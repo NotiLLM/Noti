@@ -13,7 +13,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.vector.ImageVector
 import org.muilab.notigpt.view.screen.HomeScreen
 import org.muilab.notigpt.viewModel.DrawerViewModel
-import org.muilab.notigpt.viewModel.GeminiViewModel
+import org.muilab.notigpt.viewModel.ServerViewModel
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -22,14 +22,14 @@ fun TabContent(
     pagerState: PagerState,
     context: Context,
     drawerViewModel: DrawerViewModel,
-    geminiViewModel: GeminiViewModel
+    serverViewModel: ServerViewModel
 ) {
     HorizontalPager(state = pagerState) { index ->
         when (index) {
-            0 -> HomeScreen(context, drawerViewModel, geminiViewModel, category="all")
-            1 -> HomeScreen(context, drawerViewModel, geminiViewModel, category="pinned")
-            2 -> HomeScreen(context, drawerViewModel, geminiViewModel, category="social")
-            3 -> HomeScreen(context, drawerViewModel, geminiViewModel, category="email")
+            0 -> HomeScreen(context, drawerViewModel, serverViewModel, category="all")
+            1 -> HomeScreen(context, drawerViewModel, serverViewModel, category="pinned")
+            2 -> HomeScreen(context, drawerViewModel, serverViewModel, category="social")
+            3 -> HomeScreen(context, drawerViewModel, serverViewModel, category="email")
         }
     }
 

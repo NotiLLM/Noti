@@ -111,8 +111,9 @@ class NotiListenerService: NotificationListenerService() {
             val drawerDatabase = DrawerDatabase.getInstance(applicationContext)
             val drawerDao = drawerDatabase.drawerDao()
             val existingNoti = drawerDao.getBySbnKey(sbn.key)
+            val newNoti = NotiUnit(applicationContext, sbn)
             if (existingNoti.isEmpty()) {
-                drawerDao.insert(NotiUnit(applicationContext, sbn))
+                drawerDao.insert(newNoti)
             } else if (!isInit) {
                 existingNoti[0].updateNoti(applicationContext, sbn)
                 drawerDao.update(existingNoti[0])

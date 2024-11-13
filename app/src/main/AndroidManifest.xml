@@ -19,7 +19,9 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.NotiTask"
+        android:usesCleartextTraffic="true"
         tools:targetApi="31">
+        <!-- TODO: Change cleartext traffic in the future -->
 
         <receiver android:name=".reciever.NotiActionReciever"
             android:enabled="true"
@@ -38,11 +40,6 @@
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
             </intent-filter>
         </receiver>
-
-        <service
-            android:name=".service.GeminiService"
-            android:enabled="true"
-            android:exported="true" />
 
         <service
             android:name=".service.NotiListenerService"

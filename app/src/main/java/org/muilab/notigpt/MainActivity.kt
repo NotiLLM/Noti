@@ -4,10 +4,8 @@ import android.app.ActivityManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.content.ServiceConnection
 import android.net.Uri
 import android.os.Bundle
-import android.os.IBinder
 import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -33,13 +31,12 @@ import androidx.compose.ui.unit.dp
 import androidx.core.app.NotificationManagerCompat
 import org.muilab.notigpt.database.room.DrawerDatabase
 import org.muilab.notigpt.paging.NotiRepository
-import org.muilab.notigpt.service.GeminiService
 import org.muilab.notigpt.service.NotiListenerService
 import org.muilab.notigpt.ui.theme.NotiTaskTheme
 import org.muilab.notigpt.view.screen.MainScreen
 import org.muilab.notigpt.viewModel.DrawerViewModel
 import org.muilab.notigpt.viewModel.DrawerViewModelFactory
-import org.muilab.notigpt.viewModel.GeminiViewModel
+import org.muilab.notigpt.viewModel.ServerViewModel
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -73,11 +70,12 @@ class MainActivity : ComponentActivity() {
             startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
         }
 
-        val geminiServiceIntent = Intent(this, GeminiService::class.java)
-        if (!isServiceRunning(this, GeminiService::class.java)) {
-            startService(geminiServiceIntent)
+        val sharedPrefs = getSharedPreferences("server", Context.MODE_PRIVATE)
+        val userId = sharedPrefs.getString("userId", "").toString()
+        if (userId.isBlank()) {
+            val deviceId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
+            sharedPrefs.edit().putString("userId", deviceId).apply()
         }
-        bindService(geminiServiceIntent, gptServiceConnection, Context.BIND_AUTO_CREATE)
 
         setContent {
             NotiTaskTheme {
@@ -86,7 +84,7 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    MainScreen(applicationContext, drawerViewModel, geminiViewModel)
+                    MainScreen(applicationContext, drawerViewModel, serverViewModel)
                 }
             }
         }
@@ -98,18 +96,7 @@ class MainActivity : ComponentActivity() {
         DrawerViewModelFactory(this.application, NotiRepository(drawerDao))
     }
 
-    private val gptServiceConnection = object : ServiceConnection {
-        override fun onServiceConnected(className: ComponentName, service: IBinder) {
-            val binder = service as GeminiService.GPTBinder
-            geminiService = binder.getService()
-            geminiViewModel.setService(geminiService)
-        }
-
-        override fun onServiceDisconnected(className: ComponentName) {}
-    }
-
-    private lateinit var geminiService: GeminiService
-    private val geminiViewModel by viewModels<GeminiViewModel>()
+    private val serverViewModel by viewModels<ServerViewModel>()
 
     private fun isNotiListenerEnabled(): Boolean {
         val cn = ComponentName(this, NotiListenerService::class.java)
@@ -134,8 +121,8 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun TestCard(geminiViewModel: GeminiViewModel) {
-    val result by geminiViewModel.response.observeAsState("")
+fun TestCard(serverViewModel: ServerViewModel) {
+    val result by serverViewModel.response.observeAsState("")
     Card (
         Modifier
             .fillMaxHeight(0.4f)

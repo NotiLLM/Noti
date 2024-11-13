@@ -1,5 +1,6 @@
 package org.muilab.notigpt.view.component
 
+import ApiWorker
 import android.app.Activity
 import android.content.Context
 import android.graphics.Rect
@@ -32,6 +33,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
@@ -39,7 +41,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
 import androidx.compose.material3.contentColorFor
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -73,11 +74,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.constraintlayout.compose.ConstraintLayout
 import androidx.constraintlayout.compose.Dimension
-import kotlinx.coroutines.delay
+import androidx.work.Data
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
 import kotlinx.coroutines.launch
 import org.muilab.notigpt.R
 import org.muilab.notigpt.model.notifications.NotiUnit
 import org.muilab.notigpt.service.NotiListenerService
+import org.muilab.notigpt.util.Constants.Companion.API_INSERT_PREFERENCE
 import org.muilab.notigpt.util.getDisplayTimeStr
 import org.muilab.notigpt.util.hasTransparentPixels
 import org.muilab.notigpt.util.replaceChars
@@ -235,7 +239,7 @@ fun NotiCard(context: Context, notiUnit: NotiUnit, drawerViewModel: DrawerViewMo
             containerColor = backgroundColor
         )
     ) {
-        NotiDropDownMenu(notiUnit, isDropdownMenuExpanded)
+        NotiFeedbackDropdown(context, notiUnit, isDropdownMenuExpanded)
 
         val progress = expansionProgress(anchoredDraggableState.offset, maxContentHeightPx)
         Box(
@@ -299,11 +303,17 @@ fun NotiCard(context: Context, notiUnit: NotiUnit, drawerViewModel: DrawerViewMo
 
             Column (Modifier.align(Alignment.TopEnd)) {
 
-                Row(Modifier.wrapContentHeight().padding(start = 35.dp)) {
+                Row(
+                    Modifier
+                        .wrapContentHeight()
+                        .padding(start = 35.dp)) {
                     if (showSummary()) {
                         Text(
                             summary,
-                            Modifier.weight(1f).padding(horizontal = 5.dp).align(Alignment.CenterVertically),
+                            Modifier
+                                .weight(1f)
+                                .padding(horizontal = 5.dp)
+                                .align(Alignment.CenterVertically),
                             fontSize = 15.sp
                         )
                     } else {
@@ -566,19 +576,7 @@ fun NotiCard(context: Context, notiUnit: NotiUnit, drawerViewModel: DrawerViewMo
 }
 
 @Composable
-fun NotiDropDownMenu(notiUnit: NotiUnit, isDropdownMenuExpanded: MutableState<Boolean>) {
-
-    var inputText by remember { mutableStateOf("") }
-
-    // 下拉式選單當鍵盤開出時就可以自己跳到上面來，不需要等到按下換行按鍵才重新佈局
-    val isKeyboardVisible = isKeyboardVisible()
-    LaunchedEffect(isKeyboardVisible) {
-        if (isKeyboardVisible && isDropdownMenuExpanded.value) {
-            inputText = "\n"
-            delay(5)
-            inputText = inputText.dropLast(1)
-        }
-    }
+fun NotiFeedbackDropdown(context: Context, notiUnit: NotiUnit, isDropdownMenuExpanded: MutableState<Boolean>) {
 
     DropdownMenu(
         expanded = isDropdownMenuExpanded.value,
@@ -591,25 +589,52 @@ fun NotiDropDownMenu(notiUnit: NotiUnit, isDropdownMenuExpanded: MutableState<Bo
                 .padding(vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ){
-            Spacer(modifier = Modifier.weight(0.7f))
-            TextField(
-                value = inputText,
-                onValueChange = { inputText = it },
-                placeholder = { Text("填寫意見") },
-                modifier = Modifier.weight(8f)
-            )
-            Spacer(modifier = Modifier.weight(0.7f))
             Button(
                 onClick = {
-                    getComment(inputText,notiUnit.getHashKey())
+                    val inputData = Data
+                        .Builder()
+                        .putString("api_type", API_INSERT_PREFERENCE)
+                        .putString("noti_key", notiUnit.notiKey)
+                        .putBoolean("preferred", false)
+                        .build()
+                    val apiWorkerRequest = OneTimeWorkRequestBuilder<ApiWorker>()
+                        .setInputData(inputData)
+                        .build()
+                    WorkManager
+                        .getInstance(context)
+                        .enqueue(apiWorkerRequest)
                     isDropdownMenuExpanded.value = false
                 },
-                modifier = Modifier.weight(3f)
+                modifier = Modifier.weight(3f),
+                colors = ButtonDefaults.buttonColors(containerColor = Color.Red)
             ){
-                Text("送出")
+                Text("排下")
             }
-            Spacer(modifier = Modifier.weight(0.7f))
+            Spacer(Modifier.weight(1F))
+            Button(
+                onClick = {
+                    val inputData = Data
+                        .Builder()
+                        .putString("api_type", API_INSERT_PREFERENCE)
+                        .putString("noti_key", notiUnit.notiKey)
+                        .putBoolean("preferred", true)
+                        .build()
+                    val apiWorkerRequest = OneTimeWorkRequestBuilder<ApiWorker>()
+                        .setInputData(inputData)
+                        .build()
+                    WorkManager
+                        .getInstance(context)
+                        .enqueue(apiWorkerRequest)
+                    isDropdownMenuExpanded.value = false
+                },
+                modifier = Modifier.weight(3f),
+                colors = ButtonDefaults.buttonColors(containerColor = Color.Green)
+            ){
+                Text("排上")
+            }
         }
+        Text(notiUnit.getScore().toString())
+        Text(notiUnit.getExplanation())
     }
 }
 

@@ -1,4 +1,4 @@
-package org.muilab.notigpt.model.gemini
+package org.muilab.notigpt.model.server
 
 data class SummaryOutcome(
     val id: Int,

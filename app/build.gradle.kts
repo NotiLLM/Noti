@@ -108,7 +108,7 @@ dependencies {
     implementation("com.github.qichuan:android-opencc:1.2.0")
 
     // Navigation
-    val navVersion = "2.8.1"
+    val navVersion = "2.8.2"
     implementation("androidx.navigation:navigation-compose:$navVersion")
 
     // TODO: LazyColumn Scroll-Bar
@@ -117,5 +117,9 @@ dependencies {
     implementation("com.google.code.gson:gson:2.10.1")
     implementation("androidx.constraintlayout:constraintlayout-compose:1.0.1")
 
-    implementation("com.google.ai.client.generativeai:generativeai:0.9.0")
+    // For HTTP Requests
+    implementation("com.squareup.retrofit2:retrofit")
+    implementation("com.squareup.retrofit2:converter-gson:2.9.0")
+    implementation("com.squareup.okhttp3:okhttp:4.11.0")
+    implementation("androidx.work:work-runtime-ktx:2.9.1")
 }

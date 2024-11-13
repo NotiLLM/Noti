@@ -1,5 +1,6 @@
 package org.muilab.notigpt.view.component
 
+import ApiWorker
 import android.content.Context
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
@@ -13,41 +14,97 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.work.Data
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
+import org.muilab.notigpt.util.Constants.Companion.API_CLEAR_DB
+import org.muilab.notigpt.util.Constants.Companion.API_EXPORT_DB
+import org.muilab.notigpt.util.Constants.Companion.API_SORT_DRAWER
+import org.muilab.notigpt.util.Constants.Companion.API_SYNC_DRAWER
+import org.muilab.notigpt.util.Constants.Companion.API_UPDATE_USER
 import org.muilab.notigpt.viewModel.DrawerViewModel
-import org.muilab.notigpt.viewModel.GeminiViewModel
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun DevControlPanel(context: Context, drawerViewModel: DrawerViewModel, geminiViewModel: GeminiViewModel) {
+fun DevControlPanel(context: Context, drawerViewModel: DrawerViewModel) {
     Column(Modifier.fillMaxWidth()) {
         Text("Control Panel", Modifier.align(Alignment.CenterHorizontally))
         FlowRow (
             Modifier.wrapContentHeight().fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceAround
         ) {
-                Button(onClick = {
-                    Toast.makeText(context, "Start Summarizing", Toast.LENGTH_SHORT).show()
-                    geminiViewModel.summarizeNotis()
-                }) {
-                    Text("Summarize")
-                }
-                Button(onClick = {
-                    Toast.makeText(context, "Start Sorting", Toast.LENGTH_SHORT).show()
-                    geminiViewModel.sortNotis()
-                }) {
-                    Text("Sort")
-                }
-//                Button(onClick = {
-//                    Toast.makeText(context, "Start Categorizing", Toast.LENGTH_SHORT).show()
-//                    geminiViewModel.getCategories()
-//                }) {
-//                    Text("Classify")
-//                }
-//                Button(onClick = {
-//                    Toast.makeText(context, "Work In Progress", Toast.LENGTH_SHORT).show()
-//                }) {
-//                    Text("Extract Tasks")
-//                }
+            Button(onClick = {
+                val inputData = Data.Builder()
+                    .putString("api_type", API_SYNC_DRAWER)
+                    .build()
+                val apiWorkerRequest = OneTimeWorkRequestBuilder<ApiWorker>()
+                    .setInputData(inputData)
+                    .build()
+                WorkManager.getInstance(context).enqueue(apiWorkerRequest)
+                Toast.makeText(context, "Start Syncing", Toast.LENGTH_SHORT).show()
+            }) {
+                Text("Sync Drawer")
+            }
+            Button(onClick = {
+                Toast.makeText(context, "Start Sorting", Toast.LENGTH_SHORT).show()
+                val inputData = Data.Builder()
+                    .putString("api_type", API_SORT_DRAWER)
+                    .putString("request_data", "")
+                    .build()
+                val apiWorkerRequest = OneTimeWorkRequestBuilder<ApiWorker>()
+                    .setInputData(inputData)
+                    .build()
+                WorkManager.getInstance(context).enqueue(apiWorkerRequest)
+            }) {
+                Text("Sort")
+            }
+            Button(onClick = {
+                Toast.makeText(context, "Update User", Toast.LENGTH_SHORT).show()
+                val inputData = Data.Builder()
+                    .putString("api_type", API_UPDATE_USER)
+                    .build()
+                val apiWorkerRequest = OneTimeWorkRequestBuilder<ApiWorker>()
+                    .setInputData(inputData)
+                    .build()
+                WorkManager.getInstance(context).enqueue(apiWorkerRequest)
+            }) {
+                Text("Update User")
+            }
+            Button(onClick = {
+                Toast.makeText(context, "Exporting DB", Toast.LENGTH_SHORT).show()
+                val inputData = Data.Builder()
+                    .putString("api_type", API_EXPORT_DB)
+                    .build()
+                val apiWorkerRequest = OneTimeWorkRequestBuilder<ApiWorker>()
+                    .setInputData(inputData)
+                    .build()
+                WorkManager.getInstance(context).enqueue(apiWorkerRequest)
+            }) {
+                Text("Export DB")
+            }
+            Button(onClick = {
+                Toast.makeText(context, "Clearing DB", Toast.LENGTH_SHORT).show()
+                val inputData = Data.Builder()
+                    .putString("api_type", API_CLEAR_DB)
+                    .build()
+                val apiWorkerRequest = OneTimeWorkRequestBuilder<ApiWorker>()
+                    .setInputData(inputData)
+                    .build()
+                WorkManager.getInstance(context).enqueue(apiWorkerRequest)
+            }) {
+                Text("Clear DB")
+            }
+//            Button(onClick = {
+//                Toast.makeText(context, "Start Categorizing", Toast.LENGTH_SHORT).show()
+//                geminiViewModel.getCategories()
+//            }) {
+//                Text("Classify")
+//            }
+//            Button(onClick = {
+//                Toast.makeText(context, "Work In Progress", Toast.LENGTH_SHORT).show()
+//            }) {
+//                Text("Extract Tasks")
+//            }
             Button(onClick = {
                 drawerViewModel.getPostContent(true)
             }) {

@@ -141,7 +141,30 @@ data class NotiUnit(
         return outcome.summary
     }
 
+    fun getExplanation(): String {
+        return outcome.explanation
+    }
+
     fun resetGPTValues() {
         outcome.resetOutcomes()
+    }
+
+    // FOR SERVER UPLOAD
+    fun toServerNoti(userId: String): Map<String, Any> {
+        return mapOf<String, Any>(
+            "id" to "${userId}_$notiKey",
+            "user_id" to userId,
+            "title" to getTitle(),
+            "app_name" to getAppName(),
+            "post_time" to getLatestTimeStr(),
+            "noti_key" to notiKey,
+            "body" to getNotiBody().map {
+                mapOf<String, Any>(
+                    "title" to it.title,
+                    "time" to getDisplayTimeStr(it.time),
+                    "content" to it.content
+                )
+            }
+        )
     }
 }

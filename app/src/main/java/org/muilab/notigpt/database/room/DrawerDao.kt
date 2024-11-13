@@ -5,9 +5,11 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 import org.muilab.notigpt.model.notifications.NotiUnit
+import org.muilab.notigpt.model.server.SortOutcome
 
 @Dao
 interface DrawerDao {
@@ -101,4 +103,18 @@ interface DrawerDao {
 
     @Query("DELETE FROM noti_drawer WHERE pinned <> 1")
     fun deleteAllNotPinned()
+
+    @Query("UPDATE noti_drawer SET score = :newScore WHERE sbnKey = :sbnKey")
+    fun updateScore(sbnKey: String, newScore: Float)
+
+    @Query("UPDATE noti_drawer SET explanation = :newExplanation WHERE sbnKey = :sbnKey")
+    fun updateExplanation(sbnKey: String, newExplanation: String)
+
+    @Transaction
+    suspend fun updateSorting(sortOutcomes: List<SortOutcome>) {
+        sortOutcomes.forEach { sortOutcome ->
+            updateScore(sortOutcome.id, sortOutcome.score)
+            updateExplanation(sortOutcome.id, sortOutcome.explanation)
+        }
+    }
 }

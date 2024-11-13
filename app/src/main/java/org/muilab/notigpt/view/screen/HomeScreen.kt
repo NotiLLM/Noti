@@ -19,14 +19,14 @@ import org.muilab.notigpt.view.component.DevControlPanel
 import org.muilab.notigpt.view.component.NotiDrawer
 import org.muilab.notigpt.view.component.UserControlPanel
 import org.muilab.notigpt.viewModel.DrawerViewModel
-import org.muilab.notigpt.viewModel.GeminiViewModel
+import org.muilab.notigpt.viewModel.ServerViewModel
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
 
 @RequiresApi(Build.VERSION_CODES.S)
 @Composable
-fun HomeScreen(context: Context, drawerViewModel: DrawerViewModel, geminiViewModel: GeminiViewModel, category:String) {
+fun HomeScreen(context: Context, drawerViewModel: DrawerViewModel, serverViewModel: ServerViewModel, category:String) {
 
     val notiPostContent by drawerViewModel.notiPostContent.observeAsState("")
 
@@ -37,11 +37,11 @@ fun HomeScreen(context: Context, drawerViewModel: DrawerViewModel, geminiViewMod
 //                modifier = Modifier.fillMaxSize(),
 //                contentAlignment = Alignment.BottomCenter
 //            ) {
-//                TestCard(geminiViewModel)
+//                TestCard(serverViewModel)
 //            }
         }
         UserControlPanel(drawerViewModel)
-        DevControlPanel(context, drawerViewModel, geminiViewModel)
+        DevControlPanel(context, drawerViewModel)
     }
 
     LaunchedEffect(notiPostContent) {
