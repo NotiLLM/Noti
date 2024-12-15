@@ -98,16 +98,16 @@ fun NotiCard(context: Context, notiUnit: NotiUnit, drawerViewModel: DrawerViewMo
     var notiBottomViewed by remember { mutableStateOf(false) }
 
     notiUnit.notiKey
-    val pinned = notiUnit.getPinned()
-    val wholeNotiRead = notiUnit.getWholeNotiRead()
-    val notiOverallTitle = notiUnit.getTitle()
-    val isPeople = notiUnit.getIsPeople()
-    val pkgName = notiUnit.getPkgName()
-    val appName = notiUnit.getAppName()
-    val bitmap = notiUnit.getBitmap()
-    val largeBitmap = notiUnit.getLargeBitmap()
+    val pinned = notiUnit.pinned
+    val wholeNotiRead = notiUnit.wholeNotiRead
+    val notiOverallTitle = notiUnit.title
+    val isPeople = notiUnit.isPeople
+    val pkgName = notiUnit.pkgName
+    val appName = notiUnit.appName
+    val bitmap = notiUnit.bitmap
+    val largeBitmap = notiUnit.largeBitmap
 
-    val summary = notiUnit.getSummary()
+    val summary = notiUnit.summary
     val hasSummary = summary.isNotEmpty()
 
     val backgroundColor = when {
@@ -566,7 +566,7 @@ fun NotiCard(context: Context, notiUnit: NotiUnit, drawerViewModel: DrawerViewMo
     }
 
     LaunchedEffect(notiTopViewed, notiBottomViewed) {
-        if (notiTopViewed && notiBottomViewed && !notiUnit.getWholeNotiRead() && !requiresExpansion) {
+        if (notiTopViewed && notiBottomViewed && !notiUnit.wholeNotiRead && !requiresExpansion) {
             notiViewed.value = true
             for (noti in notiBody)
                 noti.notiSeen = true
@@ -633,8 +633,8 @@ fun NotiFeedbackDropdown(context: Context, notiUnit: NotiUnit, isDropdownMenuExp
                 Text("排上")
             }
         }
-        Text(notiUnit.getScore().toString())
-        Text(notiUnit.getExplanation())
+        Text(notiUnit.score.toString())
+        Text(notiUnit.explanation)
     }
 }
 
@@ -750,7 +750,7 @@ fun NotiInfoContent(notiContent: String, modifier: Modifier = Modifier) {
 fun ScoreDisplay(notiUnit: NotiUnit) {
     Row {
         Text(
-            text = String.format("%.2f", notiUnit.getScore()),
+            text = String.format("%.2f", notiUnit.score),
             fontSize = 10.sp,
             fontWeight = FontWeight.ExtraBold,
             color = Color.Cyan

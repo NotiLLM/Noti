@@ -26,7 +26,7 @@ class NotiActionReciever : BroadcastReceiver() {
                 }
                 "pin_all" -> {
                     notReadNotis.forEachIndexed { idx, _ ->
-                        notReadNotis[idx].setPinned(true)
+                        notReadNotis[idx].pinned = true
                     }
                 }
             }

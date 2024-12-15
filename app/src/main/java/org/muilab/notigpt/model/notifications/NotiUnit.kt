@@ -35,48 +35,40 @@ data class NotiUnit(
     @RequiresApi(Build.VERSION_CODES.S)
     fun updateNoti(context: Context, sbn: StatusBarNotification) {
         metadata.update(context, sbn)
-        val isPeople = getIsPeople()
         body.update(sbn, isPeople)
-        resetSummary()
+        summary = ""
     }
 
-    // METADATA RELATED CALLS
+    val hashKey: Int
+        get() = metadata.hashKey
 
-    fun getHashKey(): Int {
-        return metadata.hashKey
-    }
+    val appName: String
+        get() = metadata.appName
 
-    fun getPkgName(): String {
-        return metadata.pkgName
-    }
+    val pkgName: String
+        get() = metadata.pkgName
 
-    fun getAppName(): String {
-        return metadata.appName
-    }
+    val isPeople: Boolean
+        get() = metadata.isPeople
 
-    fun getIsPeople(): Boolean {
-        return metadata.isPeople
-    }
+    val largeBitmap: Bitmap?
+        get() = metadata.getLargeBitmap()
 
-    fun getLargeBitmap(): Bitmap? {
-        return metadata.getLargeBitmap()
-    }
+    val bitmap: Bitmap?
+        get() = metadata.getBitmap()
 
-    fun getBitmap(): Bitmap? {
-        return metadata.getBitmap()
-    }
 
     // BODY RELATED CALLS
 
-    fun getWholeNotiRead(): Boolean {
-        return body.wholeNotiRead
-    }
+    val title: String
+        get() = body.title
+
+    val wholeNotiRead: Boolean
+        get() = body.wholeNotiRead
 
     fun markAsRead() {
         body.wholeNotiRead = true
-        for (notiInfo in body.notiInfos) {
-            notiInfo.notiSeen = true
-        }
+        body.notiInfos.forEach { it.notiSeen = true }
     }
 
     fun markInfosAsRead(seenInfos: Set<Long>) {
@@ -100,50 +92,40 @@ data class NotiUnit(
         return body.prevNotiInfos.toList()
     }
 
-    fun getTitle(): String {
-        return body.title
-    }
-
     fun getLatestTimeStr(): String {
         return getDisplayTimeStr(body.latestTime)
     }
 
     // ACTIONS RELATED CALLS
 
+    var pinned: Boolean
+        get() = actions.pinned
+        set(value) {
+            actions.pinned = value
+        }
+
     fun flipNotiPin() {
         actions.flipPin()
     }
 
-    fun getPinned(): Boolean {
-        return actions.pinned
-    }
-
-    fun setPinned(isPinned: Boolean) {
-        actions.pinned = isPinned
-    }
-
     fun removeNoti() {
         metadata.isVisible = false
-        body.removeNoti()
+        body.removeNoti(isPeople)
     }
 
     // OUTCOMES RELATED CALLS
 
-    fun getScore(): Double {
-        return outcome.score
-    }
+    var summary: String
+        get() = outcome.summary
+        set(value) {
+            outcome.summary = value
+        }
 
-    fun resetSummary() {
-        outcome.summary = ""
-    }
+    val score: Double
+        get() = outcome.score
 
-    fun getSummary(): String {
-        return outcome.summary
-    }
-
-    fun getExplanation(): String {
-        return outcome.explanation
-    }
+    val explanation: String
+        get() = outcome.explanation
 
     fun resetGPTValues() {
         outcome.resetOutcomes()
@@ -154,8 +136,8 @@ data class NotiUnit(
         return mapOf<String, Any>(
             "id" to "${userId}_$notiKey",
             "user_id" to userId,
-            "title" to getTitle(),
-            "app_name" to getAppName(),
+            "title" to title,
+            "app_name" to appName,
             "post_time" to getLatestTimeStr(),
             "noti_key" to notiKey,
             "body" to getNotiBody().map {

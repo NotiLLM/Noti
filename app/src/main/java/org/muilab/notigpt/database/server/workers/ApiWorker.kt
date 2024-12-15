@@ -27,6 +27,7 @@ import org.muilab.notigpt.util.Constants.Companion.API_INSERT_PREFERENCE
 import org.muilab.notigpt.util.Constants.Companion.API_SORT_DRAWER
 import org.muilab.notigpt.util.Constants.Companion.API_SYNC_DRAWER
 import org.muilab.notigpt.util.Constants.Companion.API_UPDATE_USER
+import org.muilab.notigpt.util.SharedPreferencesManager
 import org.muilab.notigpt.util.getNotifications
 import retrofit2.HttpException
 import java.io.IOException
@@ -44,8 +45,7 @@ class ApiWorker(appContext: Context, workerParams: WorkerParameters) :
             when (apiType) {
                 API_SYNC_DRAWER -> {
                     withContext(Dispatchers.IO) {
-                        val sharedPref = applicationContext.getSharedPreferences("server", Context.MODE_PRIVATE)
-                        val userId = sharedPref.getString("userId", "").toString()
+                        val userId = SharedPreferencesManager.userId
 
                         val allNotifications = getNotifications(applicationContext)
                         val drawerJSONArray = JSONArray(
@@ -64,8 +64,7 @@ class ApiWorker(appContext: Context, workerParams: WorkerParameters) :
                     }
                 }
                 API_SORT_DRAWER -> {
-                    val sharedPref = applicationContext.getSharedPreferences("server", Context.MODE_PRIVATE)
-                    val userId = sharedPref.getString("userId", "").toString()
+                    val userId = SharedPreferencesManager.userId
                     val requestObject = JSONObject()
                     requestObject.put("user_id", userId)
                     val requestBody = requestObject.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
@@ -73,8 +72,7 @@ class ApiWorker(appContext: Context, workerParams: WorkerParameters) :
                     handleResponse(response, API_SORT_DRAWER)
                 }
                 API_UPDATE_USER -> {
-                    val sharedPref = applicationContext.getSharedPreferences("server", Context.MODE_PRIVATE)
-                    val userId = sharedPref.getString("userId", "").toString()
+                    val userId = SharedPreferencesManager.userId
                     val requestObject = JSONObject()
                     requestObject.put("user_id", userId)
                     requestObject.put("locale", Locale.getDefault().toString())
@@ -88,8 +86,7 @@ class ApiWorker(appContext: Context, workerParams: WorkerParameters) :
                     val preferred = inputData.getBoolean("preferred", false)
 
                     withContext(Dispatchers.IO) {
-                        val sharedPref = applicationContext.getSharedPreferences("server", Context.MODE_PRIVATE)
-                        val userId = sharedPref.getString("userId", "").toString()
+                        val userId = SharedPreferencesManager.userId
                         val drawerDatabase = DrawerDatabase.getInstance(applicationContext)
                         val drawerDao = drawerDatabase.drawerDao()
                         val notification = drawerDao.getBySbnKey(notiKey)

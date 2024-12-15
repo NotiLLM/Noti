@@ -33,6 +33,7 @@ import org.muilab.notigpt.database.room.DrawerDatabase
 import org.muilab.notigpt.paging.NotiRepository
 import org.muilab.notigpt.service.NotiListenerService
 import org.muilab.notigpt.ui.theme.NotiTaskTheme
+import org.muilab.notigpt.util.SharedPreferencesManager
 import org.muilab.notigpt.view.screen.MainScreen
 import org.muilab.notigpt.viewModel.DrawerViewModel
 import org.muilab.notigpt.viewModel.DrawerViewModelFactory
@@ -70,12 +71,8 @@ class MainActivity : ComponentActivity() {
             startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
         }
 
-        val sharedPrefs = getSharedPreferences("server", Context.MODE_PRIVATE)
-        val userId = sharedPrefs.getString("userId", "").toString()
-        if (userId.isBlank()) {
-            val deviceId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
-            sharedPrefs.edit().putString("userId", deviceId).apply()
-        }
+        SharedPreferencesManager.init(this)
+        SharedPreferencesManager.userId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
 
         setContent {
             NotiTaskTheme {

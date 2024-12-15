@@ -5,7 +5,7 @@ import android.app.Notification.MessagingStyle.Message.getMessagesFromBundleArra
 import android.os.Build
 import android.service.notification.StatusBarNotification
 import androidx.annotation.RequiresApi
-import org.muilab.notigpt.util.Constants
+import org.muilab.notigpt.util.SharedPreferencesManager
 import java.util.TreeSet
 
 data class NotiBody(
@@ -36,12 +36,6 @@ data class NotiBody(
             notiInfos.add(notiInfo)
         }
         updateLatestTime()
-
-        if (isPeople) {
-            keepHistoryByCount(Constants.HISTORY_NOTI_COUNT_THRESHOLD)
-            dropHistoryByTime(Constants.HISTORY_NOTI_TIME_THRESHOLD)
-        } else
-            deleteHistory()
     }
 
     @RequiresApi(Build.VERSION_CODES.R)
@@ -95,26 +89,37 @@ data class NotiBody(
         prevNotiInfos.clear()
     }
 
-    fun removeNoti() {
-        prevNotiInfos.addAll(notiInfos)
+    fun removeNoti(isPeople: Boolean) {
+        if (isPeople) {
+            prevNotiInfos.addAll(notiInfos)
+            keepHistoryByCount()
+            dropHistoryByTime()
+        } else {
+            deleteHistory()
+        }
         notiInfos.clear()
     }
 
-    private fun keepHistoryByCount(limit: Int) {
-        if (limit < 0)
+    private fun keepHistoryByCount() {
+        val countLimit = SharedPreferencesManager.historyNotiCountThreshold
+        if (countLimit < 0)
             return
 
         val iterator = prevNotiInfos.iterator()
         var count = prevNotiInfos.size
-        while (iterator.hasNext() && count > limit) {
+        while (iterator.hasNext() && count > countLimit) {
             iterator.next()
             iterator.remove()
             count--
         }
     }
 
-    private fun dropHistoryByTime(timeThreshold: Long) {
-        val subSet = prevNotiInfos.headSet(NotiInfo(timeThreshold), true)
+    private fun dropHistoryByTime() {
+        val hoursLimit = SharedPreferencesManager.historyNotiHoursThreshold
+        if (hoursLimit < 0)
+            return
+        val historyCutOffTime = System.currentTimeMillis() - hoursLimit * 60 * 60 * 1000
+        val subSet = prevNotiInfos.headSet(NotiInfo(historyCutOffTime), true)
         prevNotiInfos.removeAll(subSet)
     }
 }

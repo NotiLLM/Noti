@@ -42,16 +42,16 @@ class DrawerViewModel(
         return when (category) {
             "all" -> notifications  // Directly return the StateFlow
             "pinned" -> notifications.map { notiList: List<NotiUnit> ->
-                notiList.filter { notiUnit: NotiUnit -> notiUnit.getPinned() }
+                notiList.filter { notiUnit: NotiUnit -> notiUnit.pinned }
             }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
             "social" -> notifications.map { notiList: List<NotiUnit> ->
                 notiList.filter { notiUnit: NotiUnit ->
-                    notiUnit.getAppName() in listOf("Facebook", "Instagram", "LINE", "Messenger", "Slack")
+                    notiUnit.appName in listOf("Facebook", "Instagram", "LINE", "Messenger", "Slack")
                 }
             }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
             "email" -> notifications.map { notiList: List<NotiUnit> ->
                 notiList.filter { notiUnit: NotiUnit ->
-                    notiUnit.getAppName() == "Gmail"
+                    notiUnit.appName == "Gmail"
                 }
             }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
             else -> notifications  // fallback to all notifications
@@ -109,13 +109,13 @@ class DrawerViewModel(
             val sb = StringBuilder()
             notifications.forEach { noti ->
 
-                val isPeople = noti.getIsPeople()
+                val isPeople = noti.isPeople
                 val notiBody = noti.getNotiBody()
                 val prevBody = noti.getPrevBody()
 
                 val notiJson = JSONObject()
-                notiJson.put("id", noti.getHashKey())
-                notiJson.put("app", noti.getAppName())
+                notiJson.put("id", noti.hashKey)
+                notiJson.put("app", noti.appName)
 
                 val titlesIdentical = (notiBody + prevBody)
                     .map { it.title }
@@ -124,7 +124,7 @@ class DrawerViewModel(
                 val notiType = if (isPeople) "message" else "info"
                 val notiTypeTitle = if (isPeople) "sender" else "title"
 
-                notiJson.put("overall_$notiTypeTitle", org.muilab.notigpt.util.replaceChars(noti.getTitle()))
+                notiJson.put("overall_$notiTypeTitle", org.muilab.notigpt.util.replaceChars(noti.title))
 
                 if (prevBody.isNotEmpty() && includeContext) {
                     val previousNotisArray = JSONArray()

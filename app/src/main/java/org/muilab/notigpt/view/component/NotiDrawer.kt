@@ -123,9 +123,9 @@ fun NotiDrawer(context: Context, drawerViewModel: DrawerViewModel, category: Str
                     }
                 }
 
-                LaunchedEffect(notiUnit.getPinned()) {
+                LaunchedEffect(notiUnit.pinned) {
                     pinningChanged = false
-                    if (notiUnit.getPinned()) {
+                    if (notiUnit.pinned) {
                         anchoredDraggableState.updateAnchors(
                             DraggableAnchors {
                                 0 at 0f

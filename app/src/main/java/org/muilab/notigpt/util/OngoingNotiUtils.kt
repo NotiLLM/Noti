@@ -100,9 +100,9 @@ fun postOngoingNotification(context: Context) {
         if (hasNotRead){
             notiNotRead.forEach { notiUnit ->
                 val notiCount = notiUnit.getNotiBody().size
-                if (!notiUnit.getIsPeople())
+                if (!notiUnit.isPeople)
                     sb.append("${notiUnit.metadata.appName}: ")
-                sb.append(notiUnit.getTitle())
+                sb.append(notiUnit.title)
                 if (notiCount > 1)
                     sb.append(" ($notiCount messages)")
                 sb.append("\n")
@@ -110,7 +110,7 @@ fun postOngoingNotification(context: Context) {
         } else {
             var appName = ""
             notiWithSenders.forEach { notiUnit ->
-                val notiSender = notiUnit.getTitle()
+                val notiSender = notiUnit.title
                 val notiCount = notiUnit.getNotiBody().size
                 sb.append(notiSender)
                 if (notiCount > 1)
