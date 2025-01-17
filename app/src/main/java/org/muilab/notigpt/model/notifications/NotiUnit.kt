@@ -7,7 +7,7 @@ import android.service.notification.StatusBarNotification
 import androidx.annotation.RequiresApi
 import androidx.room.Embedded
 import androidx.room.Entity
-import org.muilab.notigpt.util.getDisplayTimeStr
+import org.muilab.notigpt.util.getRelativeTimeStr
 
 
 @Entity(tableName = "noti_drawer", primaryKeys = ["notiKey"])
@@ -93,7 +93,7 @@ data class NotiUnit(
     }
 
     fun getLatestTimeStr(): String {
-        return getDisplayTimeStr(body.latestTime)
+        return getRelativeTimeStr(body.latestTime)
     }
 
     // ACTIONS RELATED CALLS
@@ -143,7 +143,7 @@ data class NotiUnit(
             "body" to getNotiBody().map {
                 mapOf<String, Any>(
                     "title" to it.title,
-                    "time" to getDisplayTimeStr(it.time),
+                    "time" to getRelativeTimeStr(it.time),
                     "content" to it.content
                 )
             }

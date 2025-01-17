@@ -43,7 +43,7 @@ fun hasTransparentPixels(bitmap: Bitmap, threshold: Float): Boolean {
 }
 
 
-fun getDisplayTimeStr(unixTime: Long, locale: Locale = Locale("zh", "TW")): String {
+fun getRelativeTimeStr(unixTime: Long, locale: Locale = Locale("zh", "TW")): String {
     val now = System.currentTimeMillis()
     val diffInMillis = now - unixTime
     val formatter = RelativeDateTimeFormatter.getInstance(ULocale.forLocale(locale))
@@ -79,33 +79,7 @@ fun getDisplayTimeStr(unixTime: Long, locale: Locale = Locale("zh", "TW")): Stri
     }
 }
 
-fun getRelativeTimeStr(unixTime: Long, locale: Locale = Locale("en", "TW")): String {
-    val now = System.currentTimeMillis()
-    val diffInMillis = now - unixTime
-    val formatter = RelativeDateTimeFormatter.getInstance(ULocale.forLocale(locale))
-
-    // Calculate differences in various units
-    val diffInMinutes = TimeUnit.MILLISECONDS.toMinutes(abs(diffInMillis))
-    val diffInHours = TimeUnit.MILLISECONDS.toHours(abs(diffInMillis))
-    val diffInDays = TimeUnit.MILLISECONDS.toDays(abs(diffInMillis))
-
-    return when {
-        diffInMillis < TimeUnit.MINUTES.toMillis(1) -> "Now"
-        diffInMinutes < 60 -> formatter.format(diffInMinutes.toDouble(), RelativeDateTimeFormatter.Direction.LAST, RelativeDateTimeFormatter.RelativeUnit.MINUTES).toString()
-        diffInHours < 3 -> formatter.format(diffInHours.toDouble(), RelativeDateTimeFormatter.Direction.LAST, RelativeDateTimeFormatter.RelativeUnit.HOURS).toString()
-        diffInHours < 24 -> {
-            val calNow = Calendar.getInstance()
-            val calInput = Calendar.getInstance().apply { timeInMillis = unixTime}
-            val dateFormat = if (calNow.get(Calendar.DATE) - calInput.get(Calendar.DATE) == 1) {
-                SimpleDateFormat("'Yesterday' HH:mm", locale)
-            } else {
-                SimpleDateFormat("HH:mm", locale)
-            }
-            dateFormat.format(Date(unixTime))
-        }
-        diffInDays == 1L -> "Yesterday"
-        diffInDays < 7 -> "$diffInDays days ago"
-        diffInDays < 14 -> "Last week"
-        else -> "${(diffInDays / 7).toInt()} weeks ago"
-    }
+fun getAbsoluteTimeStr(unixTime: Long, locale: Locale = Locale("zh", "TW")): String {
+    val dateFormat = SimpleDateFormat("M'月' d'日' HH:mm", Locale.getDefault())
+    return dateFormat.format(Date(unixTime))
 }

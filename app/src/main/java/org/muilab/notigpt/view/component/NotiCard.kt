@@ -82,7 +82,7 @@ import org.muilab.notigpt.R
 import org.muilab.notigpt.model.notifications.NotiUnit
 import org.muilab.notigpt.service.NotiListenerService
 import org.muilab.notigpt.util.Constants.Companion.API_INSERT_PREFERENCE
-import org.muilab.notigpt.util.getDisplayTimeStr
+import org.muilab.notigpt.util.getRelativeTimeStr
 import org.muilab.notigpt.util.hasTransparentPixels
 import org.muilab.notigpt.util.replaceChars
 import org.muilab.notigpt.view.utils.NotiExpandState
@@ -723,7 +723,7 @@ fun NotiInfoTime(notiTime: Long, infoTimeColor: Color, modifier: Modifier = Modi
         Text(
             modifier = Modifier
                 .padding(end = 16.dp),
-            text = getDisplayTimeStr(notiTime),
+            text = getRelativeTimeStr(notiTime),
             style = MaterialTheme.typography.bodySmall.copy(
                 fontSize = 12.sp,
                 fontStyle = FontStyle.Italic

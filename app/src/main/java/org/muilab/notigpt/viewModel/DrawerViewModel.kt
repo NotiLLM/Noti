@@ -20,7 +20,8 @@ import org.json.JSONObject
 import org.muilab.notigpt.database.room.DrawerDatabase
 import org.muilab.notigpt.model.notifications.NotiUnit
 import org.muilab.notigpt.paging.NotiRepository
-import org.muilab.notigpt.util.getDisplayTimeStr
+import org.muilab.notigpt.util.getAbsoluteTimeStr
+import org.muilab.notigpt.util.getRelativeTimeStr
 import org.muilab.notigpt.util.getNotifications
 import org.muilab.notigpt.util.postOngoingNotification
 
@@ -130,7 +131,8 @@ class DrawerViewModel(
                     val previousNotisArray = JSONArray()
                     prevBody.forEach {
                         val prevNotiJson = JSONObject()
-                        prevNotiJson.put("time", getDisplayTimeStr(it.time))
+                        prevNotiJson.put("time", getRelativeTimeStr(it.time))
+                        prevNotiJson.put("relative_time", getRelativeTimeStr(it.time))
                         if (!titlesIdentical)
                             prevNotiJson.put(notiTypeTitle, org.muilab.notigpt.util.replaceChars(it.title))
                         prevNotiJson.put("content", org.muilab.notigpt.util.replaceChars(it.content))
@@ -142,7 +144,8 @@ class DrawerViewModel(
 
                     notiBody.forEach {
                         val newNotiJson = JSONObject()
-                        newNotiJson.put("time", getDisplayTimeStr(it.time))
+                        newNotiJson.put("time", getAbsoluteTimeStr(it.time))
+                        newNotiJson.put("relative_time", getRelativeTimeStr(it.time))
                         if (!titlesIdentical)
                             newNotiJson.put(notiTypeTitle, org.muilab.notigpt.util.replaceChars(it.title))
                         newNotiJson.put("content", org.muilab.notigpt.util.replaceChars(it.content))
@@ -154,7 +157,8 @@ class DrawerViewModel(
 
                     notiBody.forEach {
                         val notiInfoJson = JSONObject()
-                        notiInfoJson.put("time", getDisplayTimeStr(it.time))
+                        notiInfoJson.put("time", getRelativeTimeStr(it.time))
+                        notiInfoJson.put("relative_time", getRelativeTimeStr(it.time))
                         if (!titlesIdentical)
                             notiInfoJson.put(notiTypeTitle, org.muilab.notigpt.util.replaceChars(it.title))
                         notiInfoJson.put("content", org.muilab.notigpt.util.replaceChars(it.content))
