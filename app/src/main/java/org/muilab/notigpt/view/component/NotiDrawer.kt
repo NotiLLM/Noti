@@ -59,13 +59,13 @@ import kotlin.math.roundToInt
 @RequiresApi(Build.VERSION_CODES.S)
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun NotiDrawer(context: Context, drawerViewModel: DrawerViewModel, category: String) {
+fun NotiDrawer(context: Context, drawerViewModel: DrawerViewModel) {
 
     val listState = rememberLazyListState()
     val notSeenCount by drawerViewModel.notSeenCount.observeAsState(0)
     val coroutineScope = rememberCoroutineScope()
 
-    val notifications by drawerViewModel.getFilteredFlow(category).collectAsState()
+    val notifications by drawerViewModel.presentedNotifications.collectAsState()
     val seenNotis = remember { mutableSetOf<String>() }
     val seenInfos = remember { mutableMapOf<String, Set<Long>>() }
 

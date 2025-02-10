@@ -117,4 +117,13 @@ interface DrawerDao {
             updateExplanation(sortOutcome.id, sortOutcome.explanation)
         }
     }
+
+    @Query("UPDATE noti_drawer SET embeddingString = :newEmbeddingString WHERE sbnKey = :sbnKey")
+    fun updateEmbedding(sbnKey: String, newEmbeddingString: String)
+
+    @Query("UPDATE noti_drawer SET similarityScore = :newSimilarity WHERE sbnKey = :sbnKey")
+    fun updateSimilarity(sbnKey: String, newSimilarity: Double)
+
+    @Query("UPDATE noti_drawer SET similarityScore = -1")
+    fun resetSimilarity()
 }

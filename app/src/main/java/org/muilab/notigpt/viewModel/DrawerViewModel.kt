@@ -1,17 +1,39 @@
 package org.muilab.notigpt.viewModel
 
+import org.muilab.notigpt.database.server.workers.ApiWorker
 import android.annotation.SuppressLint
 import android.app.Application
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.os.Build
+import android.os.Environment
+import android.widget.Toast
 import androidx.annotation.RequiresApi
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
-import androidx.lifecycle.MutableLiveData
+import androidx.lifecycle.asFlow
 import androidx.lifecycle.viewModelScope
+import androidx.work.Data
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -20,45 +42,136 @@ import org.json.JSONObject
 import org.muilab.notigpt.database.room.DrawerDatabase
 import org.muilab.notigpt.model.notifications.NotiUnit
 import org.muilab.notigpt.paging.NotiRepository
+import org.muilab.notigpt.util.Constants.Companion.API_SYNC_QUERY
+import org.muilab.notigpt.util.cosineSimilarity
 import org.muilab.notigpt.util.getAbsoluteTimeStr
 import org.muilab.notigpt.util.getRelativeTimeStr
 import org.muilab.notigpt.util.getNotifications
 import org.muilab.notigpt.util.postOngoingNotification
+import org.muilab.notigpt.util.resetSimilarity
+import java.io.File
+import java.io.FileOutputStream
+import java.io.IOException
 
 class DrawerViewModel(
     application: Application,
     notiRepository: NotiRepository
 ) : AndroidViewModel(application) {
 
-    private val notifications: StateFlow<List<NotiUnit>> = notiRepository.getNotificationsFlow()
+    private val _category = MutableStateFlow("")
+    val category: StateFlow<String> = _category
+
+    fun updateCategory(newCategory: String) {
+        _category.value = newCategory
+    }
+
+    private val _queryString = MutableStateFlow("")
+    val queryString: StateFlow<String> = _queryString
+
+    fun updateQueryString(newQueryString: String) {
+        _queryString.value = newQueryString
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
+    val queryEmbeddingBase64: Flow<String?> = _queryString
+        .debounce(500) // Wait until the user stops typing.
+        .distinctUntilChanged()
+        .flatMapLatest { query ->
+            // If the query is blank, no need to call the backend.
+            if (query.isBlank()) {
+                resetSimilarity(context)
+                flowOf(null)
+            } else {
+                // Emit null first (so the UI can show a "loading" indicator) and then trigger WorkManager.
+                flow<String?> {
+                    emit(null)  // Indicates that we are waiting for a result.
+                    // Build input data for your worker.
+                    val inputData = Data.Builder()
+                        .putString("api_type", API_SYNC_QUERY)
+                        .putString("query_string", query)
+                        .build()
+                    // Create the WorkManager request.
+                    val workRequest = OneTimeWorkRequestBuilder<ApiWorker>()
+                        .setInputData(inputData)
+                        .build()
+                    val workManager = WorkManager.getInstance(application)
+                    workManager.enqueue(workRequest)
+
+                    // Convert the LiveData into a Flow (requires androidx.lifecycle:lifecycle-runtime-ktx).
+                    val workInfo = workManager
+                        .getWorkInfoByIdLiveData(workRequest.id)
+                        .asFlow()
+                        .filter { it?.state!!.isFinished }
+                        .first()
+
+                    if (workInfo?.state == WorkInfo.State.SUCCEEDED) {
+                        val embeddingBase64 = workInfo.outputData.getString("embeddingString")
+                        emit(embeddingBase64)
+                    } else {
+                        resetSimilarity(context)
+                        emit(null)
+                    }
+                }
+            }
+        }
+        .flowOn(Dispatchers.IO)
+
+    private val notificationFlow: Flow<List<NotiUnit>> = notiRepository.getNotificationsFlow()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val presentedNotifications: StateFlow<List<NotiUnit>> = queryEmbeddingBase64
+            .flatMapLatest { currentQueryEmbedding ->
+                notificationFlow.map { notifications ->
+                    if (currentQueryEmbedding == null) {
+                        notifications.sortedWith(
+                            compareByDescending<NotiUnit> { noti ->
+                                noti.getNotiBody().any {
+                                    it.title.contains(queryString.value)
+                                            || it.content.contains(queryString.value)
+                                            || it.person.contains(queryString.value)
+                                }
+                            }.thenByDescending { noti -> noti.getLatestTimeStr() }
+                        )
+                    } else {
+                        notifications.sortedWith(
+                                compareByDescending<NotiUnit> { noti ->
+                                    noti.getNotiBody().any {
+                                        it.title.contains(queryString.value)
+                                                || it.content.contains(queryString.value)
+                                                || it.person.contains(queryString.value)
+                                    }
+                                }.thenByDescending<NotiUnit> { noti ->
+                                    val similarity = cosineSimilarity(currentQueryEmbedding, noti.embeddingString)
+
+                                    CoroutineScope(Dispatchers.IO).launch {
+                                        val drawerDatabase = DrawerDatabase.getInstance(context)
+                                        val drawerDao = drawerDatabase.drawerDao()
+                                        drawerDao.updateSimilarity(noti.notiKey, similarity)
+                                    }
+
+                                    similarity
+                                }.thenByDescending { noti -> noti.getLatestTimeStr() }
+                            )
+                    }
+                }
+            }
+            .map { notiList: List<NotiUnit> ->
+                when (category.value) {
+                    "pinned" -> notiList.filter { it.pinned }
+                    "social" -> notiList.filter {
+                        it.appName in listOf("Facebook", "Instagram", "LINE", "Messenger", "Slack")
+                    }
+                    "email" -> notiList.filter { it.appName in listOf("Gmail") }
+                    else -> notiList
+                }
+            }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val notSeenCount: LiveData<Int> = notiRepository.notSeenCount
 
     @SuppressLint("StaticFieldLeak")
     val context: Context = getApplication<Application>().applicationContext
-
-    //filter notification
-    fun getFilteredFlow(category: String): StateFlow<List<NotiUnit>> {
-        return when (category) {
-            "all" -> notifications  // Directly return the StateFlow
-            "pinned" -> notifications.map { notiList: List<NotiUnit> ->
-                notiList.filter { notiUnit: NotiUnit -> notiUnit.pinned }
-            }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-            "social" -> notifications.map { notiList: List<NotiUnit> ->
-                notiList.filter { notiUnit: NotiUnit ->
-                    notiUnit.appName in listOf("Facebook", "Instagram", "LINE", "Messenger", "Slack")
-                }
-            }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-            "email" -> notifications.map { notiList: List<NotiUnit> ->
-                notiList.filter { notiUnit: NotiUnit ->
-                    notiUnit.appName == "Gmail"
-                }
-            }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-            else -> notifications  // fallback to all notifications
-        }
-    }
-
 
     @RequiresApi(Build.VERSION_CODES.S)
     fun actOnNoti(notiUnit: NotiUnit, action: String) {
@@ -90,20 +203,18 @@ class DrawerViewModel(
         }
     }
 
-    fun resetGPTValues() {
+    fun resetLLMValues() {
         viewModelScope.launch(Dispatchers.IO) {
             val drawerDatabase = DrawerDatabase.getInstance(context)
             val drawerDao = drawerDatabase.drawerDao()
             val notifications = drawerDao.getAllVisible()
             for (noti in notifications)
-                noti.resetGPTValues()
+                noti.resetLLMValues()
             drawerDao.updateList(notifications)
         }
     }
 
-    // For testing
-    val notiPostContent = MutableLiveData<String>()
-    fun getPostContent(includeContext: Boolean) {
+    fun exportPostContent(includeContext: Boolean) {
 
         viewModelScope.launch(Dispatchers.IO) {
             val notifications = getNotifications(context)
@@ -131,7 +242,7 @@ class DrawerViewModel(
                     val previousNotisArray = JSONArray()
                     prevBody.forEach {
                         val prevNotiJson = JSONObject()
-                        prevNotiJson.put("time", getRelativeTimeStr(it.time))
+                        prevNotiJson.put("time", getAbsoluteTimeStr(it.time))
                         prevNotiJson.put("relative_time", getRelativeTimeStr(it.time))
                         if (!titlesIdentical)
                             prevNotiJson.put(notiTypeTitle, org.muilab.notigpt.util.replaceChars(it.title))
@@ -157,7 +268,7 @@ class DrawerViewModel(
 
                     notiBody.forEach {
                         val notiInfoJson = JSONObject()
-                        notiInfoJson.put("time", getRelativeTimeStr(it.time))
+                        notiInfoJson.put("time", getAbsoluteTimeStr(it.time))
                         notiInfoJson.put("relative_time", getRelativeTimeStr(it.time))
                         if (!titlesIdentical)
                             notiInfoJson.put(notiTypeTitle, org.muilab.notigpt.util.replaceChars(it.title))
@@ -171,7 +282,25 @@ class DrawerViewModel(
                 val notiJsonStr = notiJson.toString(2)
                 sb.append("$notiJsonStr,\n")
             }
-            notiPostContent.postValue("[\n${sb}]\n")
+
+            val notiPostContent = "[\n${sb}]\n"
+            // save to file
+            val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+            val file = File(downloadsDir, "notigpt.txt")
+            try {
+                FileOutputStream(file).use { outputStream ->
+                    outputStream.write(notiPostContent.toByteArray(Charsets.UTF_8))
+                    Toast.makeText(context, "Data saved to Downloads folder as notigpt.txt", Toast.LENGTH_LONG).show()
+                }
+            } catch (e: IOException) {
+                Toast.makeText(context, "Failed to save notification data", Toast.LENGTH_LONG).show()
+                e.printStackTrace()
+            }
+            // copy to clipboard
+            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            val clip = ClipData.newPlainText("label", notiPostContent)
+            clipboard.setPrimaryClip(clip)
+            Toast.makeText(context, "Copied to clipboard", Toast.LENGTH_SHORT).show()
         }
     }
 }

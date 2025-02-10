@@ -115,6 +115,9 @@ data class NotiUnit(
 
     // OUTCOMES RELATED CALLS
 
+    val embeddingString: String
+        get() = outcome.embeddingString
+
     var summary: String
         get() = outcome.summary
         set(value) {
@@ -127,7 +130,7 @@ data class NotiUnit(
     val explanation: String
         get() = outcome.explanation
 
-    fun resetGPTValues() {
+    fun resetLLMValues() {
         outcome.resetOutcomes()
     }
 

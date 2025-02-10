@@ -1,5 +1,6 @@
 package org.muilab.notigpt.service
 
+import org.muilab.notigpt.database.server.workers.ApiWorker
 import android.app.AlarmManager
 import android.app.Notification
 import android.app.PendingIntent
@@ -11,12 +12,17 @@ import android.os.IBinder
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import androidx.annotation.RequiresApi
+import androidx.work.Data
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.muilab.notigpt.database.room.DrawerDatabase
 import org.muilab.notigpt.model.notifications.NotiUnit
+import org.muilab.notigpt.util.Constants.Companion.API_SYNC_NOTI
+import org.muilab.notigpt.util.Constants.Companion.NOTI_REMOVE_DELAY
 import org.muilab.notigpt.util.createNotificationChannel
 import org.muilab.notigpt.util.postOngoingNotification
 
@@ -37,7 +43,6 @@ class NotiListenerService: NotificationListenerService() {
                 null
         }
 
-        val NOTI_REMOVE_DELAY = 10 * 1000L
     }
 
     @RequiresApi(Build.VERSION_CODES.S)
@@ -72,8 +77,8 @@ class NotiListenerService: NotificationListenerService() {
             it.setPackage(packageName)
         }
         val restartServicePendingIntent: PendingIntent = PendingIntent.getService(this, 1, restartServiceIntent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_ONE_SHOT)
-        getSystemService(Context.ALARM_SERVICE)
-        val alarmService: AlarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        getSystemService(ALARM_SERVICE)
+        val alarmService: AlarmManager = getSystemService(ALARM_SERVICE) as AlarmManager
         alarmService.set(AlarmManager.ELAPSED_REALTIME, System.currentTimeMillis() + 2000, restartServicePendingIntent)
         super.onDestroy()
     }
@@ -118,6 +123,16 @@ class NotiListenerService: NotificationListenerService() {
                 existingNoti[0].updateNoti(applicationContext, sbn)
                 drawerDao.update(existingNoti[0])
             }
+
+            val inputData = Data.Builder()
+                .putString("api_type", API_SYNC_NOTI)
+                .putString("noti_key", sbn.key)
+                .build()
+            val apiWorkerRequest = OneTimeWorkRequestBuilder<ApiWorker>()
+                .setInputData(inputData)
+                .build()
+            WorkManager.getInstance(applicationContext).enqueue(apiWorkerRequest)
+
             postOngoingNotification(applicationContext)
             if (!isInit) {
                 delay(NOTI_REMOVE_DELAY)

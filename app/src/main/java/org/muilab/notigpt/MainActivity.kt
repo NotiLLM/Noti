@@ -43,6 +43,9 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        SharedPreferencesManager.init(this)
+        SharedPreferencesManager.userId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
+
         if (!NotificationManagerCompat.from(applicationContext).areNotificationsEnabled()) {
             val intent = Intent().apply {
                 action = Settings.ACTION_APP_NOTIFICATION_SETTINGS
@@ -70,9 +73,6 @@ class MainActivity : ComponentActivity() {
         } else {
             startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
         }
-
-        SharedPreferencesManager.init(this)
-        SharedPreferencesManager.userId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
 
         setContent {
             NotiTaskTheme {
@@ -103,12 +103,12 @@ class MainActivity : ComponentActivity() {
     }
 
     fun isBatteryOptimizationsIgnored(): Boolean {
-        val pm = getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+        val pm = getSystemService(POWER_SERVICE) as android.os.PowerManager
         return pm.isIgnoringBatteryOptimizations(packageName)
     }
 
     private fun isServiceRunning(context: Context, serviceClass: Class<*>): Boolean {
-        val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        val activityManager = context.getSystemService(ACTIVITY_SERVICE) as ActivityManager
         val services = activityManager.getRunningServices(Integer.MAX_VALUE)
         for (serviceInfo in services)
             if (serviceClass.name == serviceInfo.service.className)

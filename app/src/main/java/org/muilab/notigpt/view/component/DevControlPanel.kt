@@ -1,6 +1,6 @@
 package org.muilab.notigpt.view.component
 
-import ApiWorker
+import org.muilab.notigpt.database.server.workers.ApiWorker
 import android.content.Context
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
@@ -142,12 +142,12 @@ fun DevControlPanel(context: Context, drawerViewModel: DrawerViewModel) {
 //                Text("Extract Tasks")
 //            }
                 Button(onClick = {
-                    drawerViewModel.getPostContent(true)
+                    drawerViewModel.exportPostContent(true)
                 }) {
                     Text("Copy Data with History")
                 }
                 Button(onClick = {
-                    drawerViewModel.getPostContent(false)
+                    drawerViewModel.exportPostContent(false)
                 }) {
                     Text("Copy Data")
                 }
