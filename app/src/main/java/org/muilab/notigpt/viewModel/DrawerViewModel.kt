@@ -1,6 +1,5 @@
 package org.muilab.notigpt.viewModel
 
-import org.muilab.notigpt.database.server.workers.ApiWorker
 import android.annotation.SuppressLint
 import android.app.Application
 import android.content.ClipData
@@ -8,7 +7,6 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.os.Build
 import android.os.Environment
-import android.util.Log
 import android.widget.Toast
 import androidx.annotation.RequiresApi
 import androidx.lifecycle.AndroidViewModel
@@ -41,13 +39,14 @@ import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
 import org.muilab.notigpt.database.room.DrawerDatabase
+import org.muilab.notigpt.database.server.workers.ApiWorker
 import org.muilab.notigpt.model.notifications.NotiUnit
 import org.muilab.notigpt.paging.NotiRepository
 import org.muilab.notigpt.util.Constants.Companion.API_SYNC_QUERY
 import org.muilab.notigpt.util.cosineSimilarity
 import org.muilab.notigpt.util.getAbsoluteTimeStr
-import org.muilab.notigpt.util.getRelativeTimeStr
 import org.muilab.notigpt.util.getNotifications
+import org.muilab.notigpt.util.getRelativeTimeStr
 import org.muilab.notigpt.util.postOngoingNotification
 import org.muilab.notigpt.util.resetSimilarity
 import java.io.File
