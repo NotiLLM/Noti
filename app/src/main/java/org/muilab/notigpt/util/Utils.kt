@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.icu.text.RelativeDateTimeFormatter
 import android.icu.util.ULocale
 import android.util.Base64
+import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -120,7 +121,8 @@ fun compressedBase64ToDoubleArray(base64String: String): DoubleArray {
         }
 
         doubleList.toDoubleArray()
-    } catch (_: EOFException) {
+    } catch (e: EOFException) {
+        Log.d("Query", e.stackTraceToString())
         emptyArray<Double>().toDoubleArray()
     } catch (e: Exception) {
         throw RuntimeException("Decompression failed: ${e.message}")
