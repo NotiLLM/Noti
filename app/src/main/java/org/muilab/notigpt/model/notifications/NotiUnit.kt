@@ -7,6 +7,7 @@ import android.service.notification.StatusBarNotification
 import androidx.annotation.RequiresApi
 import androidx.room.Embedded
 import androidx.room.Entity
+import org.muilab.notigpt.util.getAbsoluteTimeStr
 import org.muilab.notigpt.util.getRelativeTimeStr
 
 
@@ -92,7 +93,11 @@ data class NotiUnit(
         return body.prevNotiInfos.toList()
     }
 
-    fun getLatestTimeStr(): String {
+    fun getAbsLatestTimeStr(): String {
+        return getAbsoluteTimeStr(body.latestTime)
+    }
+
+    fun getRelLatestTimeStr(): String {
         return getRelativeTimeStr(body.latestTime)
     }
 
@@ -115,6 +120,9 @@ data class NotiUnit(
 
     // OUTCOMES RELATED CALLS
 
+    val embeddingString: String
+        get() = outcome.embeddingString
+
     var summary: String
         get() = outcome.summary
         set(value) {
@@ -127,7 +135,7 @@ data class NotiUnit(
     val explanation: String
         get() = outcome.explanation
 
-    fun resetGPTValues() {
+    fun resetLLMValues() {
         outcome.resetOutcomes()
     }
 
@@ -138,12 +146,14 @@ data class NotiUnit(
             "user_id" to userId,
             "title" to title,
             "app_name" to appName,
-            "post_time" to getLatestTimeStr(),
+            "abs_post_time" to getAbsLatestTimeStr(),
+            "rel_post_time" to getRelLatestTimeStr(),
             "noti_key" to notiKey,
             "body" to getNotiBody().map {
                 mapOf<String, Any>(
                     "title" to it.title,
-                    "time" to getRelativeTimeStr(it.time),
+                    "abs_time" to getAbsoluteTimeStr(it.time),
+                    "rel_time" to getRelativeTimeStr(it.time),
                     "content" to it.content
                 )
             }

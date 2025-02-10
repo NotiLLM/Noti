@@ -1,6 +1,6 @@
 package org.muilab.notigpt.view.component
 
-import ApiWorker
+import org.muilab.notigpt.database.server.workers.ApiWorker
 import android.app.Activity
 import android.content.Context
 import android.graphics.Rect
@@ -299,6 +299,12 @@ fun NotiCard(context: Context, notiUnit: NotiUnit, drawerViewModel: DrawerViewMo
                         }
                     }
                 }
+                if (progress == 0f && notiUnit.outcome.similarityScore > -1)
+                    Text(
+                        String.format("%.3f", notiUnit.outcome.similarityScore),
+                        modifier = Modifier.align(Alignment.CenterHorizontally).padding(0.dp),
+                        fontSize = 8.sp,
+                    )
             }
 
             Column (Modifier.align(Alignment.TopEnd)) {
@@ -353,7 +359,7 @@ fun NotiCard(context: Context, notiUnit: NotiUnit, drawerViewModel: DrawerViewMo
                                 ) {
                                     Text(
                                         modifier = Modifier.padding(horizontal = 5.dp),
-                                        text = notiUnit.getLatestTimeStr(),
+                                        text = notiUnit.getRelLatestTimeStr(),
                                         maxLines = 1,
                                         fontSize = 12.sp,
                                         fontStyle = FontStyle.Italic,

@@ -1,20 +1,21 @@
 import java.util.Properties
 
 plugins {
-    id("com.android.application")
-    id("org.jetbrains.kotlin.android")
-    id("com.google.devtools.ksp")
-    id("com.google.android.libraries.mapsplatform.secrets-gradle-plugin")
+    alias(libs.plugins.androidApplication)
+    alias(libs.plugins.kotlin)
+    alias(libs.plugins.compose.compiler)
+    alias(libs.plugins.ksp)
+    alias(libs.plugins.secretsGradlePlugin)
 }
 
 android {
     namespace = "org.muilab.notigpt"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "org.muilab.notigpt"
         minSdk = 29
-        targetSdk = 33
+        targetSdk = 35
         versionCode = 1
         versionName = "1.0"
 
@@ -52,8 +53,11 @@ android {
         compose = true
         buildConfig = true
     }
+    composeCompiler {
+        enableStrongSkippingMode = true
+    }
     composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.3"
+        kotlinCompilerExtensionVersion = "1.5.4"
     }
     packaging {
         resources {
@@ -63,63 +67,57 @@ android {
 }
 
 dependencies {
+    implementation(libs.core.ktx)
+    implementation(libs.lifecycle.runtime.ktx)
+    implementation(libs.activity.compose)
+    implementation(platform(libs.compose.bom))
+    implementation(libs.constraintlayout)
 
-    implementation("androidx.core:core-ktx:1.13.1")
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.6")
-    implementation("androidx.activity:activity-compose:1.9.2")
-    implementation(platform("androidx.compose:compose-bom:2024.09.02"))
-    implementation("androidx.constraintlayout:constraintlayout:2.1.4")
+    implementation(libs.compose.ui)
+    implementation(libs.compose.graphics)
+    implementation(libs.compose.tooling.preview)
+    implementation(libs.material3)
+    implementation(libs.runtime.livedata)
 
-    val composeVersion = "1.7.2"
-    implementation("androidx.compose.ui:ui:$composeVersion")
-    implementation("androidx.compose.ui:ui-graphics:$composeVersion")
-    implementation("androidx.compose.ui:ui-tooling-preview:$composeVersion")
-    implementation("androidx.compose.material3:material3")
-    implementation("androidx.compose.runtime:runtime-livedata:$composeVersion")
-    testImplementation("junit:junit:4.13.2")
-    androidTestImplementation("androidx.test.ext:junit:1.2.1")
-    androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
-    androidTestImplementation(platform("androidx.compose:compose-bom:2024.09.02"))
-    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
-    debugImplementation("androidx.compose.ui:ui-tooling")
-    debugImplementation("androidx.compose.ui:ui-test-manifest")
+    testImplementation(libs.junit)
+    androidTestImplementation(libs.androidx.junit)
+    androidTestImplementation(libs.espresso.core)
+    androidTestImplementation(platform(libs.compose.bom))
+    androidTestImplementation(libs.compose.ui.test.junit4)
+    debugImplementation(libs.compose.ui.tooling)
+    debugImplementation(libs.compose.ui.test.manifest)
 
     // Room
-    val roomVersion = "2.6.1"
-    implementation("androidx.room:room-runtime:$roomVersion")
-    ksp("androidx.room:room-compiler:$roomVersion")
-    implementation("androidx.room:room-paging:$roomVersion")
-    implementation("androidx.room:room-ktx:$roomVersion")
+    implementation(libs.room.runtime)
+    ksp(libs.room.compiler)
+    implementation(libs.room.paging)
+    implementation(libs.room.ktx)
 
     // Paging
-    val pagingVersion = "3.3.2"
-    implementation("androidx.paging:paging-runtime-ktx:$pagingVersion")
-    implementation("androidx.paging:paging-compose:3.3.2")
-
+    implementation(libs.paging.runtime.ktx)
+    implementation(libs.paging.compose)
 
     // OpenAI
-    val ktorVersion = "2.3.11"
-    implementation("io.ktor:ktor-client-android:$ktorVersion")
+    implementation(libs.ktor.client.android)
 
     // dotenv
-    implementation("io.github.cdimascio:dotenv-kotlin:6.4.1")
+    implementation(libs.dotenv)
 
     // OpenCC
-    implementation("com.github.qichuan:android-opencc:1.2.0")
+    implementation(libs.opencc)
 
     // Navigation
-    val navVersion = "2.8.2"
-    implementation("androidx.navigation:navigation-compose:$navVersion")
+    implementation(libs.navigation.compose)
 
-    // TODO: LazyColumn Scroll-Bar
-    implementation("com.github.nanihadesuka:LazyColumnScrollbar:2.0.7")
+    // LazyColumn Scroll-Bar
+    implementation(libs.lazycolumn.scrollbar)
 
-    implementation("com.google.code.gson:gson:2.10.1")
-    implementation("androidx.constraintlayout:constraintlayout-compose:1.0.1")
+    implementation(libs.gson)
+    implementation(libs.constraintlayout.compose)
 
     // For HTTP Requests
-    implementation("com.squareup.retrofit2:retrofit")
-    implementation("com.squareup.retrofit2:converter-gson:2.9.0")
-    implementation("com.squareup.okhttp3:okhttp:4.11.0")
-    implementation("androidx.work:work-runtime-ktx:2.9.1")
+    implementation(libs.retrofit)
+    implementation(libs.retrofit.converter.gson)
+    implementation(libs.okhttp)
+    implementation(libs.work.runtime.ktx)
 }

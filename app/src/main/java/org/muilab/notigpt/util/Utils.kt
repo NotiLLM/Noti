@@ -4,14 +4,24 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.icu.text.RelativeDateTimeFormatter
 import android.icu.util.ULocale
+import android.util.Base64
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import org.muilab.notigpt.database.room.DrawerDatabase
 import org.muilab.notigpt.model.notifications.NotiUnit
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+import java.io.DataInputStream
+import java.io.DataOutputStream
+import java.io.EOFException
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import java.util.concurrent.TimeUnit
+import java.util.zip.GZIPInputStream
+import java.util.zip.GZIPOutputStream
 import kotlin.math.abs
 
 fun getNotifications(context: Context): ArrayList<NotiUnit> = with(Dispatchers.IO) {
@@ -82,4 +92,56 @@ fun getRelativeTimeStr(unixTime: Long, locale: Locale = Locale("zh", "TW")): Str
 fun getAbsoluteTimeStr(unixTime: Long, locale: Locale = Locale("zh", "TW")): String {
     val dateFormat = SimpleDateFormat("M'月' d'日' HH:mm", Locale.getDefault())
     return dateFormat.format(Date(unixTime))
+}
+
+fun doubleArrayToCompressedBase64(doubleArray: DoubleArray): String {
+    val byteStream = ByteArrayOutputStream()
+    GZIPOutputStream(byteStream).use { gzipStream ->
+        DataOutputStream(gzipStream).use { dataStream ->
+            doubleArray.forEach { dataStream.writeDouble(it) }
+            dataStream.flush()
+        }
+        gzipStream.flush()
+    }
+    val compressedBytes = byteStream.toByteArray()
+    return Base64.encodeToString(compressedBytes, Base64.DEFAULT)
+}
+
+fun compressedBase64ToDoubleArray(base64String: String): DoubleArray {
+    return try {
+        val compressedBytes = Base64.decode(base64String, Base64.DEFAULT)
+        val byteStream = ByteArrayInputStream(compressedBytes)
+        val gzipStream = GZIPInputStream(byteStream)
+        val dataStream = DataInputStream(gzipStream)
+
+        val doubleList = mutableListOf<Double>()
+        while (dataStream.available() > 0) {
+            doubleList.add(dataStream.readDouble())
+        }
+
+        doubleList.toDoubleArray()
+    } catch (_: EOFException) {
+        emptyArray<Double>().toDoubleArray()
+    } catch (e: Exception) {
+        throw RuntimeException("Decompression failed: ${e.message}")
+    }
+}
+
+fun cosineSimilarity(embeddingBaseSixtyFour1: String, embeddingBaseSixtyFour2: String): Double {
+    val vec1 = compressedBase64ToDoubleArray(embeddingBaseSixtyFour1)
+    val vec2 = compressedBase64ToDoubleArray(embeddingBaseSixtyFour2)
+    if (vec1.isEmpty() || vec2.isEmpty())
+        return -1.0
+    val dotProduct = vec1.zip(vec2).sumOf { it.first * it.second }
+    val norm1 = kotlin.math.sqrt(vec1.sumOf { it * it })
+    val norm2 = kotlin.math.sqrt(vec2.sumOf { it * it })
+    return if (norm1 == 0.0 || norm2 == 0.0) 0.0 else (dotProduct / (norm1 * norm2))
+}
+
+fun resetSimilarity(context: Context) {
+    CoroutineScope(Dispatchers.IO).launch {
+        val drawerDatabase = DrawerDatabase.getInstance(context)
+        val drawerDao = drawerDatabase.drawerDao()
+        drawerDao.resetSimilarity()
+    }
 }

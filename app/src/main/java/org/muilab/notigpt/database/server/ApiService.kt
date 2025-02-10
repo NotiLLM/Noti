@@ -9,6 +9,10 @@ import retrofit2.http.GET
 import retrofit2.http.POST
 
 interface ApiService {
+    @POST("/sync_notification/")
+    fun syncNotification(@Body data: RequestBody): Call<ResponseBody>
+    @POST("/sync_query_embedding/")
+    fun syncQueryEmbedding(@Body data: RequestBody): Call<ResponseBody>
     @POST("/update_notifications/")
     fun updateNotifications(@Body data: RequestBody): Call<ResponseBody>
     @POST("/insert_preference/")

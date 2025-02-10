@@ -1,6 +1,8 @@
 package org.muilab.notigpt.view.screen
 
 import android.content.Context
+import android.os.Build
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -13,6 +15,7 @@ import org.muilab.notigpt.view.component.getTabList
 import org.muilab.notigpt.viewModel.DrawerViewModel
 import org.muilab.notigpt.viewModel.ServerViewModel
 
+@RequiresApi(Build.VERSION_CODES.S)
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun MainScreen(context: Context, drawerViewModel: DrawerViewModel, geminiViewModel: ServerViewModel) {
@@ -20,6 +23,6 @@ fun MainScreen(context: Context, drawerViewModel: DrawerViewModel, geminiViewMod
     val pagerState = rememberPagerState(initialPage = 0, pageCount = { tabData.size })
     Column(modifier = Modifier.fillMaxSize()) {
         TabLayout(tabData, pagerState)
-        TabContent(tabData, pagerState, context, drawerViewModel, geminiViewModel)
+        TabContent(pagerState, context, drawerViewModel, geminiViewModel)
     }
 }
