@@ -24,6 +24,7 @@ import java.util.concurrent.TimeUnit
 import java.util.zip.GZIPInputStream
 import java.util.zip.GZIPOutputStream
 import kotlin.math.abs
+import kotlin.math.min
 
 fun getNotifications(context: Context): ArrayList<NotiUnit> = with(Dispatchers.IO) {
     val drawerDatabase = DrawerDatabase.getInstance(context)
@@ -129,11 +130,42 @@ fun compressedBase64ToDoubleArray(base64String: String): DoubleArray {
     }
 }
 
-fun cosineSimilarity(embeddingBaseSixtyFour1: String, embeddingBaseSixtyFour2: String): Double {
-    val vec1 = compressedBase64ToDoubleArray(embeddingBaseSixtyFour1)
-    val vec2 = compressedBase64ToDoubleArray(embeddingBaseSixtyFour2)
-    if (vec1.isEmpty() || vec2.isEmpty())
-        return 0.0
+fun cosineSimilarity(embeddingBaseSixtyFourQuery: String, embeddingBaseSixtyFourNotification: String): Double {
+    val queryEmbedding = compressedBase64ToDoubleArray(embeddingBaseSixtyFourQuery)
+    val notificationEmbedding = compressedBase64ToDoubleArray(embeddingBaseSixtyFourNotification)
+    val baselineEnglishEmbedding = compressedBase64ToDoubleArray(SharedPreferencesManager.baselineEmbeddingEn)
+    val baselineChineseEmbedding = compressedBase64ToDoubleArray(SharedPreferencesManager.baselineEmbeddingZhTW)
+
+    // Compute Cosine Similarities
+    val simQN = computeCosine(queryEmbedding, notificationEmbedding) // Query-Notification
+
+    return simQN.coerceIn(0.0, 1.0)
+
+    val simQBaseEn = computeCosine(queryEmbedding, baselineEnglishEmbedding) // Query-Baseline (EN)
+    val simQBaseZh = computeCosine(queryEmbedding, baselineChineseEmbedding) // Query-Baseline (ZH)
+
+    // Prevent trivial cases
+    if (queryEmbedding.isEmpty() || notificationEmbedding.isEmpty()) return 0.0
+
+    // Adjust similarity with relative scaling instead of direct subtraction
+    val diffFromEnglish = (simQN - simQBaseEn) / (1 - simQBaseEn)
+    val diffFromChinese = (simQN - simQBaseZh) / (1 - simQBaseZh)
+    val contrastiveSimilarity = maxOf(diffFromEnglish, diffFromChinese)
+
+    // Apply a diversity boost to push down notifications that are too generic
+    val diversityFactor = 1 - min(simQBaseEn, simQBaseZh)
+    val finalSimilarity = contrastiveSimilarity * diversityFactor
+
+    // Weighted combination: Balance between direct similarity and contrastive adjustment
+    val weightedSimilarity = (0.7 * simQN) + (0.3 * finalSimilarity)
+
+    // Ensure scores remain within range (0 to 1) and prevent negatives
+    return weightedSimilarity.coerceIn(0.0, 1.0)
+}
+
+// Helper function for cosine similarity calculation
+fun computeCosine(vec1: DoubleArray, vec2: DoubleArray): Double {
+    if (vec1.isEmpty() || vec2.isEmpty()) return 0.0
     val dotProduct = vec1.zip(vec2).sumOf { it.first * it.second }
     val norm1 = kotlin.math.sqrt(vec1.sumOf { it * it })
     val norm2 = kotlin.math.sqrt(vec2.sumOf { it * it })

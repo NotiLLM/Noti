@@ -10,6 +10,7 @@ class Constants {
         const val API_EXPORT_DB = "export_db"
         const val API_CLEAR_DB = "clear_db"
         const val API_INSERT_PREFERENCE = "insert_preference"
+        const val API_FETCH_BASELINE_EMBEDDING = "fetch_baseline_embedding"
         const val NOTI_REMOVE_DELAY = 10 * 1000L
     }
 }

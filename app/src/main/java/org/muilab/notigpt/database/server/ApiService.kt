@@ -13,6 +13,8 @@ interface ApiService {
     fun syncNotification(@Body data: RequestBody): Call<ResponseBody>
     @POST("/sync_query_embedding/")
     fun syncQueryEmbedding(@Body data: RequestBody): Call<ResponseBody>
+    @POST("/fetch_baseline_embedding/")
+    fun fetchBaselineEmbedding(): Call<ResponseBody>
     @POST("/update_notifications/")
     fun updateNotifications(@Body data: RequestBody): Call<ResponseBody>
     @POST("/insert_preference/")

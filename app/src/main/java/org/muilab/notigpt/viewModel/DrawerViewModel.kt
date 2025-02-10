@@ -7,7 +7,6 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.os.Build
 import android.os.Environment
-import android.util.Log
 import android.widget.Toast
 import androidx.annotation.RequiresApi
 import androidx.lifecycle.AndroidViewModel
@@ -30,8 +29,6 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.flow.filterNotNull
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
@@ -46,8 +43,9 @@ import org.muilab.notigpt.database.room.DrawerDatabase
 import org.muilab.notigpt.database.server.workers.ApiWorker
 import org.muilab.notigpt.model.notifications.NotiUnit
 import org.muilab.notigpt.paging.NotiRepository
+import org.muilab.notigpt.util.Constants.Companion.API_FETCH_BASELINE_EMBEDDING
 import org.muilab.notigpt.util.Constants.Companion.API_SYNC_QUERY
-import org.muilab.notigpt.util.compressedBase64ToDoubleArray
+import org.muilab.notigpt.util.SharedPreferencesManager
 import org.muilab.notigpt.util.cosineSimilarity
 import org.muilab.notigpt.util.getAbsoluteTimeStr
 import org.muilab.notigpt.util.getNotifications
@@ -80,8 +78,8 @@ class DrawerViewModel(
 
     private val lastValidEmbedding = MutableStateFlow<String?>(null)
 
-    @OptIn(ExperimentalCoroutinesApi::class)
-    val queryEmbeddingBase64: Flow<String?> = _queryString
+    @OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
+    val queryEmbeddingString: Flow<String?> = _queryString
         .debounce(500)
         .distinctUntilChanged()
         .flatMapLatest { query ->
@@ -128,14 +126,24 @@ class DrawerViewModel(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    val sortedNotifications: StateFlow<List<NotiUnit>> = queryEmbeddingBase64
+    val sortedNotifications: StateFlow<List<NotiUnit>> = queryEmbeddingString
         .flatMapLatest { currentQueryEmbedding ->
             notificationFlow.map { notifications ->
                 val embeddingToUse = currentQueryEmbedding ?: lastValidEmbedding.value
                 notifications.map { noti ->
-                    val similarity = if (queryString.value.isBlank()) {
+                    val similarity = if (SharedPreferencesManager.baselineEmbeddingEn.isEmpty()
+                        || SharedPreferencesManager.baselineEmbeddingZhTW.isEmpty()) {
+                        val inputData = Data.Builder()
+                            .putString("api_type", API_FETCH_BASELINE_EMBEDDING)
+                            .build()
+                        val apiWorkerRequest = OneTimeWorkRequestBuilder<ApiWorker>()
+                            .setInputData(inputData)
+                            .build()
+                        WorkManager.getInstance(context).enqueue(apiWorkerRequest)
+                        0.0
+                    } else if (queryString.value.isBlank()) {
                         lastValidEmbedding.value = null
-                        -1.0
+                        0.0
                     } else if (embeddingToUse != null) {
                         cosineSimilarity(embeddingToUse, noti.embeddingString)
                     } else {

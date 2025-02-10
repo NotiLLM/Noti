@@ -30,14 +30,22 @@ import androidx.compose.ui.window.Dialog
 import androidx.work.Data
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import org.muilab.notigpt.database.server.RetrofitClient
+import org.muilab.notigpt.util.Constants
 import org.muilab.notigpt.util.Constants.Companion.API_CLEAR_DB
 import org.muilab.notigpt.util.Constants.Companion.API_EXPORT_DB
 import org.muilab.notigpt.util.Constants.Companion.API_SORT_DRAWER
 import org.muilab.notigpt.util.Constants.Companion.API_SYNC_DRAWER
+import org.muilab.notigpt.util.Constants.Companion.API_SYNC_NOTI
 import org.muilab.notigpt.util.Constants.Companion.API_UPDATE_USER
 import org.muilab.notigpt.util.SharedPreferencesManager
 import org.muilab.notigpt.util.SharedPreferencesManager.KEY_HISTORY_NOTI_COUNT_THRESHOLD
 import org.muilab.notigpt.util.SharedPreferencesManager.KEY_HISTORY_NOTI_HOURS_THRESHOLD
+import org.muilab.notigpt.util.SharedPreferencesManager.KEY_SERVER_IP
+import org.muilab.notigpt.util.getNotifications
 import org.muilab.notigpt.viewModel.DrawerViewModel
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -80,6 +88,23 @@ fun DevControlPanel(context: Context, drawerViewModel: DrawerViewModel) {
                     Toast.makeText(context, "Start Syncing", Toast.LENGTH_SHORT).show()
                 }) {
                     Text("Sync Drawer")
+                }
+                Button(onClick = {
+                    CoroutineScope(Dispatchers.IO).launch {
+                        val notifications = getNotifications(context)
+                        notifications.forEach {
+                            val inputData = Data.Builder()
+                                .putString("api_type", API_SYNC_NOTI)
+                                .putString("noti_key", it.notiKey)
+                                .build()
+                            val apiWorkerRequest = OneTimeWorkRequestBuilder<ApiWorker>()
+                                .setInputData(inputData)
+                                .build()
+                            WorkManager.getInstance(context).enqueue(apiWorkerRequest)
+                        }
+                    }
+                }) {
+                    Text("Sync Noti Embedding")
                 }
                 Button(onClick = {
                     Toast.makeText(context, "Start Sorting", Toast.LENGTH_SHORT).show()
@@ -159,6 +184,7 @@ fun DevControlPanel(context: Context, drawerViewModel: DrawerViewModel) {
 //            }
                 SharedPrefsButton("Set History Count", KEY_HISTORY_NOTI_COUNT_THRESHOLD)
                 SharedPrefsButton("Set History Time", KEY_HISTORY_NOTI_HOURS_THRESHOLD)
+                SharedPrefsButton("Set IP", KEY_SERVER_IP)
             }
         }
     }
@@ -189,7 +215,7 @@ fun SharedPrefsButton(
                     TextField(
                         value = inputText,
                         onValueChange = { inputText = it },
-                        placeholder = { Text("Enter integer") }
+                        placeholder = { Text("Enter value") }
                     )
 
                     // Error Message
@@ -220,6 +246,25 @@ fun SharedPrefsButton(
                                         showDialog = false
                                     } else {
                                         errorMessage = "Invalid integer!"
+                                    }
+                                }
+                                KEY_SERVER_IP -> {
+
+                                    fun isValidIpAddress(ip: String): Boolean {
+                                        val ipv4Pattern = Regex("^((25[0-5]|2[0-4][0-9]|1?[0-9][0-9]?)\\.){3}(25[0-5]|2[0-4][0-9]|1?[0-9][0-9]?)$")
+
+                                        val ipv6Pattern = Regex("^[0-9a-fA-F:]+$") // Loose check for IPv6 format
+                                        val validIpv6 = ip.contains(":") && ip.split(":").size in 3..8
+
+                                        return ipv4Pattern.matches(ip) || (ipv6Pattern.matches(ip) && validIpv6)
+                                    }
+
+                                    if (isValidIpAddress(inputText)) {
+                                        SharedPreferencesManager.serverIP = inputText
+                                        RetrofitClient.updateBaseUrl(SharedPreferencesManager.serverIP)
+                                        showDialog = false
+                                    } else {
+                                        errorMessage = "Invalid IP!"
                                     }
                                 }
                                 else -> {

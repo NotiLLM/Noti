@@ -5,11 +5,13 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -29,10 +31,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.core.app.NotificationManagerCompat
+import androidx.work.Data
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
 import org.muilab.notigpt.database.room.DrawerDatabase
+import org.muilab.notigpt.database.server.workers.ApiWorker
 import org.muilab.notigpt.paging.NotiRepository
 import org.muilab.notigpt.service.NotiListenerService
 import org.muilab.notigpt.ui.theme.NotiTaskTheme
+import org.muilab.notigpt.util.Constants.Companion.API_FETCH_BASELINE_EMBEDDING
 import org.muilab.notigpt.util.SharedPreferencesManager
 import org.muilab.notigpt.view.screen.MainScreen
 import org.muilab.notigpt.viewModel.DrawerViewModel
@@ -40,11 +47,22 @@ import org.muilab.notigpt.viewModel.DrawerViewModelFactory
 import org.muilab.notigpt.viewModel.ServerViewModel
 
 class MainActivity : ComponentActivity() {
+    @RequiresApi(Build.VERSION_CODES.S)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         SharedPreferencesManager.init(this)
         SharedPreferencesManager.userId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
+        if (SharedPreferencesManager.baselineEmbeddingEn.isEmpty()
+            || SharedPreferencesManager.baselineEmbeddingZhTW.isEmpty()) {
+            val inputData = Data.Builder()
+                .putString("api_type", API_FETCH_BASELINE_EMBEDDING)
+                .build()
+            val apiWorkerRequest = OneTimeWorkRequestBuilder<ApiWorker>()
+                .setInputData(inputData)
+                .build()
+            WorkManager.getInstance(applicationContext).enqueue(apiWorkerRequest)
+        }
 
         if (!NotificationManagerCompat.from(applicationContext).areNotificationsEnabled()) {
             val intent = Intent().apply {

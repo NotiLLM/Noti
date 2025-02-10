@@ -23,6 +23,7 @@ import org.muilab.notigpt.database.server.RetrofitClient
 import org.muilab.notigpt.model.server.SortOutcome
 import org.muilab.notigpt.util.Constants.Companion.API_CLEAR_DB
 import org.muilab.notigpt.util.Constants.Companion.API_EXPORT_DB
+import org.muilab.notigpt.util.Constants.Companion.API_FETCH_BASELINE_EMBEDDING
 import org.muilab.notigpt.util.Constants.Companion.API_INSERT_PREFERENCE
 import org.muilab.notigpt.util.Constants.Companion.API_SORT_DRAWER
 import org.muilab.notigpt.util.Constants.Companion.API_SYNC_DRAWER
@@ -49,6 +50,7 @@ class ApiWorker(appContext: Context, workerParams: WorkerParameters) :
             when (apiType) {
                 API_SYNC_NOTI -> doSyncNoti()
                 API_SYNC_QUERY -> doSyncQuery()
+                API_FETCH_BASELINE_EMBEDDING -> doFetchBaselineEmbedding()
                 API_SYNC_DRAWER -> doSyncDrawer()
                 API_SORT_DRAWER -> doSortDrawer()
                 API_UPDATE_USER -> doUpdateUser()
@@ -92,6 +94,11 @@ class ApiWorker(appContext: Context, workerParams: WorkerParameters) :
 
         val requestBody = requestObject.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
         val response = RetrofitClient.apiService.syncQueryEmbedding(requestBody).execute()
+        return handleResponse(response)
+    }
+
+    private fun doFetchBaselineEmbedding(): Result {
+        val response = RetrofitClient.apiService.fetchBaselineEmbedding().execute()
         return handleResponse(response)
     }
 
@@ -175,6 +182,7 @@ class ApiWorker(appContext: Context, workerParams: WorkerParameters) :
                 API_SORT_DRAWER -> handleSortDrawer(response)
                 API_SYNC_NOTI -> handleSyncNoti(response)
                 API_SYNC_QUERY -> handleSyncQuery(response)
+                API_FETCH_BASELINE_EMBEDDING -> handleFetchBaselineEmbedding(response)
                 else -> Data.Builder().build()
             }
             Handler(Looper.getMainLooper()).post {
@@ -229,6 +237,29 @@ class ApiWorker(appContext: Context, workerParams: WorkerParameters) :
         return Data.Builder().build()
     }
 
+    private fun handleFetchBaselineEmbedding(response: Response<ResponseBody>): Data {
+        try {
+            val responseBody = response.body()
+            val jsonString = responseBody?.string()
+            val jsonObject = JSONObject(jsonString)
+            val baselineEmbeddingEn = jsonObject.getJSONArray("en")
+            val baselineEmbeddingZhTW = jsonObject.getJSONArray("zh-TW")
+            val doubleArrayEn = DoubleArray(baselineEmbeddingEn.length()) {
+                index -> baselineEmbeddingEn.getDouble(index)
+            }
+            val doubleArrayZhTW = DoubleArray(baselineEmbeddingZhTW.length()) {
+                index -> baselineEmbeddingZhTW.getDouble(index)
+            }
+            val embeddingStringEn = doubleArrayToCompressedBase64(doubleArrayEn)
+            val embeddingStringZhTW = doubleArrayToCompressedBase64(doubleArrayZhTW)
+            SharedPreferencesManager.baselineEmbeddingEn = embeddingStringEn
+            SharedPreferencesManager.baselineEmbeddingZhTW = embeddingStringZhTW
+        } catch (e: IOException) {
+            Log.d("Fetch Baseline Embedding", e.stackTraceToString())
+        }
+        return Data.Builder().build()
+    }
+
     private fun handleSyncQuery(response: Response<ResponseBody>): Data {
         try {
             val responseBody = response.body()
@@ -242,7 +273,7 @@ class ApiWorker(appContext: Context, workerParams: WorkerParameters) :
                 .putString("embeddingString", embeddingString)
                 .build()
         } catch (e: IOException) {
-            Log.d("Sync Noti", e.stackTraceToString())
+            Log.d("Sync Query", e.stackTraceToString())
         }
         return Data.Builder().build()
     }

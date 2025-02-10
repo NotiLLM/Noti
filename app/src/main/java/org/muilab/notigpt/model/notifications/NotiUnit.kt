@@ -160,6 +160,28 @@ data class NotiUnit(
         )
     }
 
+    fun toN8NNoti(timeDiff: Long = System.currentTimeMillis()): Map<String, Any>? {
+
+        val currentTime = System.currentTimeMillis()
+        if (currentTime - body.latestTime > timeDiff)
+            return null
+
+        return mapOf<String, Any>(
+            "title" to title,
+            "app_name" to appName,
+            "body" to getNotiBody()
+                .filter { currentTime - it.time < timeDiff }
+                .map {
+                    mapOf<String, Any>(
+                        "title" to it.title,
+                        "abs_time" to getAbsoluteTimeStr(it.time),
+                        "rel_time" to getRelativeTimeStr(it.time),
+                        "content" to it.content
+                    )
+                }
+        )
+    }
+
     // FOR UI PRESENTATION
     fun withUpdatedSimilarity(similarity: Double): NotiUnit {
         return this.copy(outcome = outcome.copy(similarityScore = similarity))
