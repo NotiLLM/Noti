@@ -159,4 +159,9 @@ data class NotiUnit(
             }
         )
     }
+
+    // FOR UI PRESENTATION
+    fun withUpdatedSimilarity(similarity: Double): NotiUnit {
+        return this.copy(outcome = outcome.copy(similarityScore = similarity))
+    }
 }

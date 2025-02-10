@@ -124,6 +124,6 @@ interface DrawerDao {
     @Query("UPDATE noti_drawer SET similarityScore = :newSimilarity WHERE sbnKey = :sbnKey")
     fun updateSimilarity(sbnKey: String, newSimilarity: Double)
 
-    @Query("UPDATE noti_drawer SET similarityScore = -1")
+    @Query("UPDATE noti_drawer SET similarityScore = 0")
     fun resetSimilarity()
 }

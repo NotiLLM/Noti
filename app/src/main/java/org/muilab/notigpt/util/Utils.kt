@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.icu.text.RelativeDateTimeFormatter
 import android.icu.util.ULocale
 import android.util.Base64
+import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -120,7 +121,8 @@ fun compressedBase64ToDoubleArray(base64String: String): DoubleArray {
         }
 
         doubleList.toDoubleArray()
-    } catch (_: EOFException) {
+    } catch (e: EOFException) {
+        Log.d("Query", e.stackTraceToString())
         emptyArray<Double>().toDoubleArray()
     } catch (e: Exception) {
         throw RuntimeException("Decompression failed: ${e.message}")
@@ -131,7 +133,7 @@ fun cosineSimilarity(embeddingBaseSixtyFour1: String, embeddingBaseSixtyFour2: S
     val vec1 = compressedBase64ToDoubleArray(embeddingBaseSixtyFour1)
     val vec2 = compressedBase64ToDoubleArray(embeddingBaseSixtyFour2)
     if (vec1.isEmpty() || vec2.isEmpty())
-        return -1.0
+        return 0.0
     val dotProduct = vec1.zip(vec2).sumOf { it.first * it.second }
     val norm1 = kotlin.math.sqrt(vec1.sumOf { it * it })
     val norm2 = kotlin.math.sqrt(vec2.sumOf { it * it })

@@ -7,6 +7,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.os.Build
 import android.os.Environment
+import android.util.Log
 import android.widget.Toast
 import androidx.annotation.RequiresApi
 import androidx.lifecycle.AndroidViewModel
@@ -25,10 +26,13 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
@@ -43,6 +47,7 @@ import org.muilab.notigpt.database.server.workers.ApiWorker
 import org.muilab.notigpt.model.notifications.NotiUnit
 import org.muilab.notigpt.paging.NotiRepository
 import org.muilab.notigpt.util.Constants.Companion.API_SYNC_QUERY
+import org.muilab.notigpt.util.compressedBase64ToDoubleArray
 import org.muilab.notigpt.util.cosineSimilarity
 import org.muilab.notigpt.util.getAbsoluteTimeStr
 import org.muilab.notigpt.util.getNotifications
@@ -52,6 +57,7 @@ import org.muilab.notigpt.util.resetSimilarity
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
+import kotlin.collections.filter
 
 class DrawerViewModel(
     application: Application,
@@ -72,44 +78,46 @@ class DrawerViewModel(
         _queryString.value = newQueryString
     }
 
-    @OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
+    private val lastValidEmbedding = MutableStateFlow<String?>(null)
+
+    @OptIn(ExperimentalCoroutinesApi::class)
     val queryEmbeddingBase64: Flow<String?> = _queryString
-        .debounce(500) // Wait until the user stops typing.
+        .debounce(500)
         .distinctUntilChanged()
         .flatMapLatest { query ->
-            // If the query is blank, no need to call the backend.
             if (query.isBlank()) {
                 resetSimilarity(context)
                 flowOf(null)
             } else {
-                // Emit null first (so the UI can show a "loading" indicator) and then trigger WorkManager.
                 flow<String?> {
-                    emit(null)  // Indicates that we are waiting for a result.
-                    // Build input data for your worker.
+                    emit(null) // UI shows loading state
                     val inputData = Data.Builder()
                         .putString("api_type", API_SYNC_QUERY)
                         .putString("query_string", query)
                         .build()
-                    // Create the WorkManager request.
+
                     val workRequest = OneTimeWorkRequestBuilder<ApiWorker>()
                         .setInputData(inputData)
                         .build()
+
                     val workManager = WorkManager.getInstance(application)
                     workManager.enqueue(workRequest)
 
-                    // Convert the LiveData into a Flow (requires androidx.lifecycle:lifecycle-runtime-ktx).
                     val workInfo = workManager
                         .getWorkInfoByIdLiveData(workRequest.id)
                         .asFlow()
                         .filter { it?.state!!.isFinished }
-                        .first()
+                        .firstOrNull()
 
                     if (workInfo?.state == WorkInfo.State.SUCCEEDED) {
-                        val embeddingBase64 = workInfo.outputData.getString("embeddingString")
-                        emit(embeddingBase64)
+                        val embeddingString = workInfo.outputData.getString("embeddingString")
+                        if (!embeddingString.isNullOrBlank()) {
+                            lastValidEmbedding.value = embeddingString
+                            emit(embeddingString)
+                        }
                     } else {
                         resetSimilarity(context)
-                        emit(null)
+                        emit(lastValidEmbedding.value) // ✅ Use the last valid embedding instead of null
                     }
                 }
             }
@@ -120,51 +128,56 @@ class DrawerViewModel(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    val presentedNotifications: StateFlow<List<NotiUnit>> = queryEmbeddingBase64
-            .flatMapLatest { currentQueryEmbedding ->
-                notificationFlow.map { notifications ->
-                    if (currentQueryEmbedding == null) {
-                        notifications.sortedWith(
-                            compareByDescending<NotiUnit> { noti ->
-                                noti.getNotiBody().any { notiInfo ->
-                                    listOf(notiInfo.title, notiInfo.content, notiInfo.person)
-                                        .any { it.contains(queryString.value, ignoreCase = true) }
-                                }
-                            }.thenByDescending { noti -> noti.getAbsLatestTimeStr() }
-                        )
+    val sortedNotifications: StateFlow<List<NotiUnit>> = queryEmbeddingBase64
+        .flatMapLatest { currentQueryEmbedding ->
+            notificationFlow.map { notifications ->
+                val embeddingToUse = currentQueryEmbedding ?: lastValidEmbedding.value
+                notifications.map { noti ->
+                    val similarity = if (queryString.value.isBlank()) {
+                        lastValidEmbedding.value = null
+                        -1.0
+                    } else if (embeddingToUse != null) {
+                        cosineSimilarity(embeddingToUse, noti.embeddingString)
                     } else {
-                        notifications.sortedWith(
-                            compareByDescending<NotiUnit> { noti ->
-                                noti.getNotiBody().any { notiInfo ->
-                                    listOf(notiInfo.title, notiInfo.content, notiInfo.person)
-                                        .any { it.contains(queryString.value, ignoreCase = true) }
-                                }
-                            }.thenByDescending<NotiUnit> { noti ->
-                                    val similarity = cosineSimilarity(currentQueryEmbedding, noti.embeddingString)
-
-                                    CoroutineScope(Dispatchers.IO).launch {
-                                        val drawerDatabase = DrawerDatabase.getInstance(context)
-                                        val drawerDao = drawerDatabase.drawerDao()
-                                        drawerDao.updateSimilarity(noti.notiKey, similarity)
-                                    }
-
-                                    similarity
-                                }.thenByDescending { noti -> noti.getAbsLatestTimeStr() }
-                            )
+                        noti.outcome.similarityScore
                     }
-                }
-            }
-            .map { notiList: List<NotiUnit> ->
-                when (category.value) {
-                    "pinned" -> notiList.filter { it.pinned }
-                    "social" -> notiList.filter {
-                        it.appName in listOf("Facebook", "Instagram", "LINE", "Messenger", "Slack")
+
+                    CoroutineScope(Dispatchers.IO).launch {
+                        val drawerDatabase = DrawerDatabase.getInstance(context)
+                        val drawerDao = drawerDatabase.drawerDao()
+                        drawerDao.updateSimilarity(noti.notiKey, similarity)
                     }
-                    "email" -> notiList.filter { it.appName in listOf("Gmail") }
-                    else -> notiList
-                }
+
+                    noti.withUpdatedSimilarity(similarity)
+                }.sortedWith(
+                    compareByDescending<NotiUnit> { noti ->
+                        noti.getNotiBody().any { notiInfo ->
+                            listOf(notiInfo.title, notiInfo.content, notiInfo.person)
+                                .any { it.contains(queryString.value, ignoreCase = true) }
+                        }
+                    }.thenByDescending { noti ->
+                        noti.outcome.similarityScore
+                    }.thenByDescending { noti ->
+                        noti.getAbsLatestTimeStr()
+                    }
+                )
             }
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        }
+        .distinctUntilChanged()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val presentedNotifications: StateFlow<List<NotiUnit>> =
+        combine(category, sortedNotifications) { latestCategory, notiList ->
+            when (latestCategory) {
+                "pinned" -> notiList.filter { it.pinned }
+                "social" -> notiList.filter {
+                    it.appName in listOf("Facebook", "Instagram", "LINE", "Messenger", "Slack")
+                }
+                "email" -> notiList.filter { it.appName in listOf("Gmail") }
+                else -> notiList
+            }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val notSeenCount: LiveData<Int> = notiRepository.notSeenCount
 

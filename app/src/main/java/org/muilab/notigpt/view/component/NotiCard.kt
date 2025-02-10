@@ -299,7 +299,7 @@ fun NotiCard(context: Context, notiUnit: NotiUnit, drawerViewModel: DrawerViewMo
                         }
                     }
                 }
-                if (progress == 0f && notiUnit.outcome.similarityScore > -1)
+                if (progress == 0f && notiUnit.outcome.similarityScore > 0)
                     Text(
                         String.format("%.3f", notiUnit.outcome.similarityScore),
                         modifier = Modifier.align(Alignment.CenterHorizontally).padding(0.dp),

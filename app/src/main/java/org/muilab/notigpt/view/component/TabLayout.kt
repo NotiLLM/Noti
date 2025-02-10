@@ -44,13 +44,15 @@ fun TabLayout(tabData: List<Pair<String, ImageVector>>, pagerState: PagerState) 
                 selected = pagerState.currentPage == index,
                 onClick = {
                     scope.launch {
-                        pagerState.animateScrollToPage(index)
+                        if (pagerState.currentPage != index) {
+                            pagerState.animateScrollToPage(index)
+                        }
                     }
                 },
                 icon = {
                     Icon(imageVector = s.second, contentDescription = null)
                 },
-                text = { /*Text(text = s.first)*/ }
+                text = {}
             )
         }
     }

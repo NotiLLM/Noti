@@ -12,6 +12,7 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.graphics.vector.ImageVector
 import org.muilab.notigpt.view.screen.HomeScreen
@@ -27,17 +28,15 @@ fun TabContent(
     drawerViewModel: DrawerViewModel,
     serverViewModel: ServerViewModel
 ) {
+    val categoryMap = listOf("all", "pinned", "social", "email")
 
-    HorizontalPager(state = pagerState) { index ->
-        when (index) {
-            0 -> drawerViewModel.updateCategory("all")
-            1 -> drawerViewModel.updateCategory("pinned")
-            2 -> drawerViewModel.updateCategory("social")
-            3 -> drawerViewModel.updateCategory("email")
-        }
-        HomeScreen(context, drawerViewModel, serverViewModel)
+    LaunchedEffect(pagerState.currentPage) {
+        drawerViewModel.updateCategory(categoryMap[pagerState.currentPage])
     }
 
+    HorizontalPager(state = pagerState) { index ->
+        HomeScreen(context, drawerViewModel, serverViewModel)
+    }
 }
 
 fun getTabList(): List<Pair<String, ImageVector>> {
