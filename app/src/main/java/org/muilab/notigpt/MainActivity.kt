@@ -32,10 +32,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.core.app.NotificationManagerCompat
 import androidx.work.Data
+import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import org.muilab.notigpt.database.room.DrawerDatabase
 import org.muilab.notigpt.database.server.workers.ApiWorker
+import org.muilab.notigpt.database.server.workers.UploadWorker
 import org.muilab.notigpt.paging.NotiRepository
 import org.muilab.notigpt.service.NotiListenerService
 import org.muilab.notigpt.ui.theme.NotiTaskTheme
@@ -45,6 +48,7 @@ import org.muilab.notigpt.view.screen.MainScreen
 import org.muilab.notigpt.viewModel.DrawerViewModel
 import org.muilab.notigpt.viewModel.DrawerViewModelFactory
 import org.muilab.notigpt.viewModel.ServerViewModel
+import java.util.concurrent.TimeUnit
 
 class MainActivity : ComponentActivity() {
     @RequiresApi(Build.VERSION_CODES.S)
@@ -91,6 +95,16 @@ class MainActivity : ComponentActivity() {
         } else {
             startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
         }
+
+        val uploadWorkRequest = PeriodicWorkRequestBuilder<UploadWorker>(
+            4, TimeUnit.HOURS // 🔄 Runs every 15 minutes
+        ).build()
+        WorkManager.getInstance(applicationContext).cancelAllWorkByTag("UploadWorker")
+        WorkManager.getInstance(applicationContext).enqueueUniquePeriodicWork(
+            "UploadWorker",
+            ExistingPeriodicWorkPolicy.REPLACE,
+            uploadWorkRequest
+        )
 
         setContent {
             NotiTaskTheme {
