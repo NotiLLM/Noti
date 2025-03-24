@@ -37,13 +37,14 @@ interface DrawerDao {
                 WHEN wholeNotiRead = 0 THEN 1
                 WHEN wholeNotiRead = 1 THEN 2
             END,
-            score DESC,
+            sortScore DESC,
             latestTime DESC
     """
     )
     fun getAllVisible(): List<NotiUnit>
 
-    @Query("""
+    @Query(
+        """
         SELECT * FROM noti_drawer WHERE isVisible = 1 
         ORDER BY 
             CASE 
@@ -56,9 +57,10 @@ interface DrawerDao {
                 WHEN wholeNotiRead = 0 THEN 1
                 WHEN wholeNotiRead = 1 THEN 2
             END,
-            score DESC,
+            sortScore DESC,
             latestTime DESC
-    """)
+    """
+    )
     fun getAllVisibleFlow(): Flow<List<NotiUnit>>
 
     @Query(
@@ -104,8 +106,8 @@ interface DrawerDao {
     @Query("DELETE FROM noti_drawer WHERE pinned <> 1")
     fun deleteAllNotPinned()
 
-    @Query("UPDATE noti_drawer SET score = :newScore WHERE sbnKey = :sbnKey")
-    fun updateScore(sbnKey: String, newScore: Float)
+    @Query("UPDATE noti_drawer SET sortScore = :newSortScore WHERE sbnKey = :sbnKey")
+    fun updateSortScore(sbnKey: String, newSortScore: Float)
 
     @Query("UPDATE noti_drawer SET explanation = :newExplanation WHERE sbnKey = :sbnKey")
     fun updateExplanation(sbnKey: String, newExplanation: String)
@@ -113,7 +115,7 @@ interface DrawerDao {
     @Transaction
     suspend fun updateSorting(sortOutcomes: List<SortOutcome>) {
         sortOutcomes.forEach { sortOutcome ->
-            updateScore(sortOutcome.id, sortOutcome.score)
+            updateSortScore(sortOutcome.id, sortOutcome.score)
             updateExplanation(sortOutcome.id, sortOutcome.explanation)
         }
     }

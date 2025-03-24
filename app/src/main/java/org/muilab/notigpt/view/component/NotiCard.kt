@@ -20,12 +20,14 @@ import androidx.compose.foundation.gestures.AnchoredDraggableState
 import androidx.compose.foundation.gestures.DraggableAnchors
 import androidx.compose.foundation.gestures.animateTo
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.scrollable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentHeight
@@ -124,7 +126,7 @@ fun NotiCard(context: Context, notiUnit: NotiUnit, drawerViewModel: DrawerViewMo
     val notiBody = notiUnit.getNotiBody().toCollection(ArrayList())
     var requiresExpansion by remember { mutableStateOf(
         notiBody.size > 1 || hasSummary ||
-                (notiBody.size == 1 && notiBody[0].getTitle(pkgName, isPeople)
+                (notiBody.size == 1 && notiBody[0].getDisplayedTitle(pkgName, isPeople)
                     .let { notiOverallTitle.isNotBlank() && notiOverallTitle != it }))
     }
 
@@ -484,7 +486,7 @@ fun NotiCard(context: Context, notiUnit: NotiUnit, drawerViewModel: DrawerViewMo
                         val scrollState = rememberScrollState()
 
                         val isGroup = (listOf(notiOverallTitle)
-                                + notiBody.map { it.getTitle(pkgName, isPeople) })
+                                + notiBody.map { it.getDisplayedTitle(pkgName, isPeople) })
                             .filter { it.isNotBlank() }
                             .toSet().size > 1
 
@@ -498,11 +500,11 @@ fun NotiCard(context: Context, notiUnit: NotiUnit, drawerViewModel: DrawerViewMo
                         ) {
                             notiBody.forEachIndexed { idx, noti ->
 
-                                val notiTitle = noti.getTitle(pkgName, isPeople)
+                                val notiTitle = noti.getDisplayedTitle(pkgName, isPeople)
                                 val prevTitle = if (idx == 0)
                                     notiOverallTitle
                                 else
-                                    notiBody[idx - 1].getTitle(pkgName, isPeople)
+                                    notiBody[idx - 1].getDisplayedTitle(pkgName, isPeople)
                                 val notiTime = noti.time
                                 val notiContent = noti.content
                                 val notiSeen = noti.notiSeen
@@ -584,63 +586,76 @@ fun NotiCard(context: Context, notiUnit: NotiUnit, drawerViewModel: DrawerViewMo
 @Composable
 fun NotiFeedbackDropdown(context: Context, notiUnit: NotiUnit, isDropdownMenuExpanded: MutableState<Boolean>) {
 
+    val scrollState = rememberScrollState()
+
     DropdownMenu(
         expanded = isDropdownMenuExpanded.value,
         onDismissRequest = { isDropdownMenuExpanded.value = false },
         modifier = Modifier.fillMaxWidth()
     ) {
-        Row(
+//        Row(
+//            modifier = Modifier
+//                .fillMaxWidth()
+//                .padding(vertical = 8.dp),
+//            verticalAlignment = Alignment.CenterVertically
+//        ){
+//            Button(
+//                onClick = {
+//                    val inputData = Data
+//                        .Builder()
+//                        .putString("api_type", API_INSERT_PREFERENCE)
+//                        .putString("noti_key", notiUnit.notiKey)
+//                        .putBoolean("preferred", false)
+//                        .build()
+//                    val apiWorkerRequest = OneTimeWorkRequestBuilder<ApiWorker>()
+//                        .setInputData(inputData)
+//                        .build()
+//                    WorkManager
+//                        .getInstance(context)
+//                        .enqueue(apiWorkerRequest)
+//                    isDropdownMenuExpanded.value = false
+//                },
+//                modifier = Modifier.weight(3f),
+//                colors = ButtonDefaults.buttonColors(containerColor = Color.Red)
+//            ){
+//                Text("排下")
+//            }
+//            Spacer(Modifier.weight(1F))
+//            Button(
+//                onClick = {
+//                    val inputData = Data
+//                        .Builder()
+//                        .putString("api_type", API_INSERT_PREFERENCE)
+//                        .putString("noti_key", notiUnit.notiKey)
+//                        .putBoolean("preferred", true)
+//                        .build()
+//                    val apiWorkerRequest = OneTimeWorkRequestBuilder<ApiWorker>()
+//                        .setInputData(inputData)
+//                        .build()
+//                    WorkManager
+//                        .getInstance(context)
+//                        .enqueue(apiWorkerRequest)
+//                    isDropdownMenuExpanded.value = false
+//                },
+//                modifier = Modifier.weight(3f),
+//                colors = ButtonDefaults.buttonColors(containerColor = Color.Green)
+//            ){
+//                Text("排上")
+//            }
+//        }
+//        Text(notiUnit.sortScore.toString())
+
+        Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ){
-            Button(
-                onClick = {
-                    val inputData = Data
-                        .Builder()
-                        .putString("api_type", API_INSERT_PREFERENCE)
-                        .putString("noti_key", notiUnit.notiKey)
-                        .putBoolean("preferred", false)
-                        .build()
-                    val apiWorkerRequest = OneTimeWorkRequestBuilder<ApiWorker>()
-                        .setInputData(inputData)
-                        .build()
-                    WorkManager
-                        .getInstance(context)
-                        .enqueue(apiWorkerRequest)
-                    isDropdownMenuExpanded.value = false
-                },
-                modifier = Modifier.weight(3f),
-                colors = ButtonDefaults.buttonColors(containerColor = Color.Red)
-            ){
-                Text("排下")
-            }
-            Spacer(Modifier.weight(1F))
-            Button(
-                onClick = {
-                    val inputData = Data
-                        .Builder()
-                        .putString("api_type", API_INSERT_PREFERENCE)
-                        .putString("noti_key", notiUnit.notiKey)
-                        .putBoolean("preferred", true)
-                        .build()
-                    val apiWorkerRequest = OneTimeWorkRequestBuilder<ApiWorker>()
-                        .setInputData(inputData)
-                        .build()
-                    WorkManager
-                        .getInstance(context)
-                        .enqueue(apiWorkerRequest)
-                    isDropdownMenuExpanded.value = false
-                },
-                modifier = Modifier.weight(3f),
-                colors = ButtonDefaults.buttonColors(containerColor = Color.Green)
-            ){
-                Text("排上")
-            }
+                .height(150.dp) // Set fixed height to demonstrate overflow
+                .verticalScroll(scrollState)
+                .padding(16.dp)
+        ) {
+            Text(
+                text = notiUnit.explanation,
+                fontSize = 10.sp
+            )
         }
-        Text(notiUnit.score.toString())
-        Text(notiUnit.explanation)
     }
 }
 
@@ -756,7 +771,7 @@ fun NotiInfoContent(notiContent: String, modifier: Modifier = Modifier) {
 fun ScoreDisplay(notiUnit: NotiUnit) {
     Row {
         Text(
-            text = String.format("%.2f", notiUnit.score),
+            text = String.format("%.2f", notiUnit.sortScore),
             fontSize = 10.sp,
             fontWeight = FontWeight.ExtraBold,
             color = Color.Cyan

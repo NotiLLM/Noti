@@ -1,18 +1,17 @@
 package org.muilab.notigpt.database.server
 
 import okhttp3.OkHttpClient
-import org.muilab.notigpt.util.SharedPreferencesManager
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import java.util.concurrent.TimeUnit
 
 
-object RetrofitClient {
+object N8NRetrofitClient {
     @Volatile
     private var retrofit: Retrofit? = null
 
     private fun createRetrofit(): Retrofit {
-        val baseUrl = "http://${SharedPreferencesManager.serverIP}:8000" // ✅ Ensure it gets latest value
+        val baseUrl = "https://n8n.udchen.tw/webhook/"
 
         val client: OkHttpClient = OkHttpClient.Builder()
             .connectTimeout(10, TimeUnit.SECONDS)
@@ -27,7 +26,7 @@ object RetrofitClient {
             .build()
     }
 
-    val apiService: ApiService
+    val n8nWebhookService: N8NWebhookService
         get() {
             if (retrofit == null) {
                 synchronized(this) {
@@ -36,12 +35,6 @@ object RetrofitClient {
                     }
                 }
             }
-            return retrofit!!.create(ApiService::class.java)
+            return retrofit!!.create(N8NWebhookService::class.java)
         }
-
-    fun updateBaseUrl(newIp: String) {
-        synchronized(this) {
-            retrofit = createRetrofit()  // ✅ Always recreate with the latest IP
-        }
-    }
 }

@@ -9,10 +9,18 @@ import androidx.annotation.RequiresApi
 
 data class NotiInfo (
     val time: Long,
-    val title: String,
-    val person: String,
-    val content: String,
+    val person: String = "",
     var notiSeen: Boolean = false,
+    val prevContent: String = "",
+    val extraTitle: String = "",
+    val extraBigTitle: String = "",
+    val extraConversationTitle: String = "",
+    val extraBigText: String = "",
+    val extraText: String = "",
+    val extraTextLines: String = "",
+    val extraSummaryText: String = "",
+    val extraInfoText: String = "",
+    val extraSubText: String = ""
 ) {
 
     companion object {
@@ -42,30 +50,37 @@ data class NotiInfo (
             return ""
         }
 
-        private fun fetchTitle(sbn: StatusBarNotification): String {
-            return sbn.notification?.extras?.getCharSequence(Notification.EXTRA_TITLE_BIG).let { bigTitle ->
-                bigTitle?.toString() ?: sbn.notification?.extras?.getCharSequence(Notification.EXTRA_TITLE).let { title ->
-                    title?.toString() ?: ""
-                }
-            }
+        fun fetchExtra(sbn: StatusBarNotification, extraString: String): String {
+            return sbn.notification?.extras?.getCharSequence(extraString).toString()
         }
 
-        fun fetchContent(sbn: StatusBarNotification): String {
-            var content = sbn.notification?.extras?.getCharSequence(Notification.EXTRA_BIG_TEXT)
-            if (content == null || content.toString().isBlank())
-                content = sbn.notification?.extras?.getCharSequence(Notification.EXTRA_TEXT)
-            if (content == null || content.toString().isBlank())
-                content = sbn.notification?.extras?.getCharSequenceArray(Notification.EXTRA_TEXT_LINES).let { textLines ->
-                    textLines?.mapNotNull { it.toString() }?.joinToString(separator = "\n")
-                }
-            if (content == null || content.toString().isBlank())
-                content = sbn.notification?.extras?.getCharSequence(Notification.EXTRA_SUMMARY_TEXT)
-            if (content == null || content.toString().isBlank())
-                content = sbn.notification?.extras?.getCharSequence(Notification.EXTRA_INFO_TEXT)
-            if (content == null || content.toString().isBlank())
-                content = sbn.notification?.extras?.getCharSequence(Notification.EXTRA_SUB_TEXT)
-            return content?.toString() ?: ""
+        fun verifyExtra(extraTextString: String): Boolean {
+            return extraTextString.isNotBlank() && extraTextString != "null"
         }
+
+//        fun fetchBigText(sbn: StatusBarNotification): String {
+//            return sbn.notification?.extras?.getCharSequence(Notification.EXTRA_BIG_TEXT).toString()
+//        }
+//
+//        fun fetchText(sbn: StatusBarNotification): String {
+//            return sbn.notification?.extras?.getCharSequence(Notification.EXTRA_TEXT).toString()
+//        }
+//
+//        fun fetchTextLines(sbn: StatusBarNotification): String {
+//            return sbn.notification?.extras?.getCharSequenceArray(Notification.EXTRA_TEXT_LINES).toString()
+//        }
+//
+//        fun getSummaryText(sbn: StatusBarNotification): String {
+//            return sbn.notification?.extras?.getCharSequence(Notification.EXTRA_SUMMARY_TEXT).toString()
+//        }
+//
+//        fun getInfoText(sbn: StatusBarNotification): String {
+//            return sbn.notification?.extras?.getCharSequence(Notification.EXTRA_INFO_TEXT).toString()
+//        }
+//
+//        fun getSubText(sbn: StatusBarNotification): String {
+//            return sbn.notification?.extras?.getCharSequence(Notification.EXTRA_SUB_TEXT).toString()
+//        }
 
         val senderInTitle = setOf<String>()
     }
@@ -73,28 +88,56 @@ data class NotiInfo (
     @RequiresApi(Build.VERSION_CODES.S)
     constructor (sbn: StatusBarNotification): this(
         time = fetchTime(sbn),
-        title = fetchTitle(sbn),
         person = fetchPerson(sbn),
-        content = fetchContent(sbn)
+        extraTitle = fetchExtra(sbn, Notification.EXTRA_TITLE),
+        extraBigTitle = fetchExtra(sbn, Notification.EXTRA_TITLE_BIG),
+        extraConversationTitle = fetchExtra(sbn, Notification.EXTRA_CONVERSATION_TITLE),
+        extraBigText = fetchExtra(sbn, Notification.EXTRA_BIG_TEXT),
+        extraText = fetchExtra(sbn, Notification.EXTRA_TEXT),
+        extraTextLines = fetchExtra(sbn, Notification.EXTRA_TEXT_LINES),
+        extraSummaryText = fetchExtra(sbn, Notification.EXTRA_SUMMARY_TEXT),
+        extraInfoText = fetchExtra(sbn, Notification.EXTRA_INFO_TEXT),
+        extraSubText = fetchExtra(sbn, Notification.EXTRA_SUB_TEXT)
     )
 
-    constructor(time: Long): this(
+    constructor(time: Long, person: String, msgContent: String): this(
         time = time,
-        title = "",
-        person = "",
-        content = ""
-    )
-
-    constructor(time: Long, person: String, content: String): this(
-        time = time,
-        title = person,
         person = person,
-        content = content
+        prevContent = msgContent
     )
 
-    fun getTitle(packageName: String, isPerson: Boolean): String {
-        if (isPerson && packageName !in senderInTitle && person.isNotBlank())
-            return person
-        return title
+    var title: String = ""
+        get() {
+            return if (verifyExtra(extraConversationTitle))
+                extraConversationTitle
+            else if (verifyExtra(extraBigTitle))
+                extraBigTitle
+            else
+                extraTitle
+        }
+
+    fun getDisplayedTitle(packageName: String, isPerson: Boolean): String {
+        return if (isPerson && packageName !in senderInTitle && verifyExtra(person))
+            person
+        else
+            title
     }
+
+    var content: String = ""
+        get() {
+            return if (prevContent.isNotEmpty())
+                prevContent
+            else if (verifyExtra(extraBigText))
+                extraBigText
+            else if (verifyExtra(extraText))
+                extraText
+            else if (verifyExtra(extraTextLines))
+                extraTextLines
+            else if (verifyExtra(extraSummaryText))
+                extraSummaryText
+            else if (verifyExtra(extraInfoText))
+                extraInfoText
+            else
+                extraSubText
+        }
 }

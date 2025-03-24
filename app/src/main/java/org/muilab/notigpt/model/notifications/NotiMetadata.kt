@@ -23,7 +23,7 @@ import java.io.ByteArrayOutputStream
 
 data class NotiMetadata(
     val pkgName: String,
-    val category: String,
+    val sbnCategory: String,
     val sbnKey: String,
     val hashKey: Int,
     val groupKey: String,
@@ -91,7 +91,7 @@ data class NotiMetadata(
     @RequiresApi(Build.VERSION_CODES.S)
     constructor(sbn: StatusBarNotification): this (
         pkgName = sbn.opPkg,
-        category = sbn.notification?.category ?: "Unknown",
+        sbnCategory = sbn.notification?.category ?: "Unknown",
         sbnKey = sbn.key,
         hashKey = sbn.key.hashCode(),
         groupKey = sbn.notification?.group.toString(),

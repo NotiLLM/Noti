@@ -9,7 +9,9 @@ import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import org.muilab.notigpt.database.room.CategoryDatabase
 import org.muilab.notigpt.database.room.DrawerDatabase
+import org.muilab.notigpt.model.notifications.NotiCategory
 import org.muilab.notigpt.model.notifications.NotiUnit
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream

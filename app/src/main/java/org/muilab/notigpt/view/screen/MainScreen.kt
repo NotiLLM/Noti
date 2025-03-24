@@ -8,21 +8,20 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Modifier
 import org.muilab.notigpt.view.component.TabContent
 import org.muilab.notigpt.view.component.TabLayout
-import org.muilab.notigpt.view.component.getTabList
 import org.muilab.notigpt.viewModel.DrawerViewModel
-import org.muilab.notigpt.viewModel.ServerViewModel
 
 @RequiresApi(Build.VERSION_CODES.S)
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun MainScreen(context: Context, drawerViewModel: DrawerViewModel, geminiViewModel: ServerViewModel) {
-    val tabData = getTabList()
-    val pagerState = rememberPagerState(initialPage = 0, pageCount = { tabData.size })
+fun MainScreen(context: Context, drawerViewModel: DrawerViewModel) {
+    val pageCount = drawerViewModel.notiCategoryCount.collectAsState()
+    val pagerState = rememberPagerState(initialPage = 0, pageCount = { pageCount.value })
     Column(modifier = Modifier.fillMaxSize()) {
-        TabLayout(tabData, pagerState)
-        TabContent(pagerState, context, drawerViewModel, geminiViewModel)
+        TabLayout(context, drawerViewModel, pagerState)
+        TabContent(pagerState, context, drawerViewModel)
     }
 }

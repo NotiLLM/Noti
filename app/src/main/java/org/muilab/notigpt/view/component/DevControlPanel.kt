@@ -2,6 +2,7 @@ package org.muilab.notigpt.view.component
 
 import org.muilab.notigpt.database.server.workers.ApiWorker
 import android.content.Context
+import android.util.Log
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -28,19 +29,21 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.work.Data
+import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.OutOfQuotaPolicy
 import androidx.work.WorkManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import org.muilab.notigpt.database.server.RetrofitClient
-import org.muilab.notigpt.util.Constants
+import org.muilab.notigpt.database.server.workers.N8NWebhookWorker
 import org.muilab.notigpt.util.Constants.Companion.API_CLEAR_DB
 import org.muilab.notigpt.util.Constants.Companion.API_EXPORT_DB
 import org.muilab.notigpt.util.Constants.Companion.API_SORT_DRAWER
 import org.muilab.notigpt.util.Constants.Companion.API_SYNC_DRAWER
-import org.muilab.notigpt.util.Constants.Companion.API_SYNC_NOTI
 import org.muilab.notigpt.util.Constants.Companion.API_UPDATE_USER
+import org.muilab.notigpt.util.Constants.Companion.WEBHOOK_UPDATE_NOTIFICATION
 import org.muilab.notigpt.util.SharedPreferencesManager
 import org.muilab.notigpt.util.SharedPreferencesManager.KEY_HISTORY_NOTI_COUNT_THRESHOLD
 import org.muilab.notigpt.util.SharedPreferencesManager.KEY_HISTORY_NOTI_HOURS_THRESHOLD
@@ -90,21 +93,28 @@ fun DevControlPanel(context: Context, drawerViewModel: DrawerViewModel) {
                     Text("Sync Drawer")
                 }
                 Button(onClick = {
+                    Toast.makeText(context, "Start Updating Notifications", Toast.LENGTH_SHORT).show()
                     CoroutineScope(Dispatchers.IO).launch {
                         val notifications = getNotifications(context)
-                        notifications.forEach {
+                        notifications.forEach { notification ->
                             val inputData = Data.Builder()
-                                .putString("api_type", API_SYNC_NOTI)
-                                .putString("noti_key", it.notiKey)
+                                .putString("api_type", WEBHOOK_UPDATE_NOTIFICATION)
+                                .putString("noti_key", notification.notiKey)
                                 .build()
-                            val apiWorkerRequest = OneTimeWorkRequestBuilder<ApiWorker>()
+
+                            val workRequest = OneTimeWorkRequestBuilder<N8NWebhookWorker>()
                                 .setInputData(inputData)
                                 .build()
-                            WorkManager.getInstance(context).enqueue(apiWorkerRequest)
+
+                            WorkManager.getInstance(context).enqueueUniqueWork(
+                                "n8n-webhook",
+                                ExistingWorkPolicy.APPEND,
+                                workRequest
+                            )
                         }
                     }
                 }) {
-                    Text("Sync Noti Embedding")
+                    Text("Sync Noti Status")
                 }
                 Button(onClick = {
                     Toast.makeText(context, "Start Sorting", Toast.LENGTH_SHORT).show()

@@ -190,6 +190,7 @@ class ApiWorker(appContext: Context, workerParams: WorkerParameters) :
             }
             Result.success(outputData)
         } else {
+            // TODO: Error here
             Handler(Looper.getMainLooper()).post {
                 Toast.makeText(applicationContext, "$apiType failed to send data: ${response.errorBody()?.string()}", Toast.LENGTH_LONG).show()
             }

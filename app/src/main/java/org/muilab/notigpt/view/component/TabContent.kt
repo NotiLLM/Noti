@@ -17,7 +17,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.graphics.vector.ImageVector
 import org.muilab.notigpt.view.screen.HomeScreen
 import org.muilab.notigpt.viewModel.DrawerViewModel
-import org.muilab.notigpt.viewModel.ServerViewModel
 
 @RequiresApi(Build.VERSION_CODES.S)
 @OptIn(ExperimentalFoundationApi::class)
@@ -25,25 +24,9 @@ import org.muilab.notigpt.viewModel.ServerViewModel
 fun TabContent(
     pagerState: PagerState,
     context: Context,
-    drawerViewModel: DrawerViewModel,
-    serverViewModel: ServerViewModel
+    drawerViewModel: DrawerViewModel
 ) {
-    val categoryMap = listOf("all", "pinned", "social", "email")
-
-    LaunchedEffect(pagerState.currentPage) {
-        drawerViewModel.updateCategory(categoryMap[pagerState.currentPage])
-    }
-
     HorizontalPager(state = pagerState) { index ->
-        HomeScreen(context, drawerViewModel, serverViewModel)
+        HomeScreen(context, drawerViewModel)
     }
-}
-
-fun getTabList(): List<Pair<String, ImageVector>> {
-    return listOf(
-        "Notifications" to Icons.Default.Notifications,
-        "Pinned" to Icons.Default.Star,
-        "Messages" to Icons.Filled.Person,
-        "Emails" to Icons.Default.Email,
-    )
 }

@@ -129,11 +129,20 @@ data class NotiUnit(
             outcome.summary = value
         }
 
-    val score: Double
-        get() = outcome.score
+    var sortScore: Double
+        get() = outcome.sortScore
+        set(value) {
+            outcome.sortScore = value
+        }
 
-    val explanation: String
+    val category: String
+        get() = outcome.category
+
+    var explanation: String
         get() = outcome.explanation
+        set(value) {
+            outcome.explanation = value
+        }
 
     fun resetLLMValues() {
         outcome.resetOutcomes()
@@ -151,7 +160,7 @@ data class NotiUnit(
             "noti_key" to notiKey,
             "body" to getNotiBody().map {
                 mapOf<String, Any>(
-                    "title" to it.title,
+                    "title" to it.extraTitle,
                     "abs_time" to getAbsoluteTimeStr(it.time),
                     "rel_time" to getRelativeTimeStr(it.time),
                     "content" to it.content
@@ -167,13 +176,14 @@ data class NotiUnit(
             return null
 
         return mapOf<String, Any>(
+            "noti-key" to notiKey,
             "title" to title,
             "app_name" to appName,
             "body" to getNotiBody()
                 .filter { currentTime - it.time < timeDiff }
                 .map {
                     mapOf<String, Any>(
-                        "title" to it.title,
+                        "title" to it.extraTitle,
                         "abs_time" to getAbsoluteTimeStr(it.time),
                         "rel_time" to getRelativeTimeStr(it.time),
                         "content" to it.content

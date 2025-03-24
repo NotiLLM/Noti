@@ -37,8 +37,8 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import org.muilab.notigpt.database.room.DrawerDatabase
+import org.muilab.notigpt.database.server.RetrofitClient
 import org.muilab.notigpt.database.server.workers.ApiWorker
-import org.muilab.notigpt.database.server.workers.UploadWorker
 import org.muilab.notigpt.paging.NotiRepository
 import org.muilab.notigpt.service.NotiListenerService
 import org.muilab.notigpt.ui.theme.NotiTaskTheme
@@ -47,7 +47,6 @@ import org.muilab.notigpt.util.SharedPreferencesManager
 import org.muilab.notigpt.view.screen.MainScreen
 import org.muilab.notigpt.viewModel.DrawerViewModel
 import org.muilab.notigpt.viewModel.DrawerViewModelFactory
-import org.muilab.notigpt.viewModel.ServerViewModel
 import java.util.concurrent.TimeUnit
 
 class MainActivity : ComponentActivity() {
@@ -55,18 +54,21 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        WorkManager.getInstance(applicationContext).cancelAllWork()
+        WorkManager.getInstance(applicationContext).pruneWork()
         SharedPreferencesManager.init(this)
+        RetrofitClient.updateBaseUrl(SharedPreferencesManager.serverIP)
         SharedPreferencesManager.userId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
-        if (SharedPreferencesManager.baselineEmbeddingEn.isEmpty()
-            || SharedPreferencesManager.baselineEmbeddingZhTW.isEmpty()) {
-            val inputData = Data.Builder()
-                .putString("api_type", API_FETCH_BASELINE_EMBEDDING)
-                .build()
-            val apiWorkerRequest = OneTimeWorkRequestBuilder<ApiWorker>()
-                .setInputData(inputData)
-                .build()
-            WorkManager.getInstance(applicationContext).enqueue(apiWorkerRequest)
-        }
+//        if (SharedPreferencesManager.baselineEmbeddingEn.isEmpty()
+//            || SharedPreferencesManager.baselineEmbeddingZhTW.isEmpty()) {
+//            val inputData = Data.Builder()
+//                .putString("api_type", API_FETCH_BASELINE_EMBEDDING)
+//                .build()
+//            val apiWorkerRequest = OneTimeWorkRequestBuilder<ApiWorker>()
+//                .setInputData(inputData)
+//                .build()
+//            WorkManager.getInstance(applicationContext).enqueue(apiWorkerRequest)
+//        }
 
         if (!NotificationManagerCompat.from(applicationContext).areNotificationsEnabled()) {
             val intent = Intent().apply {
@@ -96,16 +98,6 @@ class MainActivity : ComponentActivity() {
             startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
         }
 
-        val uploadWorkRequest = PeriodicWorkRequestBuilder<UploadWorker>(
-            4, TimeUnit.HOURS // 🔄 Runs every 15 minutes
-        ).build()
-        WorkManager.getInstance(applicationContext).cancelAllWorkByTag("UploadWorker")
-        WorkManager.getInstance(applicationContext).enqueueUniquePeriodicWork(
-            "UploadWorker",
-            ExistingPeriodicWorkPolicy.REPLACE,
-            uploadWorkRequest
-        )
-
         setContent {
             NotiTaskTheme {
                 // A surface container using the 'background' color from the theme
@@ -113,7 +105,7 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    MainScreen(applicationContext, drawerViewModel, serverViewModel)
+                    MainScreen(applicationContext, drawerViewModel)
                 }
             }
         }
@@ -124,8 +116,6 @@ class MainActivity : ComponentActivity() {
         val drawerDao = drawerDatabase.drawerDao()
         DrawerViewModelFactory(this.application, NotiRepository(drawerDao))
     }
-
-    private val serverViewModel by viewModels<ServerViewModel>()
 
     private fun isNotiListenerEnabled(): Boolean {
         val cn = ComponentName(this, NotiListenerService::class.java)
@@ -147,28 +137,5 @@ class MainActivity : ComponentActivity() {
                 return true
         return false
     }
-}
-
-@Composable
-fun TestCard(serverViewModel: ServerViewModel) {
-    val result by serverViewModel.response.observeAsState("")
-    Card (
-        Modifier
-            .fillMaxHeight(0.4f)
-            .fillMaxWidth()
-            .padding(8.dp),
-        elevation = CardDefaults.cardElevation(
-            defaultElevation = 12.dp
-        )
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(
-                result,
-                Modifier
-                    .fillMaxHeight(0.8f)
-                    .padding(10.dp)
-                    .verticalScroll(rememberScrollState())
-            )
-        }
-    }
+    
 }

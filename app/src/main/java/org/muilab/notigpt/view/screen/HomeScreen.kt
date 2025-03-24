@@ -13,11 +13,10 @@ import org.muilab.notigpt.view.component.NotiDrawer
 import org.muilab.notigpt.view.component.SearchBar
 import org.muilab.notigpt.view.component.UserControlPanel
 import org.muilab.notigpt.viewModel.DrawerViewModel
-import org.muilab.notigpt.viewModel.ServerViewModel
 
 @RequiresApi(Build.VERSION_CODES.S)
 @Composable
-fun HomeScreen(context: Context, drawerViewModel: DrawerViewModel, serverViewModel: ServerViewModel) {
+fun HomeScreen(context: Context, drawerViewModel: DrawerViewModel) {
     Column {
         SearchBar(drawerViewModel)
         Box (Modifier.weight(1F), contentAlignment = Alignment.TopCenter) {

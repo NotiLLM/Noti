@@ -37,10 +37,13 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
+import org.muilab.notigpt.database.room.CategoryDatabase
 import org.muilab.notigpt.database.room.DrawerDatabase
 import org.muilab.notigpt.database.server.workers.ApiWorker
+import org.muilab.notigpt.model.notifications.NotiCategory
 import org.muilab.notigpt.model.notifications.NotiUnit
 import org.muilab.notigpt.paging.NotiRepository
 import org.muilab.notigpt.util.Constants.Companion.API_FETCH_BASELINE_EMBEDDING
@@ -78,6 +81,39 @@ class DrawerViewModel(
 
     private val lastValidEmbedding = MutableStateFlow<String?>(null)
 
+    private val _notiCategories = MutableStateFlow(listOf<NotiCategory>())
+    val notiCategories: StateFlow<List<NotiCategory>> = _notiCategories
+
+    private val _notiCategoryCount = MutableStateFlow(0)
+    val notiCategoryCount: StateFlow<Int> = _notiCategoryCount
+
+    fun loadCategories() {
+        CoroutineScope(Dispatchers.IO).launch {
+            val categoryDatabase = CategoryDatabase.getInstance(context)
+            val categoryDao = categoryDatabase.categoryDao()
+            _notiCategories.value = categoryDao.getAll()
+            _notiCategoryCount.value = categoryDao.getCount()
+        }
+    }
+
+    fun insertCategory(newCategoryName: String) {
+        CoroutineScope(Dispatchers.IO).launch {
+            val categoryDatabase = CategoryDatabase.getInstance(context)
+            val categoryDao = categoryDatabase.categoryDao()
+            categoryDao.insert(NotiCategory(categoryName = newCategoryName))
+            loadCategories()
+        }
+    }
+
+    fun deleteCategory(deletedCategoryName: String) {
+        CoroutineScope(Dispatchers.IO).launch {
+            val categoryDatabase = CategoryDatabase.getInstance(context)
+            val categoryDao = categoryDatabase.categoryDao()
+            categoryDao.deleteCategory(deletedCategoryName)
+            loadCategories()
+        }
+    }
+
     @OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
     val queryEmbeddingString: Flow<String?> = _queryString
         .debounce(500)
@@ -99,7 +135,8 @@ class DrawerViewModel(
                         .build()
 
                     val workManager = WorkManager.getInstance(application)
-                    workManager.enqueue(workRequest)
+                    // TODO: restart
+                    // workManager.enqueue(workRequest)
 
                     val workInfo = workManager
                         .getWorkInfoByIdLiveData(workRequest.id)
@@ -130,41 +167,45 @@ class DrawerViewModel(
         .flatMapLatest { currentQueryEmbedding ->
             notificationFlow.map { notifications ->
                 val embeddingToUse = currentQueryEmbedding ?: lastValidEmbedding.value
-                notifications.map { noti ->
-                    val similarity = if (SharedPreferencesManager.baselineEmbeddingEn.isEmpty()
-                        || SharedPreferencesManager.baselineEmbeddingZhTW.isEmpty()) {
-                        val inputData = Data.Builder()
-                            .putString("api_type", API_FETCH_BASELINE_EMBEDDING)
-                            .build()
-                        val apiWorkerRequest = OneTimeWorkRequestBuilder<ApiWorker>()
-                            .setInputData(inputData)
-                            .build()
-                        WorkManager.getInstance(context).enqueue(apiWorkerRequest)
-                        0.0
-                    } else if (queryString.value.isBlank()) {
-                        lastValidEmbedding.value = null
-                        0.0
-                    } else if (embeddingToUse != null) {
-                        cosineSimilarity(embeddingToUse, noti.embeddingString)
-                    } else {
-                        noti.outcome.similarityScore
-                    }
-
-                    CoroutineScope(Dispatchers.IO).launch {
-                        val drawerDatabase = DrawerDatabase.getInstance(context)
-                        val drawerDao = drawerDatabase.drawerDao()
-                        drawerDao.updateSimilarity(noti.notiKey, similarity)
-                    }
-
-                    noti.withUpdatedSimilarity(similarity)
-                }.sortedWith(
-                    compareByDescending<NotiUnit> { noti ->
-                        noti.getNotiBody().any { notiInfo ->
-                            listOf(notiInfo.title, notiInfo.content, notiInfo.person)
-                                .any { it.contains(queryString.value, ignoreCase = true) }
-                        }
+                notifications
+//                    .map { noti ->
+//                        val similarity = if (SharedPreferencesManager.baselineEmbeddingEn.isEmpty()
+//                            || SharedPreferencesManager.baselineEmbeddingZhTW.isEmpty()) {
+//                            val inputData = Data.Builder()
+//                                .putString("api_type", API_FETCH_BASELINE_EMBEDDING)
+//                                .build()
+//                            val apiWorkerRequest = OneTimeWorkRequestBuilder<ApiWorker>()
+//                                .setInputData(inputData)
+//                                .build()
+//                            WorkManager.getInstance(context).enqueue(apiWorkerRequest)
+//                            0.0
+//                        } else if (queryString.value.isBlank()) {
+//                            lastValidEmbedding.value = null
+//                            0.0
+//                        } else if (embeddingToUse != null) {
+//                            cosineSimilarity(embeddingToUse, noti.embeddingString)
+//                        } else {
+//                            noti.outcome.similarityScore
+//                        }
+//
+//                        CoroutineScope(Dispatchers.IO).launch {
+//                            val drawerDatabase = DrawerDatabase.getInstance(context)
+//                            val drawerDao = drawerDatabase.drawerDao()
+//                            drawerDao.updateSimilarity(noti.notiKey, similarity)
+//                        }
+//
+//                        noti.withUpdatedSimilarity(similarity)
+//                    }
+                    .sortedWith(
+                        compareByDescending<NotiUnit> { noti ->
+                            noti.getNotiBody().any { notiInfo ->
+                                listOf(notiInfo.extraTitle, notiInfo.content, notiInfo.person)
+                                    .any { it.contains(queryString.value, ignoreCase = true) }
+                            }
                     }.thenByDescending { noti ->
                         noti.outcome.similarityScore
+                    }.thenByDescending { noti ->
+                        noti.sortScore
                     }.thenByDescending { noti ->
                         noti.getAbsLatestTimeStr()
                     }
@@ -178,12 +219,8 @@ class DrawerViewModel(
     val presentedNotifications: StateFlow<List<NotiUnit>> =
         combine(category, sortedNotifications) { latestCategory, notiList ->
             when (latestCategory) {
-                "pinned" -> notiList.filter { it.pinned }
-                "social" -> notiList.filter {
-                    it.appName in listOf("Facebook", "Instagram", "LINE", "Messenger", "Slack")
-                }
-                "email" -> notiList.filter { it.appName in listOf("Gmail") }
-                else -> notiList
+                "All" -> notiList
+                else -> notiList.filter { it.category == latestCategory }
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -249,7 +286,7 @@ class DrawerViewModel(
                 notiJson.put("app", noti.appName)
 
                 val titlesIdentical = (notiBody + prevBody)
-                    .map { it.title }
+                    .map { it.extraTitle }
                     .filter { it.isNotBlank() }
                     .toSet().size == 1
                 val notiType = if (isPeople) "message" else "info"
@@ -264,7 +301,7 @@ class DrawerViewModel(
                         prevNotiJson.put("time", getAbsoluteTimeStr(it.time))
                         prevNotiJson.put("relative_time", getRelativeTimeStr(it.time))
                         if (!titlesIdentical)
-                            prevNotiJson.put(notiTypeTitle, org.muilab.notigpt.util.replaceChars(it.title))
+                            prevNotiJson.put(notiTypeTitle, org.muilab.notigpt.util.replaceChars(it.extraTitle))
                         prevNotiJson.put("content", org.muilab.notigpt.util.replaceChars(it.content))
                         previousNotisArray.put(prevNotiJson)
                     }
@@ -277,7 +314,7 @@ class DrawerViewModel(
                         newNotiJson.put("time", getAbsoluteTimeStr(it.time))
                         newNotiJson.put("relative_time", getRelativeTimeStr(it.time))
                         if (!titlesIdentical)
-                            newNotiJson.put(notiTypeTitle, org.muilab.notigpt.util.replaceChars(it.title))
+                            newNotiJson.put(notiTypeTitle, org.muilab.notigpt.util.replaceChars(it.extraTitle))
                         newNotiJson.put("content", org.muilab.notigpt.util.replaceChars(it.content))
                         newNotisArray.put(newNotiJson)
                     }
@@ -290,7 +327,7 @@ class DrawerViewModel(
                         notiInfoJson.put("time", getAbsoluteTimeStr(it.time))
                         notiInfoJson.put("relative_time", getRelativeTimeStr(it.time))
                         if (!titlesIdentical)
-                            notiInfoJson.put(notiTypeTitle, org.muilab.notigpt.util.replaceChars(it.title))
+                            notiInfoJson.put(notiTypeTitle, org.muilab.notigpt.util.replaceChars(it.extraTitle))
                         notiInfoJson.put("content", org.muilab.notigpt.util.replaceChars(it.content))
                         notiInfosArray.put(notiInfoJson)
                     }
@@ -309,17 +346,24 @@ class DrawerViewModel(
             try {
                 FileOutputStream(file).use { outputStream ->
                     outputStream.write(notiPostContent.toByteArray(Charsets.UTF_8))
+                }
+                withContext(Dispatchers.Main) {
                     Toast.makeText(context, "Data saved to Downloads folder as notigpt.txt", Toast.LENGTH_LONG).show()
                 }
+
             } catch (e: IOException) {
-                Toast.makeText(context, "Failed to save notification data", Toast.LENGTH_LONG).show()
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, "Failed to save notification data", Toast.LENGTH_LONG).show()
+                }
                 e.printStackTrace()
             }
             // copy to clipboard
             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
             val clip = ClipData.newPlainText("label", notiPostContent)
             clipboard.setPrimaryClip(clip)
-            Toast.makeText(context, "Copied to clipboard", Toast.LENGTH_SHORT).show()
+            withContext(Dispatchers.Main) {
+                Toast.makeText(context, "Copied to clipboard", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 }

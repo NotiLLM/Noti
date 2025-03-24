@@ -36,4 +36,4 @@ google-services.json
 .kotlin/
 
 # MacOS
-.DS_Store
+*.DS_Store
