@@ -1,19 +1,26 @@
 package org.muilab.notigpt.database.server
 
 import okhttp3.OkHttpClient
+import okhttp3.logging.HttpLoggingInterceptor
+import org.muilab.notigpt.util.SharedPreferencesManager
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import java.util.concurrent.TimeUnit
 
 
-object N8NRetrofitClient {
+object DifyAPIClient {
     @Volatile
     private var retrofit: Retrofit? = null
 
-    private fun createRetrofit(): Retrofit {
-        val baseUrl = "https://n8n.udchen.tw/webhook/"
+    private fun createRetrofit(serverIP: String = SharedPreferencesManager.serverIP): Retrofit {
+        val baseUrl = "http://$serverIP/"
+
+        val logging = HttpLoggingInterceptor().apply {
+            level = HttpLoggingInterceptor.Level.BODY
+        }
 
         val client: OkHttpClient = OkHttpClient.Builder()
+            .addInterceptor(logging)
             .connectTimeout(10, TimeUnit.SECONDS)
             .writeTimeout(300, TimeUnit.SECONDS)
             .readTimeout(300, TimeUnit.SECONDS)
@@ -26,7 +33,7 @@ object N8NRetrofitClient {
             .build()
     }
 
-    val n8nWebhookService: N8NWebhookService
+    val difyAPIService: DifyAPIService
         get() {
             if (retrofit == null) {
                 synchronized(this) {
@@ -35,6 +42,12 @@ object N8NRetrofitClient {
                     }
                 }
             }
-            return retrofit!!.create(N8NWebhookService::class.java)
+            return retrofit!!.create(DifyAPIService::class.java)
         }
+
+    fun updateBaseUrl(newIp: String) {
+        synchronized(this) {
+            retrofit = createRetrofit(newIp)  // ✅ Always recreate with the latest IP
+        }
+    }
 }

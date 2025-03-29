@@ -30,7 +30,7 @@ android {
                 localPropertiesFile.inputStream().use { load(it) }
             }
         }
-        buildConfigField("String", "apiKey", "\"${localProperties["apiKey"]}\"")
+        buildConfigField("String", "API_KEY_UPDATE_NOTIFICATION", "\"${localProperties["API_KEY_UPDATE_NOTIFICATION"]}\"")
     }
 
     buildTypes {
@@ -64,6 +64,7 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
+
 }
 
 dependencies {
@@ -119,5 +120,6 @@ dependencies {
     implementation(libs.retrofit)
     implementation(libs.retrofit.converter.gson)
     implementation(libs.okhttp)
+    implementation(libs.okhttp.logging.interceptor)
     implementation(libs.work.runtime.ktx)
 }

@@ -12,42 +12,20 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.annotation.RequiresApi
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.livedata.observeAsState
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import androidx.core.app.NotificationManagerCompat
-import androidx.work.Data
-import androidx.work.ExistingPeriodicWorkPolicy
-import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import org.muilab.notigpt.database.room.DrawerDatabase
-import org.muilab.notigpt.database.server.RetrofitClient
-import org.muilab.notigpt.database.server.workers.ApiWorker
 import org.muilab.notigpt.paging.NotiRepository
 import org.muilab.notigpt.service.NotiListenerService
 import org.muilab.notigpt.ui.theme.NotiTaskTheme
-import org.muilab.notigpt.util.Constants.Companion.API_FETCH_BASELINE_EMBEDDING
 import org.muilab.notigpt.util.SharedPreferencesManager
 import org.muilab.notigpt.view.screen.MainScreen
 import org.muilab.notigpt.viewModel.DrawerViewModel
 import org.muilab.notigpt.viewModel.DrawerViewModelFactory
-import java.util.concurrent.TimeUnit
 
 class MainActivity : ComponentActivity() {
     @RequiresApi(Build.VERSION_CODES.S)
@@ -55,9 +33,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         WorkManager.getInstance(applicationContext).cancelAllWork()
-        WorkManager.getInstance(applicationContext).pruneWork()
         SharedPreferencesManager.init(this)
-        RetrofitClient.updateBaseUrl(SharedPreferencesManager.serverIP)
         SharedPreferencesManager.userId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
 //        if (SharedPreferencesManager.baselineEmbeddingEn.isEmpty()
 //            || SharedPreferencesManager.baselineEmbeddingZhTW.isEmpty()) {

@@ -1,12 +1,12 @@
 package org.muilab.notigpt.view.component
 
-import org.muilab.notigpt.database.server.workers.ApiWorker
 import android.app.Activity
 import android.content.Context
 import android.graphics.Rect
 import android.os.Build
 import android.util.Log
 import android.view.ViewTreeObserver
+import android.widget.Toast
 import androidx.annotation.RequiresApi
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.exponentialDecay
@@ -20,14 +20,12 @@ import androidx.compose.foundation.gestures.AnchoredDraggableState
 import androidx.compose.foundation.gestures.DraggableAnchors
 import androidx.compose.foundation.gestures.animateTo
 import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.scrollable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentHeight
@@ -35,7 +33,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
@@ -77,13 +74,19 @@ import androidx.compose.ui.unit.sp
 import androidx.constraintlayout.compose.ConstraintLayout
 import androidx.constraintlayout.compose.Dimension
 import androidx.work.Data
+import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import org.muilab.notigpt.R
+import org.muilab.notigpt.database.server.enqueueUpdateNotification
+import org.muilab.notigpt.database.server.workers.DifyAPIWorker
 import org.muilab.notigpt.model.notifications.NotiUnit
 import org.muilab.notigpt.service.NotiListenerService
-import org.muilab.notigpt.util.Constants.Companion.API_INSERT_PREFERENCE
+import org.muilab.notigpt.util.Constants.Companion.DIFY_UPDATE_NOTIFICATION
+import org.muilab.notigpt.util.getNotifications
 import org.muilab.notigpt.util.getRelativeTimeStr
 import org.muilab.notigpt.util.hasTransparentPixels
 import org.muilab.notigpt.util.replaceChars
@@ -645,16 +648,24 @@ fun NotiFeedbackDropdown(context: Context, notiUnit: NotiUnit, isDropdownMenuExp
 //        }
 //        Text(notiUnit.sortScore.toString())
 
-        Box(
-            modifier = Modifier
-                .height(150.dp) // Set fixed height to demonstrate overflow
-                .verticalScroll(scrollState)
-                .padding(16.dp)
-        ) {
-            Text(
-                text = notiUnit.explanation,
-                fontSize = 10.sp
-            )
+        Column {
+            Button(onClick = {
+                Toast.makeText(context, "Start Updating Notification", Toast.LENGTH_SHORT).show()
+                enqueueUpdateNotification(context, notiUnit.notiKey)
+            }) {
+                Text("Update Notification")
+            }
+            Box(
+                modifier = Modifier
+                    .height(150.dp) // Set fixed height to demonstrate overflow
+                    .verticalScroll(scrollState)
+                    .padding(16.dp)
+            ) {
+                Text(
+                    text = notiUnit.explanation,
+                    fontSize = 10.sp
+                )
+            }
         }
     }
 }

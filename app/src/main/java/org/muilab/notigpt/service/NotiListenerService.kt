@@ -10,9 +10,13 @@ import android.os.Build
 import android.os.IBinder
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
+import android.util.Log
 import androidx.annotation.RequiresApi
+import androidx.work.BackoffPolicy
+import androidx.work.Constraints
 import androidx.work.Data
 import androidx.work.ExistingWorkPolicy
+import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import kotlinx.coroutines.CoroutineScope
@@ -20,13 +24,15 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.muilab.notigpt.database.room.DrawerDatabase
-import org.muilab.notigpt.database.server.workers.N8NWebhookWorker
+import org.muilab.notigpt.database.server.enqueueUpdateNotification
+import org.muilab.notigpt.database.server.workers.DifyAPIWorker
 import org.muilab.notigpt.model.notifications.NotiUnit
 import org.muilab.notigpt.util.Constants.Companion.NOTI_REMOVE_DELAY
-import org.muilab.notigpt.util.Constants.Companion.WEBHOOK_UPDATE_NOTIFICATION
+import org.muilab.notigpt.util.Constants.Companion.DIFY_UPDATE_NOTIFICATION
 import org.muilab.notigpt.util.SharedPreferencesManager
 import org.muilab.notigpt.util.createNotificationChannel
 import org.muilab.notigpt.util.postOngoingNotification
+import java.util.concurrent.TimeUnit
 
 class NotiListenerService: NotificationListenerService() {
 
@@ -128,18 +134,7 @@ class NotiListenerService: NotificationListenerService() {
                 drawerDao.update(existingNoti[0])
             }
 
-            val inputData = Data.Builder()
-                .putString("api_type", WEBHOOK_UPDATE_NOTIFICATION)
-                .putString("noti_key", sbn.key)
-                .build()
-            val webhookWorkerRequest = OneTimeWorkRequestBuilder<N8NWebhookWorker>()
-                .setInputData(inputData)
-                .build()
-            WorkManager.getInstance(applicationContext).enqueueUniqueWork(
-                "n8n-webhook",
-                ExistingWorkPolicy.APPEND,
-                webhookWorkerRequest
-            )
+            enqueueUpdateNotification(applicationContext, sbn.key)
 
             postOngoingNotification(applicationContext)
             if (!isInit) {

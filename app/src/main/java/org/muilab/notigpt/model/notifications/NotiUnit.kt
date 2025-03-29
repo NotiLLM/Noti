@@ -160,16 +160,24 @@ data class NotiUnit(
             "noti_key" to notiKey,
             "body" to getNotiBody().map {
                 mapOf<String, Any>(
-                    "title" to it.extraTitle,
+                    "title" to it.getDisplayedTitle(pkgName, isPeople),
                     "abs_time" to getAbsoluteTimeStr(it.time),
                     "rel_time" to getRelativeTimeStr(it.time),
                     "content" to it.content
                 )
-            }
+            },
+            "history_body" to getPrevBody().map {
+                mapOf<String, Any>(
+                    "title" to it.getDisplayedTitle(pkgName, isPeople),
+                    "abs_time" to getAbsoluteTimeStr(it.time),
+                    "rel_time" to getRelativeTimeStr(it.time),
+                    "content" to it.content
+                )
+            },
         )
     }
 
-    fun toN8NNoti(timeDiff: Long = System.currentTimeMillis()): Map<String, Any>? {
+    fun toDifyNoti(timeDiff: Long = System.currentTimeMillis()): Map<String, Any>? {
 
         val currentTime = System.currentTimeMillis()
         if (currentTime - body.latestTime > timeDiff)
@@ -183,12 +191,21 @@ data class NotiUnit(
                 .filter { currentTime - it.time < timeDiff }
                 .map {
                     mapOf<String, Any>(
-                        "title" to it.extraTitle,
+                        "title" to it.getDisplayedTitle(pkgName, isPeople),
                         "abs_time" to getAbsoluteTimeStr(it.time),
                         "rel_time" to getRelativeTimeStr(it.time),
                         "content" to it.content
                     )
-                }
+                },
+            "history_body" to getPrevBody()
+                .map {
+                    mapOf<String, Any>(
+                        "title" to it.getDisplayedTitle(pkgName, isPeople),
+                        "abs_time" to getAbsoluteTimeStr(it.time),
+                        "rel_time" to getRelativeTimeStr(it.time),
+                        "content" to it.content
+                    )
+                },
         )
     }
 

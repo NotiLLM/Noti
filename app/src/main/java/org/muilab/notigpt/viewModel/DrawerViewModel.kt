@@ -11,12 +11,7 @@ import android.widget.Toast
 import androidx.annotation.RequiresApi
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
-import androidx.lifecycle.asFlow
 import androidx.lifecycle.viewModelScope
-import androidx.work.Data
-import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.WorkInfo
-import androidx.work.WorkManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -28,8 +23,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
@@ -42,14 +35,9 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.muilab.notigpt.database.room.CategoryDatabase
 import org.muilab.notigpt.database.room.DrawerDatabase
-import org.muilab.notigpt.database.server.workers.ApiWorker
 import org.muilab.notigpt.model.notifications.NotiCategory
 import org.muilab.notigpt.model.notifications.NotiUnit
 import org.muilab.notigpt.paging.NotiRepository
-import org.muilab.notigpt.util.Constants.Companion.API_FETCH_BASELINE_EMBEDDING
-import org.muilab.notigpt.util.Constants.Companion.API_SYNC_QUERY
-import org.muilab.notigpt.util.SharedPreferencesManager
-import org.muilab.notigpt.util.cosineSimilarity
 import org.muilab.notigpt.util.getAbsoluteTimeStr
 import org.muilab.notigpt.util.getNotifications
 import org.muilab.notigpt.util.getRelativeTimeStr
@@ -124,36 +112,7 @@ class DrawerViewModel(
                 flowOf(null)
             } else {
                 flow<String?> {
-                    emit(null) // UI shows loading state
-                    val inputData = Data.Builder()
-                        .putString("api_type", API_SYNC_QUERY)
-                        .putString("query_string", query)
-                        .build()
-
-                    val workRequest = OneTimeWorkRequestBuilder<ApiWorker>()
-                        .setInputData(inputData)
-                        .build()
-
-                    val workManager = WorkManager.getInstance(application)
-                    // TODO: restart
-                    // workManager.enqueue(workRequest)
-
-                    val workInfo = workManager
-                        .getWorkInfoByIdLiveData(workRequest.id)
-                        .asFlow()
-                        .filter { it?.state!!.isFinished }
-                        .firstOrNull()
-
-                    if (workInfo?.state == WorkInfo.State.SUCCEEDED) {
-                        val embeddingString = workInfo.outputData.getString("embeddingString")
-                        if (!embeddingString.isNullOrBlank()) {
-                            lastValidEmbedding.value = embeddingString
-                            emit(embeddingString)
-                        }
-                    } else {
-                        resetSimilarity(context)
-                        emit(lastValidEmbedding.value) // ✅ Use the last valid embedding instead of null
-                    }
+                    // TODO: Similarity Search
                 }
             }
         }

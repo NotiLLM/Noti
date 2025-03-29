@@ -80,6 +80,7 @@ ktor-client-android = { module = "io.ktor:ktor-client-android", version.ref = "k
 retrofit = { module = "com.squareup.retrofit2:retrofit", version.ref = "retrofit" }
 retrofit-converter-gson = { module = "com.squareup.retrofit2:converter-gson", version.ref = "retrofit" }
 okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
+okhttp-logging-interceptor = { module = "com.squareup.okhttp3:logging-interceptor", version.ref = "okhttp" }
 
 # Miscellaneous
 dotenv = { module = "io.github.cdimascio:dotenv-kotlin", version.ref = "dotenv" }

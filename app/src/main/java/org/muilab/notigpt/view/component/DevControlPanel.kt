@@ -1,8 +1,6 @@
 package org.muilab.notigpt.view.component
 
-import org.muilab.notigpt.database.server.workers.ApiWorker
 import android.content.Context
-import android.util.Log
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -31,19 +29,15 @@ import androidx.compose.ui.window.Dialog
 import androidx.work.Data
 import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.OutOfQuotaPolicy
 import androidx.work.WorkManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import org.muilab.notigpt.database.server.RetrofitClient
-import org.muilab.notigpt.database.server.workers.N8NWebhookWorker
-import org.muilab.notigpt.util.Constants.Companion.API_CLEAR_DB
-import org.muilab.notigpt.util.Constants.Companion.API_EXPORT_DB
-import org.muilab.notigpt.util.Constants.Companion.API_SORT_DRAWER
-import org.muilab.notigpt.util.Constants.Companion.API_SYNC_DRAWER
-import org.muilab.notigpt.util.Constants.Companion.API_UPDATE_USER
-import org.muilab.notigpt.util.Constants.Companion.WEBHOOK_UPDATE_NOTIFICATION
+import org.muilab.notigpt.database.server.DifyAPIClient
+import org.muilab.notigpt.database.server.enqueueUpdateNotification
+import org.muilab.notigpt.database.server.workers.DifyAPIWorker
+import org.muilab.notigpt.util.Constants.Companion.DIFY_UPDATE_NOTIFICATION
 import org.muilab.notigpt.util.SharedPreferencesManager
 import org.muilab.notigpt.util.SharedPreferencesManager.KEY_HISTORY_NOTI_COUNT_THRESHOLD
 import org.muilab.notigpt.util.SharedPreferencesManager.KEY_HISTORY_NOTI_HOURS_THRESHOLD
@@ -81,89 +75,21 @@ fun DevControlPanel(context: Context, drawerViewModel: DrawerViewModel) {
                 horizontalArrangement = Arrangement.SpaceAround
             ) {
                 Button(onClick = {
-                    val inputData = Data.Builder()
-                        .putString("api_type", API_SYNC_DRAWER)
-                        .build()
-                    val apiWorkerRequest = OneTimeWorkRequestBuilder<ApiWorker>()
-                        .setInputData(inputData)
-                        .build()
-                    WorkManager.getInstance(context).enqueue(apiWorkerRequest)
-                    Toast.makeText(context, "Start Syncing", Toast.LENGTH_SHORT).show()
-                }) {
-                    Text("Sync Drawer")
-                }
-                Button(onClick = {
                     Toast.makeText(context, "Start Updating Notifications", Toast.LENGTH_SHORT).show()
                     CoroutineScope(Dispatchers.IO).launch {
                         val notifications = getNotifications(context)
                         notifications.forEach { notification ->
-                            val inputData = Data.Builder()
-                                .putString("api_type", WEBHOOK_UPDATE_NOTIFICATION)
-                                .putString("noti_key", notification.notiKey)
-                                .build()
-
-                            val workRequest = OneTimeWorkRequestBuilder<N8NWebhookWorker>()
-                                .setInputData(inputData)
-                                .build()
-
-                            WorkManager.getInstance(context).enqueueUniqueWork(
-                                "n8n-webhook",
-                                ExistingWorkPolicy.APPEND,
-                                workRequest
-                            )
+                            enqueueUpdateNotification(context, notification.notiKey)
+                            delay(30 * 1000)
                         }
                     }
                 }) {
                     Text("Sync Noti Status")
                 }
                 Button(onClick = {
-                    Toast.makeText(context, "Start Sorting", Toast.LENGTH_SHORT).show()
-                    val inputData = Data.Builder()
-                        .putString("api_type", API_SORT_DRAWER)
-                        .putString("request_data", "")
-                        .build()
-                    val apiWorkerRequest = OneTimeWorkRequestBuilder<ApiWorker>()
-                        .setInputData(inputData)
-                        .build()
-                    WorkManager.getInstance(context).enqueue(apiWorkerRequest)
-                }) {
-                    Text("Sort")
-                }
-                Button(onClick = {
-                    Toast.makeText(context, "Update User", Toast.LENGTH_SHORT).show()
-                    val inputData = Data.Builder()
-                        .putString("api_type", API_UPDATE_USER)
-                        .build()
-                    val apiWorkerRequest = OneTimeWorkRequestBuilder<ApiWorker>()
-                        .setInputData(inputData)
-                        .build()
-                    WorkManager.getInstance(context).enqueue(apiWorkerRequest)
+                    Toast.makeText(context, "Work In Progress", Toast.LENGTH_SHORT).show()
                 }) {
                     Text("Update User")
-                }
-                Button(onClick = {
-                    Toast.makeText(context, "Exporting DB", Toast.LENGTH_SHORT).show()
-                    val inputData = Data.Builder()
-                        .putString("api_type", API_EXPORT_DB)
-                        .build()
-                    val apiWorkerRequest = OneTimeWorkRequestBuilder<ApiWorker>()
-                        .setInputData(inputData)
-                        .build()
-                    WorkManager.getInstance(context).enqueue(apiWorkerRequest)
-                }) {
-                    Text("Export DB")
-                }
-                Button(onClick = {
-                    Toast.makeText(context, "Clearing DB", Toast.LENGTH_SHORT).show()
-                    val inputData = Data.Builder()
-                        .putString("api_type", API_CLEAR_DB)
-                        .build()
-                    val apiWorkerRequest = OneTimeWorkRequestBuilder<ApiWorker>()
-                        .setInputData(inputData)
-                        .build()
-                    WorkManager.getInstance(context).enqueue(apiWorkerRequest)
-                }) {
-                    Text("Clear DB")
                 }
 //            Button(onClick = {
 //                Toast.makeText(context, "Start Categorizing", Toast.LENGTH_SHORT).show()
@@ -271,7 +197,7 @@ fun SharedPrefsButton(
 
                                     if (isValidIpAddress(inputText)) {
                                         SharedPreferencesManager.serverIP = inputText
-                                        RetrofitClient.updateBaseUrl(SharedPreferencesManager.serverIP)
+                                        DifyAPIClient.updateBaseUrl(SharedPreferencesManager.serverIP)
                                         showDialog = false
                                     } else {
                                         errorMessage = "Invalid IP!"
