@@ -103,7 +103,7 @@ data class NotiUnit(
 
     // ACTIONS RELATED CALLS
 
-    var pinned: Boolean
+    var isPinned: Boolean
         get() = actions.pinned
         set(value) {
             actions.pinned = value
@@ -111,6 +111,10 @@ data class NotiUnit(
 
     fun flipNotiPin() {
         actions.flipPin()
+    }
+
+    fun changeCategory(newCategory: String) {
+       category = newCategory
     }
 
     fun removeNoti() {
@@ -135,7 +139,10 @@ data class NotiUnit(
             outcome.sortScore = value
         }
 
-    val category: String
+    var category: String
+        set(value) {
+            outcome.category = value
+        }
         get() = outcome.category
 
     var explanation: String

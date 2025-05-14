@@ -1,12 +1,12 @@
-package org.muilab.notigpt.view.component
+package org.muilab.notigpt.view.component.notification
 
 import android.app.Activity
+import android.app.ActivityOptions
 import android.content.Context
 import android.graphics.Rect
 import android.os.Build
 import android.util.Log
 import android.view.ViewTreeObserver
-import android.widget.Toast
 import androidx.annotation.RequiresApi
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.exponentialDecay
@@ -32,10 +32,8 @@ import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -71,25 +69,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.constraintlayout.compose.ConstraintLayout
-import androidx.constraintlayout.compose.Dimension
-import androidx.work.Data
-import androidx.work.ExistingWorkPolicy
-import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.WorkManager
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import org.muilab.notigpt.R
-import org.muilab.notigpt.database.server.enqueueUpdateNotification
-import org.muilab.notigpt.database.server.workers.DifyAPIWorker
 import org.muilab.notigpt.model.notifications.NotiUnit
 import org.muilab.notigpt.service.NotiListenerService
-import org.muilab.notigpt.util.Constants.Companion.DIFY_UPDATE_NOTIFICATION
-import org.muilab.notigpt.util.getNotifications
-import org.muilab.notigpt.util.getRelativeTimeStr
 import org.muilab.notigpt.util.hasTransparentPixels
 import org.muilab.notigpt.util.replaceChars
+import org.muilab.notigpt.view.component.notification.action.NotiActionBar
+import org.muilab.notigpt.view.component.notification.action.NotiFeedbackDropdown
+import org.muilab.notigpt.view.component.notification.info.ExpandedNotiInfo
 import org.muilab.notigpt.view.utils.NotiExpandState
 import org.muilab.notigpt.viewModel.DrawerViewModel
 import kotlin.math.abs
@@ -102,8 +90,8 @@ fun NotiCard(context: Context, notiUnit: NotiUnit, drawerViewModel: DrawerViewMo
     var notiTopViewed by remember { mutableStateOf(false) }
     var notiBottomViewed by remember { mutableStateOf(false) }
 
-    notiUnit.notiKey
-    val pinned = notiUnit.pinned
+    val notiKey = notiUnit.notiKey
+    val pinned = notiUnit.isPinned
     val wholeNotiRead = notiUnit.wholeNotiRead
     val notiOverallTitle = notiUnit.title
     val isPeople = notiUnit.isPeople
@@ -219,11 +207,42 @@ fun NotiCard(context: Context, notiUnit: NotiUnit, drawerViewModel: DrawerViewMo
             .fillMaxWidth()
             .combinedClickable(
                 onClick = {
+
+                    val contentIntent = NotiListenerService.getContentIntent(context, notiUnit)
+
+                    if (contentIntent != null) {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) { // Android 14 = API 34
+                            val options = ActivityOptions.makeBasic().apply {
+                                pendingIntentBackgroundActivityStartMode = ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
+                            }
+
+                            try {
+                                contentIntent.send(
+                                    /* context = */ context,
+                                    /* code = */ 0,
+                                    /* intent = */ null,
+                                    /* onFinished = */ null,
+                                    /* handler = */ null,
+                                    /* requiredPermission = */ null,
+                                    /* options = */ options.toBundle()
+                                )
+                            } catch (e: Exception) {
+                                Log.e("AccessNotification", "PendingIntent send failed", e)
+                                // Fallback launch
+                            }
+                        } else {
+                            try {
+                                contentIntent.send()
+                            } catch (e: Exception) {
+                                // Fallback launch
+                            }
+                        }
+                    }
+
+
+                    Log.d("NotiListenerService", "Sent intent")
                     if (!pinned)
-                        drawerViewModel.actOnNoti(notiUnit, "click_dismiss")
-                    NotiListenerService
-                        .getPendingIntent(context, notiUnit)
-                        ?.send()
+                        drawerViewModel.actOnNoti(notiKey, "access_click")
                 },
                 onLongClick = {
                     isDropdownMenuExpanded.value = true
@@ -325,7 +344,9 @@ fun NotiCard(context: Context, notiUnit: NotiUnit, drawerViewModel: DrawerViewMo
                                 .weight(1f)
                                 .padding(horizontal = 5.dp)
                                 .align(Alignment.CenterVertically),
-                            fontSize = 15.sp
+                            fontSize = 15.sp,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
                         )
                     } else {
                         Column(
@@ -413,7 +434,7 @@ fun NotiCard(context: Context, notiUnit: NotiUnit, drawerViewModel: DrawerViewMo
                     Column {
                         if (pinned) {
                             Icon(
-                                painter = painterResource(R.drawable.pin),
+                                painter = painterResource(R.drawable.pin_no),
                                 "Pin",
                                 Modifier
                                     .size(15.dp)
@@ -456,6 +477,8 @@ fun NotiCard(context: Context, notiUnit: NotiUnit, drawerViewModel: DrawerViewMo
                     }
                     Spacer(modifier = Modifier.padding(5.dp))
                 }
+
+                NotiActionBar(notiUnit, drawerViewModel)
 
                 if (requiresExpansion) {
 
@@ -587,198 +610,6 @@ fun NotiCard(context: Context, notiUnit: NotiUnit, drawerViewModel: DrawerViewMo
 }
 
 @Composable
-fun NotiFeedbackDropdown(context: Context, notiUnit: NotiUnit, isDropdownMenuExpanded: MutableState<Boolean>) {
-
-    val scrollState = rememberScrollState()
-
-    DropdownMenu(
-        expanded = isDropdownMenuExpanded.value,
-        onDismissRequest = { isDropdownMenuExpanded.value = false },
-        modifier = Modifier.fillMaxWidth()
-    ) {
-//        Row(
-//            modifier = Modifier
-//                .fillMaxWidth()
-//                .padding(vertical = 8.dp),
-//            verticalAlignment = Alignment.CenterVertically
-//        ){
-//            Button(
-//                onClick = {
-//                    val inputData = Data
-//                        .Builder()
-//                        .putString("api_type", API_INSERT_PREFERENCE)
-//                        .putString("noti_key", notiUnit.notiKey)
-//                        .putBoolean("preferred", false)
-//                        .build()
-//                    val apiWorkerRequest = OneTimeWorkRequestBuilder<ApiWorker>()
-//                        .setInputData(inputData)
-//                        .build()
-//                    WorkManager
-//                        .getInstance(context)
-//                        .enqueue(apiWorkerRequest)
-//                    isDropdownMenuExpanded.value = false
-//                },
-//                modifier = Modifier.weight(3f),
-//                colors = ButtonDefaults.buttonColors(containerColor = Color.Red)
-//            ){
-//                Text("排下")
-//            }
-//            Spacer(Modifier.weight(1F))
-//            Button(
-//                onClick = {
-//                    val inputData = Data
-//                        .Builder()
-//                        .putString("api_type", API_INSERT_PREFERENCE)
-//                        .putString("noti_key", notiUnit.notiKey)
-//                        .putBoolean("preferred", true)
-//                        .build()
-//                    val apiWorkerRequest = OneTimeWorkRequestBuilder<ApiWorker>()
-//                        .setInputData(inputData)
-//                        .build()
-//                    WorkManager
-//                        .getInstance(context)
-//                        .enqueue(apiWorkerRequest)
-//                    isDropdownMenuExpanded.value = false
-//                },
-//                modifier = Modifier.weight(3f),
-//                colors = ButtonDefaults.buttonColors(containerColor = Color.Green)
-//            ){
-//                Text("排上")
-//            }
-//        }
-//        Text(notiUnit.sortScore.toString())
-
-        Column {
-            Button(onClick = {
-                Toast.makeText(context, "Start Updating Notification", Toast.LENGTH_SHORT).show()
-                enqueueUpdateNotification(context, notiUnit.notiKey)
-            }) {
-                Text("Update Notification")
-            }
-            Box(
-                modifier = Modifier
-                    .height(150.dp) // Set fixed height to demonstrate overflow
-                    .verticalScroll(scrollState)
-                    .padding(16.dp)
-            ) {
-                Text(
-                    text = notiUnit.explanation,
-                    fontSize = 10.sp
-                )
-            }
-        }
-    }
-}
-
-@Composable
-fun ExpandedNotiInfo(
-    notiTitle: String,
-    notiTime: Long,
-    notiContent: String,
-    notiSeen: Boolean,
-    showTitle: Boolean,
-    infoTimeColor: Color,
-    viewedInfos: MutableSet<Long>
-) {
-
-    var infoTopViewed by remember { mutableStateOf(false) }
-    var infoBottomViewed by remember { mutableStateOf(false) }
-
-    Column(
-        Modifier
-            .onGloballyPositioned { coordinates ->
-                val windowBounds = coordinates.boundsInWindow()
-                infoTopViewed =
-                    infoTopViewed || windowBounds.top >= 0 && windowBounds.top < windowBounds.height
-            }
-            .onGloballyPositioned { coordinates ->
-                val windowBounds = coordinates.boundsInWindow()
-                infoBottomViewed =
-                    infoBottomViewed || windowBounds.bottom > 0 && windowBounds.bottom <= windowBounds.height
-            }
-    ) {
-        ConstraintLayout (Modifier.fillMaxWidth()) {
-            val (leftText, rightText) = createRefs()
-            val leftTextModifier = Modifier
-                .constrainAs(leftText) {
-                    start.linkTo(parent.start)
-                    end.linkTo(rightText.start)
-                    top.linkTo(parent.top)
-                    width = Dimension.fillToConstraints
-                }
-            val rightTextModifier = Modifier
-                .constrainAs(rightText) {
-                    end.linkTo(parent.end)
-                    top.linkTo(parent.top)
-                }
-            if (showTitle)
-                NotiInfoTitle(notiTitle, leftTextModifier)
-            else
-                NotiInfoContent(notiContent, leftTextModifier)
-            NotiInfoTime(notiTime, infoTimeColor, rightTextModifier)
-        }
-        if (showTitle)
-            NotiInfoContent(notiContent)
-    }
-
-    LaunchedEffect(infoTopViewed, infoBottomViewed) {
-        if (infoTopViewed && infoBottomViewed && !notiSeen) {
-            viewedInfos.add(notiTime)  // Mark the item as viewed once fully revealed
-        }
-    }
-}
-
-@Composable
-fun NotiInfoTitle(notiTitle: String, modifier: Modifier = Modifier) {
-    Text(
-        modifier = Modifier
-            .padding(start = 16.dp)
-            .then(modifier),
-        text = if (notiTitle == "null") "" else notiTitle,
-        style = MaterialTheme.typography.bodySmall.copy(
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Bold
-        )
-    )
-}
-
-@Composable
-fun NotiInfoTime(notiTime: Long, infoTimeColor: Color, modifier: Modifier = Modifier) {
-    Box(
-        modifier = Modifier
-            .background(
-                infoTimeColor,
-                RoundedCornerShape(16.dp)
-            )
-            .then(modifier)
-    ) {
-        Text(
-            modifier = Modifier
-                .padding(end = 16.dp),
-            text = getRelativeTimeStr(notiTime),
-            style = MaterialTheme.typography.bodySmall.copy(
-                fontSize = 12.sp,
-                fontStyle = FontStyle.Italic
-            ),
-            color = contentColorFor(infoTimeColor)
-        )
-    }
-}
-
-@Composable
-fun NotiInfoContent(notiContent: String, modifier: Modifier = Modifier) {
-    Text(
-        modifier = Modifier
-            .padding(horizontal = 16.dp)
-            .then(modifier),
-        text = if (notiContent == "null") "" else notiContent,
-        style = MaterialTheme.typography.bodySmall.copy(
-            fontSize = 14.sp
-        )
-    )
-}
-
-@Composable
 fun ScoreDisplay(notiUnit: NotiUnit) {
     Row {
         Text(
@@ -789,10 +620,6 @@ fun ScoreDisplay(notiUnit: NotiUnit) {
         )
         Spacer(Modifier.padding(5.dp))
     }
-}
-
-fun getComment(input: String, notiHashkey: Int) {
-    Log.d("MyApp", "用戶對通知$notiHashkey 輸入意見:$input")
 }
 
 @Composable

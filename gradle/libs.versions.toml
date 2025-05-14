@@ -1,20 +1,20 @@
 [versions]
 # Plugin versions
-android-gradle = "8.8.0"
-kotlin = "2.1.10"
-ksp = "2.0.20-1.0.25"
+android-gradle = "8.9.1"
+kotlin = "2.1.20"
+ksp = "2.1.20-1.0.32"
 secrets-gradle-plugin = "2.0.1"
 
 # AndroidX versions
-core-ktx = "1.15.0"
+core-ktx = "1.16.0"
 lifecycle-runtime-ktx = "2.8.7"
-activity-compose = "1.10.0"
-compose-bom = "2025.01.01"
-constraintlayout = "2.2.0"
+activity-compose = "1.10.1"
+compose-bom = "2025.04.00"
+constraintlayout = "2.2.1"
 
 # Compose versions
-compose = "1.7.7"
-material3 = "1.0.0"
+compose = "1.7.8"
+material3 = "1.3.2"
 
 # Testing versions
 junit = "4.13.2"
@@ -22,10 +22,10 @@ androidx-junit = "1.2.1"
 espresso-core = "3.6.1"
 
 # Room versions
-room = "2.6.1"
+room = "2.7.0"
 
 # Paging versions
-paging = "3.3.5"
+paging = "3.3.6"
 
 # OpenAI / Networking
 ktor = "2.3.11"
@@ -35,10 +35,10 @@ okhttp = "4.11.0"
 # Miscellaneous
 dotenv = "6.4.1"
 opencc = "1.2.0"
-navigation = "2.8.6"
+navigation = "2.8.9"
 lazycolumn-scrollbar = "2.0.7"
-gson = "2.10.1"
-constraintlayout-compose = "1.1.0"
+gson = "2.11.0"
+constraintlayout-compose = "1.1.1"
 work-runtime = "2.10.0"
 
 [libraries]

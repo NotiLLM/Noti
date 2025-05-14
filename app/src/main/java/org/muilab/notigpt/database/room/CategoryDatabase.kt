@@ -9,6 +9,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import org.muilab.notigpt.model.notifications.NotiCategory
+import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_ARCHIVE
+import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_DELETED
+import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_GENERAL
 
 @Database(entities = [NotiCategory::class], version = 1, exportSchema = false)
 abstract class CategoryDatabase : RoomDatabase() {
@@ -30,7 +33,9 @@ abstract class CategoryDatabase : RoomDatabase() {
                         super.onCreate(db)
                         INSTANCE?.let { database ->
                             CoroutineScope(Dispatchers.IO).launch {
-                                database.categoryDao().insert(NotiCategory("All"))
+                                database.categoryDao().insert(NotiCategory(NOTI_CATEGORY_GENERAL))
+                                database.categoryDao().insert(NotiCategory(NOTI_CATEGORY_ARCHIVE))
+                                database.categoryDao().insert(NotiCategory(NOTI_CATEGORY_DELETED))
                             }
                         }
                     }

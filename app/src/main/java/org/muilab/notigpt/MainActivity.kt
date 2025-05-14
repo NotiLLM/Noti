@@ -19,11 +19,11 @@ import androidx.compose.ui.Modifier
 import androidx.core.app.NotificationManagerCompat
 import androidx.work.WorkManager
 import org.muilab.notigpt.database.room.DrawerDatabase
-import org.muilab.notigpt.paging.NotiRepository
+import org.muilab.notigpt.repository.NotiRepository
 import org.muilab.notigpt.service.NotiListenerService
-import org.muilab.notigpt.ui.theme.NotiTaskTheme
+import org.muilab.notigpt.ui.theme.NotiLLMTheme
 import org.muilab.notigpt.util.SharedPreferencesManager
-import org.muilab.notigpt.view.screen.MainScreen
+import org.muilab.notigpt.view.component.AppScaffold
 import org.muilab.notigpt.viewModel.DrawerViewModel
 import org.muilab.notigpt.viewModel.DrawerViewModelFactory
 
@@ -75,13 +75,12 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            NotiTaskTheme {
-                // A surface container using the 'background' color from the theme
+            NotiLLMTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    MainScreen(applicationContext, drawerViewModel)
+                    AppScaffold(applicationContext, drawerViewModel)
                 }
             }
         }

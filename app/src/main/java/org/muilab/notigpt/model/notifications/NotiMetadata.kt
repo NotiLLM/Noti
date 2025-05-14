@@ -130,11 +130,6 @@ data class NotiMetadata(
         if (largeIcon == "null")
             largeIcon = icon
 
-        // save pending intent
-        val pendingIntent = sbn.notification?.contentIntent
-        if (sbn.notification?.contentIntent != null)
-            NotiListenerService.pendingIntents[sbnKey] = pendingIntent as PendingIntent
-
         sortKey = sbn.notification?.sortKey.toString()
         this.isPeople = this.isPeople || fetchIsPeople(sbn)
         people.addAll(fetchPeople(sbn))

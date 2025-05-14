@@ -12,45 +12,82 @@ import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
 import androidx.annotation.RequiresApi
-import androidx.work.BackoffPolicy
-import androidx.work.Constraints
-import androidx.work.Data
-import androidx.work.ExistingWorkPolicy
-import androidx.work.NetworkType
-import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.WorkManager
+import androidx.collection.LruCache
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.muilab.notigpt.database.room.DrawerDatabase
 import org.muilab.notigpt.database.server.enqueueUpdateNotification
-import org.muilab.notigpt.database.server.workers.DifyAPIWorker
 import org.muilab.notigpt.model.notifications.NotiUnit
 import org.muilab.notigpt.util.Constants.Companion.NOTI_REMOVE_DELAY
-import org.muilab.notigpt.util.Constants.Companion.DIFY_UPDATE_NOTIFICATION
 import org.muilab.notigpt.util.SharedPreferencesManager
 import org.muilab.notigpt.util.createNotificationChannel
 import org.muilab.notigpt.util.postOngoingNotification
-import java.util.concurrent.TimeUnit
 
 class NotiListenerService: NotificationListenerService() {
 
     companion object {
-        val pendingIntents = mutableMapOf<String, PendingIntent>()
+        // Determine a suitable cache size. This example uses 1/16th of available app memory in KB
+        // assuming each PendingIntent takes roughly 1KB (adjust as needed).
+        // Or, more simply, set a fixed number like 250 or 500 based on expected usage.
+        private val maxMemory = (Runtime.getRuntime().maxMemory() / 1024).toInt()
+        private val cacheSize = maxMemory / 16 // Example: Use 1/16th of available heap for the cache size (in KB)
+        // Alternatively, use a fixed count: private const val cacheSize = 250
 
-        fun getPendingIntent(context: Context, notiUnit: NotiUnit): PendingIntent? {
-            val sbnKey = notiUnit.metadata.sbnKey
-            if (sbnKey in pendingIntents)
-                return pendingIntents[sbnKey]
+        // Use LruCache instead of MutableMap
+        val contentIntentCache = LruCache<String, PendingIntent>(cacheSize)
+        val deleteIntentCache = LruCache<String, PendingIntent>(cacheSize)
 
-            val launchIntent = context.packageManager.getLaunchIntentForPackage(notiUnit.metadata.pkgName)
-            return if (launchIntent != null)
-                PendingIntent.getActivity(context, 0, launchIntent, PendingIntent.FLAG_IMMUTABLE)
-            else
-                null
+        // --- Corrected getContentIntent ---
+        // It should ONLY return the cached intent or null.
+        // The fallback created the WRONG intent (generic launcher).
+        fun getContentIntent(context: Context, notiUnit: NotiUnit): PendingIntent? {
+
+            val notiKey = notiUnit.notiKey
+            val packageName = notiUnit.metadata.pkgName
+
+            // 1. Try getting the original intent from the cache
+            val cachedIntent = contentIntentCache.get(notiKey)
+            if (cachedIntent != null) {
+                Log.d("NotiListenerService", "Using cached intent")
+                return cachedIntent
+            }
+
+            // 2. If not cached and packageName is provided, try creating a fallback launch intent
+            return try {
+                val launchIntent = context.packageManager.getLaunchIntentForPackage(packageName)
+                if (launchIntent != null) {
+                    // Make sure the launch intent doesn't inherit flags that might cause issues
+                    launchIntent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                            Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
+                    Log.d("NotiListenerService", "Creating new intent for package: $packageName")
+                    PendingIntent.getActivity(
+                        context,
+                        notiKey.hashCode(), // Use key's hashcode for semi-unique request code
+                        launchIntent,
+                        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT // Update if package reinstalled/updated
+                    )
+                } else {
+                    null // Package might be uninstalled or has no launch activity
+                }
+            }  catch (e: Exception) {
+                null // Catch any potential errors
+            }
         }
 
+        // --- Corrected getDeleteIntent ---
+        fun getDeleteIntent(notiKey: String): PendingIntent? {
+            return deleteIntentCache.get(notiKey) // Get from cache or null if not found/evicted
+        }
+
+        // --- Method to explicitly remove intents when no longer needed ---
+        // Call this from onNotificationRemoved or when user deletes from your archive UI
+        fun removeIntents(notiKey: String) {
+            contentIntentCache.remove(notiKey)
+            deleteIntentCache.remove(notiKey)
+            // remove other intents if you cache them (e.g., actions)
+        }
     }
 
     @RequiresApi(Build.VERSION_CODES.S)
@@ -104,8 +141,6 @@ class NotiListenerService: NotificationListenerService() {
     @RequiresApi(Build.VERSION_CODES.S)
     private fun addNotification(sbn: StatusBarNotification, isInit: Boolean) {
 
-
-
         if (sbn.packageName.equals(packageName) || sbn.isOngoing || !sbn.isClearable)
             return
 
@@ -127,11 +162,25 @@ class NotiListenerService: NotificationListenerService() {
             val existingNoti = drawerDao.getBySbnKey(sbn.key)
             val newNoti = NotiUnit(applicationContext, sbn)
 
-            if (existingNoti.isEmpty()) {
+            if (existingNoti == null) {
                 drawerDao.insert(newNoti)
             } else if (!isInit) {
-                existingNoti[0].updateNoti(applicationContext, sbn)
-                drawerDao.update(existingNoti[0])
+                existingNoti.updateNoti(applicationContext, sbn)
+                drawerDao.update(existingNoti)
+            }
+
+            // --- Cache the Intents ---
+            val notification = sbn.notification
+            if (notification != null) {
+                notification.contentIntent?.let { // Use safe call ?.let
+                    Log.d("NotiListenerService", "Caching content intent")
+                    contentIntentCache.put(sbn.key, it)
+                }
+                notification.deleteIntent?.let { // Use safe call ?.let
+                    Log.d("NotiListenerService", "Caching delete intent")
+                    deleteIntentCache.put(sbn.key, it)
+                }
+                // Add caching for notification.actions[i].actionIntent if needed
             }
 
             enqueueUpdateNotification(applicationContext, sbn.key)
@@ -152,9 +201,9 @@ class NotiListenerService: NotificationListenerService() {
             val drawerDatabase = DrawerDatabase.getInstance(applicationContext)
             val drawerDao = drawerDatabase.drawerDao()
             val existingNoti = drawerDao.getBySbnKey(sbn.key)
-            if (existingNoti.isNotEmpty()) {
-                existingNoti[0].removeNoti()
-                drawerDao.update(existingNoti[0])
+            if (existingNoti != null) {
+                existingNoti.removeNoti()
+                drawerDao.update(existingNoti)
             }
             postOngoingNotification(applicationContext)
         }

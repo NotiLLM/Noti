@@ -62,6 +62,21 @@ object SharedPreferencesManager {
         get() = get(KEY_SERVER_PREFS, KEY_SERVER_IP, "140.113.214.145").toString()
         set(value) = put(KEY_SERVER_PREFS, KEY_SERVER_IP, value)
 
+    const val KEY_AUTO_ARCHIVE = "autoArchive"
+    var autoArchive: Boolean
+        get() = get(KEY_LOCAL_PREFS, KEY_AUTO_ARCHIVE, false)
+        set(value) = put(KEY_LOCAL_PREFS, KEY_AUTO_ARCHIVE, value)
+
+    const val KEY_AUTO_DELETE = "autoDelete"
+    var autoDelete: Boolean
+        get() = get(KEY_LOCAL_PREFS, KEY_AUTO_DELETE, false)
+        set(value) = put(KEY_LOCAL_PREFS, KEY_AUTO_DELETE, value)
+
+    const val KEY_TRACK_PIN = "trackPin"
+    var trackPin: Boolean
+        get() = get(KEY_LOCAL_PREFS, KEY_TRACK_PIN, false)
+        set(value) = put(KEY_LOCAL_PREFS, KEY_TRACK_PIN, value)
+
     private const val KEY_BASELINE_EMBEDDING_EN = "baselineEmbeddingEn"
     var baselineEmbeddingEn: String
         get() = get(KEY_SERVER_PREFS, KEY_BASELINE_EMBEDDING_EN, "")

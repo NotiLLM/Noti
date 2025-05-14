@@ -3,7 +3,9 @@ package org.muilab.notigpt.view.component
 import android.content.Context
 import android.util.Log
 import android.widget.Toast
+import androidx.compose.animation.core.animateIntAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -14,6 +16,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRowDefaults
@@ -24,15 +27,23 @@ import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
+import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_ARCHIVE
+import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_DELETED
+import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_GENERAL
+import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_TODO
 import org.muilab.notigpt.viewModel.DrawerViewModel
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -46,6 +57,9 @@ fun TabLayout(context: Context, drawerViewModel: DrawerViewModel, pagerState: Pa
     var selectedCategory by remember { mutableStateOf("") }
     var newCategoryName by remember { mutableStateOf("") }
 
+    var selectedTabIndex by remember { mutableStateOf(0) }
+    val animatedTabIndex by animateIntAsState(targetValue = selectedTabIndex)
+
     LaunchedEffect(Unit) {
         drawerViewModel.loadCategories()
     }
@@ -57,38 +71,52 @@ fun TabLayout(context: Context, drawerViewModel: DrawerViewModel, pagerState: Pa
         },
         indicator = { tabPositions ->
             TabRowDefaults.Indicator(
-                modifier = Modifier.tabIndicatorOffset(tabPositions[pagerState.currentPage]),
+                modifier = Modifier.tabIndicatorOffset(tabPositions[animatedTabIndex]),
                 height = 5.dp,
                 color = Color.White
             )
         },
         modifier = Modifier
-            .fillMaxWidth()
             .wrapContentHeight()
+            .fillMaxWidth()
     ) {
         notiCategories.value.forEachIndexed { index, notiCategory ->
             Tab(
-                selected = pagerState.currentPage == index,
+                selected = selectedTabIndex == index,
+                modifier = Modifier.height(48.dp),
                 onClick = {
-                    scope.launch {
-                        if (pagerState.currentPage != index) {
-                            pagerState.animateScrollToPage(index)
-                            drawerViewModel.updateCategory(notiCategory.categoryName)
+                    if (selectedTabIndex != index) {
+                        selectedTabIndex = index
+                        drawerViewModel.updateCategory(notiCategory.categoryName)
+                    } else {
+                        val defaultCategories = listOf(
+                            NOTI_CATEGORY_GENERAL,
+                            NOTI_CATEGORY_TODO,
+                            NOTI_CATEGORY_ARCHIVE,
+                            NOTI_CATEGORY_DELETED
+                        )
+                        if (notiCategory.categoryName !in defaultCategories) {
+                            selectedCategory = notiCategory.categoryName
+                            showDeleteDialog = true
                         } else {
-                            if (notiCategory.categoryName != "All") {
-                                selectedCategory = notiCategory.categoryName
-                                showDeleteDialog = true
-                            } else {
-                                Toast.makeText(context, "Cannot delete 'All' category", Toast.LENGTH_SHORT).show()
-                            }
+                            Toast.makeText(context, "Cannot delete 'All' category", Toast.LENGTH_SHORT).show()
                         }
                     }
                 },
-                text = { Text(notiCategory.categoryName) }
+                text = {
+                    Text(
+                        text = notiCategory.categoryName,
+                        style = if (selectedTabIndex == index)
+                            MaterialTheme.typography.headlineMedium
+                        else
+                            MaterialTheme.typography.bodySmall
+                    )
+                }
             )
         }
         Tab(
-            selected = pagerState.currentPage == notiCategories.value.size,
+            selected = selectedTabIndex == notiCategories.value.size,
+            modifier = Modifier.height(48.dp),
             onClick = {
                 newCategoryName = ""
                 showAddDialog = true
@@ -150,7 +178,7 @@ fun TabLayout(context: Context, drawerViewModel: DrawerViewModel, pagerState: Pa
                         selectedCategory?.let { category ->
                             scope.launch {
                                 drawerViewModel.deleteCategory(selectedCategory)
-                                drawerViewModel.updateCategory("All")
+                                drawerViewModel.updateCategory(NOTI_CATEGORY_GENERAL)
                                 pagerState.animateScrollToPage(0)
                             }
                         }

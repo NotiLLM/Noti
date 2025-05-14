@@ -80,7 +80,7 @@ interface DrawerDao {
     fun getNotiWithSenders(): List<NotiUnit>
 
     @Query("SELECT * FROM noti_drawer WHERE sbnKey = :sbnKey")
-    fun getBySbnKey(sbnKey: String): List<NotiUnit>
+    fun getBySbnKey(sbnKey: String): NotiUnit?
 
     @Query("SELECT * FROM noti_drawer WHERE sbnKey in (:sbnKeys)")
     fun getBySbnKeys(sbnKeys: List<String>): List<NotiUnit>
@@ -104,7 +104,10 @@ interface DrawerDao {
     fun deleteAll()
 
     @Query("DELETE FROM noti_drawer WHERE pinned <> 1")
-    fun deleteAllNotPinned()
+    fun deleteAllGeneralNotPinned()
+
+    @Query("DELETE FROM noti_drawer WHERE pinned <> 1 AND category = :category")
+    fun deleteAllCategoryNotPinned(category: String)
 
     @Query("UPDATE noti_drawer SET sortScore = :newSortScore WHERE sbnKey = :sbnKey")
     fun updateSortScore(sbnKey: String, newSortScore: Float)

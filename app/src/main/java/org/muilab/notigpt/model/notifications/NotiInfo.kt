@@ -51,7 +51,16 @@ data class NotiInfo (
         }
 
         fun fetchExtra(sbn: StatusBarNotification, extraString: String): String {
-            return sbn.notification?.extras?.getCharSequence(extraString).toString()
+
+            fun sanitizeInput(str: CharSequence?): String {
+                return str?.toString()
+                    ?.replace("\\", "\\\\")
+                    ?.replace("\"", "\\\"")
+                    ?.replace("\n", "\\n")
+                    ?: ""
+            }
+
+            return sanitizeInput(sbn.notification?.extras?.getCharSequence(extraString).toString())
         }
 
         fun verifyExtra(extraTextString: String): Boolean {

@@ -35,9 +35,12 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.muilab.notigpt.database.room.CategoryDatabase
 import org.muilab.notigpt.database.room.DrawerDatabase
+import org.muilab.notigpt.database.server.enqueueNotificationAction
 import org.muilab.notigpt.model.notifications.NotiCategory
 import org.muilab.notigpt.model.notifications.NotiUnit
-import org.muilab.notigpt.paging.NotiRepository
+import org.muilab.notigpt.repository.NotiRepository
+import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_GENERAL
+import org.muilab.notigpt.util.SharedPreferencesManager
 import org.muilab.notigpt.util.getAbsoluteTimeStr
 import org.muilab.notigpt.util.getNotifications
 import org.muilab.notigpt.util.getRelativeTimeStr
@@ -50,7 +53,7 @@ import kotlin.collections.filter
 
 class DrawerViewModel(
     application: Application,
-    notiRepository: NotiRepository
+    private val notiRepository: NotiRepository
 ) : AndroidViewModel(application) {
 
     private val _category = MutableStateFlow("")
@@ -178,7 +181,7 @@ class DrawerViewModel(
     val presentedNotifications: StateFlow<List<NotiUnit>> =
         combine(category, sortedNotifications) { latestCategory, notiList ->
             when (latestCategory) {
-                "All" -> notiList
+                NOTI_CATEGORY_GENERAL -> notiList.filter { it.category.isBlank() || it.category == latestCategory }
                 else -> notiList.filter { it.category == latestCategory }
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -189,19 +192,24 @@ class DrawerViewModel(
     val context: Context = getApplication<Application>().applicationContext
 
     @RequiresApi(Build.VERSION_CODES.S)
-    fun actOnNoti(notiUnit: NotiUnit, action: String) {
-        viewModelScope.launch(Dispatchers.IO) {
-            val drawerDatabase = DrawerDatabase.getInstance(context)
-            val drawerDao = drawerDatabase.drawerDao()
-            val existingNoti = drawerDao.getBySbnKey(notiUnit.notiKey)
-            if (existingNoti.isNotEmpty()) {
-                when (action) {
-                    "swipe_dismiss" -> existingNoti[0].removeNoti()
-                    "click_dismiss" -> existingNoti[0].removeNoti()
-                    "pin" -> existingNoti[0].flipNotiPin()
-                }
-                drawerDao.update(existingNoti[0])
-            }
+    fun actOnNoti(notiKey: String, action: String) {
+
+        fun checkIfTrackAction(): Boolean {
+            if (action == "pin" && SharedPreferencesManager.trackPin)
+                return true
+            if (action in listOf("archive", "unarchive") && SharedPreferencesManager.autoArchive)
+                return true
+            if (action == "dismiss_click" && SharedPreferencesManager.autoDelete)
+                return true
+            return false
+        }
+
+        viewModelScope.launch {
+
+            if (checkIfTrackAction())
+                enqueueNotificationAction(context, notiKey, action)
+
+            notiRepository.actOnNoti(notiKey, action)
             if (action.contains("dismiss")) {
                 postOngoingNotification(context)
             }
@@ -210,10 +218,8 @@ class DrawerViewModel(
 
     @RequiresApi(Build.VERSION_CODES.S)
     fun deleteAllNotis() {
-        viewModelScope.launch(Dispatchers.IO) {
-            val drawerDatabase = DrawerDatabase.getInstance(context)
-            val drawerDao = drawerDatabase.drawerDao()
-            drawerDao.deleteAllNotPinned()
+        viewModelScope.launch {
+            notiRepository.deleteAllNotis(category.value)
             postOngoingNotification(context)
         }
     }
