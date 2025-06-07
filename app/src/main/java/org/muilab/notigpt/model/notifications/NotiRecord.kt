@@ -1,43 +1,48 @@
 package org.muilab.notigpt.model.notifications
 
 import android.app.Notification
-import android.app.Notification.MessagingStyle.Message.getMessagesFromBundleArray
 import android.app.Person
 import android.os.Build
 import android.service.notification.StatusBarNotification
 import androidx.annotation.RequiresApi
+import androidx.room.Entity
 
-data class NotiInfo (
-    val time: Long,
+@Entity(tableName = "noti_record", primaryKeys = ["notiRecordId"])
+data class NotiRecord (
+
+    // KEYS
+    val notiRecordId: String,
+    val notiKey: String,
+
+    // TIME RELATED
+    val whenTime: Long,
+    val postTime: Long,
+
+    // TITLE RELATED
     val person: String = "",
-    var notiSeen: Boolean = false,
-    val prevContent: String = "",
     val extraTitle: String = "",
     val extraBigTitle: String = "",
     val extraConversationTitle: String = "",
+
+    // CONTENT RELATED
     val extraBigText: String = "",
     val extraText: String = "",
     val extraTextLines: String = "",
     val extraSummaryText: String = "",
     val extraInfoText: String = "",
-    val extraSubText: String = ""
+    val extraSubText: String = "",
+
+    // STATUS
+    var isRead: Boolean = false,
+    var isVisible: Boolean = true,
 ) {
 
     companion object {
-        private fun fetchTime(sbn: StatusBarNotification): Long {
-            val `when` = sbn.notification?.`when` as Long
-            val postTime = sbn.postTime
-            return if (`when` != 0L)
-                `when`
-            else
-                postTime
-        }
-
         @RequiresApi(Build.VERSION_CODES.S)
         private fun fetchPerson(sbn: StatusBarNotification): String {
             val messages = sbn.notification?.extras?.getParcelableArray(Notification.EXTRA_MESSAGES)
             if (messages != null) {
-                getMessagesFromBundleArray(messages).lastOrNull()?.senderPerson?.name.let {
+                Notification.MessagingStyle.Message.getMessagesFromBundleArray(messages).lastOrNull()?.senderPerson?.name.let {
                     if (it != null)
                         return it.toString()
                 }
@@ -67,36 +72,15 @@ data class NotiInfo (
             return extraTextString.isNotBlank() && extraTextString != "null"
         }
 
-//        fun fetchBigText(sbn: StatusBarNotification): String {
-//            return sbn.notification?.extras?.getCharSequence(Notification.EXTRA_BIG_TEXT).toString()
-//        }
-//
-//        fun fetchText(sbn: StatusBarNotification): String {
-//            return sbn.notification?.extras?.getCharSequence(Notification.EXTRA_TEXT).toString()
-//        }
-//
-//        fun fetchTextLines(sbn: StatusBarNotification): String {
-//            return sbn.notification?.extras?.getCharSequenceArray(Notification.EXTRA_TEXT_LINES).toString()
-//        }
-//
-//        fun getSummaryText(sbn: StatusBarNotification): String {
-//            return sbn.notification?.extras?.getCharSequence(Notification.EXTRA_SUMMARY_TEXT).toString()
-//        }
-//
-//        fun getInfoText(sbn: StatusBarNotification): String {
-//            return sbn.notification?.extras?.getCharSequence(Notification.EXTRA_INFO_TEXT).toString()
-//        }
-//
-//        fun getSubText(sbn: StatusBarNotification): String {
-//            return sbn.notification?.extras?.getCharSequence(Notification.EXTRA_SUB_TEXT).toString()
-//        }
-
         val senderInTitle = setOf<String>()
     }
 
     @RequiresApi(Build.VERSION_CODES.S)
     constructor (sbn: StatusBarNotification): this(
-        time = fetchTime(sbn),
+        notiRecordId = "${sbn.key}_${sbn.postTime}",
+        notiKey = sbn.key,
+        whenTime = sbn.notification?.`when` as Long,
+        postTime = sbn.postTime,
         person = fetchPerson(sbn),
         extraTitle = fetchExtra(sbn, Notification.EXTRA_TITLE),
         extraBigTitle = fetchExtra(sbn, Notification.EXTRA_TITLE_BIG),
@@ -109,13 +93,15 @@ data class NotiInfo (
         extraSubText = fetchExtra(sbn, Notification.EXTRA_SUB_TEXT)
     )
 
-    constructor(time: Long, person: String, msgContent: String): this(
-        time = time,
-        person = person,
-        prevContent = msgContent
-    )
+    val time: Long
+        get() {
+            return if (whenTime != 0L)
+                whenTime
+            else
+                postTime
+        }
 
-    var title: String = ""
+    val title: String
         get() {
             return if (verifyExtra(extraConversationTitle))
                 extraConversationTitle
@@ -125,18 +111,16 @@ data class NotiInfo (
                 extraTitle
         }
 
-    fun getDisplayedTitle(packageName: String, isPerson: Boolean): String {
-        return if (isPerson && packageName !in senderInTitle && verifyExtra(person))
+    fun getDisplayedTitle(isPerson: Boolean): String {
+        return if (isPerson && verifyExtra(person))
             person
         else
             title
     }
 
-    var content: String = ""
+    val content: String
         get() {
-            return if (prevContent.isNotEmpty())
-                prevContent
-            else if (verifyExtra(extraBigText))
+            return if (verifyExtra(extraBigText))
                 extraBigText
             else if (verifyExtra(extraText))
                 extraText

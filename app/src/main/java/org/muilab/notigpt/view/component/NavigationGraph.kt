@@ -8,7 +8,7 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import org.muilab.notigpt.view.screen.HomeScreen
-import org.muilab.notigpt.view.screen.QuestionsScreen
+import org.muilab.notigpt.view.screen.SettingsScreen
 import org.muilab.notigpt.viewModel.DrawerViewModel
 
 @RequiresApi(Build.VERSION_CODES.S)
@@ -19,7 +19,7 @@ fun NavigationGraph(navController: NavHostController, drawerViewModel: DrawerVie
             HomeScreen(context, drawerViewModel)
         }
         composable(BottomNavItem.Questions.screen_route) {
-            QuestionsScreen()
+            SettingsScreen()
         }
     }
 }

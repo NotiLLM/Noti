@@ -15,13 +15,13 @@ import android.util.TypedValue
 import androidx.annotation.RequiresApi
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
+import androidx.core.graphics.createBitmap
 import androidx.core.graphics.drawable.IconCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import org.muilab.notigpt.MainActivity
-import org.muilab.notigpt.database.room.DrawerDatabase
-import org.muilab.notigpt.reciever.NotiActionReciever
+import org.muilab.notigpt.database.room.NotiDrawerDatabase
 
 fun createNotificationChannel(context: Context) {
     val channelId = "notigpt_all"
@@ -40,7 +40,7 @@ fun createNotificationChannel(context: Context) {
 fun createCountIcon(context: Context, number: Int, hasNotRead: Boolean): Bitmap {
     val size = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 24f, context.resources.displayMetrics).toInt()
 
-    val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+    val bitmap = createBitmap(size, size)
     val canvas = Canvas(bitmap)
 
     val shapePaint = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -75,49 +75,16 @@ fun createCountIcon(context: Context, number: Int, hasNotRead: Boolean): Bitmap 
 
 @RequiresApi(Build.VERSION_CODES.S)
 fun postOngoingNotification(context: Context) {
+
     CoroutineScope(Dispatchers.IO).launch {
-        val drawerDatabase = DrawerDatabase.getInstance(context)
-        val drawerDao = drawerDatabase.drawerDao()
+        val notiDrawerDatabase = NotiDrawerDatabase.getInstance(context)
+        val drawerDao = notiDrawerDatabase.drawerDao()
 
-        val allNotiCount = drawerDao.getAllNotiCount()
-        val notiNotRead = drawerDao.getnotReadNotis()
-        val notiNotReadCount = notiNotRead.size
-        val hasNotRead = notiNotRead.isNotEmpty()
-        val notiWithSenders = drawerDao.getNotiWithSenders()
-
-        val notiTitle = if (hasNotRead) {
-            "$notiNotReadCount unread ($allNotiCount in total)"
-        } else
-            "$allNotiCount notifications"
-
-        val smallIcon = if (hasNotRead)
-            createCountIcon(context, notiNotReadCount, true)
-        else
-            createCountIcon(context, allNotiCount, false)
+        val allNotiCount = drawerDao.getVisibleNotiCount()
+        val notiTitle = "$allNotiCount notifications"
+        val smallIcon = createCountIcon(context, allNotiCount, false)
 
         val sb = StringBuilder()
-
-        if (hasNotRead){
-            notiNotRead.forEach { notiUnit ->
-                val notiCount = notiUnit.getNotiBody().size
-                if (!notiUnit.isPeople)
-                    sb.append("${notiUnit.metadata.appName}: ")
-                sb.append(notiUnit.title)
-                if (notiCount > 1)
-                    sb.append(" ($notiCount messages)")
-                sb.append("\n")
-            }
-        } else {
-            var appName = ""
-            notiWithSenders.forEach { notiUnit ->
-                val notiSender = notiUnit.title
-                val notiCount = notiUnit.getNotiBody().size
-                sb.append(notiSender)
-                if (notiCount > 1)
-                    sb.append(" ($notiCount messages)")
-                sb.append("\n")
-            }
-        }
 
         val notiContent = sb.toString()
         val bigTextStyle = NotificationCompat.BigTextStyle()
@@ -134,38 +101,11 @@ fun postOngoingNotification(context: Context) {
             setContentTitle(notiTitle)
             setContentText(notiContent)
             setStyle(bigTextStyle)
-            if (hasNotRead) {
-                setColorized(true)
-                setColor(0xffeed202.toInt())
-            } else
-                setColor(0xffcccccc.toInt())
+            setColor(0xffcccccc.toInt())
             setPriority(NotificationCompat.PRIORITY_HIGH)
             setSilent(true)
             setContentIntent(pendingIntent)
             setOngoing(true)  // This makes the notification ongoing
-            if (hasNotRead) {
-                val readIntentAction = Intent(context, NotiActionReciever::class.java).apply {
-                    action = "read_all"
-                }
-                val readPendingIntent = PendingIntent.getBroadcast(
-                    context,
-                    0,
-                    readIntentAction,
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-                )
-
-                val pinIntentAction = Intent(context, NotiActionReciever::class.java).apply {
-                    action = "pin_all"
-                }
-                val pinPendingIntent = PendingIntent.getBroadcast(
-                    context,
-                    1,
-                    pinIntentAction,
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-                )
-                addAction(0, "Read All", readPendingIntent)
-                addAction(1, "Pin All", pinPendingIntent)
-            }
         }
         val notificationId = 44
 

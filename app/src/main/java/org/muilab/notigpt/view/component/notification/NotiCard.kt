@@ -1,12 +1,9 @@
 package org.muilab.notigpt.view.component.notification
 
-import android.app.Activity
 import android.app.ActivityOptions
 import android.content.Context
-import android.graphics.Rect
 import android.os.Build
 import android.util.Log
-import android.view.ViewTreeObserver
 import androidx.annotation.RequiresApi
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.exponentialDecay
@@ -40,7 +37,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.contentColorFor
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
@@ -60,9 +56,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -71,13 +65,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 import org.muilab.notigpt.R
-import org.muilab.notigpt.model.notifications.NotiUnit
+import org.muilab.notigpt.model.notifications.NotiDisplayUnit
 import org.muilab.notigpt.service.NotiListenerService
 import org.muilab.notigpt.util.hasTransparentPixels
 import org.muilab.notigpt.util.replaceChars
 import org.muilab.notigpt.view.component.notification.action.NotiActionBar
 import org.muilab.notigpt.view.component.notification.action.NotiFeedbackDropdown
-import org.muilab.notigpt.view.component.notification.info.ExpandedNotiInfo
+import org.muilab.notigpt.view.component.notification.info.ExpandedNotiRecord
 import org.muilab.notigpt.view.utils.NotiExpandState
 import org.muilab.notigpt.viewModel.DrawerViewModel
 import kotlin.math.abs
@@ -85,15 +79,18 @@ import kotlin.math.abs
 @OptIn(ExperimentalFoundationApi::class)
 @RequiresApi(Build.VERSION_CODES.S)
 @Composable
-fun NotiCard(context: Context, notiUnit: NotiUnit, drawerViewModel: DrawerViewModel, notiViewed: MutableState<Boolean>, viewedInfos: MutableSet<Long>) {
+fun NotiCard(context: Context, notiDisplayUnit: NotiDisplayUnit, drawerViewModel: DrawerViewModel, notiViewed: MutableState<Boolean>, viewedInfos: MutableSet<String>) {
 
     var notiTopViewed by remember { mutableStateOf(false) }
     var notiBottomViewed by remember { mutableStateOf(false) }
 
+    val notiUnit = notiDisplayUnit.notiUnit
+    val notiRecords = notiDisplayUnit.notiRecords
+
     val notiKey = notiUnit.notiKey
     val pinned = notiUnit.isPinned
-    val wholeNotiRead = notiUnit.wholeNotiRead
-    val notiOverallTitle = notiUnit.title
+    val isCompletelyRead = notiUnit.isCompletelyRead
+    val notiOverallTitle = notiDisplayUnit.title
     val isPeople = notiUnit.isPeople
     val pkgName = notiUnit.pkgName
     val appName = notiUnit.appName
@@ -109,15 +106,14 @@ fun NotiCard(context: Context, notiUnit: NotiUnit, drawerViewModel: DrawerViewMo
     }
 
     val timeColor = when {
-        !wholeNotiRead -> MaterialTheme.colorScheme.error
+        !isCompletelyRead -> MaterialTheme.colorScheme.error
         pinned -> MaterialTheme.colorScheme.tertiary
         else -> MaterialTheme.colorScheme.surfaceVariant
     }
 
-    val notiBody = notiUnit.getNotiBody().toCollection(ArrayList())
     var requiresExpansion by remember { mutableStateOf(
-        notiBody.size > 1 || hasSummary ||
-                (notiBody.size == 1 && notiBody[0].getDisplayedTitle(pkgName, isPeople)
+        notiRecords.size > 1 || hasSummary ||
+                (notiRecords.size == 1 && notiRecords[0].getDisplayedTitle(isPeople)
                     .let { notiOverallTitle.isNotBlank() && notiOverallTitle != it }))
     }
 
@@ -323,12 +319,6 @@ fun NotiCard(context: Context, notiUnit: NotiUnit, drawerViewModel: DrawerViewMo
                         }
                     }
                 }
-                if (progress == 0f && notiUnit.outcome.similarityScore > 0)
-                    Text(
-                        String.format("%.3f", notiUnit.outcome.similarityScore),
-                        modifier = Modifier.align(Alignment.CenterHorizontally).padding(0.dp),
-                        fontSize = 8.sp,
-                    )
             }
 
             Column (Modifier.align(Alignment.TopEnd)) {
@@ -385,7 +375,7 @@ fun NotiCard(context: Context, notiUnit: NotiUnit, drawerViewModel: DrawerViewMo
                                 ) {
                                     Text(
                                         modifier = Modifier.padding(horizontal = 5.dp),
-                                        text = notiUnit.getRelLatestTimeStr(),
+                                        text = notiDisplayUnit.latestUpdateRelTimeStr,
                                         maxLines = 1,
                                         fontSize = 12.sp,
                                         fontStyle = FontStyle.Italic,
@@ -412,7 +402,7 @@ fun NotiCard(context: Context, notiUnit: NotiUnit, drawerViewModel: DrawerViewMo
                                         }
                                     )
                                 } else {
-                                    val notiContent = notiBody.last().content
+                                    val notiContent = notiRecords.last().content
                                     Text(
                                         modifier = Modifier.background(Color.Transparent),
                                         text = if (notiContent == "null") "" else replaceChars(
@@ -512,7 +502,7 @@ fun NotiCard(context: Context, notiUnit: NotiUnit, drawerViewModel: DrawerViewMo
                         val scrollState = rememberScrollState()
 
                         val isGroup = (listOf(notiOverallTitle)
-                                + notiBody.map { it.getDisplayedTitle(pkgName, isPeople) })
+                                + notiRecords.map { it.getDisplayedTitle(isPeople) })
                             .filter { it.isNotBlank() }
                             .toSet().size > 1
 
@@ -524,22 +514,22 @@ fun NotiCard(context: Context, notiUnit: NotiUnit, drawerViewModel: DrawerViewMo
                                     contentHeightPx = size.height
                                 }
                         ) {
-                            notiBody.forEachIndexed { idx, noti ->
+                            notiRecords.forEachIndexed { idx, notiRecord ->
 
-                                val notiTitle = noti.getDisplayedTitle(pkgName, isPeople)
+                                val notiTitle = notiRecord.getDisplayedTitle(isPeople)
                                 val prevTitle = if (idx == 0)
                                     notiOverallTitle
                                 else
-                                    notiBody[idx - 1].getDisplayedTitle(pkgName, isPeople)
-                                val notiTime = noti.time
-                                val notiContent = noti.content
-                                val notiSeen = noti.notiSeen
+                                    notiRecords[idx - 1].getDisplayedTitle(isPeople)
+                                val notiTime = notiRecord.time
+                                val notiContent = notiRecord.content
+                                val notiIsRead = notiRecord.isRead
                                 val newTitle =
                                     (notiTitle != prevTitle && notiTitle.isNotBlank() && prevTitle.isNotBlank())
                                 val showTitle = isGroup && newTitle
 
                                 val infoTimeColor = when {
-                                    !notiSeen -> MaterialTheme.colorScheme.error
+                                    !notiIsRead -> MaterialTheme.colorScheme.error
                                     pinned -> MaterialTheme.colorScheme.tertiary
                                     else -> MaterialTheme.colorScheme.surfaceVariant
                                 }
@@ -547,17 +537,18 @@ fun NotiCard(context: Context, notiUnit: NotiUnit, drawerViewModel: DrawerViewMo
                                 if (showTitle)
                                     Spacer(modifier = Modifier.height(notiInfoGapDp))
 
-                                if (idx == notiBody.size - 1) {
+                                if (idx == notiRecords.size - 1) {
                                     Box(
                                         modifier = Modifier.onSizeChanged { size ->
                                             latestMessageHeightPx = size.height
                                         }
                                     ) {
-                                        ExpandedNotiInfo(
+                                        ExpandedNotiRecord(
+                                            notiRecord.notiRecordId,
                                             notiTitle,
                                             notiTime,
                                             notiContent,
-                                            notiSeen,
+                                            notiIsRead,
                                             showTitle,
                                             infoTimeColor,
                                             viewedInfos
@@ -565,11 +556,12 @@ fun NotiCard(context: Context, notiUnit: NotiUnit, drawerViewModel: DrawerViewMo
                                     }
                                     Spacer(modifier = Modifier.height(notiInfoGapDp))
                                 } else {
-                                    ExpandedNotiInfo(
+                                    ExpandedNotiRecord(
+                                        notiRecord.notiRecordId,
                                         notiTitle,
                                         notiTime,
                                         notiContent,
-                                        notiSeen,
+                                        notiIsRead,
                                         showTitle,
                                         infoTimeColor,
                                         viewedInfos
@@ -600,47 +592,11 @@ fun NotiCard(context: Context, notiUnit: NotiUnit, drawerViewModel: DrawerViewMo
     }
 
     LaunchedEffect(notiTopViewed, notiBottomViewed) {
-        if (notiTopViewed && notiBottomViewed && !notiUnit.wholeNotiRead && !requiresExpansion) {
+        if (notiTopViewed && notiBottomViewed && !notiUnit.isCompletelyRead && !requiresExpansion) {
             notiViewed.value = true
-            for (noti in notiBody)
-                noti.notiSeen = true
+            for (notiRecord in notiRecords)
+                notiRecord.isRead = true
             viewedInfos.clear()
         }
     }
-}
-
-@Composable
-fun ScoreDisplay(notiUnit: NotiUnit) {
-    Row {
-        Text(
-            text = String.format("%.2f", notiUnit.sortScore),
-            fontSize = 10.sp,
-            fontWeight = FontWeight.ExtraBold,
-            color = Color.Cyan
-        )
-        Spacer(Modifier.padding(5.dp))
-    }
-}
-
-@Composable
-fun isKeyboardVisible(): Boolean {
-    val view = LocalView.current
-    val rootView = (LocalContext.current as Activity).window.decorView
-    var isKeyboardVisible by remember { mutableStateOf(false) }
-
-    DisposableEffect(view) {
-        val listener = ViewTreeObserver.OnGlobalLayoutListener {
-            val rect = Rect()
-            rootView.getWindowVisibleDisplayFrame(rect)
-            val screenHeight = rootView.height
-            val keypadHeight = screenHeight - rect.bottom
-            isKeyboardVisible = keypadHeight > screenHeight * 0.15
-        }
-        rootView.viewTreeObserver.addOnGlobalLayoutListener(listener)
-
-        onDispose {
-            rootView.viewTreeObserver.removeOnGlobalLayoutListener(listener)
-        }
-    }
-    return isKeyboardVisible
 }

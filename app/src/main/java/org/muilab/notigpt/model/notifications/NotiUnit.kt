@@ -7,19 +7,17 @@ import android.service.notification.StatusBarNotification
 import androidx.annotation.RequiresApi
 import androidx.room.Embedded
 import androidx.room.Entity
+import org.muilab.notigpt.model.notifications.components.NotiMetadata
+import org.muilab.notigpt.model.notifications.components.NotiDisplayState
 import org.muilab.notigpt.util.getAbsoluteTimeStr
 import org.muilab.notigpt.util.getRelativeTimeStr
 
 
 @Entity(tableName = "noti_drawer", primaryKeys = ["notiKey"])
 data class NotiUnit(
-    // Fixed (On Init)
-    val notiKey: String, // primary key
+    val notiKey: String,
     @Embedded val metadata: NotiMetadata,
-    @Embedded val body: NotiBody = NotiBody(),
-    @Embedded val feature: NotiFeature = NotiFeature(),
-    @Embedded val actions: NotiActions = NotiActions(),
-    @Embedded val outcome: NotiOutcome = NotiOutcome(),
+    @Embedded val displayState: NotiDisplayState = NotiDisplayState(),
 ) {
 
     @RequiresApi(Build.VERSION_CODES.S)
@@ -36,8 +34,9 @@ data class NotiUnit(
     @RequiresApi(Build.VERSION_CODES.S)
     fun updateNoti(context: Context, sbn: StatusBarNotification) {
         metadata.update(context, sbn)
-        body.update(sbn, isPeople)
-        summary = ""
+        if (!isVisible)
+            displayState.resetUserState()
+        displayState.resetLLMState()
     }
 
     val hashKey: Int
@@ -58,166 +57,54 @@ data class NotiUnit(
     val bitmap: Bitmap?
         get() = metadata.getBitmap()
 
-
-    // BODY RELATED CALLS
-
-    val title: String
-        get() = body.title
-
-    val wholeNotiRead: Boolean
-        get() = body.wholeNotiRead
-
-    fun markAsRead() {
-        body.wholeNotiRead = true
-        body.notiInfos.forEach { it.notiSeen = true }
-    }
-
-    fun markInfosAsRead(seenInfos: Set<Long>) {
-        var checkAllRead = true
-        for (notiInfo in body.notiInfos) {
-            for (infoTime in seenInfos)
-                if (infoTime == notiInfo.time)
-                    notiInfo.notiSeen = true
-            if (!notiInfo.notiSeen)
-                checkAllRead = false
-        }
-        if (checkAllRead)
-            body.wholeNotiRead = true
-    }
-
-    fun getNotiBody(): List<NotiInfo> {
-        return body.notiInfos.toList()
-    }
-
-    fun getPrevBody(): List<NotiInfo> {
-        return body.prevNotiInfos.toList()
-    }
-
-    fun getAbsLatestTimeStr(): String {
-        return getAbsoluteTimeStr(body.latestTime)
-    }
-
-    fun getRelLatestTimeStr(): String {
-        return getRelativeTimeStr(body.latestTime)
-    }
-
-    // ACTIONS RELATED CALLS
+    // DISPLAY RELATED CALLS
+    val isVisible: Boolean
+        get() = displayState.isVisible
 
     var isPinned: Boolean
-        get() = actions.pinned
+        get() = displayState.isPinned
         set(value) {
-            actions.pinned = value
+            displayState.isPinned = value
         }
 
+    val isCompletelyRead: Boolean
+        get() = displayState.isCompletelyRead
+
     fun flipNotiPin() {
-        actions.flipPin()
+        displayState.flipPin()
     }
 
     fun changeCategory(newCategory: String) {
        category = newCategory
     }
 
-    fun removeNoti() {
-        metadata.isVisible = false
-        body.removeNoti(isPeople)
+    fun setInvisible() {
+        displayState.isVisible = false
     }
 
     // OUTCOMES RELATED CALLS
 
-    val embeddingString: String
-        get() = outcome.embeddingString
-
     var summary: String
-        get() = outcome.summary
+        get() = displayState.summary
         set(value) {
-            outcome.summary = value
+            displayState.summary = value
         }
 
     var sortScore: Double
-        get() = outcome.sortScore
+        get() = displayState.sortScore
         set(value) {
-            outcome.sortScore = value
+            displayState.sortScore = value
         }
 
     var category: String
         set(value) {
-            outcome.category = value
+            displayState.category = value
         }
-        get() = outcome.category
+        get() = displayState.category
 
     var explanation: String
-        get() = outcome.explanation
+        get() = displayState.explanation
         set(value) {
-            outcome.explanation = value
+            displayState.explanation = value
         }
-
-    fun resetLLMValues() {
-        outcome.resetOutcomes()
-    }
-
-    // FOR SERVER UPLOAD
-    fun toServerNoti(userId: String): Map<String, Any> {
-        return mapOf<String, Any>(
-            "id" to "${userId}_$notiKey",
-            "user_id" to userId,
-            "title" to title,
-            "app_name" to appName,
-            "abs_post_time" to getAbsLatestTimeStr(),
-            "rel_post_time" to getRelLatestTimeStr(),
-            "noti_key" to notiKey,
-            "body" to getNotiBody().map {
-                mapOf<String, Any>(
-                    "title" to it.getDisplayedTitle(pkgName, isPeople),
-                    "abs_time" to getAbsoluteTimeStr(it.time),
-                    "rel_time" to getRelativeTimeStr(it.time),
-                    "content" to it.content
-                )
-            },
-            "history_body" to getPrevBody().map {
-                mapOf<String, Any>(
-                    "title" to it.getDisplayedTitle(pkgName, isPeople),
-                    "abs_time" to getAbsoluteTimeStr(it.time),
-                    "rel_time" to getRelativeTimeStr(it.time),
-                    "content" to it.content
-                )
-            },
-        )
-    }
-
-    fun toDifyNoti(timeDiff: Long = System.currentTimeMillis()): Map<String, Any>? {
-
-        val currentTime = System.currentTimeMillis()
-        if (currentTime - body.latestTime > timeDiff)
-            return null
-
-        return mapOf<String, Any>(
-            "noti-key" to notiKey,
-            "title" to title,
-            "app_name" to appName,
-            "body" to getNotiBody()
-                .filter { currentTime - it.time < timeDiff }
-                .map {
-                    mapOf<String, Any>(
-                        "title" to it.getDisplayedTitle(pkgName, isPeople),
-                        "abs_time" to getAbsoluteTimeStr(it.time),
-                        "rel_time" to getRelativeTimeStr(it.time),
-                        "content" to it.content
-                    )
-                },
-            "history_body" to getPrevBody()
-                .map {
-                    mapOf<String, Any>(
-                        "title" to it.getDisplayedTitle(pkgName, isPeople),
-                        "abs_time" to getAbsoluteTimeStr(it.time),
-                        "rel_time" to getRelativeTimeStr(it.time),
-                        "content" to it.content
-                    )
-                },
-        )
-    }
-
-    // FOR UI PRESENTATION
-    fun withUpdatedSimilarity(similarity: Double): NotiUnit {
-        return this.copy(outcome = outcome.copy(similarityScore = similarity))
-    }
 }

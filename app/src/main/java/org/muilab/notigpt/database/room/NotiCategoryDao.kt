@@ -7,7 +7,7 @@ import androidx.room.Query
 import org.muilab.notigpt.model.notifications.NotiCategory
 
 @Dao
-interface CategoryDao {
+interface NotiCategoryDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insert(notiCategory: NotiCategory)
 

@@ -9,23 +9,18 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.muilab.notigpt.R
-import org.muilab.notigpt.database.server.enqueuePostNotificationPreference
+import org.muilab.notigpt.database.server.enqueueNotificationAction
 import org.muilab.notigpt.database.server.enqueueUpdateNotification
 import org.muilab.notigpt.model.notifications.NotiUnit
 
@@ -46,7 +41,7 @@ fun NotiFeedbackDropdown(context: Context, notiUnit: NotiUnit, isDropdownMenuExp
                     iconRes = R.drawable.thumb_down,
                     contentDescription = "Dislike",
                     onClick = {
-                        enqueuePostNotificationPreference(context, notiUnit.notiKey, -2)
+                        enqueueNotificationAction(context, notiUnit.notiKey, "disliked")
                         isDropdownMenuExpanded.value = false
                     }
                 )
@@ -63,7 +58,7 @@ fun NotiFeedbackDropdown(context: Context, notiUnit: NotiUnit, isDropdownMenuExp
                     iconRes = R.drawable.thumb_up,
                     contentDescription = "Like",
                     onClick = {
-                        enqueuePostNotificationPreference(context, notiUnit.notiKey, 2)
+                        enqueueNotificationAction(context, notiUnit.notiKey, "liked")
                         isDropdownMenuExpanded.value = false
                     }
                 )

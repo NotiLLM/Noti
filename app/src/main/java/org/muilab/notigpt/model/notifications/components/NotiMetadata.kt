@@ -1,8 +1,6 @@
-package org.muilab.notigpt.model.notifications
+package org.muilab.notigpt.model.notifications.components
 
 import android.app.Notification
-import android.app.Notification.MessagingStyle.Message.getMessagesFromBundleArray
-import android.app.PendingIntent
 import android.app.Person
 import android.content.Context
 import android.content.pm.ApplicationInfo
@@ -13,18 +11,15 @@ import android.graphics.Canvas
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Icon
 import android.os.Build
-import android.os.Build.VERSION_CODES.TIRAMISU
 import android.service.notification.StatusBarNotification
 import android.util.Base64
 import androidx.annotation.RequiresApi
 import androidx.core.graphics.drawable.toBitmap
-import org.muilab.notigpt.service.NotiListenerService
 import java.io.ByteArrayOutputStream
+import androidx.core.graphics.createBitmap
 
 data class NotiMetadata(
     val pkgName: String,
-    val sbnCategory: String,
-    val sbnKey: String,
     val hashKey: Int,
     val groupKey: String,
     val isAppGroup: Boolean,
@@ -33,8 +28,6 @@ data class NotiMetadata(
     var appName: String = "Unknown App",
     var icon: String = "Unknown Icon",
     var largeIcon: String = "Unknown Icon",
-    var isVisible: Boolean = true,
-    var people: MutableSet<String> = mutableSetOf(),
     var isPeople: Boolean,
 ) {
 
@@ -42,9 +35,6 @@ data class NotiMetadata(
         @RequiresApi(Build.VERSION_CODES.S)
         fun fetchIsPeople(sbn: StatusBarNotification): Boolean {
             val notification = sbn.notification
-            val messagingApps = setOf(
-                "jp.naver.line.android"
-            )
             return (notification.extras.get(Notification.EXTRA_MESSAGES) != null
                     || notification.extras.get(Notification.EXTRA_HISTORIC_MESSAGES) != null
                     || notification.extras.get(Notification.EXTRA_MESSAGING_PERSON) != null
@@ -70,7 +60,7 @@ data class NotiMetadata(
                 if (peopleParcelable == null)
                     arrayListOf()
                 else {
-                    getMessagesFromBundleArray(peopleParcelable)
+                    Notification.MessagingStyle.Message.getMessagesFromBundleArray(peopleParcelable)
                         .mapNotNull { it.senderPerson?.name }
                         .map { it.toString() }
                 }
@@ -79,7 +69,7 @@ data class NotiMetadata(
                 if (peopleParcelable == null)
                     arrayListOf()
                 else {
-                    getMessagesFromBundleArray(peopleParcelable)
+                    Notification.MessagingStyle.Message.getMessagesFromBundleArray(peopleParcelable)
                         .mapNotNull { it.senderPerson?.name }
                         .map { it.toString() }
                 }
@@ -91,8 +81,6 @@ data class NotiMetadata(
     @RequiresApi(Build.VERSION_CODES.S)
     constructor(sbn: StatusBarNotification): this (
         pkgName = sbn.opPkg,
-        sbnCategory = sbn.notification?.category ?: "Unknown",
-        sbnKey = sbn.key,
         hashKey = sbn.key.hashCode(),
         groupKey = sbn.notification?.group.toString(),
         isAppGroup = sbn.isGroup,
@@ -108,7 +96,7 @@ data class NotiMetadata(
         val applicationInfo: ApplicationInfo? =
             sbn.packageName?.let {
                 try {
-                    if (Build.VERSION.SDK_INT >= TIRAMISU) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                         pm.getApplicationInfo(it, PackageManager.ApplicationInfoFlags.of(0))
                     } else {
                         pm.getApplicationInfo(it, 0)
@@ -132,8 +120,6 @@ data class NotiMetadata(
 
         sortKey = sbn.notification?.sortKey.toString()
         this.isPeople = this.isPeople || fetchIsPeople(sbn)
-        people.addAll(fetchPeople(sbn))
-        isVisible = true
     }
 
     private fun iconToBase64(context: Context, pm: PackageManager, icon: Icon?): String {
@@ -159,7 +145,7 @@ data class NotiMetadata(
 
         val width = drawable!!.intrinsicWidth
         val height = drawable.intrinsicHeight
-        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val bitmap = createBitmap(width, height)
         val canvas = Canvas(bitmap)
         drawable.setBounds(0, 0, canvas.width, canvas.height)
         drawable.draw(canvas)

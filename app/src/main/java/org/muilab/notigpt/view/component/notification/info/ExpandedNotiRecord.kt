@@ -16,14 +16,15 @@ import androidx.constraintlayout.compose.ConstraintLayout
 import androidx.constraintlayout.compose.Dimension
 
 @Composable
-fun ExpandedNotiInfo(
+fun ExpandedNotiRecord(
+    notiRecordId: String,
     notiTitle: String,
     notiTime: Long,
     notiContent: String,
     notiSeen: Boolean,
     showTitle: Boolean,
     infoTimeColor: Color,
-    viewedInfos: MutableSet<Long>
+    viewedInfos: MutableSet<String>
 ) {
 
     var infoTopViewed by remember { mutableStateOf(false) }
@@ -68,7 +69,7 @@ fun ExpandedNotiInfo(
 
     LaunchedEffect(infoTopViewed, infoBottomViewed) {
         if (infoTopViewed && infoBottomViewed && !notiSeen) {
-            viewedInfos.add(notiTime)  // Mark the item as viewed once fully revealed
+            viewedInfos.add(notiRecordId)  // Mark the item as viewed once fully revealed
         }
     }
 }

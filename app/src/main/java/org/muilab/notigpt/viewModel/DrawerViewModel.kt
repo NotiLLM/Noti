@@ -4,13 +4,14 @@ import android.annotation.SuppressLint
 import android.app.Application
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.content.ContentValues
 import android.content.Context
 import android.os.Build
 import android.os.Environment
+import android.provider.MediaStore
 import android.widget.Toast
 import androidx.annotation.RequiresApi
 import androidx.lifecycle.AndroidViewModel
-import androidx.lifecycle.LiveData
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -33,22 +34,16 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
-import org.muilab.notigpt.database.room.CategoryDatabase
-import org.muilab.notigpt.database.room.DrawerDatabase
+import org.muilab.notigpt.database.room.NotiCategoryDatabase
 import org.muilab.notigpt.database.server.enqueueNotificationAction
 import org.muilab.notigpt.model.notifications.NotiCategory
-import org.muilab.notigpt.model.notifications.NotiUnit
+import org.muilab.notigpt.model.notifications.NotiDisplayUnit
 import org.muilab.notigpt.repository.NotiRepository
 import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_GENERAL
 import org.muilab.notigpt.util.SharedPreferencesManager
 import org.muilab.notigpt.util.getAbsoluteTimeStr
-import org.muilab.notigpt.util.getNotifications
 import org.muilab.notigpt.util.getRelativeTimeStr
 import org.muilab.notigpt.util.postOngoingNotification
-import org.muilab.notigpt.util.resetSimilarity
-import java.io.File
-import java.io.FileOutputStream
-import java.io.IOException
 import kotlin.collections.filter
 
 class DrawerViewModel(
@@ -56,7 +51,7 @@ class DrawerViewModel(
     private val notiRepository: NotiRepository
 ) : AndroidViewModel(application) {
 
-    private val _category = MutableStateFlow("")
+    private val _category = MutableStateFlow(NOTI_CATEGORY_GENERAL)
     val category: StateFlow<String> = _category
 
     fun updateCategory(newCategory: String) {
@@ -70,8 +65,6 @@ class DrawerViewModel(
         _queryString.value = newQueryString
     }
 
-    private val lastValidEmbedding = MutableStateFlow<String?>(null)
-
     private val _notiCategories = MutableStateFlow(listOf<NotiCategory>())
     val notiCategories: StateFlow<List<NotiCategory>> = _notiCategories
 
@@ -80,8 +73,8 @@ class DrawerViewModel(
 
     fun loadCategories() {
         CoroutineScope(Dispatchers.IO).launch {
-            val categoryDatabase = CategoryDatabase.getInstance(context)
-            val categoryDao = categoryDatabase.categoryDao()
+            val notiCategoryDatabase = NotiCategoryDatabase.getInstance(context)
+            val categoryDao = notiCategoryDatabase.categoryDao()
             _notiCategories.value = categoryDao.getAll()
             _notiCategoryCount.value = categoryDao.getCount()
         }
@@ -89,8 +82,8 @@ class DrawerViewModel(
 
     fun insertCategory(newCategoryName: String) {
         CoroutineScope(Dispatchers.IO).launch {
-            val categoryDatabase = CategoryDatabase.getInstance(context)
-            val categoryDao = categoryDatabase.categoryDao()
+            val notiCategoryDatabase = NotiCategoryDatabase.getInstance(context)
+            val categoryDao = notiCategoryDatabase.categoryDao()
             categoryDao.insert(NotiCategory(categoryName = newCategoryName))
             loadCategories()
         }
@@ -98,8 +91,8 @@ class DrawerViewModel(
 
     fun deleteCategory(deletedCategoryName: String) {
         CoroutineScope(Dispatchers.IO).launch {
-            val categoryDatabase = CategoryDatabase.getInstance(context)
-            val categoryDao = categoryDatabase.categoryDao()
+            val notiCategoryDatabase = NotiCategoryDatabase.getInstance(context)
+            val categoryDao = notiCategoryDatabase.categoryDao()
             categoryDao.deleteCategory(deletedCategoryName)
             loadCategories()
         }
@@ -111,7 +104,6 @@ class DrawerViewModel(
         .distinctUntilChanged()
         .flatMapLatest { query ->
             if (query.isBlank()) {
-                resetSimilarity(context)
                 flowOf(null)
             } else {
                 flow<String?> {
@@ -121,55 +113,24 @@ class DrawerViewModel(
         }
         .flowOn(Dispatchers.IO)
 
-    private val notificationFlow: Flow<List<NotiUnit>> = notiRepository.getNotificationsFlow()
+    private val notificationDisplayFlow: Flow<List<NotiDisplayUnit>> = notiRepository.getNotificationDisplayFlow()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    val sortedNotifications: StateFlow<List<NotiUnit>> = queryEmbeddingString
+    val sortedNotifications: StateFlow<List<NotiDisplayUnit>> = queryEmbeddingString
         .flatMapLatest { currentQueryEmbedding ->
-            notificationFlow.map { notifications ->
-                val embeddingToUse = currentQueryEmbedding ?: lastValidEmbedding.value
+            notificationDisplayFlow.map { notifications ->
                 notifications
-//                    .map { noti ->
-//                        val similarity = if (SharedPreferencesManager.baselineEmbeddingEn.isEmpty()
-//                            || SharedPreferencesManager.baselineEmbeddingZhTW.isEmpty()) {
-//                            val inputData = Data.Builder()
-//                                .putString("api_type", API_FETCH_BASELINE_EMBEDDING)
-//                                .build()
-//                            val apiWorkerRequest = OneTimeWorkRequestBuilder<ApiWorker>()
-//                                .setInputData(inputData)
-//                                .build()
-//                            WorkManager.getInstance(context).enqueue(apiWorkerRequest)
-//                            0.0
-//                        } else if (queryString.value.isBlank()) {
-//                            lastValidEmbedding.value = null
-//                            0.0
-//                        } else if (embeddingToUse != null) {
-//                            cosineSimilarity(embeddingToUse, noti.embeddingString)
-//                        } else {
-//                            noti.outcome.similarityScore
-//                        }
-//
-//                        CoroutineScope(Dispatchers.IO).launch {
-//                            val drawerDatabase = DrawerDatabase.getInstance(context)
-//                            val drawerDao = drawerDatabase.drawerDao()
-//                            drawerDao.updateSimilarity(noti.notiKey, similarity)
-//                        }
-//
-//                        noti.withUpdatedSimilarity(similarity)
-//                    }
                     .sortedWith(
-                        compareByDescending<NotiUnit> { noti ->
-                            noti.getNotiBody().any { notiInfo ->
-                                listOf(notiInfo.extraTitle, notiInfo.content, notiInfo.person)
+                        compareByDescending<NotiDisplayUnit> { notiDisplayUnit ->
+                            notiDisplayUnit.notiRecords.any { notiRecord ->
+                                listOf(notiRecord.extraTitle, notiRecord.content, notiRecord.person)
                                     .any { it.contains(queryString.value, ignoreCase = true) }
                             }
-                    }.thenByDescending { noti ->
-                        noti.outcome.similarityScore
-                    }.thenByDescending { noti ->
-                        noti.sortScore
-                    }.thenByDescending { noti ->
-                        noti.getAbsLatestTimeStr()
+                    }.thenByDescending { notiDisplayUnit ->
+                        notiDisplayUnit.sortScore
+                    }.thenByDescending { notiDisplayUnit ->
+                        notiDisplayUnit.lastUpdateTime
                     }
                 )
             }
@@ -178,15 +139,13 @@ class DrawerViewModel(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    val presentedNotifications: StateFlow<List<NotiUnit>> =
+    val presentedNotifications: StateFlow<List<NotiDisplayUnit>> =
         combine(category, sortedNotifications) { latestCategory, notiList ->
             when (latestCategory) {
                 NOTI_CATEGORY_GENERAL -> notiList.filter { it.category.isBlank() || it.category == latestCategory }
                 else -> notiList.filter { it.category == latestCategory }
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    val notSeenCount: LiveData<Int> = notiRepository.notSeenCount
 
     @SuppressLint("StaticFieldLeak")
     val context: Context = getApplication<Application>().applicationContext
@@ -197,14 +156,14 @@ class DrawerViewModel(
         fun checkIfTrackAction(): Boolean {
             if (action == "pin" && SharedPreferencesManager.trackPin)
                 return true
-            if (action in listOf("archive", "unarchive") && SharedPreferencesManager.autoArchive)
+            if (action == "archive" && SharedPreferencesManager.autoArchive)
                 return true
             if (action == "dismiss_click" && SharedPreferencesManager.autoDelete)
                 return true
             return false
         }
 
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
 
             if (checkIfTrackAction())
                 enqueueNotificationAction(context, notiKey, action)
@@ -218,86 +177,67 @@ class DrawerViewModel(
 
     @RequiresApi(Build.VERSION_CODES.S)
     fun deleteAllNotis() {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             notiRepository.deleteAllNotis(category.value)
             postOngoingNotification(context)
         }
     }
 
-    fun resetLLMValues() {
-        viewModelScope.launch(Dispatchers.IO) {
-            val drawerDatabase = DrawerDatabase.getInstance(context)
-            val drawerDao = drawerDatabase.drawerDao()
-            val notifications = drawerDao.getAllVisible()
-            for (noti in notifications)
-                noti.resetLLMValues()
-            drawerDao.updateList(notifications)
-        }
-    }
-
-    fun exportPostContent(includeContext: Boolean) {
+    fun exportPostContent(includeContext: Boolean, includeDismissed: Boolean) {
 
         viewModelScope.launch(Dispatchers.IO) {
-            val notifications = getNotifications(context)
+            val notifications = notiRepository.getNotifications(includeContext, includeDismissed)
             val sb = StringBuilder()
-            notifications.forEach { noti ->
+            notifications.forEach { notiDisplayUnit ->
 
-                val isPeople = noti.isPeople
-                val notiBody = noti.getNotiBody()
-                val prevBody = noti.getPrevBody()
+                val notiUnit = notiDisplayUnit.notiUnit
+                val notiRecords = notiDisplayUnit.notiRecords
+
+                val notiBody = notiRecords.filter { it.isVisible }
+                val prevBody = notiRecords.filter { !it.isVisible }
 
                 val notiJson = JSONObject()
-                notiJson.put("id", noti.hashKey)
-                notiJson.put("app", noti.appName)
+                notiJson.put("id", notiUnit.notiKey)
+                notiJson.put("app", notiUnit.appName)
+                notiJson.put("isPeople", notiUnit.isPeople)
 
                 val titlesIdentical = (notiBody + prevBody)
                     .map { it.extraTitle }
                     .filter { it.isNotBlank() }
                     .toSet().size == 1
-                val notiType = if (isPeople) "message" else "info"
-                val notiTypeTitle = if (isPeople) "sender" else "title"
 
-                notiJson.put("overall_$notiTypeTitle", org.muilab.notigpt.util.replaceChars(noti.title))
+                notiJson.put("noti_title", org.muilab.notigpt.util.replaceChars(notiDisplayUnit.title))
 
-                if (prevBody.isNotEmpty() && includeContext) {
-                    val previousNotisArray = JSONArray()
+                val previousNotisArray = JSONArray()
+                if (includeContext) {
                     prevBody.forEach {
                         val prevNotiJson = JSONObject()
-                        prevNotiJson.put("time", getAbsoluteTimeStr(it.time))
+                        prevNotiJson.put("absolute_time", getAbsoluteTimeStr(it.time))
                         prevNotiJson.put("relative_time", getRelativeTimeStr(it.time))
-                        if (!titlesIdentical)
-                            prevNotiJson.put(notiTypeTitle, org.muilab.notigpt.util.replaceChars(it.extraTitle))
-                        prevNotiJson.put("content", org.muilab.notigpt.util.replaceChars(it.content))
+                        prevNotiJson.put(
+                            "record_title",
+                            org.muilab.notigpt.util.replaceChars(it.getDisplayedTitle(notiUnit.isPeople))
+                        )
+                        prevNotiJson.put(
+                            "content",
+                            org.muilab.notigpt.util.replaceChars(it.content)
+                        )
                         previousNotisArray.put(prevNotiJson)
                     }
-                    notiJson.put("previous_${notiType}s", previousNotisArray)
-
-                    val newNotisArray = JSONArray()
-
-                    notiBody.forEach {
-                        val newNotiJson = JSONObject()
-                        newNotiJson.put("time", getAbsoluteTimeStr(it.time))
-                        newNotiJson.put("relative_time", getRelativeTimeStr(it.time))
-                        if (!titlesIdentical)
-                            newNotiJson.put(notiTypeTitle, org.muilab.notigpt.util.replaceChars(it.extraTitle))
-                        newNotiJson.put("content", org.muilab.notigpt.util.replaceChars(it.content))
-                        newNotisArray.put(newNotiJson)
-                    }
-                    notiJson.put("new_${notiType}s", newNotisArray)
-                } else {
-                    val notiInfosArray = JSONArray()
-
-                    notiBody.forEach {
-                        val notiInfoJson = JSONObject()
-                        notiInfoJson.put("time", getAbsoluteTimeStr(it.time))
-                        notiInfoJson.put("relative_time", getRelativeTimeStr(it.time))
-                        if (!titlesIdentical)
-                            notiInfoJson.put(notiTypeTitle, org.muilab.notigpt.util.replaceChars(it.extraTitle))
-                        notiInfoJson.put("content", org.muilab.notigpt.util.replaceChars(it.content))
-                        notiInfosArray.put(notiInfoJson)
-                    }
-                    notiJson.put("${notiType}s", notiInfosArray)
                 }
+                notiJson.put("previous_records", previousNotisArray)
+
+                val currentNotisArray = JSONArray()
+
+                notiBody.forEach {
+                    val currentNotiJson = JSONObject()
+                    currentNotiJson.put("absolute_time", getAbsoluteTimeStr(it.time))
+                    currentNotiJson.put("relative_time", getRelativeTimeStr(it.time))
+                    currentNotiJson.put("record_title", org.muilab.notigpt.util.replaceChars(it.getDisplayedTitle(notiUnit.isPeople)))
+                    currentNotiJson.put("content", org.muilab.notigpt.util.replaceChars(it.content))
+                    currentNotisArray.put(currentNotiJson)
+                }
+                notiJson.put("current_records", currentNotisArray)
 
                 // Convert the JSON object to a string
                 val notiJsonStr = notiJson.toString(2)
@@ -306,22 +246,21 @@ class DrawerViewModel(
 
             val notiPostContent = "[\n${sb}]\n"
             // save to file
-            val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-            val file = File(downloadsDir, "notigpt.txt")
-            try {
-                FileOutputStream(file).use { outputStream ->
-                    outputStream.write(notiPostContent.toByteArray(Charsets.UTF_8))
-                }
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(context, "Data saved to Downloads folder as notigpt.txt", Toast.LENGTH_LONG).show()
-                }
-
-            } catch (e: IOException) {
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(context, "Failed to save notification data", Toast.LENGTH_LONG).show()
-                }
-                e.printStackTrace()
+            val values = ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, "notigpt.txt")
+                put(MediaStore.MediaColumns.MIME_TYPE, "text/plain")
+                put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOCUMENTS)
             }
+
+            val resolver = context.contentResolver
+            val uri = resolver.insert(MediaStore.Files.getContentUri("external"), values)
+
+            uri?.let {
+                resolver.openOutputStream(it)?.use { outputStream ->
+                    outputStream.write(notiPostContent.toByteArray())
+                }
+            }
+
             // copy to clipboard
             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
             val clip = ClipData.newPlainText("label", notiPostContent)

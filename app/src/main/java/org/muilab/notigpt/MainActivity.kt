@@ -18,8 +18,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import androidx.core.app.NotificationManagerCompat
 import androidx.work.WorkManager
-import org.muilab.notigpt.database.room.DrawerDatabase
-import org.muilab.notigpt.repository.NotiRepository
+import org.muilab.notigpt.repository.NotiRepositoryProvider
 import org.muilab.notigpt.service.NotiListenerService
 import org.muilab.notigpt.ui.theme.NotiLLMTheme
 import org.muilab.notigpt.util.SharedPreferencesManager
@@ -87,9 +86,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private val drawerViewModel: DrawerViewModel by viewModels {
-        val drawerDatabase = DrawerDatabase.getInstance(applicationContext)
-        val drawerDao = drawerDatabase.drawerDao()
-        DrawerViewModelFactory(this.application, NotiRepository(drawerDao))
+        DrawerViewModelFactory(this.application, NotiRepositoryProvider.provideNotiRepository(applicationContext))
     }
 
     private fun isNotiListenerEnabled(): Boolean {

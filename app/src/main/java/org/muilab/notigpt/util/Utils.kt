@@ -9,9 +9,7 @@ import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import org.muilab.notigpt.database.room.CategoryDatabase
-import org.muilab.notigpt.database.room.DrawerDatabase
-import org.muilab.notigpt.model.notifications.NotiCategory
+import org.muilab.notigpt.database.room.NotiDrawerDatabase
 import org.muilab.notigpt.model.notifications.NotiUnit
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
@@ -28,15 +26,9 @@ import java.util.zip.GZIPOutputStream
 import kotlin.math.abs
 import kotlin.math.min
 
-fun getNotifications(context: Context): ArrayList<NotiUnit> = with(Dispatchers.IO) {
-    val drawerDatabase = DrawerDatabase.getInstance(context)
-    val drawerDao = drawerDatabase.drawerDao()
-    return drawerDao.getAllVisible().toCollection(ArrayList())
-}
-
 fun getViewedNotifications(context: Context): ArrayList<NotiUnit> = with(Dispatchers.IO) {
-    val drawerDatabase = DrawerDatabase.getInstance(context)
-    val drawerDao = drawerDatabase.drawerDao()
+    val notiDrawerDatabase = NotiDrawerDatabase.getInstance(context)
+    val drawerDao = notiDrawerDatabase.drawerDao()
     return drawerDao.getAllVisible().toCollection(ArrayList())
 }
 
@@ -172,12 +164,4 @@ fun computeCosine(vec1: DoubleArray, vec2: DoubleArray): Double {
     val norm1 = kotlin.math.sqrt(vec1.sumOf { it * it })
     val norm2 = kotlin.math.sqrt(vec2.sumOf { it * it })
     return if (norm1 == 0.0 || norm2 == 0.0) 0.0 else (dotProduct / (norm1 * norm2))
-}
-
-fun resetSimilarity(context: Context) {
-    CoroutineScope(Dispatchers.IO).launch {
-        val drawerDatabase = DrawerDatabase.getInstance(context)
-        val drawerDao = drawerDatabase.drawerDao()
-        drawerDao.resetSimilarity()
-    }
 }

@@ -36,13 +36,11 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.muilab.notigpt.database.server.DifyAPIClient
 import org.muilab.notigpt.database.server.enqueueUpdateNotification
-import org.muilab.notigpt.database.server.workers.DifyAPIWorker
-import org.muilab.notigpt.util.Constants.Companion.DIFY_UPDATE_NOTIFICATION
+import org.muilab.notigpt.repository.NotiRepositoryProvider
 import org.muilab.notigpt.util.SharedPreferencesManager
 import org.muilab.notigpt.util.SharedPreferencesManager.KEY_HISTORY_NOTI_COUNT_THRESHOLD
 import org.muilab.notigpt.util.SharedPreferencesManager.KEY_HISTORY_NOTI_HOURS_THRESHOLD
 import org.muilab.notigpt.util.SharedPreferencesManager.KEY_SERVER_IP
-import org.muilab.notigpt.util.getNotifications
 import org.muilab.notigpt.viewModel.DrawerViewModel
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -77,9 +75,10 @@ fun DevControlPanel(context: Context, drawerViewModel: DrawerViewModel) {
                 Button(onClick = {
                     Toast.makeText(context, "Start Updating Notifications", Toast.LENGTH_SHORT).show()
                     CoroutineScope(Dispatchers.IO).launch {
-                        val notifications = getNotifications(context)
-                        notifications.forEach { notification ->
-                            enqueueUpdateNotification(context, notification.notiKey)
+                        val notiRepository = NotiRepositoryProvider.provideNotiRepository(context)
+                        val notiKeys = notiRepository.getNotificationKeys()
+                        notiKeys.forEach { notiKey ->
+                            enqueueUpdateNotification(context, notiKey)
                             delay(30 * 1000)
                         }
                     }
@@ -103,12 +102,17 @@ fun DevControlPanel(context: Context, drawerViewModel: DrawerViewModel) {
 //                Text("Extract Tasks")
 //            }
                 Button(onClick = {
-                    drawerViewModel.exportPostContent(true)
+                    drawerViewModel.exportPostContent(true, true)
+                }) {
+                    Text("Export Data")
+                }
+                Button(onClick = {
+                    drawerViewModel.exportPostContent(true, false)
                 }) {
                     Text("Copy Data with History")
                 }
                 Button(onClick = {
-                    drawerViewModel.exportPostContent(false)
+                    drawerViewModel.exportPostContent(false, false)
                 }) {
                     Text("Copy Data")
                 }

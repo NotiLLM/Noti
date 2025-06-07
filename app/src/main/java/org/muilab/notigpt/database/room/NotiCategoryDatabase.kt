@@ -14,20 +14,20 @@ import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_DELETED
 import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_GENERAL
 
 @Database(entities = [NotiCategory::class], version = 1, exportSchema = false)
-abstract class CategoryDatabase : RoomDatabase() {
-    abstract fun categoryDao(): CategoryDao
+abstract class NotiCategoryDatabase : RoomDatabase() {
+    abstract fun categoryDao(): NotiCategoryDao
 
     companion object {
         @Volatile
-        private var INSTANCE: CategoryDatabase? = null
+        private var INSTANCE: NotiCategoryDatabase? = null
 
-        fun getInstance(context: Context): CategoryDatabase =
+        fun getInstance(context: Context): NotiCategoryDatabase =
             INSTANCE ?: synchronized(this) {
                 INSTANCE ?: buildDatabase(context).also { INSTANCE = it }
             }
 
         private fun buildDatabase(context: Context) =
-            Room.databaseBuilder(context.applicationContext, CategoryDatabase::class.java, "noti_category")
+            Room.databaseBuilder(context.applicationContext, NotiCategoryDatabase::class.java, "noti_category")
                 .addCallback(object : Callback() {
                     override fun onCreate(db: SupportSQLiteDatabase) {
                         super.onCreate(db)

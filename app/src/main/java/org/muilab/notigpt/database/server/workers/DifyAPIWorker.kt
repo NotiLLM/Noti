@@ -13,14 +13,12 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import org.muilab.notigpt.BuildConfig
-import org.muilab.notigpt.database.room.DrawerDatabase
 import org.muilab.notigpt.database.server.DifyAPIClient
 import org.muilab.notigpt.database.server.DifyPostNotificationAction
-import org.muilab.notigpt.database.server.DifyPostNotificationPreference
 import org.muilab.notigpt.database.server.DifyRequest
 import org.muilab.notigpt.database.server.DifyUpdateNotification
+import org.muilab.notigpt.repository.NotiRepositoryProvider
 import org.muilab.notigpt.util.Constants.Companion.DIFY_POST_NOTIFICATION_ACTION
-import org.muilab.notigpt.util.Constants.Companion.DIFY_POST_NOTIFICATION_PREFERENCE
 import org.muilab.notigpt.util.Constants.Companion.DIFY_UPDATE_NOTIFICATION
 import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_ARCHIVE
 import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_DELETED
@@ -39,18 +37,18 @@ class DifyAPIWorker(
         return try {
             val response = when (inputData.getString("api_type")) {
                 DIFY_UPDATE_NOTIFICATION -> updateNotification(inputData)
-                DIFY_POST_NOTIFICATION_PREFERENCE -> postNotificationPreference(inputData)
                 DIFY_POST_NOTIFICATION_ACTION -> postNotificationAction(inputData)
                 else -> Result.success()
             }
             response
         } catch (e: Exception) {
             Log.d("N8NWebhook", e.stackTraceToString())
-            Result.retry()
+            Result.failure()
         }
     }
 
     suspend fun updateNotification(inputData: Data): Result = withContext(Dispatchers.IO) {
+
 
         Log.d("N8NWebhook", "Update Notification")
 
@@ -59,19 +57,18 @@ class DifyAPIWorker(
         val authHeader = "Bearer $apiKey"
         val gson = Gson()
 
-        val drawerDatabase = DrawerDatabase.getInstance(applicationContext)
-        val drawerDao = drawerDatabase.drawerDao()
-
         val notiKey = inputData.getString("noti_key") ?: ""
-        val notiUnit = drawerDao.getBySbnKey(notiKey)
 
-        if (notiUnit == null) {
+        val notiRepository = NotiRepositoryProvider.provideNotiRepository(applicationContext)
+        val notiDisplayUnit = notiRepository.getDisplayedNotification(notiKey, includeContext = false)
+        if (notiDisplayUnit == null) {
             return@withContext Result.failure()
         }
+        val notiUnit = notiDisplayUnit.notiUnit
 
         val difyUpdateNotification = DifyUpdateNotification(
             SharedPreferencesManager.userId,
-            gson.toJson(notiUnit.toDifyNoti())
+            gson.toJson(notiDisplayUnit.toDifyNoti())
         )
 
         val difyRequest = DifyRequest(difyUpdateNotification)
@@ -100,7 +97,7 @@ class DifyAPIWorker(
                     .getJSONObject("outputs")
 
                 if (jsonOutputs.has("retry"))
-                    return@withContext Result.retry()
+                    return@withContext Result.failure()
 
                 val featureStrRaw = jsonOutputs
                     .getString("features")
@@ -181,69 +178,14 @@ class DifyAPIWorker(
 
                 notiUnit.sortScore = evaluations.optJSONObject("sort-score-before-notice")?.getDouble("score") ?: 0.0
                 notiUnit.explanation = explanationSB.toString()
-                drawerDao.update(notiUnit)
 
-                Log.d("N8NWebhook", "Notification ${notiUnit.title} updated.")
+                notiRepository.updateNotiUnit(notiUnit)
+
+                Log.d("N8NWebhook", "Notification ${notiDisplayUnit.title} updated.")
             }
         } else {
             Log.e("N8NWebhook", "API call unsuccessful: ${response.code()}")
-            return@withContext Result.retry()
-        }
-
-        delay(5000)
-        Result.success()
-    }
-
-    suspend fun postNotificationPreference(inputData: Data): Result = withContext(Dispatchers.IO) {
-
-        val difyAPIService = DifyAPIClient.difyAPIService
-        val apiKey = BuildConfig.API_KEY_POST_NOTIFICATION_PREFERENCE
-        val authHeader = "Bearer $apiKey"
-        val gson = Gson()
-
-        val drawerDatabase = DrawerDatabase.getInstance(applicationContext)
-        val drawerDao = drawerDatabase.drawerDao()
-
-        val notiKey = inputData.getString("noti_key") ?: ""
-        val preference = inputData.getInt("preference", 0)
-        val notiUnit = drawerDao.getBySbnKey(notiKey)
-
-        if (notiUnit == null) {
             return@withContext Result.failure()
-        }
-
-        val difyUpdateNotification = DifyPostNotificationPreference(
-            SharedPreferencesManager.userId,
-            gson.toJson(notiUnit.toDifyNoti()),
-            preference
-        )
-
-        val difyRequest = DifyRequest(difyUpdateNotification)
-
-
-        val json = gson.toJson(difyRequest)
-
-        val mediaType = "application/json; charset=utf-8".toMediaType()
-        val requestBody = json.toRequestBody(mediaType)
-        val response = difyAPIService.runWorkflow(authHeader, requestBody)
-
-        if (response.isSuccessful) {
-            val jsonString = response.body()?.string()
-
-            val status = try {
-                JSONObject(jsonString)
-                    .getJSONObject("data")
-                    .getString("status")
-            } catch (e: Exception) {
-                ""
-            }
-
-            if (status == "succeeded") {
-                Log.d("N8NWebhook", "Notification ${notiUnit.title} preference updated.")
-            }
-        } else {
-            Log.e("N8NWebhook", "API call unsuccessful: ${response.code()}")
-            return@withContext Result.retry()
         }
 
         delay(5000)
@@ -257,21 +199,22 @@ class DifyAPIWorker(
         val authHeader = "Bearer $apiKey"
         val gson = Gson()
 
-        val drawerDatabase = DrawerDatabase.getInstance(applicationContext)
-        val drawerDao = drawerDatabase.drawerDao()
-
         val notiKey = inputData.getString("noti_key") ?: ""
-        val action = inputData.getString("action") ?: ""
-        val notiUnit = drawerDao.getBySbnKey(notiKey)
+        val actionType = inputData.getString("action_type") ?: ""
+        val actionTime = inputData.getLong("action_time", System.currentTimeMillis())
 
-        if (notiUnit == null) {
+        val notiRepository = NotiRepositoryProvider.provideNotiRepository(applicationContext)
+        val notiDisplayUnit = notiRepository.getDisplayedNotification(notiKey, includeContext = false)
+
+        if (notiDisplayUnit == null) {
             return@withContext Result.failure()
         }
 
         val difyUpdateNotification = DifyPostNotificationAction(
             SharedPreferencesManager.userId,
-            gson.toJson(notiUnit.toDifyNoti()),
-            action
+            actionType,
+            actionTime,
+            gson.toJson(notiDisplayUnit.toDifyNoti()),
         )
 
         val difyRequest = DifyRequest(difyUpdateNotification)
@@ -295,7 +238,7 @@ class DifyAPIWorker(
             }
 
             if (status == "succeeded") {
-                Log.d("N8NWebhook", "Notification ${notiUnit.title} action updated.")
+                Log.d("N8NWebhook", "Notification ${notiDisplayUnit.title} action updated.")
             }
         } else {
             Log.e("N8NWebhook", "API call unsuccessful: ${response.code()}")
