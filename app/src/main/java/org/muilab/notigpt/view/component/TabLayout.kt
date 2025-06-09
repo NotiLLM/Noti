@@ -43,6 +43,7 @@ import kotlinx.coroutines.launch
 import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_ARCHIVE
 import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_DELETED
 import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_GENERAL
+import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_MAKETASK
 import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_TODO
 import org.muilab.notigpt.viewModel.DrawerViewModel
 
@@ -93,6 +94,7 @@ fun TabLayout(context: Context, drawerViewModel: DrawerViewModel, pagerState: Pa
                             NOTI_CATEGORY_GENERAL,
                             NOTI_CATEGORY_TODO,
                             NOTI_CATEGORY_ARCHIVE,
+                            NOTI_CATEGORY_MAKETASK,
                             NOTI_CATEGORY_DELETED
                         )
                         if (notiCategory.categoryName !in defaultCategories) {

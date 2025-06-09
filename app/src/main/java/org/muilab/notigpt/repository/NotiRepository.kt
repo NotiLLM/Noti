@@ -20,6 +20,7 @@ import org.muilab.notigpt.model.notifications.NotiUnit
 import org.muilab.notigpt.model.notifications.NotiDisplayUnit
 import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_ARCHIVE
 import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_GENERAL
+import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_MAKETASK
 
 class NotiRepository(
     private val notiDrawerDao: NotiDrawerDao,
@@ -123,6 +124,8 @@ class NotiRepository(
 
                     "archive" -> existingNoti.changeCategory(NOTI_CATEGORY_ARCHIVE)
                     "unarchive" -> existingNoti.changeCategory(NOTI_CATEGORY_GENERAL)
+                    "make_task" -> existingNoti.changeCategory(NOTI_CATEGORY_MAKETASK)
+                    "dismiss_task" -> existingNoti.changeCategory(NOTI_CATEGORY_GENERAL)
                     "unpin" -> existingNoti.flipNotiPin()
                     "pin" -> existingNoti.flipNotiPin()
                 }

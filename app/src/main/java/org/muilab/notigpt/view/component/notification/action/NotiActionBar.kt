@@ -13,6 +13,7 @@ import androidx.compose.ui.unit.dp
 import org.muilab.notigpt.R
 import org.muilab.notigpt.model.notifications.NotiUnit
 import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_ARCHIVE
+import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_MAKETASK
 import org.muilab.notigpt.viewModel.DrawerViewModel
 
 @RequiresApi(Build.VERSION_CODES.S)
@@ -48,10 +49,22 @@ fun NotiActionBar(notiUnit: NotiUnit, drawerViewModel: DrawerViewModel) {
         )
 
         NotiActionIconButton(
-            iconRes = R.drawable.schedule,
-            contentDescription = "Schedule",
-            onClick = {  }
+            iconRes = if (notiUnit.category == NOTI_CATEGORY_MAKETASK) R.drawable.task_yes else R.drawable.task_no,
+            contentDescription = "Make-Task",
+            onClick = {
+                if (notiUnit.category == NOTI_CATEGORY_MAKETASK) {
+                    drawerViewModel.actOnNoti(notiKey, "dismiss_task")
+                } else {
+                    drawerViewModel.actOnNoti(notiKey, "make_task")
+                }
+            }
         )
+
+//        NotiActionIconButton(
+//            iconRes = R.drawable.schedule,
+//            contentDescription = "Schedule",
+//            onClick = {  }
+//        )
 
         NotiActionIconButton(
             iconRes = R.drawable.delete,

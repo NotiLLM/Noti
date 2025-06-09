@@ -9,6 +9,7 @@ class Constants {
         const val NOTI_CATEGORY_GENERAL = "General"
         const val NOTI_CATEGORY_TODO = "To-Do"
         const val NOTI_CATEGORY_ARCHIVE = "Archive"
+        const val NOTI_CATEGORY_MAKETASK = "Task"
         const val NOTI_CATEGORY_DELETED = "Deleted"
 
         const val NOTI_ACTION_CLICK_PINNED = "action_click_pinned"
