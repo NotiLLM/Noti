@@ -40,6 +40,7 @@ import org.muilab.notigpt.model.notifications.NotiCategory
 import org.muilab.notigpt.model.notifications.NotiDisplayUnit
 import org.muilab.notigpt.repository.NotiRepository
 import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_GENERAL
+import org.muilab.notigpt.util.Constants.Companion.APP_CATEGORY_ALL
 import org.muilab.notigpt.util.SharedPreferencesManager
 import org.muilab.notigpt.util.getAbsoluteTimeStr
 import org.muilab.notigpt.util.getRelativeTimeStr
@@ -56,6 +57,16 @@ class DrawerViewModel(
 
     fun updateCategory(newCategory: String) {
         _category.value = newCategory
+        // Reset app category to "All" when main category changes
+        _appCategory.value = APP_CATEGORY_ALL
+    }
+
+    // app category
+    private val _appCategory = MutableStateFlow(APP_CATEGORY_ALL)
+    val appCategory: StateFlow<String> = _appCategory
+
+    fun updateAppCategory(newAppCategory: String) {
+        _appCategory.value = newAppCategory
     }
 
     private val _queryString = MutableStateFlow("")
@@ -138,13 +149,51 @@ class DrawerViewModel(
         .distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    // First level filtering（by category）
     @OptIn(ExperimentalCoroutinesApi::class)
-    val presentedNotifications: StateFlow<List<NotiDisplayUnit>> =
+    val filteredByCategory: StateFlow<List<NotiDisplayUnit>> =
         combine(category, sortedNotifications) { latestCategory, notiList ->
             when (latestCategory) {
                 NOTI_CATEGORY_GENERAL -> notiList.filter { it.category.isBlank() || it.category == latestCategory }
                 else -> notiList.filter { it.category == latestCategory }
             }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // Second level filtering（by app category）
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val presentedNotifications: StateFlow<List<NotiDisplayUnit>> =
+        combine(appCategory, filteredByCategory) { latestAppCategory, notiList ->
+            when (latestAppCategory) {
+                APP_CATEGORY_ALL -> notiList
+                else -> notiList.filter { it.notiUnit.appCategory == latestAppCategory }
+            }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // Get available app categories for the current primary category with notification counts
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val availableAppCategories: StateFlow<List<Pair<String, Int>>> =
+        filteredByCategory.map { notiList ->
+            val categoryCounts = notiList
+                .groupBy { it.notiUnit.appCategory }
+                .mapValues { it.value.size }
+                .toMutableMap()
+            
+            // Always include "All" category with total count
+            val totalCount = notiList.size
+            val result = mutableListOf<Pair<String, Int>>()
+            if (totalCount > 0) {
+                result.add(APP_CATEGORY_ALL to totalCount)
+            }
+            
+            // Add other categories sorted by count (descending)
+            categoryCounts.entries
+                .filter { it.value > 0 }
+                .sortedByDescending { it.value }
+                .forEach { (category, count) ->
+                    result.add(category to count)
+                }
+            
+            result
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     @SuppressLint("StaticFieldLeak")

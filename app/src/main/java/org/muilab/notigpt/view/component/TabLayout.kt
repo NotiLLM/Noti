@@ -95,7 +95,7 @@ fun TabLayout(context: Context, drawerViewModel: DrawerViewModel, pagerState: Pa
                             NOTI_CATEGORY_TODO,
                             NOTI_CATEGORY_ARCHIVE,
                             NOTI_CATEGORY_MAKETASK,
-                            NOTI_CATEGORY_DELETED
+//                            NOTI_CATEGORY_DELETED
                         )
                         if (notiCategory.categoryName !in defaultCategories) {
                             selectedCategory = notiCategory.categoryName

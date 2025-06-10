@@ -45,11 +45,11 @@ abstract class NotiCategoryDatabase : RoomDatabase() {
 //                    }
                     override fun onCreate(db: SupportSQLiteDatabase) {
                         super.onCreate(db)
-//                        Log.d("RoomTest", "準備插入預設分類")
+                        Log.d("RoomTest", "準備插入預設分類")
                         db.execSQL("INSERT INTO noti_category(categoryName, explanation) VALUES('$NOTI_CATEGORY_GENERAL', '')")
                         db.execSQL("INSERT INTO noti_category(categoryName, explanation) VALUES('$NOTI_CATEGORY_ARCHIVE', '')")
                         db.execSQL("INSERT INTO noti_category(categoryName, explanation) VALUES('$NOTI_CATEGORY_MAKETASK', '')")
-                        db.execSQL("INSERT INTO noti_category(categoryName, explanation) VALUES('$NOTI_CATEGORY_DELETED', '')")
+//                        db.execSQL("INSERT INTO noti_category(categoryName, explanation) VALUES('$NOTI_CATEGORY_DELETED', '')")
                     }
 
                 })

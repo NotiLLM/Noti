@@ -11,6 +11,7 @@ import org.muilab.notigpt.model.notifications.components.NotiMetadata
 import org.muilab.notigpt.model.notifications.components.NotiDisplayState
 import org.muilab.notigpt.util.getAbsoluteTimeStr
 import org.muilab.notigpt.util.getRelativeTimeStr
+import org.muilab.notigpt.util.getAppCategoryByAppName
 
 
 @Entity(tableName = "noti_drawer", primaryKeys = ["notiKey"])
@@ -29,6 +30,8 @@ data class NotiUnit(
         metadata = NotiMetadata(sbn)
     ) {
         updateNoti(context, sbn)
+        // Set initial app category
+        displayState.appCategory = getAppCategoryByAppName(context, metadata.appName)
     }
 
     @RequiresApi(Build.VERSION_CODES.S)
@@ -37,6 +40,8 @@ data class NotiUnit(
         if (!isVisible)
             displayState.resetUserState()
         displayState.resetLLMState()
+        // Set app category based on app name
+        displayState.appCategory = getAppCategoryByAppName(context, metadata.appName)
     }
 
     val hashKey: Int
@@ -107,4 +112,7 @@ data class NotiUnit(
         set(value) {
             displayState.explanation = value
         }
+
+    val appCategory: String
+        get() = displayState.appCategory
 }

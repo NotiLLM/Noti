@@ -2,6 +2,7 @@ package org.muilab.notigpt.model.notifications.components
 
 import org.muilab.notigpt.util.Constants
 import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_GENERAL
+import org.muilab.notigpt.util.Constants.Companion.APP_CATEGORY_UNKNOWN
 
 data class NotiDisplayState(
     // DETERMINED BY USER
@@ -16,7 +17,10 @@ data class NotiDisplayState(
     var sortScore: Double,
 
     // DETERMINED BY BOTH
-    var category: String
+    var category: String,
+    
+    // APP CATEGORY (DETERMINED BY APP)
+    var appCategory: String
 ) {
 
     // empty constructor
@@ -28,7 +32,8 @@ data class NotiDisplayState(
         explanation = "",
         summary = "",
         sortScore = 100.0,
-        category = NOTI_CATEGORY_GENERAL
+        category = NOTI_CATEGORY_GENERAL,
+        appCategory = APP_CATEGORY_UNKNOWN
     )
 
     fun flipPin() {

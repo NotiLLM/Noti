@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -32,6 +31,7 @@ import org.muilab.notigpt.view.component.DevControlPanel
 import org.muilab.notigpt.view.component.NotiDrawer
 import org.muilab.notigpt.view.component.SearchBar
 import org.muilab.notigpt.view.component.TabLayout
+import org.muilab.notigpt.view.component.AppCategoryTabLayout
 import org.muilab.notigpt.view.component.UserControlPanel
 import org.muilab.notigpt.view.component.notification.AutoControlBar
 import org.muilab.notigpt.viewModel.DrawerViewModel
@@ -41,14 +41,13 @@ import org.muilab.notigpt.viewModel.DrawerViewModel
 @Composable
 fun HomeScreen(context: Context, drawerViewModel: DrawerViewModel) {
     val pageCount = drawerViewModel.notiCategoryCount.collectAsState()
-    val pagerState = rememberPagerState(initialPage = 0, pageCount = { pageCount.value })
+    val pagerState = rememberPagerState(pageCount = { pageCount.value })
     var toSearch by remember { mutableStateOf(false) }
 
     Column(modifier = Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(end = 16.dp)) {
             Box(modifier = Modifier.weight(1f)) {
                 TabLayout(context, drawerViewModel, pagerState)
-                // 第二層 TabLayout
             }
             IconButton(
                 onClick = {
@@ -80,6 +79,10 @@ fun HomeScreen(context: Context, drawerViewModel: DrawerViewModel) {
                 }
             }
         }
+        
+        // 第二層 TabLayout
+        AppCategoryTabLayout(drawerViewModel)
+        
         if (toSearch)
             SearchBar(drawerViewModel)
 

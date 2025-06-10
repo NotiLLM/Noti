@@ -21,5 +21,50 @@ class Constants {
         const val NOTI_ACTION_ARCHIVE = "action_archive"
         const val NOTI_ACTION_UNARCHIVE = "action_unarchive"
         const val NOTI_ACTION_BIN = "action_bin"
+
+        // App Category constants
+        const val APP_CATEGORY_ALL = "All"
+        const val APP_CATEGORY_IM = "IM"
+        const val APP_CATEGORY_MEDIA = "Media"
+        const val APP_CATEGORY_SOCIAL = "Social"
+        const val APP_CATEGORY_SMS = "SMS"
+        const val APP_CATEGORY_SHOPPING = "Shopping"
+        const val APP_CATEGORY_FINANCE = "Finance"
+        const val APP_CATEGORY_NEWS = "News"
+        const val APP_CATEGORY_GAME = "Game"
+        const val APP_CATEGORY_TOOL = "Tool"
+        const val APP_CATEGORY_EMAIL = "Email"
+        const val APP_CATEGORY_WEATHER = "Weather"
+        const val APP_CATEGORY_SYSTEM = "System"
+        const val APP_CATEGORY_TRANSPORTATION = "Transportation"
+        const val APP_CATEGORY_READING = "Reading"
+        const val APP_CATEGORY_HEALTH_FITNESS = "Health_Fitness"
+        const val APP_CATEGORY_DATING = "Dating"
+        const val APP_CATEGORY_CALENDAR_REMINDER = "Calendar_Reminder"
+        const val APP_CATEGORY_PHONE = "Phone"
+        const val APP_CATEGORY_UNKNOWN = "Unknown"
+
+        // Available app categories list
+        val APP_CATEGORIES = setOf(
+            APP_CATEGORY_IM,
+            APP_CATEGORY_MEDIA,
+            APP_CATEGORY_SOCIAL,
+            APP_CATEGORY_SMS,
+            APP_CATEGORY_SHOPPING,
+            APP_CATEGORY_FINANCE,
+            APP_CATEGORY_NEWS,
+            APP_CATEGORY_GAME,
+            APP_CATEGORY_TOOL,
+            APP_CATEGORY_EMAIL,
+            APP_CATEGORY_WEATHER,
+            APP_CATEGORY_SYSTEM,
+            APP_CATEGORY_TRANSPORTATION,
+            APP_CATEGORY_READING,
+            APP_CATEGORY_HEALTH_FITNESS,
+            APP_CATEGORY_DATING,
+            APP_CATEGORY_CALENDAR_REMINDER,
+            APP_CATEGORY_PHONE,
+            APP_CATEGORY_UNKNOWN
+        )
     }
 }
