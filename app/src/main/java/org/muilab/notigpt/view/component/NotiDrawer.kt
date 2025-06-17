@@ -70,7 +70,7 @@ fun NotiDrawer(context: Context, drawerViewModel: DrawerViewModel) {
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
 
-    val notifications by drawerViewModel.presentedNotifications.collectAsState()
+    val notifications by drawerViewModel.filteredByQuery.collectAsState()
     val seenNotis = remember { mutableSetOf<String>() }
     val seenInfos = remember { mutableMapOf<String, Set<String>>() }
 

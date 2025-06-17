@@ -21,6 +21,7 @@ import org.muilab.notigpt.model.notifications.NotiDisplayUnit
 import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_ARCHIVE
 import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_GENERAL
 import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_MAKETASK
+import org.muilab.notigpt.util.getAppCategoryByAppName
 
 class NotiRepository(
     private val notiDrawerDao: NotiDrawerDao,
@@ -145,6 +146,16 @@ class NotiRepository(
         CoroutineScope(Dispatchers.IO).launch {
             notiDrawerDao.setUnitsReadByKeys(seenNotis.toList())
             notiRecordDao.setRecordsReadByIds(seenInfos.toList())
+        }
+    }
+
+    fun syncAppCategories(context: Context) {
+        CoroutineScope(Dispatchers.IO).launch {
+            val notiUnits = notiDrawerDao.getAll()
+            notiUnits.forEach { notiUnit ->
+                notiUnit.displayState.appCategory = getAppCategoryByAppName(context, notiUnit.appName)
+                notiDrawerDao.update(notiUnit)
+            }
         }
     }
 }

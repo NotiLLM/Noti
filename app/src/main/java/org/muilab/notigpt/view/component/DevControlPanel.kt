@@ -41,6 +41,7 @@ import org.muilab.notigpt.util.SharedPreferencesManager
 import org.muilab.notigpt.util.SharedPreferencesManager.KEY_HISTORY_NOTI_COUNT_THRESHOLD
 import org.muilab.notigpt.util.SharedPreferencesManager.KEY_HISTORY_NOTI_HOURS_THRESHOLD
 import org.muilab.notigpt.util.SharedPreferencesManager.KEY_SERVER_IP
+import org.muilab.notigpt.view.component.notification.AutoControlBar
 import org.muilab.notigpt.viewModel.DrawerViewModel
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -72,16 +73,18 @@ fun DevControlPanel(context: Context, drawerViewModel: DrawerViewModel) {
                     .fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceAround
             ) {
+                AutoControlBar()
                 Button(onClick = {
                     Toast.makeText(context, "Start Updating Notifications", Toast.LENGTH_SHORT).show()
-                    CoroutineScope(Dispatchers.IO).launch {
-                        val notiRepository = NotiRepositoryProvider.provideNotiRepository(context)
-                        val notiKeys = notiRepository.getNotificationKeys()
-                        notiKeys.forEach { notiKey ->
-                            enqueueUpdateNotification(context, notiKey)
-                            delay(30 * 1000)
-                        }
-                    }
+//                    CoroutineScope(Dispatchers.IO).launch {
+//                        val notiRepository = NotiRepositoryProvider.provideNotiRepository(context)
+//                        val notiKeys = notiRepository.getNotificationKeys()
+//                        notiKeys.forEach { notiKey ->
+//                            enqueueUpdateNotification(context, notiKey)
+//                            delay(30 * 1000)
+//                        }
+//                    }
+                    drawerViewModel.syncAppCategory()
                 }) {
                     Text("Sync Noti Status")
                 }

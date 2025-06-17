@@ -87,7 +87,6 @@ fun HomeScreen(context: Context, drawerViewModel: DrawerViewModel) {
             SearchBar(drawerViewModel)
 
         Column {
-            AutoControlBar()
             Box (Modifier.weight(1F), contentAlignment = Alignment.TopCenter) {
                 NotiDrawer(context, drawerViewModel)
             }

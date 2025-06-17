@@ -128,26 +128,29 @@ class DrawerViewModel(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    val sortedNotifications: StateFlow<List<NotiDisplayUnit>> = queryEmbeddingString
-        .flatMapLatest { currentQueryEmbedding ->
-            notificationDisplayFlow.map { notifications ->
-                notifications
-                    .sortedWith(
-                        compareByDescending<NotiDisplayUnit> { notiDisplayUnit ->
-                            notiDisplayUnit.notiRecords.any { notiRecord ->
-                                listOf(notiRecord.extraTitle, notiRecord.content, notiRecord.person)
-                                    .any { it.contains(queryString.value, ignoreCase = true) }
-                            }
+    val sortedNotifications: StateFlow<List<NotiDisplayUnit>> =
+        notificationDisplayFlow.map { notifications ->
+            notifications
+                .sortedWith(
+                    compareByDescending<NotiDisplayUnit> { notiDisplayUnit ->
+                        notiDisplayUnit.notiRecords.any { notiRecord ->
+                            listOf(notiRecord.title, notiRecord.content, notiRecord.person)
+                                .any { it.contains(queryString.value, ignoreCase = true) }
+                        } || notiDisplayUnit.notiUnit.appName.contains(queryString.value, ignoreCase = true)
                     }.thenByDescending { notiDisplayUnit ->
                         notiDisplayUnit.sortScore
                     }.thenByDescending { notiDisplayUnit ->
                         notiDisplayUnit.lastUpdateTime
                     }
                 )
-            }
         }
         .distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+//    queryEmbeddingString
+//        .flatMapLatest { currentQueryEmbedding -> }
+//        .distinctUntilChanged()
+//        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // First level filtering（by category）
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -166,6 +169,24 @@ class DrawerViewModel(
             when (latestAppCategory) {
                 APP_CATEGORY_ALL -> notiList
                 else -> notiList.filter { it.notiUnit.appCategory == latestAppCategory }
+            }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // Third level filtering (by query string)
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val filteredByQuery: StateFlow<List<NotiDisplayUnit>> =
+        combine(queryString, presentedNotifications) { query, notiList ->
+            if (query.isBlank()) {
+                notiList
+            } else {
+                notiList.filter { notiDisplayUnit ->
+                    notiDisplayUnit.title.contains(query, ignoreCase = true) ||
+                    notiDisplayUnit.notiUnit.appName.contains(query, ignoreCase = true) ||
+                    notiDisplayUnit.notiRecords.any { record ->
+                        listOf(record.title, record.content, record.person)
+                            .any { it.contains(query, ignoreCase = true) }
+                    }
+                }
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -317,6 +338,12 @@ class DrawerViewModel(
             withContext(Dispatchers.Main) {
                 Toast.makeText(context, "Copied to clipboard", Toast.LENGTH_SHORT).show()
             }
+        }
+    }
+
+    fun syncAppCategory() {
+        viewModelScope.launch(Dispatchers.IO) {
+            notiRepository.syncAppCategories(context)
         }
     }
 }
