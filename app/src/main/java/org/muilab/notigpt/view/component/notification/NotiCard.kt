@@ -16,7 +16,6 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.AnchoredDraggableState
 import androidx.compose.foundation.gestures.DraggableAnchors
 import androidx.compose.foundation.gestures.animateTo
@@ -29,7 +28,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentHeight
@@ -45,7 +43,6 @@ import androidx.compose.material3.contentColorFor
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -58,29 +55,32 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.zIndex
 import kotlinx.coroutines.launch
 import org.muilab.notigpt.R
 import org.muilab.notigpt.database.server.enqueueNotificationAction
 import org.muilab.notigpt.model.notifications.NotiDisplayUnit
 import org.muilab.notigpt.service.NotiListenerService
 import org.muilab.notigpt.util.Constants
+import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_MAKETASK
+import org.muilab.notigpt.util.Constants.Companion.NOTI_TASK_STATE_COMPLETED
+import org.muilab.notigpt.util.Constants.Companion.NOTI_TASK_STATE_IN_PROGRESS
+import org.muilab.notigpt.util.Constants.Companion.NOTI_TASK_STATE_NOT_STARTED
 import org.muilab.notigpt.util.hasTransparentPixels
 import org.muilab.notigpt.util.replaceChars
 import org.muilab.notigpt.view.component.notification.action.NotiActionIconButton
@@ -90,7 +90,6 @@ import org.muilab.notigpt.viewModel.DrawerViewModel
 import sh.calvin.reorderable.ReorderableCollectionItemScope
 import kotlin.math.abs
 import kotlin.math.pow
-import kotlin.math.roundToInt
 
 private enum class DragDirection {
     HORIZONTAL, VERTICAL
@@ -104,17 +103,15 @@ fun ReorderableCollectionItemScope.NotiCard(
     notiDisplayUnit: NotiDisplayUnit,
     isDragging: Boolean,
     drawerViewModel: DrawerViewModel,
+    isCardVisible: Boolean,
     onNotiCardRead: () -> Unit,
     onNotiRecordRead: (recordId: String) -> Unit
 ) {
 
     val isSortingMode by drawerViewModel.isSortingMode.collectAsState()
 
-    var notiTopViewed by remember { mutableStateOf(false) }
-    var notiBottomViewed by remember { mutableStateOf(false) }
     val readRecordIdsInCard = remember { mutableSetOf<String>() }
-    // Get screen height for a more reliable visibility check
-    val screenHeightPx = with(LocalDensity.current) { LocalConfiguration.current.screenHeightDp.dp.toPx() }
+    var recordsViewport by remember { mutableStateOf<Rect?>(null) }
 
     val notiUnit = notiDisplayUnit.notiUnit
     val notiRecords = notiDisplayUnit.notiRecords
@@ -129,6 +126,7 @@ fun ReorderableCollectionItemScope.NotiCard(
     val largeBitmap = notiUnit.largeBitmap
 
     val isAppCategoryView = drawerViewModel.isAppCategoryView.collectAsState()
+    val isTask = notiUnit.category == Constants.NOTI_CATEGORY_MAKETASK
     val sortPosition = if (isAppCategoryView.value) notiUnit.appCategorySortPosition else notiUnit.sortPosition
 
     val summary = notiUnit.summary
@@ -305,26 +303,11 @@ fun ReorderableCollectionItemScope.NotiCard(
                         }
                         Log.d("NotiListenerService", "Sent intent")
                         if (!isPinned)
+                            drawerViewModel.actOnNoti(notiKey, "access_click_dismiss")
+                        else
                             drawerViewModel.actOnNoti(notiKey, "access_click")
                     }
-                )
-                .onGloballyPositioned { coordinates ->
-                    val windowBounds = coordinates.boundsInWindow()
-                    val top = windowBounds.top
-                    val bottom = windowBounds.bottom
-
-                    // --- DEBUG LOG ---
-                    // Log.d("VisibilityCheck", "Card Key: ${notiUnit.notiKey} | Top: $top, Bottom: $bottom, ScreenHeight: $screenHeightPx")
-
-                    if (!notiTopViewed && top >= 0 && top < screenHeightPx) {
-                        notiTopViewed = true
-//                        Log.d("VisibilitySet", "Card Key: ${notiUnit.notiKey} -> cardTopVisible = TRUE")
-                    }
-                    if (!notiBottomViewed && bottom > 0 && bottom <= screenHeightPx) {
-                        notiBottomViewed = true
-//                        Log.d("VisibilitySet", "Card Key: ${notiUnit.notiKey} -> cardBottomVisible = TRUE")
-                    }
-                },
+                ),
             shape = MaterialTheme.shapes.large,
             shadowElevation = elevation,
             color = backgroundColor
@@ -337,16 +320,18 @@ fun ReorderableCollectionItemScope.NotiCard(
                     .padding(vertical = 5.dp)
             ) {
 
-                Column(
-                    Modifier.padding(start = 3.dp, end = 3.dp),
+                Row(
+                    Modifier.padding(start = 6.dp, end = 3.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    val imageToDisplay = remember(bitmap, largeBitmap, anchoredDraggableState.offset) {
-                        if (anchoredDraggableState.offset > COLLAPSE_THRESHOLD && largeBitmap != null) {
-                            largeBitmap.asImageBitmap()
-                        } else {
-                            bitmap?.asImageBitmap()
+                    val imageToDisplay =
+                        remember(bitmap, largeBitmap, anchoredDraggableState.offset) {
+                            if (anchoredDraggableState.offset > COLLAPSE_THRESHOLD && largeBitmap != null) {
+                                largeBitmap.asImageBitmap()
+                            } else {
+                                bitmap?.asImageBitmap()
+                            }
                         }
-                    }
 
                     val hasTransparency = remember(bitmap) {
                         bitmap != null && hasTransparentPixels(bitmap, 0.1f)
@@ -355,25 +340,57 @@ fun ReorderableCollectionItemScope.NotiCard(
                     if (showSummary())
                         Spacer(Modifier.size(3.dp))
 
+                    if (notiUnit.category == NOTI_CATEGORY_MAKETASK) {
+
+                        val taskState = notiUnit.taskState
+                        val iconRes = when (taskState) {
+                            NOTI_TASK_STATE_NOT_STARTED -> R.drawable.task_not_started
+                            NOTI_TASK_STATE_IN_PROGRESS -> R.drawable.task_in_progress
+                            NOTI_TASK_STATE_COMPLETED -> R.drawable.task_completed
+                            else -> R.drawable.task_no
+                        }
+                        val color = when (taskState) {
+                            NOTI_TASK_STATE_NOT_STARTED -> Color(234, 67, 53)
+                            NOTI_TASK_STATE_IN_PROGRESS -> Color(251, 188, 5)
+                            NOTI_TASK_STATE_COMPLETED -> Color(52, 168, 83)
+                            else -> Color.Unspecified
+                        }
+                        val action = when (taskState) {
+                            NOTI_TASK_STATE_NOT_STARTED -> "mark_task_in_progress"
+                            NOTI_TASK_STATE_IN_PROGRESS -> "mark_task_completed"
+                            NOTI_TASK_STATE_COMPLETED -> "mark_task_reset"
+                            else -> "dismiss_task"
+                        }
+
+                        NotiActionIconButton(
+                            iconRes = iconRes,
+                            contentDescription = "Task Checkbox",
+                            backgroundColor = backgroundColor,
+                            onClick = { drawerViewModel.actOnNoti(notiKey, action) },
+                            hasBorder = false,
+                            color = color
+                        )
+                    }
+
                     if (imageToDisplay != null) {
+                        val iconModifier = Modifier
+                            .size((35 + 15 * progress).dp)
+                            .padding(vertical = 3.dp, horizontal = if (isTask) 0.dp else 3.dp)
                         if (anchoredDraggableState.offset > COLLAPSE_THRESHOLD && largeBitmap != null) {
-                            Image(bitmap = imageToDisplay, "Notification Icon",
-                                Modifier
-                                    .size((40 + 15 * progress).dp)
-                                    .padding(vertical = 3.dp, horizontal = 6.dp)
+                            Image(
+                                bitmap = imageToDisplay, "Notification Icon",
+                                iconModifier
                             )
                         } else {
                             if (hasTransparency) {
-                                Icon(bitmap = imageToDisplay, "Notification Icon",
-                                    Modifier
-                                        .size((40 + 15 * progress).dp)
-                                        .padding(vertical = 3.dp, horizontal = 6.dp)
+                                Icon(
+                                    bitmap = imageToDisplay, "Notification Icon",
+                                    iconModifier
                                 )
                             } else {
-                                Image(bitmap = imageToDisplay, "Notification Icon",
-                                    Modifier
-                                        .size((40 + 15 * progress).dp)
-                                        .padding(vertical = 3.dp, horizontal = 6.dp),
+                                Image(
+                                    bitmap = imageToDisplay, "Notification Icon",
+                                    iconModifier
                                 )
                             }
                         }
@@ -386,7 +403,7 @@ fun ReorderableCollectionItemScope.NotiCard(
                     Row(
                         Modifier
                             .wrapContentHeight()
-                            .padding(start = 35.dp)
+                            .padding(start = if (isTask) 80.dp else 35.dp)
                     ) {
                         if (showSummary()) {
                             Text(
@@ -518,6 +535,9 @@ fun ReorderableCollectionItemScope.NotiCard(
                             modifier = Modifier
                                 .height(with(density) { currentHeightPx.toDp() })
                                 .clipToBounds()
+                                .onGloballyPositioned { layoutCoordinates: LayoutCoordinates ->
+                                    recordsViewport = layoutCoordinates.boundsInWindow()
+                                }
                         ) {
                             HorizontalDivider(Modifier.padding(horizontal = 16.dp), thickness = 1.dp, color = Color.White)
                             val scrollState = rememberScrollState()
@@ -549,9 +569,9 @@ fun ReorderableCollectionItemScope.NotiCard(
                                                 showTitle = showTitle,
                                                 infoTimeColor = infoTimeColor,
                                                 notiSeen = notiRecord.isRead,
+                                                isCardVisible = isCardVisible,
+                                                recordsViewport = recordsViewport,
                                                 onRecordRead = {
-                                                    // This is the callback from ExpandedNotiRecord
-                                                    // It now correctly communicates back to the NotiCard
                                                     if (!notiRecord.isRead) {
                                                         onNotiRecordRead(notiRecord.notiRecordId)
                                                         readRecordIdsInCard.add(notiRecord.notiRecordId)
@@ -568,9 +588,9 @@ fun ReorderableCollectionItemScope.NotiCard(
                                             showTitle = showTitle,
                                             infoTimeColor = infoTimeColor,
                                             notiSeen = notiRecord.isRead,
+                                            isCardVisible = isCardVisible,
+                                            recordsViewport = recordsViewport,
                                             onRecordRead = {
-                                                // This is the callback from ExpandedNotiRecord
-                                                // It now correctly communicates back to the NotiCard
                                                 if (!notiRecord.isRead) {
                                                     onNotiRecordRead(notiRecord.notiRecordId)
                                                     readRecordIdsInCard.add(notiRecord.notiRecordId)
@@ -668,22 +688,32 @@ fun ReorderableCollectionItemScope.NotiCard(
         }
     }
 
-    // --- LOGIC FOR SIMPLE CARDS ---
-    LaunchedEffect(notiTopViewed, notiBottomViewed, notiUnit.isCompletelyRead, requiresExpansion) {
-//        Log.d("EffectCheck", "Card Key: ${notiUnit.notiKey} [SIMPLE] | Effect Running | TopSeen: $notiTopViewed, BottomSeen: $notiBottomViewed, Read: ${notiUnit.isCompletelyRead}, Expands: $requiresExpansion")
-        if (notiTopViewed && notiBottomViewed && !notiUnit.isCompletelyRead && !requiresExpansion) {
-//            Log.d("CallbackFire", "Card Key: ${notiUnit.notiKey} [SIMPLE] -> Firing onNotiCardRead()!")
-            onNotiCardRead()
-        }
-    }
+    // --- NEW UNIFIED "READ" LOGIC ---
+    // This single LaunchedEffect handles all cases for marking the card as read.
+    LaunchedEffect(isCardVisible, requiresExpansion, notiUnit.isCompletelyRead, readRecordIdsInCard.size) {
+        // Condition 1: Card is not already marked as read.
+        if (notiUnit.isCompletelyRead) return@LaunchedEffect
 
-    // --- LOGIC FOR COMPLEX CARDS ---
-    LaunchedEffect(notiTopViewed, notiBottomViewed, readRecordIdsInCard.size) {
-        val unreadRecordsInThisUnit = notiRecords.filter { !it.isRead }.map { it.notiRecordId }.toSet()
-//        Log.d("EffectCheck", "Card Key: ${notiUnit.notiKey} [COMPLEX] | Effect Running | Read in card: ${readRecordIdsInCard.size}, Total unread: ${unreadRecordsInThisUnit.size}")
-        if (requiresExpansion && !notiUnit.isCompletelyRead && (unreadRecordsInThisUnit.isNotEmpty() && readRecordIdsInCard.containsAll(unreadRecordsInThisUnit) || notiRecords.all { it.isRead })) {
-//            Log.d("CallbackFire", "Card Key: ${notiUnit.notiKey} [COMPLEX] -> Firing onNotiCardRead()!")
+        // Condition 2: The card must be fully visible in the LazyColumn.
+        if (!isCardVisible) return@LaunchedEffect
+
+        // Now, decide based on whether it's simple or complex.
+        if (!requiresExpansion) {
+            // Case A: It's a "simple" card (no expansion needed).
+            // Since it's visible and simple, we can mark it as read.
+            Log.d("Visibility", "Marking simple card as read: ${notiUnit.notiKey}")
             onNotiCardRead()
+        } else {
+            // Case B: It's a "complex" card that requires expansion.
+            // Mark it as read ONLY if all its unread records have been seen.
+            val unreadRecordIds = notiRecords.filter { !it.isRead }.map { it.notiRecordId }.toSet()
+
+            // This condition is met if there were no unread records to begin with (already all read),
+            // OR if the set of records we've seen in this session now contains all originally unread records.
+            if (unreadRecordIds.isEmpty() || (unreadRecordIds.isNotEmpty() && readRecordIdsInCard.containsAll(unreadRecordIds))) {
+                Log.d("Visibility", "All records in complex card ${notiUnit.notiKey} are now read. Marking card as read.")
+                onNotiCardRead()
+            }
         }
     }
 }

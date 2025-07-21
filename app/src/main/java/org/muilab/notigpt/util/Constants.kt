@@ -66,5 +66,9 @@ class Constants {
             APP_CATEGORY_PHONE,
             APP_CATEGORY_UNKNOWN
         )
+
+        const val NOTI_TASK_STATE_NOT_STARTED = 0
+        const val NOTI_TASK_STATE_IN_PROGRESS = 1
+        const val NOTI_TASK_STATE_COMPLETED = 2
     }
 }

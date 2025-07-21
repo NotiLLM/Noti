@@ -210,12 +210,18 @@ class NotiRepository(
         when (action) {
             "dismiss_swipe" -> notiDrawerDao.setUnitInvisibleByKey(notiKey)
             "access_click_dismiss" -> notiDrawerDao.setUnitInvisibleByKey(notiKey)
+
             "archive" -> notiDrawerDao.updateCategory(notiKey, NOTI_CATEGORY_ARCHIVE)
             "unarchive" -> notiDrawerDao.updateCategory(notiKey, NOTI_CATEGORY_GENERAL)
             "make_task" -> notiDrawerDao.updateCategory(notiKey, NOTI_CATEGORY_MAKETASK)
             "dismiss_task" -> notiDrawerDao.updateCategory(notiKey, NOTI_CATEGORY_GENERAL)
+
             "unpin" -> notiDrawerDao.flipPin(notiKey)
             "pin" -> notiDrawerDao.flipPin(notiKey)
+
+            "mark_task_in_progress" -> notiDrawerDao.incrementTaskState(notiKey)
+            "mark_task_completed" -> notiDrawerDao.incrementTaskState(notiKey)
+            "mark_task_reset" -> notiDrawerDao.incrementTaskState(notiKey)
         }
         notiActionDao.insert(NotiAction(notiKey, action, System.currentTimeMillis()))
     }

@@ -77,6 +77,12 @@ data class NotiUnit(
             displayState.isCompletelyRead = value
         }
 
+    var taskState: Int
+        get() = displayState.taskState
+        set(value) {
+            displayState.taskState = value
+        }
+
     // OUTCOMES RELATED CALLS
 
     var summary: String

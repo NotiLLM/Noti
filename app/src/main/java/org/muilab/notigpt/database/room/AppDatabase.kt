@@ -16,7 +16,7 @@ import org.muilab.notigpt.model.notifications.VisibleNotiRecord
 @Database(
     entities = [NotiUnit::class, NotiRecord::class, NotiAction::class],
     views = [VisibleNotiRecord::class], // <-- Add the view here
-    version = 3, // <-- Increment the version number
+    version = 4, // <-- Increment the version number
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -54,6 +54,15 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                // Add int entry named taskState to noti_drawer table, initial value is 0
+                database.execSQL("""
+                    ALTER TABLE noti_drawer ADD COLUMN taskState INTEGER NOT NULL DEFAULT 0
+                """)
+            }
+        }
+
         // --- END MIGRATION DEFINITION ---
 
         fun getInstance(context: Context): AppDatabase =
@@ -66,6 +75,7 @@ abstract class AppDatabase : RoomDatabase() {
                 // Remove any old callbacks if they are still there
                 .addMigrations(MIGRATION_1_2) // <-- Add the migration here
                 .addMigrations(MIGRATION_2_3)
+                .addMigrations(MIGRATION_3_4)
                 .build()
         }
     }

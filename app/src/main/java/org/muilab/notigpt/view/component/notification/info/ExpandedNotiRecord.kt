@@ -10,6 +10,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -29,37 +30,54 @@ fun ExpandedNotiRecord(
     infoTimeColor: Color,
     // Parameters for the logic
     notiSeen: Boolean,
-    onRecordRead: () -> Unit // REPLACES viewedInfos: MutableSet<String>
+    isCardVisible: Boolean, // Is the parent NotiCard fully visible?
+    recordsViewport: Rect?, // What is the visible area of the records list?
+    onRecordRead: () -> Unit
 ) {
 
-    var infoTopViewed by remember { mutableStateOf(false) }
-    var infoBottomViewed by remember { mutableStateOf(false) }
+    var isFullyVisible by remember { mutableStateOf(false) }
+
     // Add local state to prevent the callback from firing multiple times
     var hasBeenTriggered by remember { mutableStateOf(false) }
-
-    val screenHeightPx = with(LocalDensity.current) { LocalConfiguration.current.screenHeightDp.dp.toPx() }
 
     Column(
         Modifier
             // Use a single onGloballyPositioned for efficiency
             .onGloballyPositioned { coordinates ->
-                val windowBounds = coordinates.boundsInWindow()
-                val top = windowBounds.top
-                val bottom = windowBounds.bottom
+                if (recordsViewport != null) {
 
-                // --- DEBUG LOG ---
-                // Log the raw values to see what we're working with.
-                // Log.d("VisibilityCheck", "Record ID: $notiRecordId | Top: $top, Bottom: $bottom, ScreenHeight: $screenHeightPx")
+                    // If the size of coordinates and viewport is not zero, we can proceed
+                    if (coordinates.size.width == 0 || coordinates.size.height == 0 ||
+                        recordsViewport.width == 0f || recordsViewport.height == 0f) {
+                        isFullyVisible = false
+                        return@onGloballyPositioned
+                    }
 
-                // Check and set top visibility flag
-                if (!infoTopViewed && top >= 0 && top < screenHeightPx) {
-                    infoTopViewed = true
-//                    Log.d("VisibilitySet", "Record ID: $notiTitle -> infoTopViewed = TRUE")
-                }
-                // Check and set bottom visibility flag
-                if (!infoBottomViewed && bottom > 0 && bottom <= screenHeightPx) {
-                    infoBottomViewed = true
-//                    Log.d("VisibilitySet", "Record ID: $notiTitle -> infoBottomViewed = TRUE")
+                    val recordBounds = coordinates.boundsInWindow()
+
+                    // --- VVV THE FIX VVV ---
+                    val tolerance = 1.0f // A 1px tolerance for floating point inaccuracies
+
+                    // Check if the record's top is at or below the viewport's top (with tolerance)
+                    val topIsVisible = recordBounds.top >= recordsViewport.top - tolerance
+
+                    // Check if the record's bottom is at or above the viewport's bottom (with tolerance)
+                    val bottomIsVisible = recordBounds.bottom <= recordsViewport.bottom + tolerance
+
+                    // Check if the horizontal bounds are also within the viewport
+                    val leftIsVisible = recordBounds.left >= recordsViewport.left - tolerance
+                    val rightIsVisible = recordBounds.right <= recordsViewport.right + tolerance
+
+                    val newVisibility = topIsVisible && bottomIsVisible && leftIsVisible && rightIsVisible
+                    // --- ^^^ THE FIX ^^^ ---
+
+                    if (newVisibility != isFullyVisible) {
+                        isFullyVisible = newVisibility
+                        // Optional: Add a log here to see the result of the new check
+                        // Log.d("VisibilityCheck", "Record: $notiTitle, isVisible: $newVisibility, TopOK: $topIsVisible, BottomOK: $bottomIsVisible")
+                    }
+                } else {
+                    if (isFullyVisible) isFullyVisible = false
                 }
             }
     ) {
@@ -87,12 +105,13 @@ fun ExpandedNotiRecord(
             NotiInfoContent(notiContent)
     }
 
-    LaunchedEffect(infoTopViewed, infoBottomViewed, notiSeen) {
-//        Log.d("EffectCheck", "Record ID: $notiTitle | Effect Running | TopSeen: $infoTopViewed, BottomSeen: $infoBottomViewed, AlreadySeen: $notiSeen, Triggered: $hasBeenTriggered")
-        if (infoTopViewed && infoBottomViewed && !notiSeen && !hasBeenTriggered) {
-//            Log.d("CallbackFire", "Record ID: $notiTitle -> Firing onRecordRead()!")
+    // --- MODIFIED: The effect that triggers the read callback ---
+    LaunchedEffect(isCardVisible, isFullyVisible, notiSeen) {
+        // Log.d("VisibilityCheck", "Record: $notiTitle | CardVisible: $isCardVisible, RecordFullyVisible: $isFullyVisible, Seen: $notiSeen")
+        if (isCardVisible && isFullyVisible && !notiSeen && !hasBeenTriggered) {
+            Log.d("CallbackFire", "Record: '$notiTitle' -> Firing onRecordRead()!")
             onRecordRead()
-            hasBeenTriggered = true
+            hasBeenTriggered = true // Prevent multiple triggers
         }
     }
 }

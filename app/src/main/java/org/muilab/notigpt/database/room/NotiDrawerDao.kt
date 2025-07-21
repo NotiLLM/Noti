@@ -57,12 +57,16 @@ interface NotiDrawerDao {
     fun update(notiUnit: NotiUnit)
 
     // Update category of a notification unit
-    @Query("UPDATE noti_drawer SET category = :newCategory, sortPosition = -1, appCategorySortPosition = -1 WHERE notiKey = :notiKey")
+    @Query("UPDATE noti_drawer SET category = :newCategory, sortPosition = -1, appCategorySortPosition = -1, taskState = 0 WHERE notiKey = :notiKey")
     fun updateCategory(notiKey: String, newCategory: String)
 
     // Flip pin
     @Query("UPDATE noti_drawer SET isPinned = NOT isPinned WHERE notiKey = :notiKey")
     fun flipPin(notiKey: String)
+
+    // Add taskState by one and take remainder with 3
+    @Query("UPDATE noti_drawer SET taskState = (taskState + 1) % 3 WHERE notiKey = :notiKey")
+    fun incrementTaskState(notiKey: String)
 
     @Query("UPDATE noti_drawer SET sortScore = :newSortScore WHERE notiKey = :notiKey")
     fun updateSortScore(notiKey: String, newSortScore: Float)

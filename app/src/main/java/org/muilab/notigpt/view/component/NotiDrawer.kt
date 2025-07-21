@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListLayoutInfo
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.ElevatedButton
@@ -24,9 +25,13 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.LayoutInfo
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -58,6 +63,37 @@ fun NotiDrawer(context: Context, drawerViewModel: DrawerViewModel) {
         Log.d("NotiDrawer", "Moved from ${from.key} at ${from.index} to ${to.index}")
     }
 
+    // --- State to hold the keys of fully visible cards ---
+    var fullyVisibleCardKeys by remember { mutableStateOf(emptySet<String>()) }
+
+    // --- The main visibility detection logic ---
+    // This LaunchedEffect is the source of truth for card visibility.
+    LaunchedEffect(lazyListState) {
+        // Use snapshotFlow to observe changes to layoutInfo
+        snapshotFlow { lazyListState.layoutInfo }
+            // V-- FIX IS HERE --V
+            .collect { layoutInfo: LazyListLayoutInfo ->
+                val viewportStartOffset = layoutInfo.viewportStartOffset
+                val viewportEndOffset = layoutInfo.viewportEndOffset
+
+                val visibleItems = layoutInfo.visibleItemsInfo
+
+                val newVisibleKeys = visibleItems.filter { item ->
+                    // Check if the item is fully contained within the viewport
+                    val itemStart = item.offset
+                    val itemEnd = item.offset + item.size
+                    itemStart >= viewportStartOffset && itemEnd <= viewportEndOffset
+                }.mapNotNull { it.key as? String } // Use mapNotNull for safety
+                    .toSet()
+
+                // Update the state only if the set of visible keys has changed
+                if (newVisibleKeys != fullyVisibleCardKeys) {
+                    // Log.d("Visibility", "Fully visible cards changed: $newVisibleKeys")
+                    fullyVisibleCardKeys = newVisibleKeys
+                }
+            }
+    }
+
     LaunchedEffect(category, appCategory) {
         lazyListState.animateScrollToItem(0)
     }
@@ -76,6 +112,7 @@ fun NotiDrawer(context: Context, drawerViewModel: DrawerViewModel) {
                     notiDisplayUnit = notiDisplayUnit,
                     isDragging = isDragging,
                     drawerViewModel = drawerViewModel,
+                    isCardVisible = fullyVisibleCardKeys.contains(notiDisplayUnit.notiKey),
                     // PASS a callback to mark the whole card as read
                     onNotiCardRead = {
                         drawerViewModel.markNotificationAsRead(notiDisplayUnit.notiKey)

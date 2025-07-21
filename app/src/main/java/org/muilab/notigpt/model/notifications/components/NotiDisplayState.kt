@@ -3,6 +3,7 @@ package org.muilab.notigpt.model.notifications.components
 import org.muilab.notigpt.util.Constants
 import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_GENERAL
 import org.muilab.notigpt.util.Constants.Companion.APP_CATEGORY_UNKNOWN
+import org.muilab.notigpt.util.Constants.Companion.NOTI_TASK_STATE_NOT_STARTED
 
 data class NotiDisplayState(
     // DETERMINED BY USER
@@ -12,6 +13,7 @@ data class NotiDisplayState(
     var isCompletelyRead: Boolean,
     var sortPosition: Int,
     var appCategorySortPosition: Int,
+    var taskState: Int,
 
     // DETERMINED BY LLM
     var explanation: String,
@@ -33,6 +35,7 @@ data class NotiDisplayState(
         isCompletelyRead = false,
         sortPosition = -1,
         appCategorySortPosition = -1,
+        taskState = NOTI_TASK_STATE_NOT_STARTED,
         explanation = "",
         summary = "",
         sortScore = 100.0,
@@ -48,6 +51,7 @@ data class NotiDisplayState(
         isArchived = false
         isVisible = true
         isCompletelyRead = false
+        taskState = NOTI_TASK_STATE_NOT_STARTED
         category = NOTI_CATEGORY_GENERAL
         resetSortPositions()
     }
