@@ -6,13 +6,11 @@ import android.icu.text.RelativeDateTimeFormatter
 import android.icu.util.ULocale
 import android.util.Base64
 import android.util.Log
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import org.muilab.notigpt.database.room.NotiDrawerDatabase
 import org.muilab.notigpt.model.notifications.NotiUnit
 import org.muilab.notigpt.util.Constants.Companion.APP_CATEGORY_UNKNOWN
 import org.muilab.notigpt.R
+import org.muilab.notigpt.database.room.AppDatabase
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.DataInputStream
@@ -29,8 +27,8 @@ import kotlin.math.abs
 import kotlin.math.min
 
 fun getViewedNotifications(context: Context): ArrayList<NotiUnit> = with(Dispatchers.IO) {
-    val notiDrawerDatabase = NotiDrawerDatabase.getInstance(context)
-    val drawerDao = notiDrawerDatabase.drawerDao()
+    val appDatabase = AppDatabase.getInstance(context)
+    val drawerDao = appDatabase.drawerDao()
     return drawerDao.getAllVisible().toCollection(ArrayList())
 }
 

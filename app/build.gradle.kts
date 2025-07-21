@@ -113,6 +113,9 @@ dependencies {
     // LazyColumn Scroll-Bar
     implementation(libs.lazycolumn.scrollbar)
 
+    // Reorderable LazyColumn
+    implementation(libs.reorderable)
+
     implementation(libs.gson)
     implementation(libs.constraintlayout.compose)
 

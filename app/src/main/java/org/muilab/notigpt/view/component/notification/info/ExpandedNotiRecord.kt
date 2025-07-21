@@ -1,5 +1,6 @@
 package org.muilab.notigpt.view.component.notification.info
 
+import android.util.Log
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
@@ -12,35 +13,54 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.dp
 import androidx.constraintlayout.compose.ConstraintLayout
 import androidx.constraintlayout.compose.Dimension
 
 @Composable
 fun ExpandedNotiRecord(
-    notiRecordId: String,
+    // Parameters for displaying the UI
     notiTitle: String,
     notiTime: Long,
     notiContent: String,
-    notiSeen: Boolean,
     showTitle: Boolean,
     infoTimeColor: Color,
-    viewedInfos: MutableSet<String>
+    // Parameters for the logic
+    notiSeen: Boolean,
+    onRecordRead: () -> Unit // REPLACES viewedInfos: MutableSet<String>
 ) {
 
     var infoTopViewed by remember { mutableStateOf(false) }
     var infoBottomViewed by remember { mutableStateOf(false) }
+    // Add local state to prevent the callback from firing multiple times
+    var hasBeenTriggered by remember { mutableStateOf(false) }
+
+    val screenHeightPx = with(LocalDensity.current) { LocalConfiguration.current.screenHeightDp.dp.toPx() }
 
     Column(
         Modifier
+            // Use a single onGloballyPositioned for efficiency
             .onGloballyPositioned { coordinates ->
                 val windowBounds = coordinates.boundsInWindow()
-                infoTopViewed =
-                    infoTopViewed || windowBounds.top >= 0 && windowBounds.top < windowBounds.height
-            }
-            .onGloballyPositioned { coordinates ->
-                val windowBounds = coordinates.boundsInWindow()
-                infoBottomViewed =
-                    infoBottomViewed || windowBounds.bottom > 0 && windowBounds.bottom <= windowBounds.height
+                val top = windowBounds.top
+                val bottom = windowBounds.bottom
+
+                // --- DEBUG LOG ---
+                // Log the raw values to see what we're working with.
+                // Log.d("VisibilityCheck", "Record ID: $notiRecordId | Top: $top, Bottom: $bottom, ScreenHeight: $screenHeightPx")
+
+                // Check and set top visibility flag
+                if (!infoTopViewed && top >= 0 && top < screenHeightPx) {
+                    infoTopViewed = true
+//                    Log.d("VisibilitySet", "Record ID: $notiTitle -> infoTopViewed = TRUE")
+                }
+                // Check and set bottom visibility flag
+                if (!infoBottomViewed && bottom > 0 && bottom <= screenHeightPx) {
+                    infoBottomViewed = true
+//                    Log.d("VisibilitySet", "Record ID: $notiTitle -> infoBottomViewed = TRUE")
+                }
             }
     ) {
         ConstraintLayout (Modifier.fillMaxWidth()) {
@@ -67,9 +87,12 @@ fun ExpandedNotiRecord(
             NotiInfoContent(notiContent)
     }
 
-    LaunchedEffect(infoTopViewed, infoBottomViewed) {
-        if (infoTopViewed && infoBottomViewed && !notiSeen) {
-            viewedInfos.add(notiRecordId)  // Mark the item as viewed once fully revealed
+    LaunchedEffect(infoTopViewed, infoBottomViewed, notiSeen) {
+//        Log.d("EffectCheck", "Record ID: $notiTitle | Effect Running | TopSeen: $infoTopViewed, BottomSeen: $infoBottomViewed, AlreadySeen: $notiSeen, Triggered: $hasBeenTriggered")
+        if (infoTopViewed && infoBottomViewed && !notiSeen && !hasBeenTriggered) {
+//            Log.d("CallbackFire", "Record ID: $notiTitle -> Firing onRecordRead()!")
+            onRecordRead()
+            hasBeenTriggered = true
         }
     }
 }

@@ -6,6 +6,7 @@ import android.app.PendingIntent
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Build
 import android.os.IBinder
 import android.service.notification.NotificationListenerService
@@ -18,7 +19,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import org.muilab.notigpt.database.room.NotiDrawerDatabase
 import org.muilab.notigpt.database.server.enqueueUpdateNotification
 import org.muilab.notigpt.model.notifications.NotiUnit
 import org.muilab.notigpt.repository.NotiRepository
@@ -29,6 +29,8 @@ import org.muilab.notigpt.util.createNotificationChannel
 import org.muilab.notigpt.util.postOngoingNotification
 
 class NotiListenerService: NotificationListenerService() {
+
+    private var componentName: ComponentName? = null
 
     companion object {
         private val maxMemory = (Runtime.getRuntime().maxMemory() / 1024).toInt()
@@ -91,12 +93,13 @@ class NotiListenerService: NotificationListenerService() {
     }
 
     override fun onListenerDisconnected() {
-        requestRebind(ComponentName(this, NotiListenerService::class.java))
-        try {
 
-        } catch (e: Exception) {
-            e.printStackTrace()
+        if (componentName == null) {
+            componentName = ComponentName(this, this::class.java)
         }
+
+        componentName?.let { requestRebind(it) }
+
         super.onListenerDisconnected()
     }
 
@@ -121,7 +124,31 @@ class NotiListenerService: NotificationListenerService() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        return START_STICKY
+        super.onStartCommand(intent, flags, startId)
+
+        if(componentName == null) {
+            componentName = ComponentName(this, this::class.java)
+        }
+
+        componentName?.let {
+            requestRebind(it)
+            toggleNotificationListenerService(it)
+        }
+        return START_REDELIVER_INTENT
+    }
+
+    private fun toggleNotificationListenerService(componentName: ComponentName) {
+        val pm = packageManager
+        pm.setComponentEnabledSetting(
+            componentName,
+            PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+            PackageManager.DONT_KILL_APP
+        )
+        pm.setComponentEnabledSetting(
+            componentName,
+            PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+            PackageManager.DONT_KILL_APP
+        )
     }
 
     @RequiresApi(Build.VERSION_CODES.S)
@@ -152,6 +179,10 @@ class NotiListenerService: NotificationListenerService() {
         // If notification is media style, ignore
         val notiStyle = sbn.notification.extras.getCharSequence(Notification.EXTRA_TEMPLATE)
         if (notiStyle == Notification.MediaStyle::class.java.canonicalName)
+            return
+
+        // If notification tag contains ConnectivityNotification, ignore
+        if (sbn.tag?.contains("ConnectivityNotification") == true)
             return
 
         // Store notification to DB

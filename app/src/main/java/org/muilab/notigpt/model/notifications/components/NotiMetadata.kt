@@ -26,6 +26,7 @@ data class NotiMetadata(
     val isGroupChat: Boolean,
     var sortKey: String,
     var appName: String = "Unknown App",
+    var lastUpdateTime: Long = 0L,
     var icon: String = "Unknown Icon",
     var largeIcon: String = "Unknown Icon",
     var isPeople: Boolean,
@@ -110,6 +111,9 @@ data class NotiMetadata(
         } else {
             pkgName
         })
+
+        // time
+        lastUpdateTime = sbn.notification?.`when` ?: sbn.postTime
 
         // icon
         icon = iconToBase64(context, pm, sbn.notification.smallIcon)

@@ -21,7 +21,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import org.muilab.notigpt.MainActivity
-import org.muilab.notigpt.database.room.NotiDrawerDatabase
+import org.muilab.notigpt.database.room.AppDatabase
 
 fun createNotificationChannel(context: Context) {
     val channelId = "notigpt_all"
@@ -77,8 +77,8 @@ fun createCountIcon(context: Context, number: Int, hasNotRead: Boolean): Bitmap 
 fun postOngoingNotification(context: Context) {
 
     CoroutineScope(Dispatchers.IO).launch {
-        val notiDrawerDatabase = NotiDrawerDatabase.getInstance(context)
-        val drawerDao = notiDrawerDatabase.drawerDao()
+        val appDatabase = AppDatabase.getInstance(context)
+        val drawerDao = appDatabase.drawerDao()
 
         val allNotiCount = drawerDao.getVisibleNotiCount()
         val notiTitle = "$allNotiCount notifications"

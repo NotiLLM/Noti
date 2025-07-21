@@ -17,6 +17,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.muilab.notigpt.R
@@ -36,16 +37,6 @@ fun NotiFeedbackDropdown(context: Context, notiUnit: NotiUnit, isDropdownMenuExp
     ) {
         Column {
             Row {
-                Spacer(Modifier.weight(1f))
-                NotiActionIconButton(
-                    iconRes = R.drawable.thumb_down,
-                    contentDescription = "Dislike",
-                    onClick = {
-                        enqueueNotificationAction(context, notiUnit.notiKey, "disliked")
-                        isDropdownMenuExpanded.value = false
-                    }
-                )
-                Spacer(Modifier.weight(1f))
                 Button(onClick = {
                     Toast.makeText(context, "Start Updating Notification", Toast.LENGTH_SHORT).show()
                     enqueueUpdateNotification(context, notiUnit.notiKey)
@@ -53,16 +44,6 @@ fun NotiFeedbackDropdown(context: Context, notiUnit: NotiUnit, isDropdownMenuExp
                 }) {
                     Text("Update Notification")
                 }
-                Spacer(Modifier.weight(1f))
-                NotiActionIconButton(
-                    iconRes = R.drawable.thumb_up,
-                    contentDescription = "Like",
-                    onClick = {
-                        enqueueNotificationAction(context, notiUnit.notiKey, "liked")
-                        isDropdownMenuExpanded.value = false
-                    }
-                )
-                Spacer(Modifier.weight(1f))
             }
             Box(
                 modifier = Modifier

@@ -9,8 +9,6 @@ import androidx.room.Embedded
 import androidx.room.Entity
 import org.muilab.notigpt.model.notifications.components.NotiMetadata
 import org.muilab.notigpt.model.notifications.components.NotiDisplayState
-import org.muilab.notigpt.util.getAbsoluteTimeStr
-import org.muilab.notigpt.util.getRelativeTimeStr
 import org.muilab.notigpt.util.getAppCategoryByAppName
 
 
@@ -30,8 +28,6 @@ data class NotiUnit(
         metadata = NotiMetadata(sbn)
     ) {
         updateNoti(context, sbn)
-        // Set initial app category
-        displayState.appCategory = getAppCategoryByAppName(context, metadata.appName)
     }
 
     @RequiresApi(Build.VERSION_CODES.S)
@@ -53,6 +49,9 @@ data class NotiUnit(
     val pkgName: String
         get() = metadata.pkgName
 
+    val lastUpdateTime: Long
+        get() = metadata.lastUpdateTime
+
     val isPeople: Boolean
         get() = metadata.isPeople
 
@@ -72,20 +71,11 @@ data class NotiUnit(
             displayState.isPinned = value
         }
 
-    val isCompletelyRead: Boolean
+    var isCompletelyRead: Boolean
         get() = displayState.isCompletelyRead
-
-    fun flipNotiPin() {
-        displayState.flipPin()
-    }
-
-    fun changeCategory(newCategory: String) {
-       category = newCategory
-    }
-
-    fun setInvisible() {
-        displayState.isVisible = false
-    }
+        set(value) {
+            displayState.isCompletelyRead = value
+        }
 
     // OUTCOMES RELATED CALLS
 
@@ -115,4 +105,16 @@ data class NotiUnit(
 
     val appCategory: String
         get() = displayState.appCategory
+
+    var sortPosition: Int
+        get() = displayState.sortPosition
+        set(value) {
+            displayState.sortPosition = value
+        }
+
+    var appCategorySortPosition: Int
+        get() = displayState.appCategorySortPosition
+        set(value) {
+            displayState.appCategorySortPosition = value
+        }
 }

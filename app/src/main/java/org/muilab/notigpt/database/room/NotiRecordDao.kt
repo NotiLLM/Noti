@@ -1,6 +1,7 @@
 package org.muilab.notigpt.database.room
 
 import androidx.room.Dao
+import androidx.room.Insert
 import androidx.room.Query
 import androidx.room.Upsert
 import kotlinx.coroutines.flow.Flow
@@ -23,10 +24,10 @@ interface NotiRecordDao {
     @Query("SELECT * FROM noti_record WHERE isVisible = 1 AND notiKey IN ( :notiKeys )")
     fun getVisibleRecordsByKeys(notiKeys: List<String>): List<NotiRecord>
 
-    @Query("UPDATE noti_record SET isVisible = 0 WHERE notiKey = :notiKey")
+    @Query("UPDATE noti_record SET isVisible = 0, isRead = 1 WHERE notiKey = :notiKey")
     fun setRecordsInvisibleByKey(notiKey: String)
 
-    @Query("UPDATE noti_record SET isVisible = 0 WHERE notiKey IN ( :notiKeys)")
+    @Query("UPDATE noti_record SET isVisible = 0, isRead = 1 WHERE notiKey IN ( :notiKeys)")
     fun setRecordsInvisibleByKeys(notiKeys: List<String>)
 
     @Query("UPDATE noti_record SET isRead = 1 WHERE notiRecordId IN ( :notiRecordIds)")
@@ -34,4 +35,10 @@ interface NotiRecordDao {
 
     @Query("SELECT * FROM noti_record WHERE isVisible = 1 AND notiKey IN ( :notiKeys )")
     fun getVisibleRecordsFlowByKeys(notiKeys: List<String>): Flow<List<NotiRecord>>
+
+    @Query("SELECT * FROM noti_record")
+    fun getAllRecords(): List<NotiRecord>
+
+    @Insert
+    fun insertAllRecords(notiRecords: List<NotiRecord>)
 }

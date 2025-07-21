@@ -10,6 +10,8 @@ data class NotiDisplayState(
     var isArchived: Boolean,
     var isVisible: Boolean,
     var isCompletelyRead: Boolean,
+    var sortPosition: Int,
+    var appCategorySortPosition: Int,
 
     // DETERMINED BY LLM
     var explanation: String,
@@ -18,7 +20,7 @@ data class NotiDisplayState(
 
     // DETERMINED BY BOTH
     var category: String,
-    
+
     // APP CATEGORY (DETERMINED BY APP)
     var appCategory: String
 ) {
@@ -29,6 +31,8 @@ data class NotiDisplayState(
         isArchived = false,
         isVisible = true,
         isCompletelyRead = false,
+        sortPosition = -1,
+        appCategorySortPosition = -1,
         explanation = "",
         summary = "",
         sortScore = 100.0,
@@ -45,10 +49,16 @@ data class NotiDisplayState(
         isVisible = true
         isCompletelyRead = false
         category = NOTI_CATEGORY_GENERAL
+        resetSortPositions()
     }
     fun resetLLMState() {
         explanation = ""
         summary = ""
         sortScore = 100.0
+    }
+
+    fun resetSortPositions() {
+        sortPosition = -1
+        appCategorySortPosition = -1
     }
 }

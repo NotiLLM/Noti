@@ -9,6 +9,7 @@ import android.content.Context
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
+import android.util.Log
 import android.widget.Toast
 import androidx.annotation.RequiresApi
 import androidx.lifecycle.AndroidViewModel
@@ -21,6 +22,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -28,23 +30,26 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
-import org.muilab.notigpt.database.room.NotiCategoryDatabase
 import org.muilab.notigpt.database.server.enqueueNotificationAction
-import org.muilab.notigpt.model.notifications.NotiCategory
 import org.muilab.notigpt.model.notifications.NotiDisplayUnit
 import org.muilab.notigpt.repository.NotiRepository
 import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_GENERAL
 import org.muilab.notigpt.util.Constants.Companion.APP_CATEGORY_ALL
+import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_ARCHIVE
+import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_MAKETASK
 import org.muilab.notigpt.util.SharedPreferencesManager
 import org.muilab.notigpt.util.getAbsoluteTimeStr
 import org.muilab.notigpt.util.getRelativeTimeStr
 import org.muilab.notigpt.util.postOngoingNotification
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.collections.filter
 
 class DrawerViewModel(
@@ -55,17 +60,49 @@ class DrawerViewModel(
     private val _category = MutableStateFlow(NOTI_CATEGORY_GENERAL)
     val category: StateFlow<String> = _category
 
+    private val _isSortingMode = MutableStateFlow(false)
+    val isSortingMode: StateFlow<Boolean> = _isSortingMode
+
+    fun toggleSortingMode() {
+        _isSortingMode.value = !_isSortingMode.value
+        if (!_isSortingMode.value) {
+            syncManualSortOrder(isAppCategoryView.value)
+        }
+    }
+
+    private var isOrderDirty = false
+
+    @RequiresApi(Build.VERSION_CODES.S)
     fun updateCategory(newCategory: String) {
         _category.value = newCategory
+        if (isSortingMode.value)
+            toggleSortingMode()
+        persistReadStatus()
         // Reset app category to "All" when main category changes
-        _appCategory.value = APP_CATEGORY_ALL
+        updateUnreadCounts()
+        updateAppCategory(APP_CATEGORY_ALL)
     }
 
     // app category
     private val _appCategory = MutableStateFlow(APP_CATEGORY_ALL)
     val appCategory: StateFlow<String> = _appCategory
 
+    private val _isAppCategoryView = MutableStateFlow(false)
+    val isAppCategoryView: StateFlow<Boolean> = _isAppCategoryView
+
+    @RequiresApi(Build.VERSION_CODES.S)
     fun updateAppCategory(newAppCategory: String) {
+
+        if (isSortingMode.value)
+            toggleSortingMode()
+        persistReadStatus()
+        // Reset app category to "All" when main category changes
+        updateUnreadCounts()
+        if (newAppCategory == APP_CATEGORY_ALL) {
+            _isAppCategoryView.value = false
+        } else {
+            _isAppCategoryView.value = true
+        }
         _appCategory.value = newAppCategory
     }
 
@@ -76,36 +113,57 @@ class DrawerViewModel(
         _queryString.value = newQueryString
     }
 
-    private val _notiCategories = MutableStateFlow(listOf<NotiCategory>())
-    val notiCategories: StateFlow<List<NotiCategory>> = _notiCategories
+    private val _optimisticNotifications = MutableStateFlow<List<NotiDisplayUnit>>(emptyList())
+    val optimisticNotifications: StateFlow<List<NotiDisplayUnit>> = _optimisticNotifications.asStateFlow()
 
-    private val _notiCategoryCount = MutableStateFlow(0)
-    val notiCategoryCount: StateFlow<Int> = _notiCategoryCount
+    private val _reorderRecords = MutableStateFlow<Map<String, Int>>(emptyMap())
+    val reorderRecords: StateFlow<Map<String, Int>> = _reorderRecords.asStateFlow()
 
-    fun loadCategories() {
-        CoroutineScope(Dispatchers.IO).launch {
-            val notiCategoryDatabase = NotiCategoryDatabase.getInstance(context)
-            val categoryDao = notiCategoryDatabase.categoryDao()
-            _notiCategories.value = categoryDao.getAll()
-            _notiCategoryCount.value = categoryDao.getCount()
+    fun onNotificationMoved(key: String, from: Int, to: Int) {
+        isOrderDirty = true
+        _optimisticNotifications.value = _optimisticNotifications.value.toMutableList().apply {
+            add(to, removeAt(from))
+        }
+        _reorderRecords.value = _reorderRecords.value.toMutableMap().apply {
+            put(key, to)
         }
     }
 
-    fun insertCategory(newCategoryName: String) {
-        CoroutineScope(Dispatchers.IO).launch {
-            val notiCategoryDatabase = NotiCategoryDatabase.getInstance(context)
-            val categoryDao = notiCategoryDatabase.categoryDao()
-            categoryDao.insert(NotiCategory(categoryName = newCategoryName))
-            loadCategories()
+    fun syncManualSortOrder(isAppCategoryView: Boolean) {
+        viewModelScope.launch(Dispatchers.IO) {
+            commitManualSortOrder(isAppCategoryView)
         }
     }
 
-    fun deleteCategory(deletedCategoryName: String) {
-        CoroutineScope(Dispatchers.IO).launch {
-            val notiCategoryDatabase = NotiCategoryDatabase.getInstance(context)
-            val categoryDao = notiCategoryDatabase.categoryDao()
-            categoryDao.deleteCategory(deletedCategoryName)
-            loadCategories()
+    suspend fun commitManualSortOrder(isAppCategoryView: Boolean) {
+        if (!isOrderDirty) return
+
+        val listAfterMove = _optimisticNotifications.value.toList()
+        val listBeforeMove = presentedNotifications.value.toList()
+        val updates = _reorderRecords.value.mapNotNull { (key, newPos) ->
+            Pair(key, newPos)
+        }
+        isOrderDirty = false // Reset immediately
+        _reorderRecords.value = emptyMap() // Clear the reorder records
+
+        if (listAfterMove.isEmpty() || listAfterMove == listBeforeMove)
+            return
+
+        withContext(Dispatchers.IO) {
+            if (updates.isNotEmpty()) {
+                // Use the highly efficient bulk update
+                notiRepository.updateSortPositionsInBulk(updates, isAppCategoryView)
+                Log.d("DrawerViewModel", "Smart bulk committed manual sort order for ${updates.size} items.")
+            }
+        }
+    }
+
+    fun resetAllManualSortOrders() {
+        viewModelScope.launch(Dispatchers.IO) {
+            notiRepository.resetAllSortPositions()
+            withContext(Dispatchers.Main) {
+                Toast.makeText(context, "All manual sort orders have been reset.", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
@@ -124,88 +182,101 @@ class DrawerViewModel(
         }
         .flowOn(Dispatchers.IO)
 
-    private val notificationDisplayFlow: Flow<List<NotiDisplayUnit>> = notiRepository.getNotificationDisplayFlow()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val manuallySortedNotifications: Flow<List<NotiDisplayUnit>> =
+        notiRepository.getManuallySorted(category, appCategory, isAppCategoryView)
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    val sortedNotifications: StateFlow<List<NotiDisplayUnit>> =
-        notificationDisplayFlow.map { notifications ->
-            notifications
-                .sortedWith(
-                    compareByDescending<NotiDisplayUnit> { notiDisplayUnit ->
-                        notiDisplayUnit.notiRecords.any { notiRecord ->
-                            listOf(notiRecord.title, notiRecord.content, notiRecord.person)
-                                .any { it.contains(queryString.value, ignoreCase = true) }
-                        } || notiDisplayUnit.notiUnit.appName.contains(queryString.value, ignoreCase = true)
-                    }.thenByDescending { notiDisplayUnit ->
-                        notiDisplayUnit.sortScore
-                    }.thenByDescending { notiDisplayUnit ->
-                        notiDisplayUnit.lastUpdateTime
+    private val autoSortedNotifications: Flow<List<NotiDisplayUnit>> =
+        notiRepository.getAutoSorted(category, appCategory, isAppCategoryView)
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val presentedNotifications: StateFlow<List<NotiDisplayUnit>> =
+        combine(
+            manuallySortedNotifications,
+            autoSortedNotifications,
+            isAppCategoryView
+        ) { manualList, autoList, isAppView ->
+
+            // YOUR ORIGINAL LOGIC IS HERE - NOW OPERATING ON SMALL, PRE-SORTED LISTS
+            if (manualList.isEmpty()) {
+                autoList // Optimization: if no manual items, just return the auto-sorted list
+            } else {
+                fun getPos(unit: NotiDisplayUnit) = if (isAppView)
+                    unit.notiUnit.appCategorySortPosition else unit.notiUnit.sortPosition
+
+                val result = mutableListOf<NotiDisplayUnit>()
+                val autoSortedIterator = autoList.iterator()
+                var manualItemIndex = 0
+
+                // The total size is simply the sum of the two list sizes
+                val finalSize = manualList.size + autoList.size
+                var itemsAddedCount = 0
+
+                while (itemsAddedCount < finalSize) {
+                    val currentPos = result.size
+                    val manualItem = manualList.getOrNull(manualItemIndex)
+
+                    if (manualItem != null && getPos(manualItem) == currentPos) {
+                        result.add(manualItem)
+                        manualItemIndex++
+                    } else if (autoSortedIterator.hasNext()) {
+                        result.add(autoSortedIterator.next())
+                    } else if (manualItem != null) {
+                        // This handles any remaining manual items if auto-list is exhausted
+                        result.add(manualItem)
+                        manualItemIndex++
+                    } else {
+                        break // Should not happen, but a safeguard
                     }
-                )
-        }
-        .distinctUntilChanged()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-//    queryEmbeddingString
-//        .flatMapLatest { currentQueryEmbedding -> }
-//        .distinctUntilChanged()
-//        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    // First level filtering（by category）
-    @OptIn(ExperimentalCoroutinesApi::class)
-    val filteredByCategory: StateFlow<List<NotiDisplayUnit>> =
-        combine(category, sortedNotifications) { latestCategory, notiList ->
-            when (latestCategory) {
-                NOTI_CATEGORY_GENERAL -> notiList.filter { it.category.isBlank() || it.category == latestCategory }
-                else -> notiList.filter { it.category == latestCategory }
+                    itemsAddedCount++
+                }
+                val seenKeys = mutableSetOf<String>()
+                result.filter { item -> seenKeys.add(item.notiKey) }
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    // Second level filtering（by app category）
-    @OptIn(ExperimentalCoroutinesApi::class)
-    val presentedNotifications: StateFlow<List<NotiDisplayUnit>> =
-        combine(appCategory, filteredByCategory) { latestAppCategory, notiList ->
-            when (latestAppCategory) {
-                APP_CATEGORY_ALL -> notiList
-                else -> notiList.filter { it.notiUnit.appCategory == latestAppCategory }
-            }
-        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    // Third level filtering (by query string)
-    @OptIn(ExperimentalCoroutinesApi::class)
-    val filteredByQuery: StateFlow<List<NotiDisplayUnit>> =
+    // Third level filtering (by query string) and sync to optimistic list
+    init {
         combine(queryString, presentedNotifications) { query, notiList ->
             if (query.isBlank()) {
                 notiList
             } else {
                 notiList.filter { notiDisplayUnit ->
                     notiDisplayUnit.title.contains(query, ignoreCase = true) ||
-                    notiDisplayUnit.notiUnit.appName.contains(query, ignoreCase = true) ||
-                    notiDisplayUnit.notiRecords.any { record ->
-                        listOf(record.title, record.content, record.person)
-                            .any { it.contains(query, ignoreCase = true) }
-                    }
+                            notiDisplayUnit.notiUnit.appName.contains(query, ignoreCase = true) ||
+                            notiDisplayUnit.notiRecords.any { record ->
+                                listOf(record.title, record.content, record.person)
+                                    .any { it.contains(query, ignoreCase = true) }
+                            }
                 }
             }
-        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        }.onEach {
+            // Sync the fully sorted and filtered list from the database to our optimistic UI list
+            _optimisticNotifications.value = it
+        }.launchIn(viewModelScope)
+
+        optimisticNotifications.onEach { notifications ->
+            updateUnreadCounts()
+        }.launchIn(viewModelScope)
+    }
 
     // Get available app categories for the current primary category with notification counts
     @OptIn(ExperimentalCoroutinesApi::class)
     val availableAppCategories: StateFlow<List<Pair<String, Int>>> =
-        filteredByCategory.map { notiList ->
+        presentedNotifications.map { notiList ->
             val categoryCounts = notiList
                 .groupBy { it.notiUnit.appCategory }
                 .mapValues { it.value.size }
                 .toMutableMap()
-            
+
             // Always include "All" category with total count
             val totalCount = notiList.size
             val result = mutableListOf<Pair<String, Int>>()
             if (totalCount > 0) {
                 result.add(APP_CATEGORY_ALL to totalCount)
             }
-            
+
             // Add other categories sorted by count (descending)
             categoryCounts.entries
                 .filter { it.value > 0 }
@@ -213,7 +284,7 @@ class DrawerViewModel(
                 .forEach { (category, count) ->
                     result.add(category to count)
                 }
-            
+
             result
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -228,7 +299,7 @@ class DrawerViewModel(
                 return true
             if (action == "archive" && SharedPreferencesManager.autoArchive)
                 return true
-            if (action == "dismiss_click" && SharedPreferencesManager.autoDelete)
+            if (action == "dismiss_swipe" && SharedPreferencesManager.autoDelete)
                 return true
             return false
         }
@@ -251,6 +322,14 @@ class DrawerViewModel(
             notiRepository.deleteAllNotis(category.value)
             postOngoingNotification(context)
         }
+        updateUnreadCounts()
+    }
+
+    fun markAllNotisRead() {
+        viewModelScope.launch(Dispatchers.IO) {
+            notiRepository.markAllNotisRead(category.value)
+        }
+        updateUnreadCounts()
     }
 
     fun exportPostContent(includeContext: Boolean, includeDismissed: Boolean) {
@@ -344,6 +423,108 @@ class DrawerViewModel(
     fun syncAppCategory() {
         viewModelScope.launch(Dispatchers.IO) {
             notiRepository.syncAppCategories(context)
+        }
+    }
+
+    // Add these properties to your DrawerViewModel
+    private val _seenNotiKeys = ConcurrentHashMap.newKeySet<String>()
+    private val _seenRecordIds = ConcurrentHashMap.newKeySet<String>()
+
+    // MODIFICATION 1: Update the optimistic data directly
+    fun markNotificationAsRead(notiKey: String) {
+        // Find the notification in the current list
+        val currentList = _optimisticNotifications.value.toMutableList()
+        val notiIndex = currentList.indexOfFirst { it.notiKey == notiKey }
+
+        if (notiIndex != -1) {
+            val oldNoti = currentList[notiIndex]
+            // If it's already marked as read, do nothing
+            if (oldNoti.notiUnit.isCompletelyRead) return
+
+            Log.d("ViewModelReadState", "Marking card as read: $notiKey")
+            _seenNotiKeys.add(notiKey)
+        }
+    }
+
+    // MODIFICATION 2: Update the optimistic data for single records
+    fun markRecordAsRead(recordId: String) {
+        val currentList = _optimisticNotifications.value.toMutableList()
+        var notiIndex = -1
+        var recordIndex = -1
+        var parentNoti: NotiDisplayUnit? = null
+
+        // Find the notification and the record within it
+        for ((nIdx, noti) in currentList.withIndex()) {
+            val rIdx = noti.notiRecords.indexOfFirst { it.notiRecordId == recordId }
+            if (rIdx != -1) {
+                notiIndex = nIdx
+                recordIndex = rIdx
+                parentNoti = noti
+                break
+            }
+        }
+
+        if (notiIndex != -1 && recordIndex != -1 && parentNoti != null) {
+            // If it's already marked as read, do nothing
+            if (parentNoti.notiRecords[recordIndex].isRead) return
+
+            Log.d("ViewModelReadState", "Marking record as read: $recordId")
+            _seenRecordIds.add(recordId)
+
+            // Create a new updated record
+            val updatedRecords = parentNoti.notiRecords.toMutableList()
+            updatedRecords[recordIndex] = updatedRecords[recordIndex].copy(isRead = true)
+
+            // Check if ALL records are now read. If so, mark the whole unit as read.
+            val allRecordsRead = updatedRecords.all { it.isRead }
+            if (allRecordsRead) {
+                _seenNotiKeys.add(parentNoti.notiKey) // Add to persistence queue
+            }
+        }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.S)
+    fun persistReadStatus() {
+        // A function to be called from DisposableEffect in the UI
+        if (_seenNotiKeys.isEmpty() && _seenRecordIds.isEmpty()) return
+
+        CoroutineScope(Dispatchers.IO).launch {
+            Log.d("ViewModelReadState", "Persisting seenNotis: ${_seenNotiKeys.size}, seenRecords: ${_seenRecordIds.size}")
+            notiRepository.updateSeenNotifications(_seenNotiKeys.toSet(), _seenRecordIds.toSet())
+            // Clear them after persisting
+            _seenNotiKeys.clear()
+            _seenRecordIds.clear()
+        }
+    }
+
+    private val _unreadCountsByCategory = MutableStateFlow<Map<String, Int>>(emptyMap())
+    val unreadCountsByCategory = _unreadCountsByCategory.asStateFlow()
+
+    private fun updateUnreadCounts() {
+
+        viewModelScope.launch(Dispatchers.IO) {
+
+            val counts = mutableMapOf<String, Int>()
+
+            val generalCount = notiRepository.getVisibleNotReadNotificationCountByCategory(NOTI_CATEGORY_GENERAL)
+            val taskCount = notiRepository.getVisibleNotReadNotificationCountByCategory(NOTI_CATEGORY_MAKETASK)
+            val archiveCount = notiRepository.getVisibleNotReadNotificationCountByCategory(NOTI_CATEGORY_ARCHIVE)
+
+            counts[NOTI_CATEGORY_GENERAL] = generalCount
+            counts[NOTI_CATEGORY_MAKETASK] = taskCount
+            counts[NOTI_CATEGORY_ARCHIVE] = archiveCount
+
+            val generalTotalCount = notiRepository.getVisibleNotiCountByCategory(NOTI_CATEGORY_GENERAL)
+            val taskTotalCount = notiRepository.getVisibleNotiCountByCategory(NOTI_CATEGORY_MAKETASK)
+            val archiveTotalCount = notiRepository.getVisibleNotiCountByCategory(NOTI_CATEGORY_ARCHIVE)
+
+            counts["$NOTI_CATEGORY_GENERAL-Total"] = generalTotalCount
+            counts["$NOTI_CATEGORY_MAKETASK-Total"] = taskTotalCount
+            counts["$NOTI_CATEGORY_ARCHIVE-Total"] = archiveTotalCount
+
+            Log.d("DrawerViewModel", "Unread counts updated: $counts")
+
+            _unreadCountsByCategory.value = counts
         }
     }
 }

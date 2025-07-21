@@ -4,13 +4,15 @@ import android.content.Context
 import android.os.Build
 import android.service.notification.StatusBarNotification
 import androidx.annotation.RequiresApi
+import androidx.room.withTransaction
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
-import org.muilab.notigpt.database.room.NotiCategoryDao
+import org.muilab.notigpt.database.room.AppDatabase
 import org.muilab.notigpt.database.room.NotiActionDao
 import org.muilab.notigpt.database.room.NotiDrawerDao
 import org.muilab.notigpt.database.room.NotiRecordDao
@@ -18,30 +20,113 @@ import org.muilab.notigpt.model.notifications.NotiAction
 import org.muilab.notigpt.model.notifications.NotiRecord
 import org.muilab.notigpt.model.notifications.NotiUnit
 import org.muilab.notigpt.model.notifications.NotiDisplayUnit
+import org.muilab.notigpt.model.notifications.NotiUnitWithRecords
 import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_ARCHIVE
 import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_GENERAL
 import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_MAKETASK
 import org.muilab.notigpt.util.getAppCategoryByAppName
 
 class NotiRepository(
+    private val db: AppDatabase, // Add database instance
     private val notiDrawerDao: NotiDrawerDao,
     private val notiActionDao: NotiActionDao,
-    private val notiRecordDao: NotiRecordDao,
-    private val notiCategoryDao: NotiCategoryDao
+    private val notiRecordDao: NotiRecordDao
 ) {
 
-    fun getNotificationDisplayFlow(): Flow<List<NotiDisplayUnit>> {
-        return notiDrawerDao.getAllVisibleFlow().flatMapLatest { notiUnits ->
-            val keys = notiUnits.map { it.notiKey }
-            notiRecordDao.getVisibleRecordsFlowByKeys(keys).map { records ->
-                notiUnits.map { notiUnit ->
-                    val notiUnitRecords = records
-                        .filter { it.notiKey == notiUnit.notiKey }
-                        .sortedBy { it.time }
-                    NotiDisplayUnit(notiUnit, notiUnitRecords)
-                }
+    // Helper function to avoid code duplication
+    private fun mapToDisplayUnit(listWithRecords: List<NotiUnitWithRecords>): List<NotiDisplayUnit> {
+        return listWithRecords.map { unitWithRecords ->
+            val mappedNotiRecords = unitWithRecords.notiRecords.map { visibleRecord ->
+                NotiRecord(
+                    // KEYS
+                    notiRecordId = visibleRecord.notiRecordId,
+                    notiKey = visibleRecord.notiKey,
+
+                    // TIME RELATED
+                    whenTime = visibleRecord.whenTime,
+                    postTime = visibleRecord.postTime,
+
+                    // TITLE RELATED
+                    person = visibleRecord.person,
+                    extraTitle = visibleRecord.extraTitle,
+                    extraBigTitle = visibleRecord.extraBigTitle,
+                    extraConversationTitle = visibleRecord.extraConversationTitle,
+
+                    // CONTENT RELATED
+                    extraBigText = visibleRecord.extraBigText,
+                    extraText = visibleRecord.extraText,
+                    extraTextLines = visibleRecord.extraTextLines,
+                    extraSummaryText = visibleRecord.extraSummaryText,
+                    extraInfoText = visibleRecord.extraInfoText,
+                    extraSubText = visibleRecord.extraSubText,
+
+                    // STATUS
+                    isRead = visibleRecord.isRead,
+                    isVisible = visibleRecord.isVisible
+                )
             }
+            NotiDisplayUnit(unitWithRecords.notiUnit, mappedNotiRecords.sortedBy { it.time })
         }
+    }
+
+    // NEW REPO METHOD 1
+    fun getManuallySorted(
+        category: Flow<String>,
+        appCategory: Flow<String>,
+        isAppCategoryView: Flow<Boolean>
+    ): Flow<List<NotiDisplayUnit>> {
+        return combine(category, appCategory, isAppCategoryView) { cat, appCat, isAppView ->
+            Triple(cat, appCat, isAppView)
+        }.flatMapLatest { (cat, appCat, isAppView) ->
+            notiDrawerDao.getManuallySortedNotifications(cat, appCat, isAppView)
+                .map { mapToDisplayUnit(it) }
+        }
+    }
+
+    // NEW REPO METHOD 2
+    fun getAutoSorted(
+        category: Flow<String>,
+        appCategory: Flow<String>,
+        isAppCategoryView: Flow<Boolean>
+    ): Flow<List<NotiDisplayUnit>> {
+        return combine(category, appCategory, isAppCategoryView) { cat, appCat, isAppView ->
+            Triple(cat, appCat, isAppView)
+        }.flatMapLatest { (cat, appCat, isAppView) ->
+            notiDrawerDao.getAutoSortedNotifications(cat, appCat, isAppView)
+                .map { mapToDisplayUnit(it) }
+        }
+    }
+
+    suspend fun updateSortPositionsInBulk(updates: List<Pair<String, Int>>, isAppCategoryView: Boolean) {
+        if (updates.isEmpty()) return
+
+        val columnName = if (isAppCategoryView) "appCategorySortPosition" else "sortPosition"
+
+        val sql = buildString {
+            append("UPDATE noti_drawer SET $columnName = CASE notiKey ")
+            updates.forEach { (key, pos) ->
+                // Note: It's crucial that 'key' is properly escaped or known to be safe.
+                // Since notiKey comes from the system, it's generally safe.
+                append("WHEN '$key' THEN $pos ")
+            }
+            append("END WHERE notiKey IN (")
+            updates.joinTo(this, separator = ", ") { "'${it.first}'" }
+            append(")")
+        }
+
+        // Execute the raw query in a transaction for atomicity.
+        db.withTransaction {
+            db.openHelper.writableDatabase.execSQL(sql)
+        }
+    }
+
+
+    suspend fun updateSortPositions(updates: List<Pair<String, Int>>, isAppCategoryView: Boolean) {
+        notiDrawerDao.updateSortPositions(updates, isAppCategoryView)
+    }
+
+    suspend fun resetAllSortPositions() {
+        notiDrawerDao.resetAllSortPositions()
     }
 
     fun getNotifications(includeContext: Boolean, includeDismissed: Boolean): List<NotiDisplayUnit> {
@@ -69,6 +154,14 @@ class NotiRepository(
 
     fun getNotificationCount(): Int {
         return notiDrawerDao.getVisibleNotiCount()
+    }
+
+    fun getVisibleNotiCountByCategory(category: String): Int {
+        return notiDrawerDao.getVisibleNotiCountByCategory(category)
+    }
+
+    fun getVisibleNotReadNotificationCountByCategory(category: String): Int {
+        return notiDrawerDao.getVisibleNotReadCountByCategory(category)
     }
 
     @RequiresApi(Build.VERSION_CODES.S)
@@ -114,32 +207,39 @@ class NotiRepository(
     }
 
     fun actOnNoti(notiKey: String, action: String) {
-
-        CoroutineScope(Dispatchers.IO).launch {
-            val existingNoti = notiDrawerDao.getByNotiKey(notiKey)
-            if (existingNoti != null) {
-                when (action) {
-                    "dismiss_swipe" -> existingNoti.setInvisible()
-                    "access_click" -> existingNoti.setInvisible()
-                    "dismiss_click" -> existingNoti.setInvisible()
-
-                    "archive" -> existingNoti.changeCategory(NOTI_CATEGORY_ARCHIVE)
-                    "unarchive" -> existingNoti.changeCategory(NOTI_CATEGORY_GENERAL)
-                    "make_task" -> existingNoti.changeCategory(NOTI_CATEGORY_MAKETASK)
-                    "dismiss_task" -> existingNoti.changeCategory(NOTI_CATEGORY_GENERAL)
-                    "unpin" -> existingNoti.flipNotiPin()
-                    "pin" -> existingNoti.flipNotiPin()
-                }
-                notiActionDao.insert(NotiAction(notiKey, action, System.currentTimeMillis()))
-                notiDrawerDao.update(existingNoti)
-            }
+        when (action) {
+            "dismiss_swipe" -> notiDrawerDao.setUnitInvisibleByKey(notiKey)
+            "access_click_dismiss" -> notiDrawerDao.setUnitInvisibleByKey(notiKey)
+            "archive" -> notiDrawerDao.updateCategory(notiKey, NOTI_CATEGORY_ARCHIVE)
+            "unarchive" -> notiDrawerDao.updateCategory(notiKey, NOTI_CATEGORY_GENERAL)
+            "make_task" -> notiDrawerDao.updateCategory(notiKey, NOTI_CATEGORY_MAKETASK)
+            "dismiss_task" -> notiDrawerDao.updateCategory(notiKey, NOTI_CATEGORY_GENERAL)
+            "unpin" -> notiDrawerDao.flipPin(notiKey)
+            "pin" -> notiDrawerDao.flipPin(notiKey)
         }
+        notiActionDao.insert(NotiAction(notiKey, action, System.currentTimeMillis()))
+    }
+
+    fun markAllNotisRead(category: String) {
+        val notiKeys = notiDrawerDao.getVisibleKeysByCategory(category)
+        notiKeys.forEach { notiKey ->
+            notiActionDao.insert(NotiAction(notiKey, "mark_all_read", System.currentTimeMillis()))
+        }
+        notiDrawerDao.setUnitsReadByKeys(notiKeys)
+        notiRecordDao.setRecordsReadByIds(notiKeys)
     }
 
     fun deleteAllNotis(category: String) {
         val notiKeys = notiDrawerDao.getVisibleNotPinnedKeysByCategory(category)
+        val currentTime = System.currentTimeMillis()
+        notiKeys.forEach { notiKey ->
+            notiActionDao.insert(NotiAction(notiKey, "delete_all", currentTime))
+        }
+
         notiDrawerDao.setUnitsInvisibleByKeys(notiKeys)
+        notiDrawerDao.setUnitsReadByKeys(notiKeys)
         notiRecordDao.setRecordsInvisibleByKeys(notiKeys)
+        notiRecordDao.setRecordsReadByIds(notiKeys)
     }
 
     fun updateSeenNotifications(seenNotis: Set<String>, seenInfos: Set<String>) {
