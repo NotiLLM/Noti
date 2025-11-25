@@ -70,5 +70,14 @@ class Constants {
         const val NOTI_TASK_STATE_NOT_STARTED = 0
         const val NOTI_TASK_STATE_IN_PROGRESS = 1
         const val NOTI_TASK_STATE_COMPLETED = 2
+
+        // Time in milliseconds for one week
+        const val NOTI_RECORD_EXPIRE_TIME_MS = 7 * 24 * 60 * 60 * 1000L
+        // The maximum number of read, expired notification records to keep visible per key
+        const val MAX_EXPIRED_RECORDS_PER_KEY = 5
+
+        // n8n task API types
+        const val N8N_TASK_SCAN = "task_scan"
+        const val N8N_TASK_EXTRACTION = "task_extraction"
     }
 }

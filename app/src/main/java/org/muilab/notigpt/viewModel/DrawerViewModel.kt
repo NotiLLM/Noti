@@ -36,8 +36,6 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.json.JSONArray
-import org.json.JSONObject
 import org.muilab.notigpt.database.server.enqueueNotificationAction
 import org.muilab.notigpt.model.notifications.NotiDisplayUnit
 import org.muilab.notigpt.repository.NotiRepository
@@ -46,8 +44,6 @@ import org.muilab.notigpt.util.Constants.Companion.APP_CATEGORY_ALL
 import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_ARCHIVE
 import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_MAKETASK
 import org.muilab.notigpt.util.SharedPreferencesManager
-import org.muilab.notigpt.util.getAbsoluteTimeStr
-import org.muilab.notigpt.util.getRelativeTimeStr
 import org.muilab.notigpt.util.postOngoingNotification
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.collections.filter
@@ -59,6 +55,15 @@ class DrawerViewModel(
 
     private val _category = MutableStateFlow(NOTI_CATEGORY_GENERAL)
     val category: StateFlow<String> = _category
+
+    // Whether we're currently waiting for the newly selected category/appCategory to load
+    private val _isTargetLoading = MutableStateFlow(false)
+    val isTargetLoading: StateFlow<Boolean> = _isTargetLoading.asStateFlow()
+
+    // Token to mark a pending target-loading session. Set when user requests a new category/appCategory.
+    // When `presentedNotifications` emits its next value after this token is set we assume loading finished
+    // (even if the emitted list is empty) and consume the token by clearing the spinner.
+    private val _targetLoadingToken = MutableStateFlow(0L)
 
     private val _isSortingMode = MutableStateFlow(false)
     val isSortingMode: StateFlow<Boolean> = _isSortingMode
@@ -74,6 +79,11 @@ class DrawerViewModel(
 
     @RequiresApi(Build.VERSION_CODES.S)
     fun updateCategory(newCategory: String) {
+        // Start loading indicator immediately so UI can show spinner before other work/recomposition
+        _isTargetLoading.value = true
+        // mark a pending loading session; will be consumed by the next presentedNotifications emission
+        _targetLoadingToken.value = System.currentTimeMillis()
+        Log.d("DrawerViewModel", "[VM:${this.hashCode()}] updateCategory: set isTargetLoading=true for newCategory=$newCategory")
         _category.value = newCategory
         if (isSortingMode.value)
             toggleSortingMode()
@@ -81,6 +91,7 @@ class DrawerViewModel(
         // Reset app category to "All" when main category changes
         updateUnreadCounts()
         updateAppCategory(APP_CATEGORY_ALL)
+        // Intentionally do not auto-clear the loading flag here; UX will clear when data arrives.
     }
 
     // app category
@@ -92,18 +103,26 @@ class DrawerViewModel(
 
     @RequiresApi(Build.VERSION_CODES.S)
     fun updateAppCategory(newAppCategory: String) {
+        // Start loading indicator immediately so UI can show spinner before other work/recomposition
+        _isTargetLoading.value = true
+        // mark a pending loading session; will be consumed by the next presentedNotifications emission
+        _targetLoadingToken.value = System.currentTimeMillis()
+        Log.d("DrawerViewModel", "[VM:${this.hashCode()}] updateAppCategory: set isTargetLoading=true for newAppCategory=$newAppCategory")
 
         if (isSortingMode.value)
             toggleSortingMode()
         persistReadStatus()
         // Reset app category to "All" when main category changes
         updateUnreadCounts()
-        if (newAppCategory == APP_CATEGORY_ALL) {
-            _isAppCategoryView.value = false
-        } else {
-            _isAppCategoryView.value = true
-        }
+        _isAppCategoryView.value = newAppCategory != APP_CATEGORY_ALL
         _appCategory.value = newAppCategory
+        // Intentionally do not auto-clear the loading flag here; UX will clear when data arrives.
+    }
+
+    // Called by UI when data matching the target arrives
+    fun clearTargetLoading() {
+        Log.d("DrawerViewModel", "[VM:${this.hashCode()}] clearTargetLoading called; clearing isTargetLoading")
+        _isTargetLoading.value = false
     }
 
     private val _queryString = MutableStateFlow("")
@@ -116,16 +135,16 @@ class DrawerViewModel(
     private val _optimisticNotifications = MutableStateFlow<List<NotiDisplayUnit>>(emptyList())
     val optimisticNotifications: StateFlow<List<NotiDisplayUnit>> = _optimisticNotifications.asStateFlow()
 
-    private val _reorderRecords = MutableStateFlow<Map<String, Int>>(emptyMap())
-    val reorderRecords: StateFlow<Map<String, Int>> = _reorderRecords.asStateFlow()
+    private val _reorderRecords = MutableStateFlow<Map<String, Pair<Int, Long>>>(emptyMap())
 
     fun onNotificationMoved(key: String, from: Int, to: Int) {
+        val currentTime = System.currentTimeMillis()
         isOrderDirty = true
         _optimisticNotifications.value = _optimisticNotifications.value.toMutableList().apply {
             add(to, removeAt(from))
         }
         _reorderRecords.value = _reorderRecords.value.toMutableMap().apply {
-            put(key, to)
+            put(key, Pair(to, currentTime))
         }
     }
 
@@ -143,6 +162,7 @@ class DrawerViewModel(
         val updates = _reorderRecords.value.mapNotNull { (key, newPos) ->
             Pair(key, newPos)
         }
+        val listSize = listAfterMove.size
         isOrderDirty = false // Reset immediately
         _reorderRecords.value = emptyMap() // Clear the reorder records
 
@@ -152,9 +172,15 @@ class DrawerViewModel(
         withContext(Dispatchers.IO) {
             if (updates.isNotEmpty()) {
                 // Use the highly efficient bulk update
-                notiRepository.updateSortPositionsInBulk(updates, isAppCategoryView)
+                notiRepository.updateSortPositionsInBulk(updates, isAppCategoryView, listSize)
                 Log.d("DrawerViewModel", "Smart bulk committed manual sort order for ${updates.size} items.")
             }
+        }
+    }
+
+    fun resetManualSortOrder(notiKey: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            notiRepository.resetSortPosition(notiKey, isAppCategoryView.value)
         }
     }
 
@@ -251,14 +277,58 @@ class DrawerViewModel(
                             }
                 }
             }
-        }.onEach {
+        }
+        // Collapse rapid bursts of updates so Compose isn't asked to recompose excessively.
+        // 60 ms is a small latency tradeoff but dramatically reduces UI jank from quick bursts.
+        .debounce(60)
+        .onEach { newList ->
             // Sync the fully sorted and filtered list from the database to our optimistic UI list
-            _optimisticNotifications.value = it
+            val prev = _optimisticNotifications.value
+            if (!shallowEqualUiList(prev, newList)) {
+                _optimisticNotifications.value = newList
+            }
         }.launchIn(viewModelScope)
 
         optimisticNotifications.onEach { notifications ->
             updateUnreadCounts()
+            // Log sizes for debugging
+            Log.d("DrawerViewModel", "optimisticNotifications emitted: size=${notifications.size}, isTargetLoading=${_isTargetLoading.value}")
+            // If we were showing the target-loading spinner and notifications matching
+            // the current selection have arrived (after filtering), clear the loading state.
+            if (_isTargetLoading.value) {
+                val cat = category.value
+                val appCat = appCategory.value
+                val hasMatching = notifications.any { it.category == cat && it.notiUnit.appCategory == appCat }
+                Log.d("DrawerViewModel", "optimistic check: cat=$cat appCat=$appCat hasMatching=$hasMatching")
+                if (hasMatching) {
+                    Log.d("DrawerViewModel", "[VM:${this.hashCode()}] Clearing isTargetLoading due to optimisticNotifications match")
+                    _isTargetLoading.value = false
+                }
+            }
         }.launchIn(viewModelScope)
+
+        // Additionally, clear the loading flag as soon as the parent-level presentedNotifications
+        // (which represent the units) emit entries for the new target. This avoids waiting for
+        // the record-level fetch to finish — the UI can hide the spinner as soon as units are ready.
+        presentedNotifications.onEach { units ->
+            Log.d("DrawerViewModel", "presentedNotifications emitted: parentUnits=${units.size}, isTargetLoading=${_isTargetLoading.value}, token=${_targetLoadingToken.value}")
+            // If a loading token is present, consume it on the first emission (even if units is empty)
+            if (_targetLoadingToken.value != 0L) {
+                Log.d("DrawerViewModel", "[VM:${this.hashCode()}] Consuming target loading token and clearing spinner")
+                _isTargetLoading.value = false
+                _targetLoadingToken.value = 0L
+            } else if (_isTargetLoading.value) {
+                // Backwards-compatible behavior: if no token but spinner is on and units arrived, clear only when units exist
+                if (units.isNotEmpty()) {
+                    Log.d("DrawerViewModel", "[VM:${this.hashCode()}] Clearing isTargetLoading because presentedNotifications has units (${units.size})")
+                    _isTargetLoading.value = false
+                } else {
+                    Log.d("DrawerViewModel", "[VM:${this.hashCode()}] presentedNotifications empty for current target; keeping spinner")
+                }
+            }
+        }.launchIn(viewModelScope)
+
+        removeExpiredRecords()
     }
 
     // Get available app categories for the current primary category with notification counts
@@ -310,6 +380,19 @@ class DrawerViewModel(
                 enqueueNotificationAction(context, notiKey, action)
 
             notiRepository.actOnNoti(notiKey, action)
+
+            if (action == "pin" || action == "unpin") {
+                // Find the notification in optimistic notification and update its pin state
+                val index = _optimisticNotifications.value.indexOfFirst { it.notiKey == notiKey }
+                if (index != -1) {
+                    val updatedNoti = _optimisticNotifications.value[index].notiUnit.copy()
+                    updatedNoti.isPinned = action == "pin"
+                    _optimisticNotifications.value = _optimisticNotifications.value.toMutableList().apply {
+                        set(index, NotiDisplayUnit(updatedNoti, _optimisticNotifications.value[index].notiRecords))
+                    }
+                }
+            }
+
             if (action.contains("dismiss")) {
                 postOngoingNotification(context)
             }
@@ -325,7 +408,9 @@ class DrawerViewModel(
         updateUnreadCounts()
     }
 
+    @RequiresApi(Build.VERSION_CODES.S)
     fun markAllNotisRead() {
+        persistReadStatus()
         viewModelScope.launch(Dispatchers.IO) {
             notiRepository.markAllNotisRead(category.value)
         }
@@ -335,65 +420,9 @@ class DrawerViewModel(
     fun exportPostContent(includeContext: Boolean, includeDismissed: Boolean) {
 
         viewModelScope.launch(Dispatchers.IO) {
-            val notifications = notiRepository.getNotifications(includeContext, includeDismissed)
-            val sb = StringBuilder()
-            notifications.forEach { notiDisplayUnit ->
+            val notiLogs = notiRepository.exportLog(includeContext, includeDismissed)
+            val notiLogsStr = notiLogs.toString(2)
 
-                val notiUnit = notiDisplayUnit.notiUnit
-                val notiRecords = notiDisplayUnit.notiRecords
-
-                val notiBody = notiRecords.filter { it.isVisible }
-                val prevBody = notiRecords.filter { !it.isVisible }
-
-                val notiJson = JSONObject()
-                notiJson.put("id", notiUnit.notiKey)
-                notiJson.put("app", notiUnit.appName)
-                notiJson.put("isPeople", notiUnit.isPeople)
-
-                val titlesIdentical = (notiBody + prevBody)
-                    .map { it.extraTitle }
-                    .filter { it.isNotBlank() }
-                    .toSet().size == 1
-
-                notiJson.put("noti_title", org.muilab.notigpt.util.replaceChars(notiDisplayUnit.title))
-
-                val previousNotisArray = JSONArray()
-                if (includeContext) {
-                    prevBody.forEach {
-                        val prevNotiJson = JSONObject()
-                        prevNotiJson.put("absolute_time", getAbsoluteTimeStr(it.time))
-                        prevNotiJson.put("relative_time", getRelativeTimeStr(it.time))
-                        prevNotiJson.put(
-                            "record_title",
-                            org.muilab.notigpt.util.replaceChars(it.getDisplayedTitle(notiUnit.isPeople))
-                        )
-                        prevNotiJson.put(
-                            "content",
-                            org.muilab.notigpt.util.replaceChars(it.content)
-                        )
-                        previousNotisArray.put(prevNotiJson)
-                    }
-                }
-                notiJson.put("previous_records", previousNotisArray)
-
-                val currentNotisArray = JSONArray()
-
-                notiBody.forEach {
-                    val currentNotiJson = JSONObject()
-                    currentNotiJson.put("absolute_time", getAbsoluteTimeStr(it.time))
-                    currentNotiJson.put("relative_time", getRelativeTimeStr(it.time))
-                    currentNotiJson.put("record_title", org.muilab.notigpt.util.replaceChars(it.getDisplayedTitle(notiUnit.isPeople)))
-                    currentNotiJson.put("content", org.muilab.notigpt.util.replaceChars(it.content))
-                    currentNotisArray.put(currentNotiJson)
-                }
-                notiJson.put("current_records", currentNotisArray)
-
-                // Convert the JSON object to a string
-                val notiJsonStr = notiJson.toString(2)
-                sb.append("$notiJsonStr,\n")
-            }
-
-            val notiPostContent = "[\n${sb}]\n"
             // save to file
             val values = ContentValues().apply {
                 put(MediaStore.MediaColumns.DISPLAY_NAME, "notigpt.txt")
@@ -406,13 +435,13 @@ class DrawerViewModel(
 
             uri?.let {
                 resolver.openOutputStream(it)?.use { outputStream ->
-                    outputStream.write(notiPostContent.toByteArray())
+                    outputStream.write(notiLogsStr.toByteArray())
                 }
             }
 
             // copy to clipboard
             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-            val clip = ClipData.newPlainText("label", notiPostContent)
+            val clip = ClipData.newPlainText("label", notiLogsStr)
             clipboard.setPrimaryClip(clip)
             withContext(Dispatchers.Main) {
                 Toast.makeText(context, "Copied to clipboard", Toast.LENGTH_SHORT).show()
@@ -427,11 +456,19 @@ class DrawerViewModel(
     }
 
     // Add these properties to your DrawerViewModel
-    private val _seenNotiKeys = ConcurrentHashMap.newKeySet<String>()
+    private val _seenNotiKeys = ConcurrentHashMap.newKeySet<Pair<String, Long>>()
     private val _seenRecordIds = ConcurrentHashMap.newKeySet<String>()
 
     // MODIFICATION 1: Update the optimistic data directly
-    fun markNotificationAsRead(notiKey: String) {
+    fun markNotificationAsRead(notiKey: String, isManual: Boolean) {
+
+        if (isManual) {
+            viewModelScope.launch(Dispatchers.IO) {
+                notiRepository.actOnNoti(notiKey, "mark_read")
+            }
+            return
+        }
+
         // Find the notification in the current list
         val currentList = _optimisticNotifications.value.toMutableList()
         val notiIndex = currentList.indexOfFirst { it.notiKey == notiKey }
@@ -442,7 +479,8 @@ class DrawerViewModel(
             if (oldNoti.notiUnit.isCompletelyRead) return
 
             Log.d("ViewModelReadState", "Marking card as read: $notiKey")
-            _seenNotiKeys.add(notiKey)
+            val currentTime = System.currentTimeMillis()
+            _seenNotiKeys.add(Pair(notiKey, currentTime))
         }
     }
 
@@ -478,7 +516,8 @@ class DrawerViewModel(
             // Check if ALL records are now read. If so, mark the whole unit as read.
             val allRecordsRead = updatedRecords.all { it.isRead }
             if (allRecordsRead) {
-                _seenNotiKeys.add(parentNoti.notiKey) // Add to persistence queue
+                val currentTime = System.currentTimeMillis()
+                _seenNotiKeys.add(Pair(parentNoti.notiKey, currentTime)) // Add to persistence queue
             }
         }
     }
@@ -494,6 +533,12 @@ class DrawerViewModel(
             // Clear them after persisting
             _seenNotiKeys.clear()
             _seenRecordIds.clear()
+        }
+    }
+
+    fun removeExpiredRecords() {
+        viewModelScope.launch { // No dispatcher needed here
+            notiRepository.removeExpiredNotiRecords()
         }
     }
 
@@ -526,5 +571,77 @@ class DrawerViewModel(
 
             _unreadCountsByCategory.value = counts
         }
+    }
+
+    fun logAction(notiKey: String, action: String, metadata: String = "") {
+        viewModelScope.launch(Dispatchers.IO) {
+            notiRepository.logAction(notiKey, action, metadata)
+        }
+    }
+
+    fun extractRandomTasks(count: Int) {
+        viewModelScope.launch(Dispatchers.IO) {
+            notiRepository.requestRandomTaskExtraction(count)
+        }
+    }
+
+    // Shallow equality check for the UI list to avoid pointless updates/recompositions.
+    private fun shallowEqualUiList(a: List<NotiDisplayUnit>, b: List<NotiDisplayUnit>): Boolean {
+        if (a === b) return true
+        if (a.size != b.size) return false
+        for (i in a.indices) {
+            val ai = a[i]
+            val bi = b[i]
+            if (ai.notiKey != bi.notiKey) return false
+            if (ai.notiRecords.size != bi.notiRecords.size) return false
+            if (ai.lastUpdateTime != bi.lastUpdateTime) return false
+        }
+        return true
+    }
+
+    // --- Per-key full-records cache & live subscription (systematic lazy-load approach) ---
+    private val fullRecordsCache = java.util.concurrent.ConcurrentHashMap<String, kotlinx.coroutines.flow.MutableStateFlow<List<org.muilab.notigpt.model.notifications.NotiRecord>>>()
+    // Track active collector jobs so we can cancel subscriptions when not needed
+    private val fullRecordsJobs = java.util.concurrent.ConcurrentHashMap<String, kotlinx.coroutines.Job>()
+
+    fun getFullRecordsFlow(notiKey: String): kotlinx.coroutines.flow.StateFlow<List<org.muilab.notigpt.model.notifications.NotiRecord>> {
+        return fullRecordsCache.getOrPut(notiKey) { kotlinx.coroutines.flow.MutableStateFlow(emptyList()) }
+    }
+
+    /**
+     * Subscribe to a live flow for the given notiKey and forward updates into the cached StateFlow.
+     * If a subscription already exists, this is a no-op. If the cached StateFlow already has data
+     * we still subscribe so the expanded view stays live. This uses viewModelScope so it survives
+     * configuration changes while the VM is active.
+     */
+    fun loadFullRecordsForKey(notiKey: String) {
+        // If there's already an active job for this key, do nothing (already subscribed)
+        if (fullRecordsJobs.containsKey(notiKey)) return
+
+        val stateFlow = fullRecordsCache.getOrPut(notiKey) { kotlinx.coroutines.flow.MutableStateFlow(emptyList()) }
+
+        // Launch a subscription that collects the repository's live Flow and updates stateFlow
+        val job = viewModelScope.launch(Dispatchers.IO) {
+            try {
+                notiRepository.visibleRecordsFlowForKey(notiKey)
+                    .collect { recs ->
+                        // Re-sort by time ascending to keep the UI expectation
+                        stateFlow.value = recs.sortedBy { it.time }
+                    }
+            } catch (e: Exception) {
+                Log.e("DrawerViewModel", "Error subscribing to full records for $notiKey", e)
+            } finally {
+                // Ensure we remove the job entry when collector finishes
+                fullRecordsJobs.remove(notiKey)
+            }
+        }
+
+        fullRecordsJobs[notiKey] = job
+    }
+
+    /** Cancel subscription and clear cached full records for the key. */
+    fun clearFullRecordsForKey(notiKey: String) {
+        fullRecordsJobs.remove(notiKey)?.cancel()
+        fullRecordsCache.remove(notiKey)
     }
 }

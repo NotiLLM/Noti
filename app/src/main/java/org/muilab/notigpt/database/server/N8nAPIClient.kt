@@ -2,19 +2,19 @@ package org.muilab.notigpt.database.server
 
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
-import org.muilab.notigpt.util.SharedPreferencesManager
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import java.util.concurrent.TimeUnit
 
-
-object DifyAPIClient {
+object N8nAPIClient {
     @Volatile
     private var retrofit: Retrofit? = null
 
-    private fun createRetrofit(serverIP: String = SharedPreferencesManager.serverIP): Retrofit {
-        val baseUrl = "http://$serverIP/"
+    // If you want to keep it configurable, you can still read from SharedPreferencesManager,
+    // but since you said prefix is n8n.udchen.tw/webhook-test/, we hard-code the domain here.
+    private const val BASE_URL = "https://n8n.udchen.tw/"
 
+    private fun createRetrofit(baseUrl: String = BASE_URL): Retrofit {
         val logging = HttpLoggingInterceptor().apply {
             level = HttpLoggingInterceptor.Level.BODY
         }
@@ -27,13 +27,13 @@ object DifyAPIClient {
             .build()
 
         return Retrofit.Builder()
-            .baseUrl(baseUrl)
+            .baseUrl(baseUrl) // e.g. https://n8n.udchen.tw/
             .addConverterFactory(GsonConverterFactory.create())
             .client(client)
             .build()
     }
 
-    val difyAPIService: DifyAPIService
+    val n8nAPIService: N8nAPIService
         get() {
             if (retrofit == null) {
                 synchronized(this) {
@@ -42,12 +42,12 @@ object DifyAPIClient {
                     }
                 }
             }
-            return retrofit!!.create(DifyAPIService::class.java)
+            return retrofit!!.create(N8nAPIService::class.java)
         }
 
-    fun updateBaseUrl(newIp: String) {
+    fun updateBaseUrl(newBaseUrl: String) {
         synchronized(this) {
-            retrofit = createRetrofit(newIp)  // ✅ Always recreate with the latest IP
+            retrofit = createRetrofit(newBaseUrl)
         }
     }
 }

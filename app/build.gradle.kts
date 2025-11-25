@@ -10,12 +10,12 @@ plugins {
 
 android {
     namespace = "org.muilab.notigpt"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "org.muilab.notigpt"
         minSdk = 29
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 1
         versionName = "1.0"
 
@@ -30,7 +30,11 @@ android {
                 localPropertiesFile.inputStream().use { load(it) }
             }
         }
-        buildConfigField("String", "API_KEY_UPDATE_NOTIFICATION", "\"${localProperties["API_KEY_UPDATE_NOTIFICATION"]}\"")
+        // in your app build.gradle
+        buildConfigField("String", "N8N_UPDATE_NOTIFICATION_PATH", "\"webhook-test/update-notification\"")
+        buildConfigField("String", "N8N_POST_NOTIFICATION_ACTION_PATH", "\"webhook-test/notification-action\"")
+        buildConfigField("String", "N8N_TASK_SCAN_PATH", "\"webhook/task-scan\"")
+        buildConfigField("String", "N8N_TASK_EXTRACTION_PATH", "\"webhook/task-extraction\"")
     }
 
     buildTypes {
@@ -79,6 +83,7 @@ dependencies {
     implementation(libs.compose.tooling.preview)
     implementation(libs.material3)
     implementation(libs.runtime.livedata)
+    implementation(libs.compose.material.icons.core)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
@@ -103,9 +108,6 @@ dependencies {
 
     // dotenv
     implementation(libs.dotenv)
-
-    // OpenCC
-    implementation(libs.opencc)
 
     // Navigation
     implementation(libs.navigation.compose)

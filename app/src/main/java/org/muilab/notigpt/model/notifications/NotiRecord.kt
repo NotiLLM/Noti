@@ -6,8 +6,14 @@ import android.os.Build
 import android.service.notification.StatusBarNotification
 import androidx.annotation.RequiresApi
 import androidx.room.Entity
+import androidx.room.ColumnInfo
+import androidx.room.Index
 
-@Entity(tableName = "noti_record", primaryKeys = ["notiRecordId"])
+@Entity(
+    tableName = "noti_record",
+    primaryKeys = ["notiRecordId"],
+    indices = [Index(value = ["notiKey", "whenTime"], name = "idx_record_notiKey_whenTime")]
+)
 data class NotiRecord (
 
     // KEYS
@@ -35,6 +41,19 @@ data class NotiRecord (
     // STATUS
     var isRead: Boolean = false,
     var isVisible: Boolean = true,
+
+    // TASK DETECTION/EXTRACTION FLAGS
+    @ColumnInfo(defaultValue = "0")
+    var taskScanned: Boolean = false,
+    @ColumnInfo(defaultValue = "0")
+    var taskExtracted: Boolean = false,
+
+    // CLAIM FLAG: used to atomically claim records for extraction to avoid duplicates
+    @ColumnInfo(defaultValue = "0")
+    var taskExtractionClaimed: Boolean = false,
+    // Timestamp when record was claimed for extraction (millis since epoch). 0 means not claimed.
+    @ColumnInfo(defaultValue = "0")
+    var taskExtractionClaimedAt: Long = 0L,
 ) {
 
     companion object {

@@ -27,6 +27,7 @@ data class NotiMetadata(
     var sortKey: String,
     var appName: String = "Unknown App",
     var lastUpdateTime: Long = 0L,
+    var lastSyncTime: Long = 0L,
     var icon: String = "Unknown Icon",
     var largeIcon: String = "Unknown Icon",
     var isPeople: Boolean,

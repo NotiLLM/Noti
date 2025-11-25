@@ -19,12 +19,14 @@ import androidx.compose.ui.Modifier
 import androidx.core.app.NotificationManagerCompat
 import androidx.work.WorkManager
 import org.muilab.notigpt.repository.NotiRepositoryProvider
+import org.muilab.notigpt.repository.TaskRepositoryProvider
 import org.muilab.notigpt.service.NotiListenerService
 import org.muilab.notigpt.ui.theme.NotiLLMTheme
 import org.muilab.notigpt.util.SharedPreferencesManager
 import org.muilab.notigpt.view.component.AppScaffold
 import org.muilab.notigpt.viewModel.DrawerViewModel
 import org.muilab.notigpt.viewModel.DrawerViewModelFactory
+import org.muilab.notigpt.viewModel.TaskViewModelFactory
 
 class MainActivity : ComponentActivity() {
     @RequiresApi(Build.VERSION_CODES.S)
@@ -79,7 +81,11 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    AppScaffold(applicationContext, drawerViewModel)
+                    AppScaffold(
+                        applicationContext,
+                        drawerViewModel,
+                        taskViewModel
+                    )
                 }
             }
         }
@@ -87,6 +93,10 @@ class MainActivity : ComponentActivity() {
 
     private val drawerViewModel: DrawerViewModel by viewModels {
         DrawerViewModelFactory(this.application, NotiRepositoryProvider.provideNotiRepository(applicationContext))
+    }
+
+    private val taskViewModel: org.muilab.notigpt.viewModel.TaskViewModel by viewModels {
+        TaskViewModelFactory(this.application, TaskRepositoryProvider.provideTaskRepository(applicationContext))
     }
 
     private fun isNotiListenerEnabled(): Boolean {
@@ -108,6 +118,11 @@ class MainActivity : ComponentActivity() {
             if (serviceClass.name == serviceInfo.service.className)
                 return true
         return false
+    }
+
+    override fun onResume() {
+        SharedPreferencesManager.lastAppResumeTime = System.currentTimeMillis()
+        super.onResume()
     }
     
 }

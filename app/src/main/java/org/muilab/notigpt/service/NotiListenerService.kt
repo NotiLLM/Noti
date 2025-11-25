@@ -113,13 +113,13 @@ class NotiListenerService: NotificationListenerService() {
     }
 
     override fun onDestroy() {
-        val restartServiceIntent = Intent(applicationContext, NotiListenerService::class.java).also {
-            it.setPackage(packageName)
-        }
-        val restartServicePendingIntent: PendingIntent = PendingIntent.getService(this, 1, restartServiceIntent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_ONE_SHOT)
-        getSystemService(ALARM_SERVICE)
-        val alarmService: AlarmManager = getSystemService(ALARM_SERVICE) as AlarmManager
-        alarmService.set(AlarmManager.ELAPSED_REALTIME, System.currentTimeMillis() + 2000, restartServicePendingIntent)
+//        val restartServiceIntent = Intent(applicationContext, NotiListenerService::class.java).also {
+//            it.setPackage(packageName)
+//        }
+//        val restartServicePendingIntent: PendingIntent = PendingIntent.getService(this, 1, restartServiceIntent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_ONE_SHOT)
+//        getSystemService(ALARM_SERVICE)
+//        val alarmService: AlarmManager = getSystemService(ALARM_SERVICE) as AlarmManager
+//        alarmService.set(AlarmManager.ELAPSED_REALTIME, System.currentTimeMillis() + 2000, restartServicePendingIntent)
         super.onDestroy()
     }
 
@@ -182,13 +182,30 @@ class NotiListenerService: NotificationListenerService() {
             return
 
         // If notification tag contains ConnectivityNotification, ignore
-        if (sbn.tag?.contains("ConnectivityNotification") == true)
+        if (sbn.key.contains("ConnectivityNotification") == true)
+            return
+
+        // If notification is from com.android.wifi, ignore
+        if (sbn.key.contains("com.android.wifi"))
+            return
+
+        if (sbn.key.contains("com.google.android.networkstack"))
             return
 
         // Store notification to DB
         serviceScope.launch {
+
             notiRepository.upsertNotiUnit(applicationContext, sbn, isInit)
             notiRepository.insertNotiRecord(sbn)
+
+            // Debug: log visible record count and sample ids for this key
+            try {
+                val count = notiRepository.getVisibleRecordsCountForKey(sbn.key)
+                val sampleIds = notiRepository.getVisibleRecordIdsForKey(sbn.key, limit = 5)
+                Log.d("NotiListenerService", "Inserted record for key=${sbn.key}; visibleCount=$count; sampleIds=${sampleIds.joinToString(separator = ",")}")
+            } catch (e: Exception) {
+                Log.d("NotiListenerService", "Debug logging failed for key=${sbn.key}", e)
+            }
         }
 
         val notification = sbn.notification

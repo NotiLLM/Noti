@@ -7,8 +7,11 @@ import androidx.annotation.RequiresApi
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -31,7 +34,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.layout.LayoutInfo
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -39,7 +41,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import kotlinx.coroutines.launch
 import org.muilab.notigpt.R
-import org.muilab.notigpt.util.postOngoingNotification
 import org.muilab.notigpt.view.component.notification.NotiCard
 import org.muilab.notigpt.viewModel.DrawerViewModel
 import sh.calvin.reorderable.ReorderableItem
@@ -95,35 +96,46 @@ fun NotiDrawer(context: Context, drawerViewModel: DrawerViewModel) {
     }
 
     LaunchedEffect(category, appCategory) {
+        // Scroll to top on category change
         lazyListState.animateScrollToItem(0)
     }
 
-    LazyColumn(
-        state = lazyListState,
-        modifier = Modifier
-            .fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        items(notifications, key = { it.notiKey }) { notiDisplayUnit ->
-            ReorderableItem(reorderableState, key = notiDisplayUnit.notiKey) { isDragging ->
+    // Wrap list in a Box so we can overlay a loading spinner when Paging is refreshing
+    Box(modifier = Modifier.fillMaxWidth().fillMaxHeight()) {
+        LazyColumn(
+            state = lazyListState,
+            modifier = Modifier
+                .fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            items(notifications, key = { it.notiKey }) { notiDisplayUnit ->
+                ReorderableItem(reorderableState, key = notiDisplayUnit.notiKey) { isDragging ->
 
-                NotiCard(
-                    context = context,
-                    notiDisplayUnit = notiDisplayUnit,
-                    isDragging = isDragging,
-                    drawerViewModel = drawerViewModel,
-                    isCardVisible = fullyVisibleCardKeys.contains(notiDisplayUnit.notiKey),
-                    // PASS a callback to mark the whole card as read
-                    onNotiCardRead = {
-                        drawerViewModel.markNotificationAsRead(notiDisplayUnit.notiKey)
-                    },
-                    // PASS a callback to mark a single record as read
-                    onNotiRecordRead = { recordId ->
-                        drawerViewModel.markRecordAsRead(recordId)
-                    }
-                )
+                    // Debug: log the number of records we're about to render for this unit
+                    Log.d("NotiDrawer", "Rendering NotiCard key=${notiDisplayUnit.notiKey} records=${notiDisplayUnit.notiRecords.size}")
+
+                    NotiCard(
+                        context = context,
+                        notiDisplayUnit = notiDisplayUnit,
+                        isDragging = isDragging,
+                        drawerViewModel = drawerViewModel,
+                        isCardVisible = fullyVisibleCardKeys.contains(notiDisplayUnit.notiKey),
+                        // PASS a callback to mark the whole card as read
+                        onNotiCardRead = { isManual ->
+                            drawerViewModel.markNotificationAsRead(notiDisplayUnit.notiKey, isManual)
+                        },
+                        // PASS a callback to mark a single record as read
+                        onNotiRecordRead = { recordId ->
+                            drawerViewModel.markRecordAsRead(recordId)
+                        },
+                        category = category,
+                        appCategory = appCategory
+                    )
+                }
             }
         }
+
+        // Spinner is shown in AppScaffold; NotiDrawer no longer renders it.
     }
 
     val firstVisibleIndex by remember {
@@ -167,7 +179,6 @@ fun NotiDrawer(context: Context, drawerViewModel: DrawerViewModel) {
                 drawerViewModel.syncManualSortOrder(isAppCategoryView)
                 // Call the new ViewModel function
                 drawerViewModel.persistReadStatus()
-                postOngoingNotification(context)
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -181,7 +192,6 @@ fun NotiDrawer(context: Context, drawerViewModel: DrawerViewModel) {
             drawerViewModel.syncManualSortOrder(isAppCategoryView)
             // Call the new ViewModel function
             drawerViewModel.persistReadStatus()
-            postOngoingNotification(context)
         }
     }
 }

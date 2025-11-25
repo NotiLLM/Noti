@@ -2,6 +2,9 @@ package org.muilab.notigpt.util
 
 import android.content.Context
 import android.content.SharedPreferences
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 object SharedPreferencesManager {
 
@@ -57,10 +60,10 @@ object SharedPreferencesManager {
         get() = get(KEY_SERVER_PREFS, KEY_USER_ID, "").toString()
         set(value) = put(KEY_SERVER_PREFS, KEY_USER_ID, value)
 
-    const val KEY_SERVER_IP = "SERVER_IP"
+    const val KEY_SERVER_URL = "SERVER_URL"
     var serverIP: String
-        get() = get(KEY_SERVER_PREFS, KEY_SERVER_IP, "140.113.214.145").toString()
-        set(value) = put(KEY_SERVER_PREFS, KEY_SERVER_IP, value)
+        get() = get(KEY_SERVER_PREFS, KEY_SERVER_URL, "dify.udchen.tw").toString()
+        set(value) = put(KEY_SERVER_PREFS, KEY_SERVER_URL, value)
 
     const val KEY_AUTO_ARCHIVE = "autoArchive"
     var autoArchive: Boolean
@@ -76,6 +79,29 @@ object SharedPreferencesManager {
     var trackPin: Boolean
         get() = get(KEY_LOCAL_PREFS, KEY_TRACK_PIN, false)
         set(value) = put(KEY_LOCAL_PREFS, KEY_TRACK_PIN, value)
+
+    const val KEY_WAIT_SECONDS_BEFORE_NOTI_UNIT_SYNC = "waitSecondsBeforeNotiUnitSync"
+    var waitSecondsBeforeNotiUnitSync: Int
+        get() = get(KEY_LOCAL_PREFS, KEY_WAIT_SECONDS_BEFORE_NOTI_UNIT_SYNC, 5 * 60)
+        set(value) = put(KEY_LOCAL_PREFS, KEY_WAIT_SECONDS_BEFORE_NOTI_UNIT_SYNC, value)
+
+    const val KEY_MAX_RECORDS_BEFORE_NOTI_SYNC = "maxRecordsBeforeNotiSync"
+    var maxRecordsBeforeNotiSync: Int
+        get() = get(KEY_LOCAL_PREFS, KEY_MAX_RECORDS_BEFORE_NOTI_SYNC, 10)
+        set(value) = put(KEY_LOCAL_PREFS, KEY_MAX_RECORDS_BEFORE_NOTI_SYNC, value)
+
+    const val KEY_WAIT_SECONDS_BEFORE_DRAWER_SYNC = "waitSecondsBeforeDrawerSync"
+    var waitSecondsBeforeDrawerSync: Int
+        get() = get(KEY_LOCAL_PREFS, KEY_WAIT_SECONDS_BEFORE_DRAWER_SYNC, 30 * 60)
+        set(value) = put(KEY_LOCAL_PREFS, KEY_WAIT_SECONDS_BEFORE_DRAWER_SYNC, value)
+
+    const val KEY_MAX_RECORDS_BEFORE_DRAWER_SYNC = "maxRecordsBeforeDrawerSync"
+    var maxRecordsBeforeDrawerSync: Int
+        get() = get(KEY_LOCAL_PREFS, KEY_MAX_RECORDS_BEFORE_DRAWER_SYNC, 5)
+        set(value) = put(KEY_LOCAL_PREFS, KEY_MAX_RECORDS_BEFORE_DRAWER_SYNC, value)
+
+    private val _hideComplexVisualsFlow = MutableStateFlow(true)
+    val hideComplexVisualsFlow: StateFlow<Boolean> = _hideComplexVisualsFlow.asStateFlow()
 
     private const val KEY_BASELINE_EMBEDDING_EN = "baselineEmbeddingEn"
     var baselineEmbeddingEn: String
@@ -96,6 +122,16 @@ object SharedPreferencesManager {
     var historyNotiHoursThreshold: Int
         get() = get(KEY_LOCAL_PREFS, KEY_HISTORY_NOTI_HOURS_THRESHOLD, -1)
         set(value) = put(KEY_LOCAL_PREFS, KEY_HISTORY_NOTI_HOURS_THRESHOLD, value)
+
+    const val KEY_LAST_APP_RESUME_TIME = "lastAppResumeTime"
+    var lastAppResumeTime: Long
+        get() = get(KEY_LOCAL_PREFS, KEY_LAST_APP_RESUME_TIME, 0L)
+        set(value) = put(KEY_LOCAL_PREFS, KEY_LAST_APP_RESUME_TIME, value)
+
+    const val KEY_MAX_PAST_CONTEXT = "maxPastContext"
+    var maxPastContext: Int
+        get() = get(KEY_LOCAL_PREFS, KEY_MAX_PAST_CONTEXT, 0)
+        set(value) = put(KEY_LOCAL_PREFS, KEY_MAX_PAST_CONTEXT, value)
 
     fun clearAll() {
         localSharedPrefs.edit().clear().apply()

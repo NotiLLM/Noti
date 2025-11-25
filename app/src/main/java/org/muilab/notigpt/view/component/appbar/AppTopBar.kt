@@ -8,6 +8,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -30,8 +31,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import org.muilab.notigpt.R
+import org.muilab.notigpt.util.SharedPreferencesManager
 import org.muilab.notigpt.view.component.SearchBar
 import org.muilab.notigpt.viewModel.DrawerViewModel
 
@@ -68,8 +71,13 @@ fun AppTopBar(
                 } else {
                     // The standard title text
                     Text(
-                        text = "NotiManager",
+                        text = stringResource(R.string.app_name),
                         style = MaterialTheme.typography.titleLarge
+//                        modifier = Modifier.clickable(
+//                            onClick = {
+//                                SharedPreferencesManager.hideComplexVisuals = !SharedPreferencesManager.hideComplexVisuals
+//                            }
+//                        )
                     )
                 }
             }

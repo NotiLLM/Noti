@@ -9,6 +9,7 @@ import androidx.room.Embedded
 import androidx.room.Entity
 import org.muilab.notigpt.model.notifications.components.NotiMetadata
 import org.muilab.notigpt.model.notifications.components.NotiDisplayState
+import org.muilab.notigpt.model.notifications.components.NotiTaskAttr
 import org.muilab.notigpt.util.getAppCategoryByAppName
 
 
@@ -17,6 +18,7 @@ data class NotiUnit(
     val notiKey: String,
     @Embedded val metadata: NotiMetadata,
     @Embedded val displayState: NotiDisplayState = NotiDisplayState(),
+    @Embedded val taskAttr: NotiTaskAttr = NotiTaskAttr()
 ) {
 
     @RequiresApi(Build.VERSION_CODES.S)
@@ -35,6 +37,7 @@ data class NotiUnit(
         metadata.update(context, sbn)
         if (!isVisible)
             displayState.resetUserState()
+        displayState.resetReadState()
         displayState.resetLLMState()
         // Set app category based on app name
         displayState.appCategory = getAppCategoryByAppName(context, metadata.appName)
@@ -51,6 +54,9 @@ data class NotiUnit(
 
     val lastUpdateTime: Long
         get() = metadata.lastUpdateTime
+
+    val lastSyncTime: Long
+        get() = metadata.lastSyncTime
 
     val isPeople: Boolean
         get() = metadata.isPeople
@@ -122,5 +128,17 @@ data class NotiUnit(
         get() = displayState.appCategorySortPosition
         set(value) {
             displayState.appCategorySortPosition = value
+        }
+
+    var shouldExtractTask: Boolean
+        get() = taskAttr.shouldExtractTask
+        set(value) {
+            taskAttr.shouldExtractTask = value
+        }
+
+    var hasGenuineTask: Boolean
+        get() = taskAttr.hasGenuineTask
+        set(value) {
+            taskAttr.hasGenuineTask = value
         }
 }

@@ -17,6 +17,11 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Text
 import androidx.compose.material3.contentColorFor
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -29,6 +34,7 @@ import org.muilab.notigpt.R
 import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_ARCHIVE
 import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_GENERAL
 import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_MAKETASK
+import org.muilab.notigpt.util.SharedPreferencesManager
 
 @Composable
 fun AppBottomBar(
@@ -36,6 +42,8 @@ fun AppBottomBar(
     onItemSelected: (String) -> Unit,
     unreadCounts: Map<String, Int> // The map of unread counts
 ) {
+    val hideComplexVisuals by SharedPreferencesManager.hideComplexVisualsFlow.collectAsState()
+
     val categoryNames = listOf(NOTI_CATEGORY_GENERAL, NOTI_CATEGORY_MAKETASK, NOTI_CATEGORY_ARCHIVE)
     val iconResIds = listOf(R.drawable.notifications, R.drawable.task_no, R.drawable.archive_no)
 
@@ -58,7 +66,8 @@ fun AppBottomBar(
                             )
                             // Show the badge only if the count is greater than 0
                             Log.d("AppBottomBar", "Unread count for $categoryName: $unreadCount, Total count: $totalCount")
-                            if (unreadCount > 0) {
+                            if (unreadCount > 0 && !hideComplexVisuals) {
+                                // Show a badge for unread count if it's greater than 0
                                 NotificationBadge(count = unreadCount, MaterialTheme.colorScheme.error)
                             } else if (totalCount > 0) {
                                 // Show a badge for total count if it's greater than 0

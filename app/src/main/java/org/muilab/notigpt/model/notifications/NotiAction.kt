@@ -8,11 +8,15 @@ data class NotiAction (
     val notiKey: String,
     val actionType: String,
     val time: Long,
+    val lastAppResumeTime: Long,
+    val metadata: String = ""
 ) {
-    constructor(notiKey: String, actionType: String, time: Long): this (
+    constructor(notiKey: String, actionType: String, time: Long, lastAppResumeTime: Long, metadata: String = ""): this (
         notiActionId = "${notiKey}_$time",
         notiKey = notiKey,
         actionType = actionType,
-        time = time
+        time = time,
+        lastAppResumeTime = lastAppResumeTime,
+        metadata = metadata
     )
 }
