@@ -12,11 +12,11 @@ interface TaskListDao {
     @Upsert
     suspend fun insert(taskUnit: TaskUnit)
 
-    @Query("SELECT * FROM task_list ORDER BY deadlineTimestamp ASC")
+    @Query("SELECT * FROM task_list ORDER BY estimatedCompletionTime ASC, deadlineTimestamp ASC")
     fun getAllTasks(): Flow<List<TaskUnit>>
 
     // Visible tasks: tasks that are not completed (isCompleted = 0)
-    @Query("SELECT * FROM task_list WHERE isVisible = 1 ORDER BY deadlineTimestamp ASC")
+    @Query("SELECT * FROM task_list WHERE isVisible = 1 ORDER BY estimatedCompletionTime ASC, deadlineTimestamp ASC")
     fun getVisibleTasks(): Flow<List<TaskUnit>>
 
     @Query("UPDATE task_list SET isCompleted = :completed WHERE taskId = :taskId")

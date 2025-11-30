@@ -15,6 +15,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "NotiGPT"
+rootProject.name = "Noti"
 include(":app")
  

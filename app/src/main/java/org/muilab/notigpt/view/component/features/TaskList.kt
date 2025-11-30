@@ -28,6 +28,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import org.muilab.notigpt.model.features.TaskUnit
 import org.muilab.notigpt.viewModel.TaskViewModel
+import java.util.UUID
 
 /**
  * TaskList composable now expects the caller to provide a Context and TaskViewModel.
@@ -49,6 +50,8 @@ fun TaskList(
     if (tasks.isEmpty()) return
 
     var expanded by remember { mutableStateOf(true) }
+    // state to show the new-task dialog
+    var showNewTaskDialog by remember { mutableStateOf(false) }
 
     Card(
         modifier = Modifier
@@ -73,6 +76,14 @@ fun TaskList(
                 )
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (expanded) {
+                        // New Task button (on the left of Clear Completed)
+                        OutlinedButton(
+                            onClick = { showNewTaskDialog = true },
+                            modifier = Modifier.padding(end = 8.dp)
+                        ) {
+                            Text("New Task", style = MaterialTheme.typography.labelSmall)
+                        }
+
                         OutlinedButton(
                             onClick = { taskViewModel.clearCompleted() },
                             // keep it small and subtle
@@ -106,5 +117,24 @@ fun TaskList(
                 }
             }
         }
+    }
+
+    // Show the new-task dialog outside the Card so it isn't clipped; construct a blank TaskUnit to edit
+    if (showNewTaskDialog) {
+        val newTask = TaskUnit(
+            taskId = UUID.randomUUID().toString(),
+            taskDescription = "",
+            deadlineTimestamp = -1L,
+            estimatedCompletionTime = 0L,
+            associatedNotis = emptySet()
+        )
+        TaskEditDialog(
+            task = newTask,
+            onDismiss = { showNewTaskDialog = false },
+            onSave = { saved ->
+                showNewTaskDialog = false
+                taskViewModel.editTask(saved)
+            }
+        )
     }
 }

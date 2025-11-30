@@ -120,6 +120,7 @@ dependencies {
 
     implementation(libs.gson)
     implementation(libs.constraintlayout.compose)
+    implementation(libs.kotlin.toon)
 
     // For HTTP Requests
     implementation(libs.retrofit)

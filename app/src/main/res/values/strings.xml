@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">NotiManager 2</string>
+    <string name="app_name">Noti</string>
     <string name="summary_lead_prompt">These are notifications from a smartphone user\'s drawer. You should summarize each notification into a short sentence that covers the important elements mentioned in the notification times, titles and contents. If the notification shows clear emotion of the sender, you could also interpret it in the summary sentence. Each notification takes a single line INDIVIDUALLY.</string>
     <string name="summary_end_prompt">Each summary should be a short sentence within 15 full-width characters (or 30 half-width CHARACTERS). Use the most condensed form of text possible to convey information without losing the context. SUMMARIZE USING THE LANGUAGE OF THE GIVEN LOCALE. The summary sentence should have NO NEW LINE CHARACTERS.</string>
     <string name="category_lead_prompt">These are notifications from a smartphone user\'s drawer. You should classify them using a few categories according to each notification. Make sure these category names provide enough information to acknowledge the notification.</string>
