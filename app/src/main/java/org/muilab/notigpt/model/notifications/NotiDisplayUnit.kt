@@ -15,6 +15,8 @@ class NotiDisplayUnit (
         }
     val category: String
         get() = notiUnit.category
+    val appCategory: String
+        get() = notiUnit.appCategory
     val sortScore: Double
         get() = notiUnit.sortScore
     val lastUpdateTime: Long

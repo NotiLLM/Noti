@@ -5,35 +5,25 @@ import org.muilab.notigpt.util.Constants.Companion.APP_CATEGORY_UNKNOWN
 import org.muilab.notigpt.util.Constants.Companion.NOTI_TASK_STATE_NOT_STARTED
 
 data class NotiDisplayState(
-    // DETERMINED BY USER
     var isPinned: Boolean,
     var isArchived: Boolean,
     var isVisible: Boolean,
     var isCompletelyRead: Boolean,
-    var sortPosition: Int,
-    var appCategorySortPosition: Int,
+    // REMOVED: sortPosition, appCategorySortPosition
     var taskState: Int,
 
-    // DETERMINED BY LLM
     var explanation: String,
     var summary: String,
     var sortScore: Double,
 
-    // DETERMINED BY BOTH
     var category: String,
-
-    // APP CATEGORY (DETERMINED BY APP)
     var appCategory: String
 ) {
-
-    // empty constructor
     constructor() : this(
         isPinned = false,
         isArchived = false,
         isVisible = true,
         isCompletelyRead = false,
-        sortPosition = -1,
-        appCategorySortPosition = -1,
         taskState = NOTI_TASK_STATE_NOT_STARTED,
         explanation = "",
         summary = "",
@@ -42,17 +32,13 @@ data class NotiDisplayState(
         appCategory = APP_CATEGORY_UNKNOWN
     )
 
-    fun flipPin() {
-        isPinned = !isPinned
-    }
-
     fun resetUserState() {
         isArchived = false
         isVisible = true
         taskState = NOTI_TASK_STATE_NOT_STARTED
         category = NOTI_CATEGORY_GENERAL
         resetReadState()
-        resetSortPositions()
+        // resetSortPositions() // Removed
     }
 
     fun resetReadState() {
@@ -63,10 +49,5 @@ data class NotiDisplayState(
         explanation = ""
         summary = ""
         sortScore = 100.0
-    }
-
-    fun resetSortPositions() {
-        sortPosition = -1
-        appCategorySortPosition = -1
     }
 }

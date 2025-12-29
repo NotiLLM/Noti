@@ -55,7 +55,7 @@ fun AppTopBar(
     TopAppBar(
         // 2. Customize colors to match your original design
         colors = TopAppBarDefaults.topAppBarColors(
-            containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(3.dp)
+            containerColor = MaterialTheme.colorScheme.surface
         ),
 
         // 3. Use the 'title' slot for your title or search bar
@@ -132,8 +132,8 @@ fun AppTopBar(
                         onClick = { drawerViewModel.toggleSortingMode() }
                     ) {
                         Icon(
-                            painter = painterResource(id = R.drawable.reorder),
-                            contentDescription = "Reorder"
+                            painter = painterResource(id = R.drawable.group),
+                            contentDescription = "Group"
                         )
                     }
                     IconButton(

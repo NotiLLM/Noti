@@ -5,7 +5,6 @@ import android.os.Build
 import android.service.notification.StatusBarNotification
 import android.util.Log
 import androidx.annotation.RequiresApi
-import androidx.room.withTransaction
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -18,9 +17,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 import org.json.JSONArray
@@ -31,11 +28,16 @@ import org.muilab.notigpt.database.server.enqueueDelayedTaskExtraction
 import org.muilab.notigpt.database.room.AppDatabase
 import org.muilab.notigpt.database.room.NotiActionDao
 import org.muilab.notigpt.database.room.NotiDrawerDao
+import org.muilab.notigpt.database.room.NotiGroupDao
 import org.muilab.notigpt.database.room.NotiRecordDao
 import org.muilab.notigpt.model.notifications.NotiAction
 import org.muilab.notigpt.model.notifications.NotiRecord
 import org.muilab.notigpt.model.notifications.NotiUnit
 import org.muilab.notigpt.model.notifications.NotiDisplayUnit
+import org.muilab.notigpt.model.notifications.NotiDrawerItem
+import org.muilab.notigpt.model.notifications.NotiGroup
+import org.muilab.notigpt.model.notifications.NotiGroupItem
+import org.muilab.notigpt.model.notifications.NotiItem
 import org.muilab.notigpt.model.notifications.NotiUnitWithRecords
 import org.muilab.notigpt.util.Constants.Companion.MAX_EXPIRED_RECORDS_PER_KEY
 import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_ARCHIVE
@@ -45,58 +47,22 @@ import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_SAVE
 import org.muilab.notigpt.util.Constants.Companion.NOTI_RECORD_EXPIRE_TIME_MS
 import org.muilab.notigpt.util.SharedPreferencesManager
 import org.muilab.notigpt.util.getAppCategoryByAppName
-import kotlin.collections.map
+import java.util.UUID
 
 class NotiRepository(
     private val appContext: Context,
-    private val db: AppDatabase, // Add database instance
+    private val db: AppDatabase,
     private val notiDrawerDao: NotiDrawerDao,
     private val notiActionDao: NotiActionDao,
-    private val notiRecordDao: NotiRecordDao
+    private val notiRecordDao: NotiRecordDao,
+    private val notiGroupDao: NotiGroupDao
 ) {
 
-    // In-memory maps to track pending counters and debounce jobs per notiKey
     private val detectionCounters = mutableMapOf<String, Int>()
     private val detectionJobs = mutableMapOf<String, Job?>()
     private val extractionCounters = mutableMapOf<String, Int>()
 
     private val scope = CoroutineScope(Dispatchers.IO)
-
-    // Helper function to avoid code duplication
-    private fun mapToDisplayUnit(listWithRecords: List<NotiUnitWithRecords>): List<NotiDisplayUnit> {
-        return listWithRecords.map { unitWithRecords ->
-            val mappedNotiRecords = unitWithRecords.notiRecords.map { visibleRecord ->
-                NotiRecord(
-                    // KEYS
-                    notiRecordId = visibleRecord.notiRecordId,
-                    notiKey = visibleRecord.notiKey,
-
-                    // TIME RELATED
-                    whenTime = visibleRecord.whenTime,
-                    postTime = visibleRecord.postTime,
-
-                    // TITLE RELATED
-                    person = visibleRecord.person,
-                    extraTitle = visibleRecord.extraTitle,
-                    extraBigTitle = visibleRecord.extraBigTitle,
-                    extraConversationTitle = visibleRecord.extraConversationTitle,
-
-                    // CONTENT RELATED
-                    extraBigText = visibleRecord.extraBigText,
-                    extraText = visibleRecord.extraText,
-                    extraTextLines = visibleRecord.extraTextLines,
-                    extraSummaryText = visibleRecord.extraSummaryText,
-                    extraInfoText = visibleRecord.extraInfoText,
-                    extraSubText = visibleRecord.extraSubText,
-
-                    // STATUS
-                    isRead = visibleRecord.isRead,
-                    isVisible = visibleRecord.isVisible
-                )
-            }
-            NotiDisplayUnit(unitWithRecords.notiUnit, mappedNotiRecords.sortedBy { it.time })
-        }
-    }
 
     suspend fun removeExpiredNotiRecords() {
         val expireTimestamp = System.currentTimeMillis() - NOTI_RECORD_EXPIRE_TIME_MS
@@ -106,210 +72,155 @@ class NotiRepository(
         )
     }
 
-    // NEW REPO METHOD 1
     @OptIn(ExperimentalCoroutinesApi::class)
-    fun getManuallySorted(
-        category: Flow<String>,
-        appCategory: Flow<String>,
-        isAppCategoryView: Flow<Boolean>
-    ): Flow<List<NotiDisplayUnit>> {
-        return combine(category, appCategory, isAppCategoryView) { cat, appCat, isAppView ->
-            Triple(cat, appCat, isAppView)
-        }.flatMapLatest { (cat, appCat, isAppView) ->
-            notiDrawerDao.getManuallySortedNotifications(cat, appCat, isAppView)
-                .map { mapToDisplayUnit(it) }
-        }
-    }
+    fun getGroupedNotifications(
+        categoryFlow: Flow<String>,
+        appCategoryFlow: Flow<String>,
+        isAppCategoryViewFlow: Flow<Boolean>
+    ): Flow<List<NotiDrawerItem>> {
+        return combine(
+            categoryFlow,
+            appCategoryFlow,
+            isAppCategoryViewFlow,
+            notiGroupDao.getAllGroupsFlow()
+        ) { cat, appCat, isAppView, groups ->
+            Quadruple(cat, appCat, isAppView, groups)
+        }.flatMapLatest { (cat, appCat, isAppView, groups) ->
+            val unitsFlow = notiDrawerDao.getAutoSortedNotificationsNoRelation(cat, appCat)
 
-    // NEW REPO METHOD 2
-    @OptIn(ExperimentalCoroutinesApi::class)
-    fun getAutoSorted(
-        category: Flow<String>,
-        appCategory: Flow<String>,
-        isAppCategoryView: Flow<Boolean>
-    ): Flow<List<NotiDisplayUnit>> {
-        return combine(category, appCategory, isAppCategoryView) { cat, appCat, isAppView ->
-            Triple(cat, appCat, isAppView)
-        }.flatMapLatest { (cat, appCat, isAppView) ->
-            // Prepare flows
-            val fastFlow = notiDrawerDao.getAutoSortedNotificationsNoRelationLimited(cat, appCat, isAppView, 50)
-            val fullFlow = notiDrawerDao.getAutoSortedNotificationsNoRelation(cat, appCat, isAppView)
-
-            // Build a flow that first emits a fast mapped snapshot, then continues emitting mapped fullFlow updates.
-            flow {
-                // Fetch first fast snapshot (suspend until available)
-                val units = fastFlow.first()
-                val tStart = System.currentTimeMillis()
-                Log.d("NotiRepoPerf", "Fast AutoSorted snapshot: parentUnits=${units.size}")
-
-                // Emit a parent-only snapshot immediately so the UI can react (hide spinner)
-                val parentOnly = units.map { unit -> NotiDisplayUnit(unit, emptyList()) }
-                emit(parentOnly)
-
+            unitsFlow.flatMapLatest { units ->
                 val keys = units.map { it.notiKey }
-                val tAfterParents = System.currentTimeMillis()
-                Log.d("NotiRepoPerf", "Fast parent query time: ${tAfterParents - tStart} ms; fetching records for ${keys.size} keys")
 
-                val latestRecords = if (keys.isNotEmpty()) {
-                    val tFetchStart = System.currentTimeMillis()
-                    val recs = fetchLatestRecordsConcurrently(keys, 3)
-                    val tFetchEnd = System.currentTimeMillis()
-                    Log.d("NotiRepoPerf", "Fast fetched latestRecords=${recs.size} in ${tFetchEnd - tFetchStart} ms")
-                    recs
-                } else emptyList()
-
-                val tAfterFetch = System.currentTimeMillis()
-                val grouped = latestRecords.groupBy { it.notiKey }
-                val mapped = units.map { unit ->
-                    val recs = grouped[unit.notiKey]?.sortedBy { it.time } ?: emptyList()
-                    NotiDisplayUnit(unit, recs)
-                }
-                // Log mapping summary for debugging (sample up to 10 units)
-                mapped.take(10).forEach { ndu ->
-                    Log.d("NotiRepoDebug", "fast mapped unit key=${ndu.notiUnit.notiKey} records=${ndu.notiRecords.size}")
-                }
-                val tEnd = System.currentTimeMillis()
-                Log.d("NotiRepoPerf", "Fast mapping time: ${tEnd - tAfterFetch} ms; total fast processing: ${tEnd - tStart} ms")
-
-                // Emit the mapped snapshot with records
-                emit(mapped)
-
-                // Merge two streams: (A) live updates for the initial fast keys, and (B) the fullFlow mapped stream
-                // Using merge avoids blocking: both streams can emit independently and the UI will receive updates.
-                val initialKeysFlow = if (keys.isNotEmpty()) {
-                    notiRecordDao.getVisibleRecordsFlowByKeys(keys).map { recs ->
-                        val groupedLive = recs.groupBy { it.notiKey }
-                        val liveMapped = units.map { unit ->
-                            val recsForUnit = groupedLive[unit.notiKey]?.sortedBy { it.time } ?: emptyList()
-                            NotiDisplayUnit(unit, recsForUnit)
-                        }
-                        liveMapped.take(10).forEach { ndu ->
-                            Log.d("NotiRepoDebug", "fast live mapped unit key=${ndu.notiUnit.notiKey} records=${ndu.notiRecords.size}")
-                        }
-                        liveMapped
-                    }
+                val displayUnitsFlow = if (keys.isEmpty()) {
+                    flowOf(emptyList<NotiDisplayUnit>())
                 } else {
-                    kotlinx.coroutines.flow.emptyFlow()
-                }
-
-                val fullMappedStream = fullFlow.flatMapLatest { fullUnits ->
-                    flow {
-                        val tFullStart = System.currentTimeMillis()
-                        Log.d("NotiRepoPerf", "Full AutoSorted emission: parentUnits=${fullUnits.size}")
-
-                        // Emit parent-only snapshot immediately for full emission
-                        val parentOnlyFull = fullUnits.map { unit -> NotiDisplayUnit(unit, emptyList()) }
-                        emit(parentOnlyFull)
-
-                        val fullKeys = fullUnits.map { it.notiKey }
-                        val tAfterParentsFull = System.currentTimeMillis()
-                        Log.d("NotiRepoPerf", "Full parent query time: ${tAfterParentsFull - tFullStart} ms; fetching records for ${fullKeys.size} keys")
-
-                        val fullLatestRecords = if (fullKeys.isNotEmpty()) {
-                            val tFetchStart = System.currentTimeMillis()
-                            // Use Int.MAX_VALUE to indicate 'no artificial upper limit' — fetch all visible records per key.
-                            val recs = fetchLatestRecordsConcurrently(fullKeys, Int.MAX_VALUE)
-                            val tFetchEnd = System.currentTimeMillis()
-                            Log.d("NotiRepoPerf", "Full fetched latestRecords=${recs.size} in ${tFetchEnd - tFetchStart} ms")
-                            recs
-                        } else emptyList()
-
-                        val tAfterFetchFull = System.currentTimeMillis()
-                        val groupedFull = fullLatestRecords.groupBy { it.notiKey }
-                        val mappedFull = fullUnits.map { unit ->
-                            val recs = groupedFull[unit.notiKey]?.sortedBy { it.time } ?: emptyList()
-                            NotiDisplayUnit(unit, recs)
+                    notiRecordDao.getVisibleRecordsFlowByKeys(keys).map { recs ->
+                        val groupedRecs = recs.groupBy { it.notiKey }
+                        units.map { unit ->
+                            val unitRecs = groupedRecs[unit.notiKey]?.sortedBy { it.time } ?: emptyList()
+                            NotiDisplayUnit(unit, unitRecs)
                         }
-                        mappedFull.take(20).forEach { ndu ->
-                            Log.d("NotiRepoDebug", "full mapped unit key=${ndu.notiUnit.notiKey} records=${ndu.notiRecords.size}")
-                        }
-                        val tEndFull = System.currentTimeMillis()
-                        Log.d("NotiRepoPerf", "Full mapping time: ${tEndFull - tAfterFetchFull} ms; total full processing: ${tEndFull - tFullStart} ms")
-
-                        // Emit full mapped initial snapshot
-                        emit(mappedFull)
-
-                        // Then emit live updates for these fullKeys (this inner emitAll is fine inside flatMapLatest)
-                        if (fullKeys.isNotEmpty()) {
-                            emitAll(
-                                notiRecordDao.getVisibleRecordsFlowByKeys(fullKeys).map { recs ->
-                                    val groupedLive = recs.groupBy { it.notiKey }
-                                    val liveMapped = fullUnits.map { unit ->
-                                        val recsForUnit = groupedLive[unit.notiKey]?.sortedBy { it.time } ?: emptyList()
-                                        NotiDisplayUnit(unit, recsForUnit)
-                                    }
-                                    liveMapped.take(20).forEach { ndu ->
-                                        Log.d("NotiRepoDebug", "full live mapped unit key=${ndu.notiUnit.notiKey} records=${ndu.notiRecords.size}")
-                                    }
-                                    liveMapped
-                                }
-                            )
-                        }
-
                     }
                 }
 
-                emitAll(kotlinx.coroutines.flow.merge(initialKeysFlow, fullMappedStream))
-             }
-          }
-      }
+                displayUnitsFlow.map { displayUnits ->
+                    val groupMap = groups.associateBy { it.groupId }
 
-    suspend fun updateSortPositionsInBulk(updates: List<Pair<String, Pair<Int, Long>>>, isAppCategoryView: Boolean, listSize: Int) {
-        if (updates.isEmpty()) return
+                    val groupedItemsMap = displayUnits
+                        .filter { it.notiUnit.groupId != null }
+                        .groupBy { it.notiUnit.groupId!! }
 
-        val columnName = if (isAppCategoryView) "appCategorySortPosition" else "sortPosition"
+                    val looseItems = displayUnits.filter { it.notiUnit.groupId == null }.toMutableList()
 
-        val sql = buildString {
-            append("UPDATE noti_drawer SET $columnName = CASE notiKey ")
-            updates.forEach { (key, posAndTime) ->
-                // Note: It's crucial that 'key' is properly escaped or known to be safe.
-                // Since notiKey comes from the system, it's generally safe.
-                append("WHEN '$key' THEN ${posAndTime.first} ")
+                    val result = mutableListOf<NotiDrawerItem>()
+
+                    groupedItemsMap.forEach { (groupId, children) ->
+                        val group = groupMap[groupId]
+
+                        // FEATURE 3: Auto-Ungroup
+                        // If a group exists but has <= 1 visible child, treat it as a loose item
+                        if (group != null && children.size > 1) {
+                            val sortedChildren = children.sortedByDescending { it.lastUpdateTime }
+                            result.add(NotiGroupItem(group, sortedChildren))
+                        } else {
+                            // Render as loose items
+                            looseItems.addAll(children)
+
+                            // Optional: If you want to permanently delete empty/single groups from DB,
+                            // you would trigger a cleanup here, but simply rendering them as loose
+                            // fulfills the requirement of "displaying the sole remaining notification by a noticard".
+                        }
+                    }
+
+                    // Add all loose items (including those from dissolved groups)
+                    result.addAll(looseItems.map { NotiItem(it) })
+
+                    // Sort everything by latestTime Descending
+                    result.sortedByDescending { it.latestTime }
+                }
             }
-            append("END WHERE notiKey IN (")
-            updates.joinTo(this, separator = ", ") { "'${it.first}'" }
-            append(")")
-        }
-
-        // Execute the raw query in a transaction for atomicity.
-        db.withTransaction {
-            db.openHelper.writableDatabase.execSQL(sql)
-        }
-
-        updates.forEach { (notiKey, posAndTime) ->
-            val metadata = "${posAndTime.first}/$listSize"
-            if (isAppCategoryView)
-               logAction(notiKey, "set_app_category_sort_position", metadata = metadata, actionTime = posAndTime.second)
-            else
-                logAction(notiKey, "set_overall_sort_position", metadata = metadata, actionTime = posAndTime.second)
         }
     }
 
-
-    suspend fun updateSortPositions(updates: List<Pair<String, Int>>, isAppCategoryView: Boolean) {
-        notiDrawerDao.updateSortPositions(updates, isAppCategoryView)
-    }
-
-    suspend fun resetSortPosition(notiKey: String, isAppCategoryView: Boolean) {
-        if (isAppCategoryView) {
-            notiDrawerDao.updateAppCategorySortPosition(notiKey, -1)
-            logAction(notiKey, "reset_app_category_sort_position")
-        } else {
-            notiDrawerDao.updateSortPosition(notiKey, -1)
-            logAction(notiKey, "reset_overall_sort_position")
+    // --- NEW: Feature 2 (Group Actions) ---
+    suspend fun actOnGroup(groupId: String, action: String) {
+        when (action) {
+            "dismiss_swipe" -> {
+                notiDrawerDao.setGroupInvisible(groupId)
+                val remainingVisibleItems = notiDrawerDao.getVisibleCountForGroup(groupId)
+                if (remainingVisibleItems <= 1) {
+                    notiDrawerDao.ungroupItems(groupId)
+                    notiGroupDao.deleteGroup(groupId)
+                }
+            }
+            "archive" -> notiDrawerDao.updateCategoryByGroupId(groupId, NOTI_CATEGORY_ARCHIVE)
+            "unarchive" -> notiDrawerDao.updateCategoryByGroupId(groupId, NOTI_CATEGORY_GENERAL)
+            "make_task" -> notiDrawerDao.updateCategoryByGroupId(groupId, NOTI_CATEGORY_MAKETASK)
+            "dismiss_task" -> notiDrawerDao.updateCategoryByGroupId(groupId, NOTI_CATEGORY_GENERAL)
+            "save" -> notiDrawerDao.updateCategoryByGroupId(groupId, NOTI_CATEGORY_SAVE)
+            "unsave" -> notiDrawerDao.updateCategoryByGroupId(groupId, NOTI_CATEGORY_GENERAL)
         }
     }
 
-    suspend fun resetAllSortPositions() {
-        notiDrawerDao.resetAllSortPositions()
+    suspend fun merge(dragId: String, targetId: String) {
+        val dragUnit = notiDrawerDao.getByNotiKey(dragId)
+        val targetUnit = notiDrawerDao.getByNotiKey(targetId)
+        val targetGroup = notiGroupDao.getGroupById(targetId)
+        val dragGroup = notiGroupDao.getGroupById(dragId)
+
+        if (targetUnit != null) {
+            // TARGET IS AN ITEM
+            if (dragUnit != null) {
+                // Item -> Item : Create Group
+                val newGroupId = "g_" + UUID.randomUUID().toString().take(8)
+                val newTitle = targetUnit.appName
+                val newGroup = NotiGroup(groupId = newGroupId, title = newTitle)
+
+                notiGroupDao.insert(newGroup)
+                setGroupId(targetUnit.notiKey, newGroupId)
+                setGroupId(dragUnit.notiKey, newGroupId)
+            } else if (dragGroup != null) {
+                // Group -> Item : Create group containing item + group contents
+                val newGroupId = "g_" + UUID.randomUUID().toString().take(8)
+                val newGroup = NotiGroup(groupId = newGroupId, title = dragGroup.title)
+                notiGroupDao.insert(newGroup)
+
+                setGroupId(targetUnit.notiKey, newGroupId)
+                moveGroupChildren(dragGroup.groupId, newGroupId)
+                notiGroupDao.deleteGroup(dragGroup.groupId)
+            }
+        } else if (targetGroup != null) {
+            // TARGET IS A GROUP
+            if (dragUnit != null) {
+                // Item -> Group : Add item
+                setGroupId(dragUnit.notiKey, targetGroup.groupId)
+            } else if (dragGroup != null) {
+                // Group -> Group : Merge children
+                moveGroupChildren(dragGroup.groupId, targetGroup.groupId)
+                notiGroupDao.deleteGroup(dragGroup.groupId)
+            }
+        }
     }
 
-    fun getNotificationKeys(): List<String> {
-        return notiDrawerDao.getAllVisibleKeys()
+    suspend fun ungroup(groupId: String) {
+        moveGroupChildren(groupId, null)
+        notiGroupDao.deleteGroup(groupId)
     }
 
-    fun getNotificationCount(): Int {
-        return notiDrawerDao.getVisibleNotiCount()
+    suspend fun updateGroupExpansion(groupId: String, expanded: Boolean) {
+        notiGroupDao.updateExpansion(groupId, expanded)
+    }
+
+    suspend fun updateGroupTitle(groupId: String, title: String) {
+        notiGroupDao.updateTitle(groupId, title)
+    }
+
+    private suspend fun setGroupId(notiKey: String, groupId: String?) {
+        notiDrawerDao.updateGroupId(notiKey, groupId)
+    }
+
+    private suspend fun moveGroupChildren(oldGroupId: String, newGroupId: String?) {
+        notiDrawerDao.moveGroupChildren(oldGroupId, newGroupId)
     }
 
     fun getVisibleNotiCountByCategory(category: String): Int {
@@ -346,21 +257,14 @@ class NotiRepository(
     fun insertNotiRecord(sbn: StatusBarNotification) {
         val notiRecord = NotiRecord(sbn)
         notiRecordDao.upsert(notiRecord)
-        // Register arrival for detection scheduling
         registerNewRecordForNotiUnit(notiRecord.notiKey)
 
-        // If this noti unit is pinned, we want to ensure extraction is scheduled for new content.
         try {
             val existing = notiDrawerDao.getByNotiKey(notiRecord.notiKey)
             if (existing != null && existing.isPinned) {
-                // Only set shouldExtractTask to true if it's not already true. Then register extraction scheduling.
                 if (!existing.shouldExtractTask) {
                     notiDrawerDao.setShouldExtractTaskByKey(notiRecord.notiKey, true)
-                    Log.d("NotiRepo", "Pinned unit received new record; set shouldExtractTask for key=${notiRecord.notiKey}")
-                    // Register for extraction debounce/scheduling
                     registerShouldExtractForNotiUnit(notiRecord.notiKey)
-                } else {
-                    Log.d("NotiRepo", "Pinned unit received new record; shouldExtractTask already true for key=${notiRecord.notiKey}")
                 }
             }
         } catch (e: Exception) {
@@ -369,18 +273,13 @@ class NotiRepository(
     }
 
     private fun registerNewRecordForNotiUnit(notiKey: String) {
-        // Increment counter
         val newCount = (detectionCounters[notiKey] ?: 0) + 1
         detectionCounters[notiKey] = newCount
-
-        // Cancel existing job if present
         detectionJobs[notiKey]?.cancel()
 
-        // Start a new debounce job
         val job = scope.launch {
             val waitSeconds = SharedPreferencesManager.waitSecondsBeforeNotiUnitSync
             val maxRecords = SharedPreferencesManager.maxRecordsBeforeNotiSync
-            // If count exceeds max, trigger immediately
             if (newCount >= maxRecords) {
                 enqueueTaskScan(appContext, notiKey)
                 detectionCounters.remove(notiKey)
@@ -392,27 +291,20 @@ class NotiRepository(
             detectionCounters.remove(notiKey)
             detectionJobs.remove(notiKey)
         }
-
         detectionJobs[notiKey] = job
     }
 
     private fun registerShouldExtractForNotiUnit(notiKey: String) {
-         synchronized(extractionCounters) {
-             extractionCounters[notiKey] = (extractionCounters[notiKey] ?: 0) + 1
-         }
-
-        // Log for debugging
+        synchronized(extractionCounters) {
+            extractionCounters[notiKey] = (extractionCounters[notiKey] ?: 0) + 1
+        }
         val totalPending = synchronized(extractionCounters) { extractionCounters.values.sum() }
-        Log.d("NotiRepo", "registerShouldExtractForNotiUnit() triggered for=$notiKey totalPending=$totalPending")
-
         val maxCount = SharedPreferencesManager.maxRecordsBeforeDrawerSync
         val waitSeconds = SharedPreferencesManager.waitSecondsBeforeDrawerSync
 
-        // If we have reached the threshold, submit immediately using only the candidate keys
         if (totalPending >= maxCount) {
             val candidateKeys: List<String> = synchronized(extractionCounters) { extractionCounters.keys.toList() }
             val toSubmit = candidateKeys.filter { k -> notiDrawerDao.getByNotiKey(k)?.shouldExtractTask == true }
-            Log.d("NotiRepo", "Immediate extraction triggered: candidateKeys=${candidateKeys.size} toSubmit=${toSubmit.size}")
             if (toSubmit.isNotEmpty()) {
                 notiDrawerDao.setShouldExtractTaskByKeys(toSubmit, false)
                 enqueueTaskExtraction(appContext, toSubmit)
@@ -421,8 +313,6 @@ class NotiRepository(
             return
         }
 
-        // Otherwise schedule a unique delayed WorkManager job that will run after waitSeconds
-        // This replaces the previous scheduled delayed job if one exists, making debounce survive process death.
         enqueueDelayedTaskExtraction(appContext, waitSeconds.toLong())
     }
 
@@ -434,13 +324,10 @@ class NotiRepository(
         return notiDrawerDao.getByNotiKey(notiKey)
     }
 
-
     fun actOnNoti(notiKey: String, action: String) {
         when (action) {
             "dismiss_swipe" -> {
-                // Fetch the current state of the notification from the database.
                 val noti = notiDrawerDao.getByNotiKey(notiKey)
-                // Only set it to invisible if it exists and is NOT pinned.
                 if (noti != null && !noti.isPinned) {
                     notiDrawerDao.setUnitInvisibleByKey(notiKey)
                     logAction(notiKey, action)
@@ -448,7 +335,6 @@ class NotiRepository(
                 return
             }
             "access_click_dismiss" -> {
-                // You should apply the same logic here for consistency.
                 val noti = notiDrawerDao.getByNotiKey(notiKey)
                 if (noti != null) {
                     if (!noti.isPinned) {
@@ -460,17 +346,14 @@ class NotiRepository(
                 }
                 return
             }
-
             "archive" -> notiDrawerDao.updateCategory(notiKey, NOTI_CATEGORY_ARCHIVE)
             "unarchive" -> notiDrawerDao.updateCategory(notiKey, NOTI_CATEGORY_GENERAL)
             "make_task" -> notiDrawerDao.updateCategory(notiKey, NOTI_CATEGORY_MAKETASK)
             "dismiss_task" -> notiDrawerDao.updateCategory(notiKey, NOTI_CATEGORY_GENERAL)
             "save" -> notiDrawerDao.updateCategory(notiKey, NOTI_CATEGORY_SAVE)
             "unsave" -> notiDrawerDao.updateCategory(notiKey, NOTI_CATEGORY_GENERAL)
-
             "unpin" -> setPinnedState(notiKey, true)
             "pin" -> setPinnedState(notiKey, false)
-
             "mark_task_in_progress" -> notiDrawerDao.incrementTaskState(notiKey)
             "mark_task_completed" -> notiDrawerDao.incrementTaskState(notiKey)
             "mark_task_reset" -> notiDrawerDao.incrementTaskState(notiKey)
@@ -499,7 +382,6 @@ class NotiRepository(
         notiKeys.forEach { notiKey ->
             logAction(notiKey, "delete_all")
         }
-
         notiDrawerDao.setUnitsInvisibleByKeys(notiKeys)
         notiDrawerDao.setUnitsReadByKeys(notiKeys)
         notiRecordDao.setRecordsInvisibleByKeys(notiKeys)
@@ -534,16 +416,13 @@ class NotiRepository(
         val notificationLogs = JSONArray()
 
         notiUnits.forEach { notiUnit ->
-
             val notiKey = notiUnit.notiKey
             val notiRecords = if (includeContext) {
                 notiRecordDao.getRecordsByKey(notiKey)
             } else {
                 notiRecordDao.getVisibleRecordsByKey(notiKey)
-            }
-                .sortedBy { it.time }
-            val notiActions = notiActionDao.getActionsByKey(notiKey)
-                .sortedBy { it.time }
+            }.sortedBy { it.time }
+            val notiActions = notiActionDao.getActionsByKey(notiKey).sortedBy { it.time }
 
             val notiJson = JSONObject()
             notiJson.put("id", notiUnit.notiKey)
@@ -570,7 +449,6 @@ class NotiRepository(
             notiJson.put("overall_title", notiOverallTitle)
             notiJson.put("second_title", notiSecondOverallTitle)
 
-            // Order and merge the two lists by time
             val mergedData = (notiRecords.map { it.time to it } + notiActions.map { it.time to it })
                 .sortedBy { it.first }
 
@@ -605,7 +483,6 @@ class NotiRepository(
                     }
                 }
             }
-
             notiJson.put("timeline_data", timelineDataArray)
             notificationLogs.put(notiJson)
         }
@@ -618,40 +495,34 @@ class NotiRepository(
     }
 
     fun setHasGenuineTask(notiKey: String, hasGenuine: Boolean) {
-         val existing = notiDrawerDao.getByNotiKey(notiKey) ?: return
-         val prev = existing.hasGenuineTask
-         notiDrawerDao.setHasGenuineTaskByKey(notiKey, hasGenuine)
+        val existing = notiDrawerDao.getByNotiKey(notiKey) ?: return
+        val prev = existing.hasGenuineTask
+        notiDrawerDao.setHasGenuineTaskByKey(notiKey, hasGenuine)
 
-         if (!prev && hasGenuine) {
-             // changed false -> true
-             notiDrawerDao.setShouldExtractTaskByKey(notiKey, true)
-             registerShouldExtractForNotiUnit(notiKey)
-         } else if (prev && !hasGenuine) {
-             // changed true -> false, set shouldExtractTask false only if not pinned
-             if (!existing.isPinned) {
-                 notiDrawerDao.setShouldExtractTaskByKey(notiKey, false)
-             }
-         }
-     }
+        if (!prev && hasGenuine) {
+            notiDrawerDao.setShouldExtractTaskByKey(notiKey, true)
+            registerShouldExtractForNotiUnit(notiKey)
+        } else if (prev && !hasGenuine) {
+            if (!existing.isPinned) {
+                notiDrawerDao.setShouldExtractTaskByKey(notiKey, false)
+            }
+        }
+    }
 
     fun setPinnedState(notiKey: String, pinned: Boolean) {
         val existing = notiDrawerDao.getByNotiKey(notiKey) ?: return
         val prev = existing.isPinned
-        // flip pin in DB via existing flipPin method if desired, but here we set explicitly
         notiDrawerDao.flipPin(notiKey)
         if (!prev && pinned) {
-            // changed false -> true
             notiDrawerDao.setShouldExtractTaskByKey(notiKey, true)
             registerShouldExtractForNotiUnit(notiKey)
         } else if (prev && !pinned) {
-            // changed true -> false, set shouldExtractTask false only if hasGenuineTask is also false
             if (!existing.hasGenuineTask) {
                 notiDrawerDao.setShouldExtractTaskByKey(notiKey, false)
             }
         }
-     }
+    }
 
-    // Helper to recompute shouldExtractTask based on current DB state for a notiKey
     fun recomputeShouldExtractForKey(notiKey: String) {
         val current = notiDrawerDao.getByNotiKey(notiKey) ?: return
         val should = current.hasGenuineTask || current.isPinned
@@ -662,12 +533,10 @@ class NotiRepository(
         return notiDrawerDao.getAllVisibleKeys()
     }
 
-    // Debug helper: number of visible records for a key
     fun getVisibleRecordsCountForKey(notiKey: String): Int {
         return notiRecordDao.getVisibleRecordsByKey(notiKey).size
     }
 
-    // Debug helper: sample of visible record IDs for a key (ordered oldest->latest)
     fun getVisibleRecordIdsForKey(notiKey: String, limit: Int = 5): List<String> {
         val recs = notiRecordDao.getVisibleRecordsByKey(notiKey).sortedBy { it.time }
         return recs.takeLast(limit.coerceAtLeast(1)).map { it.notiRecordId }
@@ -682,31 +551,19 @@ class NotiRepository(
         }
     }
 
-    // New helper function to fetch latest visible records efficiently.
-    // Prefer a single DAO call for the full key list; fallback to chunked parallel calls if too many bind params.
-    private suspend fun fetchLatestRecordsConcurrently(
-        keys: List<String>,
-        perKeyLimit: Int = 1
-    ): List<NotiRecord> {
-         if (keys.isEmpty()) return emptyList()
-
-         // SQLite default max variables is often 999; stay well under that. Use 900 as a safe threshold.
-         val safeThreshold = 900
-
-        // We'll fetch visible records for the provided keys, group them and pick the latest `perKeyLimit` per key.
+    private suspend fun fetchLatestRecordsConcurrently(keys: List<String>, perKeyLimit: Int = 1): List<NotiRecord> {
+        if (keys.isEmpty()) return emptyList()
+        val safeThreshold = 900
         return if (keys.size <= safeThreshold) {
             withContext(Dispatchers.IO) {
                 val allRecs = notiRecordDao.getVisibleRecordsByKeys(keys)
                 val grouped = allRecs.groupBy { it.notiKey }
-                val selected = grouped.flatMap { (_, list) ->
+                grouped.flatMap { (_, list) ->
                     list.sortedByDescending { if (it.whenTime != 0L) it.whenTime else it.postTime }
                         .take(perKeyLimit)
                 }
-                // Return flattened selection; upstream code groups by notiKey again.
-                selected
             }
         } else {
-            // Chunk keys to avoid SQL variable limits and aggregate results.
             coroutineScope {
                 val chunkSize = safeThreshold
                 val deferred = keys.chunked(chunkSize).map { chunk ->
@@ -714,7 +571,6 @@ class NotiRepository(
                         notiRecordDao.getVisibleRecordsByKeys(chunk)
                     }
                 }
-
                 val results = deferred.awaitAll().flatten()
                 val grouped = results.groupBy { it.notiKey }
                 grouped.flatMap { (_, list) ->
@@ -723,7 +579,7 @@ class NotiRepository(
                 }
             }
         }
-     }
+    }
 
     fun getPreviewRecordsForKeys(keys: List<String>, perKeyLimit: Int = 3): List<NotiRecord> {
         if (keys.isEmpty()) return emptyList()
@@ -742,4 +598,10 @@ class NotiRepository(
             notiRecordDao.getVisibleRecordsByKey(notiKey).sortedBy { it.time }
         }
     }
- }
+
+    suspend fun removeFromGroup(notiKey: String) {
+        setGroupId(notiKey, null)
+    }
+}
+
+data class Quadruple<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)

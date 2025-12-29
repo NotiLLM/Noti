@@ -34,6 +34,7 @@ import java.util.Locale
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.sp
@@ -49,7 +50,14 @@ fun TaskUIUnit(
 ) {
     var showEdit by remember { mutableStateOf(false) }
     var expanded by remember { mutableStateOf(false) }
-    Card(modifier = Modifier.fillMaxWidth().padding(2.dp)) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(2.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLowest
+        )
+    ) {
         val contentAlpha = if (taskUnit.isCompleted) 0.45f else 1f
         Row(
             modifier = Modifier

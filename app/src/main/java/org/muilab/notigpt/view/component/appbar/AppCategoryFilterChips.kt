@@ -1,3 +1,6 @@
+import android.os.Build
+import androidx.annotation.RequiresApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -12,6 +15,7 @@ import org.muilab.notigpt.util.Constants.Companion.APP_CATEGORY_ALL
 import org.muilab.notigpt.viewModel.DrawerViewModel
 
 
+@RequiresApi(Build.VERSION_CODES.S)
 @OptIn(ExperimentalMaterial3Api::class) // FilterChip is still experimental
 @Composable
 fun AppCategoryFilterChips(drawerViewModel: DrawerViewModel) {
@@ -70,6 +74,14 @@ fun AppCategoryFilterChips(drawerViewModel: DrawerViewModel) {
                             // fontStyle = if (isSelected) FontStyle.Normal else FontStyle.Italic
                         )
                     },
+                    colors = FilterChipDefaults.filterChipColors(
+                        // 選中時使用品牌色容器
+                        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                        selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                        // 未選中時使用低階層顏色
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                        labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    ),
                     // Optional: Add a leading icon for selected chips
                     leadingIcon = if (isSelected) {
                         {

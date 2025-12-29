@@ -34,6 +34,7 @@ interface NotiDrawerDao {
 
     @Query("SELECT notiKey FROM noti_drawer WHERE isVisible = 1")
     fun getAllVisibleKeys(): List<String>
+
     @Query("SELECT * FROM noti_drawer WHERE notiKey = :notiKey")
     fun getByNotiKey(notiKey: String): NotiUnit?
 
@@ -58,8 +59,8 @@ interface NotiDrawerDao {
     @Update
     fun update(notiUnit: NotiUnit)
 
-    // Update category of a notification unit
-    @Query("UPDATE noti_drawer SET category = :newCategory, sortPosition = -1, appCategorySortPosition = -1, taskState = 0 WHERE notiKey = :notiKey")
+    // Update category of a notification unit (cleaned sort cols)
+    @Query("UPDATE noti_drawer SET category = :newCategory, taskState = 0 WHERE notiKey = :notiKey")
     fun updateCategory(notiKey: String, newCategory: String)
 
     // Flip pin
@@ -83,26 +84,6 @@ interface NotiDrawerDao {
             updateExplanation(sortOutcome.id, sortOutcome.explanation)
         }
     }
-
-    @Query("UPDATE noti_drawer SET sortPosition = :newPosition WHERE notiKey = :notiKey")
-    suspend fun updateSortPosition(notiKey: String, newPosition: Int)
-
-    @Query("UPDATE noti_drawer SET appCategorySortPosition = :newPosition WHERE notiKey = :notiKey")
-    suspend fun updateAppCategorySortPosition(notiKey: String, newPosition: Int)
-
-    @Transaction
-    suspend fun updateSortPositions(updates: List<Pair<String, Int>>, isAppCategoryView: Boolean) {
-        updates.forEach { (key, pos) ->
-            if (isAppCategoryView) {
-                updateAppCategorySortPosition(key, pos)
-            } else {
-                updateSortPosition(key, pos)
-            }
-        }
-    }
-
-    @Query("UPDATE noti_drawer SET sortPosition = -1, appCategorySortPosition = -1")
-    suspend fun resetAllSortPositions()
 
     // Set unit invisible by key
     @Query("UPDATE noti_drawer SET isVisible = 0, isCompletelyRead = 1 WHERE notiKey = :notiKey")
@@ -133,66 +114,67 @@ interface NotiDrawerDao {
     @Query("UPDATE noti_drawer SET hasGenuineTask = :value WHERE notiKey IN (:notiKeys)")
     fun setHasGenuineTaskByKeys(notiKeys: List<String>, value: Boolean)
 
+    // Simplified AutoSorted Query: Removed manual position logic
     @Transaction
     @Query("""
         SELECT * FROM noti_drawer
         WHERE isVisible = 1
         AND (:category = 'General' AND (category = '' OR category = 'General') OR category = :category)
         AND (:appCategory = 'All' OR appCategory = :appCategory)
-        AND (CASE WHEN :isAppCategoryView = 1 THEN appCategorySortPosition != -1 ELSE sortPosition != -1 END)
-        ORDER BY CASE WHEN :isAppCategoryView = 1 THEN appCategorySortPosition ELSE sortPosition END ASC
-    """)
-    fun getManuallySortedNotifications(
-        category: String,
-        appCategory: String,
-        isAppCategoryView: Boolean
-    ): Flow<List<NotiUnitWithRecords>>
-
-    @Transaction
-    @Query("""
-        SELECT * FROM noti_drawer
-        WHERE isVisible = 1
-        AND (:category = 'General' AND (category = '' OR category = 'General') OR category = :category)
-        AND (:appCategory = 'All' OR appCategory = :appCategory)
-        AND (CASE WHEN :isAppCategoryView = 1 THEN appCategorySortPosition = -1 ELSE sortPosition = -1 END)
         ORDER BY sortScore DESC, lastUpdateTime DESC
     """)
     fun getAutoSortedNotifications(
         category: String,
-        appCategory: String,
-        isAppCategoryView: Boolean
+        appCategory: String
     ): Flow<List<NotiUnitWithRecords>>
 
-    // Same auto-sorted query but return only the parent NotiUnit rows (no relation fetching).
-    // This allows higher-level code to batch-fetch related records in one query and avoid N+1 DB calls.
+    // Simplified NoRelation Query
     @Query("""
         SELECT * FROM noti_drawer
         WHERE isVisible = 1
         AND (:category = 'General' AND (category = '' OR category = 'General') OR category = :category)
         AND (:appCategory = 'All' OR appCategory = :appCategory)
-        AND (CASE WHEN :isAppCategoryView = 1 THEN appCategorySortPosition = -1 ELSE sortPosition = -1 END)
         ORDER BY sortScore DESC, lastUpdateTime DESC
     """)
     fun getAutoSortedNotificationsNoRelation(
         category: String,
-        appCategory: String,
-        isAppCategoryView: Boolean
+        appCategory: String
     ): Flow<List<NotiUnit>>
 
-    // Same as getAutoSortedNotificationsNoRelation but with a LIMIT for fast initial loads (paging-friendly)
+    // Simplified Limited Query
     @Query("""
         SELECT * FROM noti_drawer
         WHERE isVisible = 1
         AND (:category = 'General' AND (category = '' OR category = 'General') OR category = :category)
         AND (:appCategory = 'All' OR appCategory = :appCategory)
-        AND (CASE WHEN :isAppCategoryView = 1 THEN appCategorySortPosition = -1 ELSE sortPosition = -1 END)
         ORDER BY sortScore DESC, lastUpdateTime DESC
         LIMIT :limit
     """)
     fun getAutoSortedNotificationsNoRelationLimited(
         category: String,
         appCategory: String,
-        isAppCategoryView: Boolean,
         limit: Int
     ): Flow<List<NotiUnit>>
+
+    @Query("UPDATE noti_drawer SET groupId = :groupId WHERE notiKey = :notiKey")
+    suspend fun updateGroupId(notiKey: String, groupId: String?)
+
+    @Query("UPDATE noti_drawer SET groupId = :newGroupId WHERE groupId = :oldGroupId")
+    suspend fun moveGroupChildren(oldGroupId: String, newGroupId: String?)
+
+    // Update category for all items in a group
+    @Query("UPDATE noti_drawer SET category = :newCategory, taskState = 0 WHERE groupId = :groupId")
+    suspend fun updateCategoryByGroupId(groupId: String, newCategory: String)
+
+    // Set all items in a group to invisible (Dismiss)
+    @Query("UPDATE noti_drawer SET isVisible = 0, isCompletelyRead = 1 WHERE groupId = :groupId AND isPinned = 0")
+    suspend fun setGroupInvisible(groupId: String)
+
+    // NEW: Check if the group still has visible items
+    @Query("SELECT COUNT(*) FROM noti_drawer WHERE groupId = :groupId AND isVisible = 1")
+    suspend fun getVisibleCountForGroup(groupId: String): Int
+
+    // Remove group association for a specific group (used for cleanup)
+    @Query("UPDATE noti_drawer SET groupId = NULL WHERE groupId = :groupId")
+    suspend fun ungroupItems(groupId: String)
 }

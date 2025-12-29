@@ -11,7 +11,8 @@ object NotiRepositoryProvider {
             appDatabase, // Pass the whole database instance
             appDatabase.drawerDao(),
             appDatabase.actionDao(),
-            appDatabase.recordDao()
+            appDatabase.recordDao(),
+            appDatabase.groupDao()
         )
     }
 }

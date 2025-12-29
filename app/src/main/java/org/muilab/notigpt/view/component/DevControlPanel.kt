@@ -88,11 +88,6 @@ fun DevControlPanel(context: Context, drawerViewModel: DrawerViewModel) {
                     Text("Sync Noti Status")
                 }
                 Button(onClick = {
-                    drawerViewModel.resetAllManualSortOrders()
-                }) {
-                    Text("Reset Sort")
-                }
-                Button(onClick = {
                     Toast.makeText(context, "Work In Progress", Toast.LENGTH_SHORT).show()
                 }) {
                     Text("Update User")

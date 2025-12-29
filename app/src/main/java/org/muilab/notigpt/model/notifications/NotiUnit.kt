@@ -7,20 +7,23 @@ import android.service.notification.StatusBarNotification
 import androidx.annotation.RequiresApi
 import androidx.room.Embedded
 import androidx.room.Entity
+import androidx.room.Index
 import org.muilab.notigpt.model.notifications.components.NotiMetadata
 import org.muilab.notigpt.model.notifications.components.NotiDisplayState
 import org.muilab.notigpt.model.notifications.components.NotiTaskAttr
 import org.muilab.notigpt.util.getAppCategoryByAppName
 
-
-@Entity(tableName = "noti_drawer", primaryKeys = ["notiKey"])
+// Add index on groupId for faster lookups
+@Entity(tableName = "noti_drawer", primaryKeys = ["notiKey"], indices = [Index(value = ["groupId"])])
 data class NotiUnit(
     val notiKey: String,
     @Embedded val metadata: NotiMetadata,
     @Embedded val displayState: NotiDisplayState = NotiDisplayState(),
-    @Embedded val taskAttr: NotiTaskAttr = NotiTaskAttr()
+    @Embedded val taskAttr: NotiTaskAttr = NotiTaskAttr(),
+    // NEW: Link to a parent group
+    val groupId: String? = null
 ) {
-
+    // ... existing constructors ...
     @RequiresApi(Build.VERSION_CODES.S)
     constructor(
         context: Context,
@@ -39,106 +42,57 @@ data class NotiUnit(
             displayState.resetUserState()
         displayState.resetReadState()
         displayState.resetLLMState()
-        // Set app category based on app name
         displayState.appCategory = getAppCategoryByAppName(context, metadata.appName)
     }
 
-    val hashKey: Int
-        get() = metadata.hashKey
-
-    val appName: String
-        get() = metadata.appName
-
-    val pkgName: String
-        get() = metadata.pkgName
-
-    val lastUpdateTime: Long
-        get() = metadata.lastUpdateTime
-
-    val lastSyncTime: Long
-        get() = metadata.lastSyncTime
-
-    val isPeople: Boolean
-        get() = metadata.isPeople
-
-    val largeBitmap: Bitmap?
-        get() = metadata.getLargeBitmap()
-
-    val bitmap: Bitmap?
-        get() = metadata.getBitmap()
-
-    // DISPLAY RELATED CALLS
-    val isVisible: Boolean
-        get() = displayState.isVisible
+    // ... existing getters ...
+    val hashKey: Int get() = metadata.hashKey
+    val appName: String get() = metadata.appName
+    val pkgName: String get() = metadata.pkgName
+    val lastUpdateTime: Long get() = metadata.lastUpdateTime
+    val lastSyncTime: Long get() = metadata.lastSyncTime
+    val isPeople: Boolean get() = metadata.isPeople
+    val largeBitmap: Bitmap? get() = metadata.getLargeBitmap()
+    val bitmap: Bitmap? get() = metadata.getBitmap()
+    val isVisible: Boolean get() = displayState.isVisible
 
     var isPinned: Boolean
         get() = displayState.isPinned
-        set(value) {
-            displayState.isPinned = value
-        }
+        set(value) { displayState.isPinned = value }
 
     var isCompletelyRead: Boolean
         get() = displayState.isCompletelyRead
-        set(value) {
-            displayState.isCompletelyRead = value
-        }
+        set(value) { displayState.isCompletelyRead = value }
 
     var taskState: Int
         get() = displayState.taskState
-        set(value) {
-            displayState.taskState = value
-        }
-
-    // OUTCOMES RELATED CALLS
+        set(value) { displayState.taskState = value }
 
     var summary: String
         get() = displayState.summary
-        set(value) {
-            displayState.summary = value
-        }
+        set(value) { displayState.summary = value }
 
     var sortScore: Double
         get() = displayState.sortScore
-        set(value) {
-            displayState.sortScore = value
-        }
+        set(value) { displayState.sortScore = value }
 
     var category: String
-        set(value) {
-            displayState.category = value
-        }
+        set(value) { displayState.category = value }
         get() = displayState.category
 
     var explanation: String
         get() = displayState.explanation
-        set(value) {
-            displayState.explanation = value
-        }
+        set(value) { displayState.explanation = value }
 
-    val appCategory: String
-        get() = displayState.appCategory
+    val appCategory: String get() = displayState.appCategory
 
-    var sortPosition: Int
-        get() = displayState.sortPosition
-        set(value) {
-            displayState.sortPosition = value
-        }
-
-    var appCategorySortPosition: Int
-        get() = displayState.appCategorySortPosition
-        set(value) {
-            displayState.appCategorySortPosition = value
-        }
+    // REMOVED: sortPosition, appCategorySortPosition logic
 
     var shouldExtractTask: Boolean
         get() = taskAttr.shouldExtractTask
-        set(value) {
-            taskAttr.shouldExtractTask = value
-        }
+        set(value) { taskAttr.shouldExtractTask = value }
 
     var hasGenuineTask: Boolean
         get() = taskAttr.hasGenuineTask
-        set(value) {
-            taskAttr.hasGenuineTask = value
-        }
+        set(value) { taskAttr.hasGenuineTask = value }
 }
