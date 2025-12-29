@@ -31,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import org.muilab.notigpt.model.features.TaskUnit
+import org.muilab.notigpt.util.SharedPreferencesManager
 import org.muilab.notigpt.viewModel.TaskViewModel
 import java.util.UUID
 
@@ -43,6 +44,7 @@ import java.util.UUID
 fun TaskList(
     taskViewModel: TaskViewModel
 ) {
+
     val tasksState = taskViewModel.tasks.collectAsState()
     // Sort: deadline (if nonzero/non-negative) ascending, then estimated time ascending
     val tasks: List<TaskUnit> = tasksState.value.sortedWith(compareBy<TaskUnit> {
@@ -53,7 +55,7 @@ fun TaskList(
     // Hide entire card when no tasks are present
     if (tasks.isEmpty()) return
 
-    var expanded by remember { mutableStateOf(true) }
+    var expanded by remember { mutableStateOf(SharedPreferencesManager.taskListDefaultExpanded) }
     // state to show the new-task dialog
     var showNewTaskDialog by remember { mutableStateOf(false) }
 

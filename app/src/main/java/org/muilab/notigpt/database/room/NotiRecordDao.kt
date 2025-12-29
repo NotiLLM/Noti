@@ -45,7 +45,7 @@ interface NotiRecordDao {
     fun getLatestVisibleRecordsByKeys(notiKeys: List<String>): List<NotiRecord>
 
     @Query("UPDATE noti_record SET isVisible = 0, isRead = 1 WHERE notiKey = :notiKey")
-    fun setRecordsInvisibleByKey(notiKey: String)
+    suspend fun setRecordsInvisibleByKey(notiKey: String)
 
     @Query("UPDATE noti_record SET isVisible = 0, isRead = 1 WHERE notiKey IN ( :notiKeys)")
     fun setRecordsInvisibleByKeys(notiKeys: List<String>)
@@ -54,7 +54,7 @@ interface NotiRecordDao {
     fun setRecordsReadByIds(notiRecordIds: List<String>)
 
     @Query("UPDATE noti_record SET isRead = 1 WHERE notiKey = :notiKey")
-    fun setRecordsReadByKey(notiKey: String)
+    suspend fun setRecordsReadByKey(notiKey: String)
 
     @Query("SELECT * FROM noti_record WHERE isVisible = 1 AND notiKey IN ( :notiKeys )")
     fun getVisibleRecordsFlowByKeys(notiKeys: List<String>): Flow<List<NotiRecord>>

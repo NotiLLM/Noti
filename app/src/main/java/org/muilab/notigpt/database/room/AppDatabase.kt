@@ -18,7 +18,7 @@ import org.muilab.notigpt.model.notifications.NotiGroup
 @Database(
     entities = [NotiUnit::class, NotiRecord::class, NotiAction::class, TaskUnit::class, NotiGroup::class],
     views = [VisibleNotiRecord::class],
-    version = 15,
+    version = 16, // Increment version
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -261,6 +261,13 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_15_16 = object : Migration(15, 16) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE noti_drawer ADD COLUMN isSetToTop INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE noti_drawer ADD COLUMN setToTopTime INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
         fun getInstance(context: Context): AppDatabase =
             INSTANCE ?: synchronized(this) {
                 INSTANCE ?: buildDatabase(context).also { INSTANCE = it }
@@ -282,6 +289,7 @@ abstract class AppDatabase : RoomDatabase() {
                 .addMigrations(MIGRATION_12_13)
                 .addMigrations(MIGRATION_13_14)
                 .addMigrations(MIGRATION_14_15)
+                .addMigrations(MIGRATION_15_16)
                 .setJournalMode(JournalMode.TRUNCATE)
                 .build()
         }

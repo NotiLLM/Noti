@@ -95,4 +95,12 @@ data class NotiUnit(
     var hasGenuineTask: Boolean
         get() = taskAttr.hasGenuineTask
         set(value) { taskAttr.hasGenuineTask = value }
+
+    var isSetToTop: Boolean
+        get() = displayState.isSetToTop
+        set(value) { displayState.isSetToTop = value }
+
+    var setToTopTime: Long
+        get() = displayState.setToTopTime
+        set(value) { displayState.setToTopTime = value }
 }

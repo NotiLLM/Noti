@@ -1,8 +1,10 @@
 package org.muilab.notigpt.view.component.notification
 
 import android.app.ActivityOptions
+import android.app.PendingIntent
 import android.content.Context
 import android.os.Build
+import android.os.Bundle
 import android.util.Log
 import androidx.annotation.RequiresApi
 import androidx.compose.animation.core.Animatable
@@ -16,6 +18,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.AnchoredDraggableDefaults
 import androidx.compose.foundation.gestures.AnchoredDraggableState
 import androidx.compose.foundation.gestures.DraggableAnchors
@@ -33,6 +36,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -43,12 +47,14 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.contentColorFor
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
@@ -123,11 +129,13 @@ fun NotiCard( // REMOVED RECEIVER HERE
 ) {
 
     val hideComplexVisuals by SharedPreferencesManager.hideComplexVisualsFlow.collectAsState()
-    val swipeDeleteLeft by SharedPreferencesManager.swipeDeleteLeftFlow.collectAsState()
+    val swipeDeleteLeft = SharedPreferencesManager.swipeDeleteLeft
     val isSortingMode by drawerViewModel.isSortingMode.collectAsState()
 
     val readRecordIdsInCard = remember { mutableSetOf<String>() }
     var recordsViewport: Rect? by remember { mutableStateOf<Rect?>(null) }
+
+    var showOptionsDialog by remember { mutableStateOf(false) }
 
     val notiUnit = notiDisplayUnit.notiUnit
     val notiRecords = notiDisplayUnit.notiRecords
@@ -149,6 +157,9 @@ fun NotiCard( // REMOVED RECEIVER HERE
         else -> ""
     }
 
+    // Check Top Status
+    val isSetToTop = notiUnit.isSetToTop
+
     val hasSecondTitle = notiSecondOverallTitle.isNotBlank() && notiSecondOverallTitle != notiOverallTitle
     val isPeople = notiUnit.isPeople
     val appName = notiUnit.appName
@@ -160,9 +171,17 @@ fun NotiCard( // REMOVED RECEIVER HERE
 
     val backgroundColor = when {
         isMergeTarget -> MaterialTheme.colorScheme.primaryContainer
-        // 讓通知卡片成為全螢幕最亮的元件
+        isSetToTop -> MaterialTheme.colorScheme.surfaceContainerHigh
         else -> MaterialTheme.colorScheme.surfaceBright
     }
+
+    val borderColor = when {
+        isMergeTarget -> MaterialTheme.colorScheme.primary
+        isSetToTop -> MaterialTheme.colorScheme.secondary
+        else -> MaterialTheme.colorScheme.outlineVariant
+    }
+
+    val borderWidth = if (isSetToTop || isMergeTarget) 2.dp else 0.5.dp
 
     // Floating visualization logic (simplified)
     val isFloating = false
@@ -251,8 +270,14 @@ fun NotiCard( // REMOVED RECEIVER HERE
     var overlayBoundsRelativeToSurface by remember { mutableStateOf<Rect?>(null) }
 
     val combinedDragHandler = if (isDragging) Modifier else Modifier.pointerInput(endActionsWidth, cardWidth) {
-        val horizontalBiasFactor = 0.45f
-        val minHorizontalPx = viewTouchSlop * 0.45f
+        // FIX: Increased bias to 0.5f to ensure diagonal movements don't accidentally trigger swipe
+        val horizontalBiasFactor = 0.5f
+
+        // FIX: Removed the (* 0.45f) multiplier.
+        // Using the full viewTouchSlop ensures that micro-movements during a 'tap'
+        // are ignored, allowing the click event to fire successfully.
+        val minHorizontalPx = viewTouchSlop
+
         awaitEachGesture {
             val down = awaitFirstDown(requireUnconsumed = false)
             val overlayRect = overlayBoundsRelativeToSurface
@@ -262,13 +287,17 @@ fun NotiCard( // REMOVED RECEIVER HERE
             val slopResult = awaitTouchSlopOrCancellation(down.id) { change, over ->
                 val absX = abs(over.x)
                 val absY = abs(over.y)
+
+                // Logic: Only claim the gesture if X movement is significantly larger than Y
+                // AND the total X movement exceeds the system's standard touch slop.
                 if (absX > max(minHorizontalPx, absY * horizontalBiasFactor)) {
                     isHorizontal = true
-                    change.consume()
+                    change.consume() // Consuming this kills the click, so we only do it if we are SURE it's a swipe.
                 }
             }
 
             if (slopResult != null && isHorizontal) {
+                // ... (The rest of your existing VelocityTracker and drag logic remains exactly the same) ...
                 val velocityTracker = VelocityTracker()
                 try {
                     drag(down.id) { change ->
@@ -281,6 +310,9 @@ fun NotiCard( // REMOVED RECEIVER HERE
                         }
                     }
                 } finally {
+                    // ... (Your existing fling logic here) ...
+                    // Copy the exact content of your finally block from the previous code
+                    // logic for handling swipe delete left/right, dismissal, etc.
                     coroutineScope.launch {
                         val vel = try { velocityTracker.calculateVelocity() } catch (_: Throwable) { androidx.compose.ui.unit.Velocity.Zero }
                         val flingVelocityX = vel.x
@@ -319,28 +351,6 @@ fun NotiCard( // REMOVED RECEIVER HERE
                             }
 
                             if (abs(flingVelocityX) <= flingThreshold) {
-                                if (swipeDeleteLeft) {
-                                    when {
-                                        horizontalOffsetX.value < -swipeThresholdPx -> {
-                                            horizontalOffsetX.animateTo(-cardWidth, tween(300))
-                                            drawerViewModel.actOnNoti(notiKey, "dismiss_swipe")
-                                            horizontalOffsetX.snapTo(0f)
-                                        }
-                                        horizontalOffsetX.value > swipeThresholdPx -> horizontalOffsetX.animateTo(endActionsWidth)
-                                        else -> horizontalOffsetX.animateTo(0f)
-                                    }
-                                } else {
-                                    when {
-                                        horizontalOffsetX.value > swipeThresholdPx -> {
-                                            horizontalOffsetX.animateTo(cardWidth, tween(300))
-                                            drawerViewModel.actOnNoti(notiKey, "dismiss_swipe")
-                                            horizontalOffsetX.snapTo(0f)
-                                        }
-                                        horizontalOffsetX.value < -swipeThresholdPx -> horizontalOffsetX.animateTo(-endActionsWidth)
-                                        else -> horizontalOffsetX.animateTo(0f)
-                                    }
-                                }
-                            } else {
                                 if (swipeDeleteLeft) {
                                     when {
                                         horizontalOffsetX.value < -swipeThresholdPx -> {
@@ -415,11 +425,12 @@ fun NotiCard( // REMOVED RECEIVER HERE
                     }
                     alpha = t * t
                 }
-                .zIndex(1f),
+                .zIndex(0f),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             NotiActionIconButton(R.drawable.close, "Hide Actions", { if (abs(horizontalOffsetX.value) == endActionsWidth) coroutineScope.launch { collapse() } }, Color.Black)
+
             if (isInGroup) {
                 NotiActionIconButton(R.drawable.leave_group, "Remove from Group", {
                     if (abs(horizontalOffsetX.value) == endActionsWidth) {
@@ -476,7 +487,7 @@ fun NotiCard( // REMOVED RECEIVER HERE
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
-                .zIndex(0f)
+                .zIndex(1f)
                 .graphicsLayer {
                     translationX = horizontalOffsetX.value
                     translationY = lift.toPx()
@@ -485,26 +496,70 @@ fun NotiCard( // REMOVED RECEIVER HERE
                     alpha = if (isFloating) 0.88f else 1f
                 }
                 .border(
-                    width = 0.5.dp,
-                    color = MaterialTheme.colorScheme.outlineVariant,
+                    width = borderWidth,
+                    color = borderColor,
                     shape = MaterialTheme.shapes.large
                 )
-                .clickable(
+                .combinedClickable(
                     onClick = {
+                        // 1. Try to get the intent (Cached or Fresh)
                         val contentIntent = NotiListenerService.getContentIntent(context, notiUnit)
                         if (contentIntent != null) {
                             try {
-                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                                    val options = ActivityOptions.makeBasic()
-                                    contentIntent.send(context, 0, null, null, null, null, options.toBundle())
-                                } else {
-                                    contentIntent.send()
+                                // 2. Version-specific ActivityOptions to allow Background Activity Launches
+                                val optionsBundle: Bundle? = when {
+                                    // Android 14 (API 34)+: STRICT requirement to allow background starts
+                                    Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE -> {
+                                        val options = ActivityOptions.makeBasic()
+                                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.BAKLAVA)
+                                            options.setPendingIntentBackgroundActivityStartMode(
+                                                ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOW_ALWAYS
+                                            )
+                                        else
+                                            options.setPendingIntentBackgroundActivityStartMode(
+                                                ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
+                                            )
+                                        options.toBundle()
+                                    }
+                                    // Android 11 (API 30) - Android 13: Good practice to provide basic options
+                                    Build.VERSION.SDK_INT >= Build.VERSION_CODES.R -> {
+                                        ActivityOptions.makeBasic().toBundle()
+                                    }
+                                    // Older Android versions: null is usually sufficient
+                                    else -> null
+                                }
+
+                                // 3. Attempt to send the PendingIntent
+                                contentIntent.send(context, 0, null, null, null, null, optionsBundle)
+
+                            } catch (e: PendingIntent.CanceledException) {
+                                // 4. Handle "One Shot" expiration (CanceledException)
+                                Log.w("AccessNotification", "PendingIntent canceled/expired. Trying Fallback.")
+                                NotiListenerService.removeIntents(notiUnit.notiKey)
+
+                                try {
+                                    // Fallback: Launch the app's main page directly
+                                    val launchIntent = context.packageManager.getLaunchIntentForPackage(notiUnit.metadata.pkgName)
+                                    if (launchIntent != null) {
+                                        context.startActivity(launchIntent)
+                                    }
+                                } catch (e2: Exception) {
+                                    Log.e("AccessNotification", "Fallback launch failed", e2)
                                 }
                             } catch (e: Exception) {
+                                // 5. Handle BAL Blocks (SecurityException) or other errors
                                 Log.e("AccessNotification", "PendingIntent send failed", e)
                             }
+                        } else {
+                            Log.e("AccessNotification", "No content intent found for ${notiUnit.appName}")
                         }
+                        // Perform your UI action
                         drawerViewModel.actOnNoti(notiKey, "access_click_dismiss")
+                    },
+                    onLongClick = {
+                        if (!isSortingMode) {
+                            showOptionsDialog = true
+                        }
                     }
                 )
                 .onGloballyPositioned { coords -> surfaceBoundsInWindow = coords.boundsInWindow() }
@@ -654,25 +709,130 @@ fun NotiCard( // REMOVED RECEIVER HERE
             }
         }
 
-        Box(modifier = Modifier.fillMaxWidth().graphicsLayer { translationX = horizontalOffsetX.value }.zIndex(3f)) {
-            Row(modifier = Modifier.align(Alignment.TopEnd).padding(end = 12.dp, top = 8.dp).onGloballyPositioned { coords ->
-                val overlayWindow = coords.boundsInWindow()
-                val surfaceWindow = surfaceBoundsInWindow
-                if (surfaceWindow != null) overlayBoundsRelativeToSurface = Rect(overlayWindow.left - surfaceWindow.left, overlayWindow.top - surfaceWindow.top, overlayWindow.right - surfaceWindow.left, overlayWindow.bottom - surfaceWindow.top)
-            }, horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopEnd) // <--- ADD THIS
+                .fillMaxHeight()
+                .graphicsLayer { translationX = horizontalOffsetX.value }
+                .zIndex(2f)
+        ) {
+            Row(
+                // We keep onGloballyPositioned here.
+                // Now 'overlayBoundsRelativeToSurface' will correctly represent ONLY the buttons,
+                // allowing you to drag the rest of the header!
+                modifier = Modifier
+                    .padding(end = 12.dp, top = 8.dp)
+                    .fillMaxHeight()
+                    .onGloballyPositioned { coords ->
+                        val overlayWindow = coords.boundsInWindow()
+                        val surfaceWindow = surfaceBoundsInWindow
+                        if (surfaceWindow != null) overlayBoundsRelativeToSurface = Rect(
+                            overlayWindow.left - surfaceWindow.left,
+                            overlayWindow.top - surfaceWindow.top,
+                            overlayWindow.right - surfaceWindow.left,
+                            overlayWindow.bottom - surfaceWindow.top
+                        )
+                    },
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Remove the Spacer entirely. You don't need it anymore.
+
                 if (requiresExpansion) {
                     val expandPainter = if (progress < 0.5f) painterResource(R.drawable.expand_circle_down) else painterResource(R.drawable.expand_circle_up)
-                    Icon(painter = expandPainter, contentDescription = "Expand", modifier = Modifier.minimumInteractiveComponentSize().size(30.dp).anchoredDraggable(anchoredDraggableState, Orientation.Vertical, enabled = requiresExpansion, flingBehavior = anchoredFlingBehavior).clickable {
-                        coroutineScope.launch { updateMeasuredAnchors(); if (anchoredDraggableState.offset < COLLAPSE_THRESHOLD) anchoredDraggableState.animateTo(NotiExpandState.Opened) else anchoredDraggableState.animateTo(NotiExpandState.Collapsed) }
-                    })
+                    Icon(
+                        painter = expandPainter,
+                        contentDescription = "Expand",
+                        modifier = Modifier
+                            .minimumInteractiveComponentSize()
+                            .size(30.dp)
+                            .anchoredDraggable(anchoredDraggableState, Orientation.Vertical, enabled = requiresExpansion, flingBehavior = anchoredFlingBehavior)
+                            .clickable {
+                                coroutineScope.launch {
+                                    updateMeasuredAnchors()
+                                    if (anchoredDraggableState.offset < COLLAPSE_THRESHOLD) anchoredDraggableState.animateTo(NotiExpandState.Opened)
+                                    else anchoredDraggableState.animateTo(NotiExpandState.Collapsed)
+                                }
+                            }
+                    )
                 }
+
                 if (isSortingMode) {
-                    // Visual handle only - dragging logic handled by parent
-                    Icon(painterResource(R.drawable.drag_handle), contentDescription = "Drag to reorder", modifier = Modifier.minimumInteractiveComponentSize())
+                    if (!isInGroup)
+                        Icon(painterResource(R.drawable.drag_handle), contentDescription = "Drag to reorder", modifier = Modifier.minimumInteractiveComponentSize())
                 } else {
-                    NotiActionIconButton(if (isPinned) R.drawable.pin_yes else R.drawable.pin_no, "Pin", { if (isPinned) drawerViewModel.actOnNoti(notiKey, "unpin") else drawerViewModel.actOnNoti(notiKey, "pin") }, backgroundColor, false, if (isPinned) Color(76, 139, 245) else Color.Unspecified)
+                    NotiActionIconButton(
+                        if (isPinned) R.drawable.pin_yes else R.drawable.pin_no,
+                        "Pin",
+                        { if (isPinned) drawerViewModel.actOnNoti(notiKey, "unpin") else drawerViewModel.actOnNoti(notiKey, "pin") },
+                        backgroundColor,
+                        false,
+                        if (isPinned) Color(76, 139, 245) else Color.Unspecified
+                    )
                 }
             }
         }
+    }
+
+    if (showOptionsDialog) {
+        AlertDialog(
+            onDismissRequest = { showOptionsDialog = false },
+            title = { Text("Options") },
+            text = {
+                Column {
+                    // To Top Button (Always visible)
+                    // If already top, clicking this updates the timestamp (moves to very top)
+                    TextButton(
+                        onClick = {
+                            drawerViewModel.actOnNoti(notiKey, "to_top")
+                            showOptionsDialog = false
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Start,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(
+                                painter = painterResource(id = R.drawable.totop),
+                                contentDescription = "To Top",
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(Modifier.width(12.dp))
+                            Text(if (isSetToTop) "Move to Top (Update Time)" else "Set To Top")
+                        }
+                    }
+
+                    if (isSetToTop) {
+                        TextButton(
+                            onClick = {
+                                drawerViewModel.actOnNoti(notiKey, "undo_to_top")
+                                showOptionsDialog = false
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Start,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Icon(
+                                    painter = painterResource(id = R.drawable.undo_totop),
+                                    contentDescription = "Undo To Top",
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                Spacer(Modifier.width(12.dp))
+                                Text("Undo To Top")
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showOptionsDialog = false }) {
+                    Text("Close")
+                }
+            }
+        )
     }
 }

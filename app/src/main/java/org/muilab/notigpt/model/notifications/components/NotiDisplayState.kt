@@ -9,8 +9,11 @@ data class NotiDisplayState(
     var isArchived: Boolean,
     var isVisible: Boolean,
     var isCompletelyRead: Boolean,
-    // REMOVED: sortPosition, appCategorySortPosition
     var taskState: Int,
+
+    // New Fields
+    var isSetToTop: Boolean = false,
+    var setToTopTime: Long = 0L,
 
     var explanation: String,
     var summary: String,
@@ -25,6 +28,8 @@ data class NotiDisplayState(
         isVisible = true,
         isCompletelyRead = false,
         taskState = NOTI_TASK_STATE_NOT_STARTED,
+        isSetToTop = false,
+        setToTopTime = 0L,
         explanation = "",
         summary = "",
         sortScore = 100.0,
@@ -37,8 +42,12 @@ data class NotiDisplayState(
         isVisible = true
         taskState = NOTI_TASK_STATE_NOT_STARTED
         category = NOTI_CATEGORY_GENERAL
+
+        // Reset To Top when state resets
+        isSetToTop = false
+        setToTopTime = 0L
+
         resetReadState()
-        // resetSortPositions() // Removed
     }
 
     fun resetReadState() {

@@ -86,6 +86,7 @@ class NotiRepository(
         ) { cat, appCat, isAppView, groups ->
             Quadruple(cat, appCat, isAppView, groups)
         }.flatMapLatest { (cat, appCat, isAppView, groups) ->
+            // This retrieves items already sorted by SQL (ToTop > Time)
             val unitsFlow = notiDrawerDao.getAutoSortedNotificationsNoRelation(cat, appCat)
 
             unitsFlow.flatMapLatest { units ->
@@ -106,37 +107,38 @@ class NotiRepository(
                 displayUnitsFlow.map { displayUnits ->
                     val groupMap = groups.associateBy { it.groupId }
 
+                    // Grouping Logic
                     val groupedItemsMap = displayUnits
                         .filter { it.notiUnit.groupId != null }
                         .groupBy { it.notiUnit.groupId!! }
 
                     val looseItems = displayUnits.filter { it.notiUnit.groupId == null }.toMutableList()
-
                     val result = mutableListOf<NotiDrawerItem>()
 
                     groupedItemsMap.forEach { (groupId, children) ->
                         val group = groupMap[groupId]
-
-                        // FEATURE 3: Auto-Ungroup
-                        // If a group exists but has <= 1 visible child, treat it as a loose item
                         if (group != null && children.size > 1) {
-                            val sortedChildren = children.sortedByDescending { it.lastUpdateTime }
+                            // Sort children within group: Top > TopTime > UpdateTime
+                            val sortedChildren = children.sortedWith(
+                                compareByDescending<NotiDisplayUnit> { it.notiUnit.isSetToTop }
+                                    .thenByDescending { it.notiUnit.setToTopTime }
+                                    .thenByDescending { it.lastUpdateTime }
+                            )
                             result.add(NotiGroupItem(group, sortedChildren))
                         } else {
-                            // Render as loose items
                             looseItems.addAll(children)
-
-                            // Optional: If you want to permanently delete empty/single groups from DB,
-                            // you would trigger a cleanup here, but simply rendering them as loose
-                            // fulfills the requirement of "displaying the sole remaining notification by a noticard".
                         }
                     }
 
-                    // Add all loose items (including those from dissolved groups)
                     result.addAll(looseItems.map { NotiItem(it) })
 
-                    // Sort everything by latestTime Descending
-                    result.sortedByDescending { it.latestTime }
+                    // Final Sort for the Drawer List
+                    // Priority: IsTop > TopTime > LatestTime
+                    result.sortedWith(
+                        compareByDescending<NotiDrawerItem> { it.isSetToTop }
+                            .thenByDescending { it.setToTopTime }
+                            .thenByDescending { it.latestTime }
+                    )
                 }
             }
         }
@@ -145,6 +147,8 @@ class NotiRepository(
     // --- NEW: Feature 2 (Group Actions) ---
     suspend fun actOnGroup(groupId: String, action: String) {
         when (action) {
+            "to_top" -> notiDrawerDao.updateToTopStatusByGroupId(groupId, true, System.currentTimeMillis())
+            "undo_to_top" -> notiDrawerDao.updateToTopStatusByGroupId(groupId, false, 0L)
             "dismiss_swipe" -> {
                 notiDrawerDao.setGroupInvisible(groupId)
                 val remainingVisibleItems = notiDrawerDao.getVisibleCountForGroup(groupId)
@@ -248,13 +252,13 @@ class NotiRepository(
         notiDrawerDao.update(notiUnit)
     }
 
-    fun removeNotiUnit(notiKey: String) {
+    suspend fun removeNotiUnit(notiKey: String) {
         notiDrawerDao.setUnitInvisibleByKey(notiKey)
         notiRecordDao.setRecordsInvisibleByKey(notiKey)
     }
 
     @RequiresApi(Build.VERSION_CODES.S)
-    fun insertNotiRecord(sbn: StatusBarNotification) {
+    suspend fun insertNotiRecord(sbn: StatusBarNotification) {
         val notiRecord = NotiRecord(sbn)
         notiRecordDao.upsert(notiRecord)
         registerNewRecordForNotiUnit(notiRecord.notiKey)
@@ -324,7 +328,7 @@ class NotiRepository(
         return notiDrawerDao.getByNotiKey(notiKey)
     }
 
-    fun actOnNoti(notiKey: String, action: String) {
+    suspend fun actOnNoti(notiKey: String, action: String) {
         when (action) {
             "dismiss_swipe" -> {
                 val noti = notiDrawerDao.getByNotiKey(notiKey)
@@ -346,6 +350,8 @@ class NotiRepository(
                 }
                 return
             }
+            "to_top" -> notiDrawerDao.updateToTopStatus(notiKey, true, System.currentTimeMillis())
+            "undo_to_top" -> notiDrawerDao.updateToTopStatus(notiKey, false, 0L)
             "archive" -> notiDrawerDao.updateCategory(notiKey, NOTI_CATEGORY_ARCHIVE)
             "unarchive" -> notiDrawerDao.updateCategory(notiKey, NOTI_CATEGORY_GENERAL)
             "make_task" -> notiDrawerDao.updateCategory(notiKey, NOTI_CATEGORY_MAKETASK)
@@ -362,12 +368,12 @@ class NotiRepository(
         logAction(notiKey, action)
     }
 
-    fun markNotiRead(notiKey: String) {
+    suspend fun markNotiRead(notiKey: String) {
         notiDrawerDao.setUnitReadByKey(notiKey)
         notiRecordDao.setRecordsReadByKey(notiKey)
     }
 
-    fun markAllNotisRead(category: String) {
+    suspend fun markAllNotisRead(category: String) {
         val notReadNotiKeys = notiDrawerDao.getVisibleNotReadKeysByCategory(category)
         val notiKeys = notiDrawerDao.getVisibleKeysByCategory(category)
         notReadNotiKeys.forEach { notiKey ->
@@ -377,7 +383,7 @@ class NotiRepository(
         notiRecordDao.setRecordsReadByIds(notiKeys)
     }
 
-    fun deleteAllNotis(category: String) {
+    suspend fun deleteAllNotis(category: String) {
         val notiKeys = notiDrawerDao.getVisibleNotPinnedKeysByCategory(category)
         notiKeys.forEach { notiKey ->
             logAction(notiKey, "delete_all")
@@ -494,7 +500,7 @@ class NotiRepository(
         notiActionDao.insert(NotiAction(notiKey, action, actionTime, lastAppResumeTime, metadata))
     }
 
-    fun setHasGenuineTask(notiKey: String, hasGenuine: Boolean) {
+    suspend fun setHasGenuineTask(notiKey: String, hasGenuine: Boolean) {
         val existing = notiDrawerDao.getByNotiKey(notiKey) ?: return
         val prev = existing.hasGenuineTask
         notiDrawerDao.setHasGenuineTaskByKey(notiKey, hasGenuine)
@@ -509,7 +515,7 @@ class NotiRepository(
         }
     }
 
-    fun setPinnedState(notiKey: String, pinned: Boolean) {
+    suspend fun setPinnedState(notiKey: String, pinned: Boolean) {
         val existing = notiDrawerDao.getByNotiKey(notiKey) ?: return
         val prev = existing.isPinned
         notiDrawerDao.flipPin(notiKey)
@@ -523,7 +529,7 @@ class NotiRepository(
         }
     }
 
-    fun recomputeShouldExtractForKey(notiKey: String) {
+    suspend fun recomputeShouldExtractForKey(notiKey: String) {
         val current = notiDrawerDao.getByNotiKey(notiKey) ?: return
         val should = current.hasGenuineTask || current.isPinned
         notiDrawerDao.setShouldExtractTaskByKey(notiKey, should)

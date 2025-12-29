@@ -59,12 +59,15 @@ fun GroupCard(
     val children = groupItem.children
     val expanded = group.isExpanded
 
+    // Determine Group Top Status: True if ANY child is set to top
+    val isGroupSetToTop = children.any { it.notiUnit.isSetToTop }
+
     // Feature 1 State: Rename Dialog
     var showRenameDialog by remember { mutableStateOf(false) }
     var renameText by remember { mutableStateOf(group.title) }
 
     // Feature 2 State: Swipe Logic
-    val swipeDeleteLeft by SharedPreferencesManager.swipeDeleteLeftFlow.collectAsState()
+    val swipeDeleteLeft = SharedPreferencesManager.swipeDeleteLeft
     val coroutineScope = rememberCoroutineScope()
     val horizontalOffsetX = remember { Animatable(0f) }
     var cardWidth by remember { mutableStateOf(0f) }
@@ -176,8 +179,7 @@ fun GroupCard(
                 .fillMaxHeight()
                 .padding(horizontal = 16.dp)
                 .graphicsLayer {
-                    translationX = 0f // Fixed position, card moves over it
-                    // Optional alpha fade
+                    translationX = 0f
                     val safeWidth = maxOf(1f, endActionsWidth)
                     val t = if (swipeDeleteLeft) (horizontalOffsetX.value / safeWidth) else (-horizontalOffsetX.value / safeWidth)
                     alpha = t.coerceIn(0f, 1f)
@@ -189,6 +191,22 @@ fun GroupCard(
             NotiActionIconButton(R.drawable.close, "Hide Actions", {
                 coroutineScope.launch { collapse() }
             }, Color.Black)
+
+            // NEW: Batch To-Top Action
+            // Logic: If ANY child is to-topped, the button allows you to Undo all.
+            // Otherwise, it allows you to Set Top all.
+            val isAnyChildTopped = children.any { it.notiUnit.isSetToTop }
+
+            NotiActionIconButton(
+                if (isAnyChildTopped) R.drawable.undo_totop else R.drawable.totop,
+                if (isAnyChildTopped) "Undo Group Top" else "Group To Top",
+                {
+                    val action = if (isAnyChildTopped) "undo_to_top" else "to_top"
+                    drawerViewModel.actOnGroup(group.groupId, action)
+                    coroutineScope.launch { collapse() }
+                },
+                Color.Black
+            )
 
             NotiActionIconButton(if (representativeCategory == NOTI_CATEGORY_MAKETASK) R.drawable.task_yes else R.drawable.task_no, "Make-Task Group", {
                 val action = if (representativeCategory == NOTI_CATEGORY_MAKETASK) "dismiss_task" else "make_task"
@@ -256,8 +274,10 @@ fun GroupCard(
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )
+                        val countText = "${children.size} notifications" +
+                            if (!expanded && children.size > 1) " (${children.size - 1} more...)" else ""
                         Text(
-                            text = "${children.size} notifications",
+                            text = countText,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -310,14 +330,6 @@ fun GroupCard(
                             appCategory = unit.appCategory,
                             isMergeTarget = false,
                             isInGroup = true
-                        )
-                    }
-
-                    if (!expanded && children.size > 1) {
-                        Text(
-                            text = "+ ${children.size - 1} more...",
-                            style = MaterialTheme.typography.labelSmall,
-                            modifier = Modifier.padding(start = 8.dp, bottom = 4.dp)
                         )
                     }
                 }
