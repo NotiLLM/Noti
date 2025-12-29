@@ -19,11 +19,23 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.material3.CircularProgressIndicator
 import android.util.Log
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.RadioButtonDefaults
+import androidx.compose.material3.Text
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.unit.dp
+import org.muilab.notigpt.util.SharedPreferencesManager
 import org.muilab.notigpt.view.component.appbar.AppBottomBar
 import org.muilab.notigpt.view.component.appbar.AppTopBar
 import org.muilab.notigpt.view.component.features.TaskList
 import org.muilab.notigpt.view.screen.HomeScreen
+import org.muilab.notigpt.view.screen.SettingsScreen
 import org.muilab.notigpt.viewModel.DrawerViewModel
 import org.muilab.notigpt.viewModel.TaskViewModel
 
@@ -40,6 +52,7 @@ fun AppScaffold(
 
     // State to manage whether the search bar is expanded
     var isSearchExpanded by remember { mutableStateOf(false) }
+    var isSettingsShown by remember { mutableStateOf(false) }
     // State to manage the selected item in the bottom navigation bar
     val selectedCategory = drawerViewModel.category.collectAsState()
     val unreadCounts by drawerViewModel.unreadCountsByCategory.collectAsState()
@@ -50,40 +63,30 @@ fun AppScaffold(
                 drawerViewModel = drawerViewModel,
                 isSearchExpanded = isSearchExpanded,
                 // Lambda to toggle the search state
-                onSearchToggled = { isSearchExpanded = it }
+                onSearchToggled = { isSearchExpanded = it },
+                isSettingsShown = isSettingsShown,
+                onSettingsShown = { isSettingsShown = it }
             )
         },
         bottomBar = {
-            AppBottomBar(
-                selectedCategory = selectedCategory.value,
-                onItemSelected = { category ->
-                    drawerViewModel.updateCategory(category)
-                    // Reset the search state when a new category is selected
-                    isSearchExpanded = false
-                },
-                unreadCounts = unreadCounts,
-            )
+            if (!isSettingsShown) {
+                AppBottomBar(
+                    selectedCategory = selectedCategory.value,
+                    onItemSelected = { category ->
+                        drawerViewModel.updateCategory(category)
+                        // Reset the search state when a new category is selected
+                        isSearchExpanded = false
+                    },
+                    unreadCounts = unreadCounts,
+                )
+            }
         }
     ) { paddingValues ->
         Box(modifier = Modifier.padding(paddingValues)) {
-            Column (modifier = Modifier.fillMaxSize()) {
-                TaskList(taskViewModel)
-                AppCategoryFilterChips(drawerViewModel)
-                Box(modifier = Modifier.fillMaxSize()) {
-                    HomeScreen(context, drawerViewModel)
-
-                    // Global spinner overlay triggered by DrawerViewModel when user switches targets
-                    val isLoading by drawerViewModel.isTargetLoading.collectAsState()
-                    // Log the loading state changes for debugging
-                    LaunchedEffect(isLoading) {
-                        Log.d("AppScaffold", "isTargetLoading changed: $isLoading")
-                    }
-                    if (isLoading) {
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator()
-                        }
-                    }
-                }
+            if (!isSettingsShown) {
+                HomeScreen(context, drawerViewModel, taskViewModel)
+            } else {
+                SettingsScreen()
             }
         }
     }

@@ -43,6 +43,7 @@ import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_GENERAL
 import org.muilab.notigpt.util.Constants.Companion.APP_CATEGORY_ALL
 import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_ARCHIVE
 import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_MAKETASK
+import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_SAVE
 import org.muilab.notigpt.util.SharedPreferencesManager
 import org.muilab.notigpt.util.postOngoingNotification
 import java.util.concurrent.ConcurrentHashMap
@@ -553,18 +554,23 @@ class DrawerViewModel(
 
             val generalCount = notiRepository.getVisibleNotReadNotificationCountByCategory(NOTI_CATEGORY_GENERAL)
             val taskCount = notiRepository.getVisibleNotReadNotificationCountByCategory(NOTI_CATEGORY_MAKETASK)
+            val saveCount = notiRepository.getVisibleNotReadNotificationCountByCategory(NOTI_CATEGORY_SAVE)
             val archiveCount = notiRepository.getVisibleNotReadNotificationCountByCategory(NOTI_CATEGORY_ARCHIVE)
 
             counts[NOTI_CATEGORY_GENERAL] = generalCount
             counts[NOTI_CATEGORY_MAKETASK] = taskCount
+            counts[NOTI_CATEGORY_SAVE] = saveCount
             counts[NOTI_CATEGORY_ARCHIVE] = archiveCount
 
             val generalTotalCount = notiRepository.getVisibleNotiCountByCategory(NOTI_CATEGORY_GENERAL)
             val taskTotalCount = notiRepository.getVisibleNotiCountByCategory(NOTI_CATEGORY_MAKETASK)
             val archiveTotalCount = notiRepository.getVisibleNotiCountByCategory(NOTI_CATEGORY_ARCHIVE)
+            val saveTotalCount = notiRepository.getVisibleNotiCountByCategory(NOTI_CATEGORY_SAVE)
+
 
             counts["$NOTI_CATEGORY_GENERAL-Total"] = generalTotalCount
             counts["$NOTI_CATEGORY_MAKETASK-Total"] = taskTotalCount
+            counts["$NOTI_CATEGORY_SAVE-Total"] = saveTotalCount
             counts["$NOTI_CATEGORY_ARCHIVE-Total"] = archiveTotalCount
 
             Log.d("DrawerViewModel", "Unread counts updated: $counts")

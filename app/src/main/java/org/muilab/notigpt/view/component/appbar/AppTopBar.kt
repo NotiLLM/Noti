@@ -44,7 +44,9 @@ import org.muilab.notigpt.viewModel.DrawerViewModel
 fun AppTopBar(
     drawerViewModel: DrawerViewModel,
     isSearchExpanded: Boolean,
-    onSearchToggled: (Boolean) -> Unit
+    onSearchToggled: (Boolean) -> Unit,
+    isSettingsShown: Boolean,
+    onSettingsShown: (Boolean) -> Unit
 ) {
 
     val isSortingMode = drawerViewModel.isSortingMode.collectAsState()
@@ -58,27 +60,36 @@ fun AppTopBar(
 
         // 3. Use the 'title' slot for your title or search bar
         title = {
-            AnimatedContent(
-                targetState = isSearchExpanded,
-                transitionSpec = {
-                    fadeIn(animationSpec = tween(200)).togetherWith(fadeOut(animationSpec = tween(200)))
-                },
-                label = "Search Bar Animation"
-            ) { expanded ->
-                if (expanded) {
-                    // Your existing SearchBar fits here perfectly
-                    SearchBar(drawerViewModel, onSearchToggled)
-                } else {
-                    // The standard title text
-                    Text(
-                        text = stringResource(R.string.app_name),
-                        style = MaterialTheme.typography.titleLarge
-//                        modifier = Modifier.clickable(
-//                            onClick = {
-//                                SharedPreferencesManager.hideComplexVisuals = !SharedPreferencesManager.hideComplexVisuals
-//                            }
-//                        )
-                    )
+
+            if (isSettingsShown) {
+                Text(
+                    text = "Settings",
+                    style = MaterialTheme.typography.titleLarge
+                )
+            } else {
+                AnimatedContent(
+                    targetState = isSearchExpanded,
+                    transitionSpec = {
+                        fadeIn(animationSpec = tween(200)).togetherWith(
+                            fadeOut(
+                                animationSpec = tween(
+                                    200
+                                )
+                            )
+                        )
+                    },
+                    label = "Search Bar Animation"
+                ) { expanded ->
+                    if (expanded) {
+                        // Your existing SearchBar fits here perfectly
+                        SearchBar(drawerViewModel, onSearchToggled)
+                    } else {
+                        // The standard title text
+                        Text(
+                            text = stringResource(R.string.app_name),
+                            style = MaterialTheme.typography.titleLarge
+                        )
+                    }
                 }
             }
         },
@@ -86,50 +97,68 @@ fun AppTopBar(
         // 4. Use the 'actions' slot for your IconButtons
         actions = {
             // Hide actions when search is expanded to make space
-            if (!isSearchExpanded) {
-                IconButton(
-                    modifier = Modifier.minimumInteractiveComponentSize(),
-                    onClick = { onSearchToggled(true) }
-                ) {
-                    Icon(Icons.Default.Search, contentDescription = "Search")
-                }
-                IconButton(
-                    modifier = Modifier.minimumInteractiveComponentSize(),
-                    onClick = { drawerViewModel.deleteAllNotis() }
-                ) {
-                    Icon(
-                        painter = painterResource(id = R.drawable.sweep),
-                        contentDescription = "Sweep"
-                    )
-                }
-                IconButton(
-                    modifier = Modifier.minimumInteractiveComponentSize(),
-                    onClick = { drawerViewModel.markAllNotisRead() }
-                ) {
-                    Icon(
-                        painter = painterResource(id = R.drawable.mark_read),
-                        contentDescription = "Mark Read"
-                    )
-                }
-                IconButton(
-                    modifier = Modifier.minimumInteractiveComponentSize(),
-                    colors = IconButtonDefaults.iconButtonColors(
-                        containerColor = if (isSortingMode.value) MaterialTheme.colorScheme.primary else Color.Transparent,
-                        contentColor = if (isSortingMode.value) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
-                    ),
-                    onClick = { drawerViewModel.toggleSortingMode() }
-                ) {
-                    Icon(
-                        painter = painterResource(id = R.drawable.reorder),
-                        contentDescription = "Reorder"
-                    )
-                }
+            if (!isSettingsShown) {
+                if (!isSearchExpanded) {
+                    IconButton(
+                        modifier = Modifier.minimumInteractiveComponentSize(),
+                        onClick = { onSearchToggled(true) }
+                    ) {
+                        Icon(Icons.Default.Search, contentDescription = "Search")
+                    }
+                    IconButton(
+                        modifier = Modifier.minimumInteractiveComponentSize(),
+                        onClick = { drawerViewModel.deleteAllNotis() }
+                    ) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.sweep),
+                            contentDescription = "Sweep"
+                        )
+                    }
+//                IconButton(
+//                    modifier = Modifier.minimumInteractiveComponentSize(),
+//                    onClick = { drawerViewModel.markAllNotisRead() }
+//                ) {
+//                    Icon(
+//                        painter = painterResource(id = R.drawable.mark_read),
+//                        contentDescription = "Mark Read"
+//                    )
+//                }
+                    IconButton(
+                        modifier = Modifier.minimumInteractiveComponentSize(),
+                        colors = IconButtonDefaults.iconButtonColors(
+                            containerColor = if (isSortingMode.value) MaterialTheme.colorScheme.primary else Color.Transparent,
+                            contentColor = if (isSortingMode.value) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+                        ),
+                        onClick = { drawerViewModel.toggleSortingMode() }
+                    ) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.reorder),
+                            contentDescription = "Reorder"
+                        )
+                    }
+                    IconButton(
+                        modifier = Modifier.minimumInteractiveComponentSize(),
+                        onClick = { onSettingsShown(true) }
+                    ) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.settings),
+                            contentDescription = "Settings"
+                        )
+                    }
 //                IconButton(
 //                    modifier = Modifier.minimumInteractiveComponentSize(),
 //                    onClick = {  }
 //                ) {
 //                    Icon(Icons.Default.MoreVert, contentDescription = "More Options")
 //                }
+                }
+            } else {
+                IconButton(
+                    modifier = Modifier.minimumInteractiveComponentSize(),
+                    onClick = { onSettingsShown(false) }
+                ) {
+                    Icon(painterResource(R.drawable.close), contentDescription = "Close Settings")
+                }
             }
         }
     )

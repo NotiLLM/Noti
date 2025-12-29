@@ -39,6 +39,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import org.muilab.notigpt.R
 import org.muilab.notigpt.view.component.notification.NotiCard
@@ -72,8 +73,7 @@ fun NotiDrawer(context: Context, drawerViewModel: DrawerViewModel) {
     LaunchedEffect(lazyListState) {
         // Use snapshotFlow to observe changes to layoutInfo
         snapshotFlow { lazyListState.layoutInfo }
-            // V-- FIX IS HERE --V
-            .collect { layoutInfo: LazyListLayoutInfo ->
+            .collectLatest { layoutInfo: LazyListLayoutInfo ->
                 val viewportStartOffset = layoutInfo.viewportStartOffset
                 val viewportEndOffset = layoutInfo.viewportEndOffset
 
@@ -101,7 +101,7 @@ fun NotiDrawer(context: Context, drawerViewModel: DrawerViewModel) {
     }
 
     // Wrap list in a Box so we can overlay a loading spinner when Paging is refreshing
-    Box(modifier = Modifier.fillMaxWidth().fillMaxHeight()) {
+    Box(modifier = Modifier.fillMaxSize()) {
         LazyColumn(
             state = lazyListState,
             modifier = Modifier

@@ -41,6 +41,7 @@ import org.muilab.notigpt.util.Constants.Companion.MAX_EXPIRED_RECORDS_PER_KEY
 import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_ARCHIVE
 import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_GENERAL
 import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_MAKETASK
+import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_SAVE
 import org.muilab.notigpt.util.Constants.Companion.NOTI_RECORD_EXPIRE_TIME_MS
 import org.muilab.notigpt.util.SharedPreferencesManager
 import org.muilab.notigpt.util.getAppCategoryByAppName
@@ -464,6 +465,8 @@ class NotiRepository(
             "unarchive" -> notiDrawerDao.updateCategory(notiKey, NOTI_CATEGORY_GENERAL)
             "make_task" -> notiDrawerDao.updateCategory(notiKey, NOTI_CATEGORY_MAKETASK)
             "dismiss_task" -> notiDrawerDao.updateCategory(notiKey, NOTI_CATEGORY_GENERAL)
+            "save" -> notiDrawerDao.updateCategory(notiKey, NOTI_CATEGORY_SAVE)
+            "unsave" -> notiDrawerDao.updateCategory(notiKey, NOTI_CATEGORY_GENERAL)
 
             "unpin" -> setPinnedState(notiKey, true)
             "pin" -> setPinnedState(notiKey, false)
