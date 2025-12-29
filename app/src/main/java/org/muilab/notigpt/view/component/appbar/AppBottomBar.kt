@@ -34,6 +34,7 @@ import org.muilab.notigpt.R
 import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_ARCHIVE
 import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_GENERAL
 import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_MAKETASK
+import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_SAVE
 import org.muilab.notigpt.util.SharedPreferencesManager
 
 @Composable
@@ -44,8 +45,8 @@ fun AppBottomBar(
 ) {
     val hideComplexVisuals by SharedPreferencesManager.hideComplexVisualsFlow.collectAsState()
 
-    val categoryNames = listOf(NOTI_CATEGORY_GENERAL, NOTI_CATEGORY_MAKETASK, NOTI_CATEGORY_ARCHIVE)
-    val iconResIds = listOf(R.drawable.notifications, R.drawable.task_no, R.drawable.archive_no)
+    val categoryNames = listOf(NOTI_CATEGORY_GENERAL, NOTI_CATEGORY_MAKETASK, NOTI_CATEGORY_SAVE, NOTI_CATEGORY_ARCHIVE)
+    val iconResIds = listOf(R.drawable.notifications, R.drawable.task_no, R.drawable.save_no, R.drawable.archive_no)
 
     NavigationBar {
         categoryNames

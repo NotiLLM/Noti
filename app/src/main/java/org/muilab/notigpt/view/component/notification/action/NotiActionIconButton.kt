@@ -43,7 +43,7 @@ fun NotiActionIconButton(
         Icon(
             painter = painterResource(id = iconRes),
             contentDescription = contentDescription,
-            modifier = Modifier.size(24.dp),
+            modifier = Modifier.size(30.dp),
             tint = if (color == Color.Unspecified) contentColorFor(backgroundColor) else color
         )
     }

@@ -16,6 +16,9 @@ object SharedPreferencesManager {
     fun init(context: Context) {
         localSharedPrefs = context.getSharedPreferences("local", Context.MODE_PRIVATE)
         serverSharedPrefs = context.getSharedPreferences("server", Context.MODE_PRIVATE)
+
+        // Initialize flows that depend on stored prefs
+        _swipeDeleteLeftFlow.value = get(KEY_LOCAL_PREFS, KEY_SWIPE_DELETE_LEFT, true)
     }
 
     // Generic Setter
@@ -102,6 +105,18 @@ object SharedPreferencesManager {
 
     private val _hideComplexVisualsFlow = MutableStateFlow(true)
     val hideComplexVisualsFlow: StateFlow<Boolean> = _hideComplexVisualsFlow.asStateFlow()
+
+    // --- Swipe delete direction preference ---
+    const val KEY_SWIPE_DELETE_LEFT = "swipeDeleteLeft"
+    private val _swipeDeleteLeftFlow = MutableStateFlow(true)
+    val swipeDeleteLeftFlow: StateFlow<Boolean> = _swipeDeleteLeftFlow.asStateFlow()
+
+    var swipeDeleteLeft: Boolean
+        get() = get(KEY_LOCAL_PREFS, KEY_SWIPE_DELETE_LEFT, true)
+        set(value) {
+            put(KEY_LOCAL_PREFS, KEY_SWIPE_DELETE_LEFT, value)
+            _swipeDeleteLeftFlow.value = value
+        }
 
     private const val KEY_BASELINE_EMBEDDING_EN = "baselineEmbeddingEn"
     var baselineEmbeddingEn: String
