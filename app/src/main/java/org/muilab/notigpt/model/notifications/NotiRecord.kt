@@ -39,7 +39,6 @@ data class NotiRecord (
     val extraSubText: String = "",
 
     // STATUS
-    var isRead: Boolean = false,
     var isVisible: Boolean = true,
 
     // TASK DETECTION/EXTRACTION FLAGS

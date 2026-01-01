@@ -2,15 +2,12 @@ package org.muilab.notigpt.view.component.notification.action
 
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.contentColorFor
-import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -24,8 +21,6 @@ fun NotiActionIconButton(
     @DrawableRes iconRes: Int,
     contentDescription: String,
     onClick: () -> Unit,
-    backgroundColor: Color,
-    hasBorder: Boolean = true,
     color: Color = Color.Unspecified
 ) {
     val buttonBgColor = MaterialTheme.colorScheme.surfaceContainerHighest // 讓按鈕最亮，看起來可點擊

@@ -7,18 +7,17 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import org.muilab.notigpt.model.features.TaskUnit
 import org.muilab.notigpt.model.notifications.NotiAction
+import org.muilab.notigpt.model.notifications.NotiGroup
 import org.muilab.notigpt.model.notifications.NotiRecord
 import org.muilab.notigpt.model.notifications.NotiUnit
 import org.muilab.notigpt.model.notifications.VisibleNotiRecord
-import org.muilab.notigpt.model.features.TaskUnit
-import org.muilab.notigpt.database.room.TaskListDao
-import org.muilab.notigpt.model.notifications.NotiGroup
 
 @Database(
     entities = [NotiUnit::class, NotiRecord::class, NotiAction::class, TaskUnit::class, NotiGroup::class],
     views = [VisibleNotiRecord::class],
-    version = 16, // Increment version
+    version = 17, // Increment version
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -268,6 +267,106 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_16_17 = object : Migration(16, 17) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // 1. Migrate NotiDrawer (Remove taskState, Rename isCompletelyRead -> isRead)
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `noti_drawer_new` (
+                        `notiKey` TEXT NOT NULL,
+                        `appCategory` TEXT NOT NULL,
+                        `appName` TEXT NOT NULL,
+                        `category` TEXT NOT NULL,
+                        `explanation` TEXT NOT NULL,
+                        `groupId` TEXT,
+                        `groupKey` TEXT NOT NULL,
+                        `hasGenuineTask` INTEGER NOT NULL,
+                        `hashKey` INTEGER NOT NULL,
+                        `icon` TEXT NOT NULL,
+                        `isAppGroup` INTEGER NOT NULL,
+                        `isArchived` INTEGER NOT NULL,
+                        `isRead` INTEGER NOT NULL,
+                        `isGroupChat` INTEGER NOT NULL,
+                        `isPeople` INTEGER NOT NULL,
+                        `isPinned` INTEGER NOT NULL,
+                        `isVisible` INTEGER NOT NULL,
+                        `largeIcon` TEXT NOT NULL,
+                        `lastSyncTime` INTEGER NOT NULL,
+                        `lastUpdateTime` INTEGER NOT NULL,
+                        `pkgName` TEXT NOT NULL,
+                        `shouldExtractTask` INTEGER NOT NULL,
+                        `sortKey` TEXT NOT NULL,
+                        `sortScore` REAL NOT NULL,
+                        `summary` TEXT NOT NULL,
+                        `isSetToTop` INTEGER NOT NULL,
+                        `setToTopTime` INTEGER NOT NULL,
+                        PRIMARY KEY(`notiKey`)
+                    )
+                """)
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_noti_drawer_new_groupId` ON `noti_drawer_new` (`groupId`)")
+
+                // Copy data (Map isCompletelyRead to isRead, Drop taskState)
+                db.execSQL("""
+                    INSERT INTO `noti_drawer_new` (
+                        notiKey, appCategory, appName, category, explanation, groupId, groupKey, 
+                        hasGenuineTask, hashKey, icon, isAppGroup, isArchived, isRead, isGroupChat, 
+                        isPeople, isPinned, isVisible, largeIcon, lastSyncTime, lastUpdateTime, 
+                        pkgName, shouldExtractTask, sortKey, sortScore, summary, isSetToTop, setToTopTime
+                    )
+                    SELECT 
+                        notiKey, appCategory, appName, category, explanation, groupId, groupKey, 
+                        hasGenuineTask, hashKey, icon, isAppGroup, isArchived, isCompletelyRead, isGroupChat, 
+                        isPeople, isPinned, isVisible, largeIcon, lastSyncTime, lastUpdateTime, 
+                        pkgName, shouldExtractTask, sortKey, sortScore, summary, isSetToTop, setToTopTime
+                    FROM `noti_drawer`
+                """)
+                db.execSQL("DROP TABLE `noti_drawer`")
+                db.execSQL("ALTER TABLE `noti_drawer_new` RENAME TO `noti_drawer`")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_noti_drawer_groupId` ON `noti_drawer` (`groupId`)")
+
+                // 2. Migrate NotiRecord (Remove isRead)
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `noti_record_new` (
+                        `notiRecordId` TEXT NOT NULL,
+                        `notiKey` TEXT NOT NULL,
+                        `whenTime` INTEGER NOT NULL,
+                        `postTime` INTEGER NOT NULL,
+                        `person` TEXT NOT NULL,
+                        `extraTitle` TEXT NOT NULL,
+                        `extraBigTitle` TEXT NOT NULL,
+                        `extraConversationTitle` TEXT NOT NULL,
+                        `extraBigText` TEXT NOT NULL,
+                        `extraText` TEXT NOT NULL,
+                        `extraTextLines` TEXT NOT NULL,
+                        `extraSummaryText` TEXT NOT NULL,
+                        `extraInfoText` TEXT NOT NULL,
+                        `extraSubText` TEXT NOT NULL,
+                        `isVisible` INTEGER NOT NULL,
+                        `taskScanned` INTEGER NOT NULL DEFAULT 0,
+                        `taskExtracted` INTEGER NOT NULL DEFAULT 0,
+                        `taskExtractionClaimed` INTEGER NOT NULL DEFAULT 0,
+                        `taskExtractionClaimedAt` INTEGER NOT NULL DEFAULT 0,
+                        PRIMARY KEY(`notiRecordId`)
+                    )
+                """)
+                db.execSQL("""
+                    INSERT INTO noti_record_new 
+                    SELECT 
+                        notiRecordId, notiKey, whenTime, postTime, person, extraTitle, extraBigTitle, 
+                        extraConversationTitle, extraBigText, extraText, extraTextLines, extraSummaryText, 
+                        extraInfoText, extraSubText, isVisible, taskScanned, taskExtracted, 
+                        taskExtractionClaimed, taskExtractionClaimedAt
+                    FROM noti_record
+                """)
+                db.execSQL("DROP TABLE noti_record")
+                db.execSQL("ALTER TABLE noti_record_new RENAME TO noti_record")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `idx_record_notiKey_whenTime` ON `noti_record` (`notiKey`, `whenTime`)")
+
+                // Re-create View
+                db.execSQL("DROP VIEW IF EXISTS `VisibleNotiRecord`")
+                db.execSQL("CREATE VIEW `VisibleNotiRecord` AS SELECT * FROM noti_record WHERE isVisible = 1")
+            }
+        }
+
         fun getInstance(context: Context): AppDatabase =
             INSTANCE ?: synchronized(this) {
                 INSTANCE ?: buildDatabase(context).also { INSTANCE = it }
@@ -290,6 +389,7 @@ abstract class AppDatabase : RoomDatabase() {
                 .addMigrations(MIGRATION_13_14)
                 .addMigrations(MIGRATION_14_15)
                 .addMigrations(MIGRATION_15_16)
+                .addMigrations(MIGRATION_16_17)
                 .setJournalMode(JournalMode.TRUNCATE)
                 .build()
         }

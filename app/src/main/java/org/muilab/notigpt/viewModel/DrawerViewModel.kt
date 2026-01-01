@@ -36,7 +36,6 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.muilab.notigpt.database.server.enqueueNotificationAction
-import org.muilab.notigpt.model.notifications.NotiDisplayUnit
 import org.muilab.notigpt.model.notifications.NotiDrawerItem
 import org.muilab.notigpt.repository.NotiRepository
 import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_GENERAL
@@ -83,9 +82,6 @@ class DrawerViewModel(
     private val _appCategory = MutableStateFlow(APP_CATEGORY_ALL)
     val appCategory: StateFlow<String> = _appCategory
 
-    private val _isAppCategoryView = MutableStateFlow(false)
-    val isAppCategoryView: StateFlow<Boolean> = _isAppCategoryView
-
     @RequiresApi(Build.VERSION_CODES.S)
     fun updateAppCategory(newAppCategory: String) {
         _isTargetLoading.value = true
@@ -93,7 +89,6 @@ class DrawerViewModel(
         if (isSortingMode.value) toggleSortingMode()
         persistReadStatus()
         updateUnreadCounts()
-        _isAppCategoryView.value = newAppCategory != APP_CATEGORY_ALL
         _appCategory.value = newAppCategory
     }
 
@@ -129,7 +124,7 @@ class DrawerViewModel(
 
     init {
         // Main subscription to the grouped data flow
-        notiRepository.getGroupedNotifications(category, appCategory, isAppCategoryView)
+        notiRepository.getGroupedNotifications(category, appCategory)
             .debounce(60)
             .onEach { newList ->
                 val prev = _groupedNotifications.value
@@ -150,8 +145,6 @@ class DrawerViewModel(
                 _targetLoadingToken.value = 0L
             } else if (_isTargetLoading.value) {
                 // Check if items match current filters to decide if we stop loading
-                val cat = category.value
-                val appCat = appCategory.value
                 // Approximate check
                 if (notifications.isNotEmpty()) {
                     _isTargetLoading.value = false
@@ -267,18 +260,9 @@ class DrawerViewModel(
         }
     }
 
-    private val _seenNotiKeys = ConcurrentHashMap.newKeySet<Pair<String, Long>>()
-    private val _seenRecordIds = ConcurrentHashMap.newKeySet<String>()
 
-    fun markNotificationAsRead(notiKey: String, isManual: Boolean) {
-        if (isManual) {
-            viewModelScope.launch(Dispatchers.IO) {
-                notiRepository.actOnNoti(notiKey, "mark_read")
-            }
-            return
-        }
-
-        // Search in flattened list
+    private val _seenNotiKeys = ConcurrentHashMap.newKeySet<String>()
+    fun markNotificationAsRead(notiKey: String) {
         val currentItems = _groupedNotifications.value
         val foundUnit = currentItems.asSequence().flatMap { item ->
             when(item) {
@@ -288,29 +272,19 @@ class DrawerViewModel(
         }.firstOrNull { it.notiKey == notiKey }
 
         if (foundUnit != null) {
-            if (foundUnit.notiUnit.isCompletelyRead) return
-            Log.d("ViewModelReadState", "Marking card as read: $notiKey")
-            val currentTime = System.currentTimeMillis()
-            _seenNotiKeys.add(Pair(notiKey, currentTime))
+            if (foundUnit.notiUnit.isRead) return
+            _seenNotiKeys.add(notiKey)
         }
-    }
-
-    fun markRecordAsRead(recordId: String) {
-        // Finding record in nested structure is expensive, but necessary
-        // Optimization: UI calls this, so it exists.
-        _seenRecordIds.add(recordId)
-        // Persistence handled by persistReadStatus called on pause
     }
 
     @RequiresApi(Build.VERSION_CODES.S)
     fun persistReadStatus() {
-        if (_seenNotiKeys.isEmpty() && _seenRecordIds.isEmpty()) return
+        if (_seenNotiKeys.isEmpty()) return
 
         CoroutineScope(Dispatchers.IO).launch {
-            Log.d("ViewModelReadState", "Persisting seenNotis: ${_seenNotiKeys.size}, seenRecords: ${_seenRecordIds.size}")
-            notiRepository.updateSeenNotifications(_seenNotiKeys.toSet(), _seenRecordIds.toSet())
+            Log.d("ViewModelReadState", "Persisting seenNotis: ${_seenNotiKeys.size}")
+            notiRepository.updateSeenNotifications(_seenNotiKeys.toSet())
             _seenNotiKeys.clear()
-            _seenRecordIds.clear()
         }
     }
 
@@ -350,16 +324,16 @@ class DrawerViewModel(
         }
     }
 
-    private val fullRecordsCache = java.util.concurrent.ConcurrentHashMap<String, kotlinx.coroutines.flow.MutableStateFlow<List<org.muilab.notigpt.model.notifications.NotiRecord>>>()
-    private val fullRecordsJobs = java.util.concurrent.ConcurrentHashMap<String, kotlinx.coroutines.Job>()
+    private val fullRecordsCache = ConcurrentHashMap<String, MutableStateFlow<List<org.muilab.notigpt.model.notifications.NotiRecord>>>()
+    private val fullRecordsJobs = ConcurrentHashMap<String, kotlinx.coroutines.Job>()
 
-    fun getFullRecordsFlow(notiKey: String): kotlinx.coroutines.flow.StateFlow<List<org.muilab.notigpt.model.notifications.NotiRecord>> {
-        return fullRecordsCache.getOrPut(notiKey) { kotlinx.coroutines.flow.MutableStateFlow(emptyList()) }
+    fun getFullRecordsFlow(notiKey: String): StateFlow<List<org.muilab.notigpt.model.notifications.NotiRecord>> {
+        return fullRecordsCache.getOrPut(notiKey) { MutableStateFlow(emptyList()) }
     }
 
     fun loadFullRecordsForKey(notiKey: String) {
         if (fullRecordsJobs.containsKey(notiKey)) return
-        val stateFlow = fullRecordsCache.getOrPut(notiKey) { kotlinx.coroutines.flow.MutableStateFlow(emptyList()) }
+        val stateFlow = fullRecordsCache.getOrPut(notiKey) { MutableStateFlow(emptyList()) }
 
         val job = viewModelScope.launch(Dispatchers.IO) {
             try {

@@ -8,7 +8,6 @@ import androidx.room.Transaction
 import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 import org.muilab.notigpt.model.notifications.NotiUnit
-import org.muilab.notigpt.model.notifications.NotiUnitWithRecords
 import org.muilab.notigpt.model.server.SortOutcome
 
 @Dao
@@ -20,7 +19,7 @@ interface NotiDrawerDao {
     @Query("SELECT COUNT(*) FROM noti_drawer WHERE isVisible = 1 AND category = :category")
     fun getVisibleNotiCountByCategory(category: String): Int
 
-    @Query("SELECT COUNT(*) FROM noti_drawer WHERE isVisible = 1 AND isCompletelyRead = 0 AND category = :category")
+    @Query("SELECT COUNT(*) FROM noti_drawer WHERE isVisible = 1 AND isRead = 0 AND category = :category")
     fun getVisibleNotReadCountByCategory(category: String): Int
 
     @Query("SELECT * FROM noti_drawer")
@@ -47,7 +46,7 @@ interface NotiDrawerDao {
     @Query("SELECT notiKey FROM noti_drawer WHERE isVisible = 1 AND isPinned = 0 AND category = :category")
     fun getVisibleNotPinnedKeysByCategory(category: String): List<String>
 
-    @Query("SELECT notiKey FROM noti_drawer WHERE isVisible = 1 AND isCompletelyRead = 0 AND category = :category")
+    @Query("SELECT notiKey FROM noti_drawer WHERE isVisible = 1 AND isRead = 0 AND category = :category")
     fun getVisibleNotReadKeysByCategory(category: String): List<String>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -64,16 +63,12 @@ interface NotiDrawerDao {
     suspend fun updateToTopStatus(notiKey: String, isSetToTop: Boolean, timestamp: Long)
 
     // Update category of a notification unit (Reset ToTop here)
-    @Query("UPDATE noti_drawer SET category = :newCategory, taskState = 0, isSetToTop = 0, setToTopTime = 0 WHERE notiKey = :notiKey")
+    @Query("UPDATE noti_drawer SET category = :newCategory, isSetToTop = 0, setToTopTime = 0 WHERE notiKey = :notiKey")
     suspend fun updateCategory(notiKey: String, newCategory: String)
 
     // Flip pin
     @Query("UPDATE noti_drawer SET isPinned = NOT isPinned WHERE notiKey = :notiKey")
     suspend fun flipPin(notiKey: String)
-
-    // Add taskState by one and take remainder with 3
-    @Query("UPDATE noti_drawer SET taskState = (taskState + 1) % 3 WHERE notiKey = :notiKey")
-    suspend fun incrementTaskState(notiKey: String)
 
     @Query("UPDATE noti_drawer SET sortScore = :newSortScore WHERE notiKey = :notiKey")
     fun updateSortScore(notiKey: String, newSortScore: Float)
@@ -89,20 +84,20 @@ interface NotiDrawerDao {
         }
     }
 
-    // Set unit invisible by key
-    @Query("UPDATE noti_drawer SET isVisible = 0, isCompletelyRead = 1 WHERE notiKey = :notiKey")
+    // Set unit invisible by key (Also set isRead = 1)
+    @Query("UPDATE noti_drawer SET isVisible = 0, isRead = 1 WHERE notiKey = :notiKey")
     suspend fun setUnitInvisibleByKey(notiKey: String)
 
     // Set units invisible by keys
-    @Query("UPDATE noti_drawer SET isVisible = 0, isCompletelyRead = 1 WHERE notiKey IN (:notiKeys)")
+    @Query("UPDATE noti_drawer SET isVisible = 0, isRead = 1 WHERE notiKey IN (:notiKeys)")
     suspend fun setUnitsInvisibleByKeys(notiKeys: List<String>)
 
     // Set unit read by key
-    @Query("UPDATE noti_drawer SET isCompletelyRead = 1 WHERE notiKey = :notiKey")
+    @Query("UPDATE noti_drawer SET isRead = 1 WHERE notiKey = :notiKey")
     suspend fun setUnitReadByKey(notiKey: String)
 
     // Set units read by keys
-    @Query("UPDATE noti_drawer SET isCompletelyRead = 1 WHERE notiKey IN (:notiKeys)")
+    @Query("UPDATE noti_drawer SET isRead = 1 WHERE notiKey IN (:notiKeys)")
     suspend fun setUnitsReadByKeys(notiKeys: List<String>)
 
     // Task-related attribute setters
@@ -118,13 +113,13 @@ interface NotiDrawerDao {
     @Query("UPDATE noti_drawer SET hasGenuineTask = :value WHERE notiKey IN (:notiKeys)")
     fun setHasGenuineTaskByKeys(notiKeys: List<String>, value: Boolean)
 
-    // Simplified NoRelation Query
+    // Simplified NoRelation Query - REMOVED taskState from ORDER BY if it was there? No, it wasn't.
     @Query("""
         SELECT * FROM noti_drawer
         WHERE isVisible = 1
         AND (:category = 'General' AND (category = '' OR category = 'General') OR category = :category)
         AND (:appCategory = 'All' OR appCategory = :appCategory)
-        ORDER BY isSetToTop DESC, setToTopTime DESC, sortScore DESC, lastUpdateTime DESC
+        ORDER BY isSetToTop DESC, setToTopTime DESC, sortScore DESC, isRead ASC, lastUpdateTime DESC
     """)
     fun getAutoSortedNotificationsNoRelation(
         category: String,
@@ -137,8 +132,8 @@ interface NotiDrawerDao {
     @Query("UPDATE noti_drawer SET groupId = :newGroupId WHERE groupId = :oldGroupId")
     suspend fun moveGroupChildren(oldGroupId: String, newGroupId: String?)
 
-    // Update category for all items in a group (Reset ToTop here)
-    @Query("UPDATE noti_drawer SET category = :newCategory, taskState = 0, isSetToTop = 0, setToTopTime = 0 WHERE groupId = :groupId")
+    // Update category for all items in a group
+    @Query("UPDATE noti_drawer SET category = :newCategory, isSetToTop = 0, setToTopTime = 0 WHERE groupId = :groupId")
     suspend fun updateCategoryByGroupId(groupId: String, newCategory: String)
 
     // Batch update ToTop for a group
@@ -146,7 +141,7 @@ interface NotiDrawerDao {
     suspend fun updateToTopStatusByGroupId(groupId: String, isSetToTop: Boolean, timestamp: Long)
 
     // Set all items in a group to invisible (Dismiss)
-    @Query("UPDATE noti_drawer SET isVisible = 0, isCompletelyRead = 1 WHERE groupId = :groupId AND isPinned = 0")
+    @Query("UPDATE noti_drawer SET isVisible = 0, isRead = 1 WHERE groupId = :groupId AND isPinned = 0")
     suspend fun setGroupInvisible(groupId: String)
 
     // NEW: Check if the group still has visible items

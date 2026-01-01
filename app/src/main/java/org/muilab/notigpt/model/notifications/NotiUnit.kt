@@ -60,13 +60,9 @@ data class NotiUnit(
         get() = displayState.isPinned
         set(value) { displayState.isPinned = value }
 
-    var isCompletelyRead: Boolean
-        get() = displayState.isCompletelyRead
-        set(value) { displayState.isCompletelyRead = value }
-
-    var taskState: Int
-        get() = displayState.taskState
-        set(value) { displayState.taskState = value }
+    var isRead: Boolean
+        get() = displayState.isRead
+        set(value) { displayState.isRead = value }
 
     var summary: String
         get() = displayState.summary

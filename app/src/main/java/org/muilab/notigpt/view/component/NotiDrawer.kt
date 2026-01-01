@@ -7,13 +7,27 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.scrollBy
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -22,6 +36,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
@@ -30,7 +45,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import org.muilab.notigpt.model.notifications.NotiDrawerItem
 import org.muilab.notigpt.model.notifications.NotiGroupItem
 import org.muilab.notigpt.model.notifications.NotiItem
 import org.muilab.notigpt.view.component.notification.GroupCard
@@ -46,7 +60,7 @@ private const val NEST_HOVER_MS = 450L
 class DragState {
     var draggingId by mutableStateOf<String?>(null)
     var dragStartPointerInRoot by mutableStateOf(Offset.Zero)
-    var dragOffsetY by mutableStateOf(0f)
+    var dragOffsetY by mutableFloatStateOf(0f)
 
     var hoverId by mutableStateOf<String?>(null)
     var hoverStartMs by mutableStateOf<Long?>(null)
@@ -72,6 +86,8 @@ fun NotiDrawer(context: Context, drawerViewModel: DrawerViewModel) {
     val isSortingMode by drawerViewModel.isSortingMode.collectAsState()
     val category by drawerViewModel.category.collectAsState()
     val appCategory by drawerViewModel.appCategory.collectAsState()
+
+    var viewportBounds by remember { mutableStateOf<Rect?>(null) }
 
     val dragState = remember { DragState() }
     val listState = rememberLazyListState()
@@ -205,7 +221,12 @@ fun NotiDrawer(context: Context, drawerViewModel: DrawerViewModel) {
 
         LazyColumn(
             state = listState,
-            modifier = Modifier.fillMaxSize().background(Color.Transparent),
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Transparent)
+                .onGloballyPositioned { layoutCoordinates ->
+                    viewportBounds = layoutCoordinates.boundsInWindow()
+                },
             verticalArrangement = Arrangement.spacedBy(8.dp),
             contentPadding = PaddingValues(top = 8.dp, bottom = 80.dp)
         ) {
@@ -240,8 +261,7 @@ fun NotiDrawer(context: Context, drawerViewModel: DrawerViewModel) {
                                 isDragging = isDragging, // Visual only
                                 drawerViewModel = drawerViewModel,
                                 isCardVisible = true, // Simplified visibility logic
-                                onNotiCardRead = { manual -> drawerViewModel.markNotificationAsRead(item.id, manual) },
-                                onNotiRecordRead = { rId -> drawerViewModel.markRecordAsRead(rId) },
+                                parentViewport = viewportBounds,
                                 category = category,
                                 appCategory = appCategory,
                                 // Pass merging state for visual cues
@@ -255,7 +275,8 @@ fun NotiDrawer(context: Context, drawerViewModel: DrawerViewModel) {
                                 groupItem = item,
                                 drawerViewModel = drawerViewModel,
                                 isMergeTarget = isMergeTarget,
-                                isSortingMode = isSortingMode
+                                isSortingMode = isSortingMode,
+                                parentViewport = viewportBounds
                             )
                         }
                     }

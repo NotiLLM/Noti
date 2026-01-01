@@ -15,7 +15,6 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -36,7 +35,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -46,7 +44,6 @@ import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
@@ -98,9 +95,6 @@ import org.muilab.notigpt.service.NotiListenerService
 import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_ARCHIVE
 import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_MAKETASK
 import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_SAVE
-import org.muilab.notigpt.util.Constants.Companion.NOTI_TASK_STATE_COMPLETED
-import org.muilab.notigpt.util.Constants.Companion.NOTI_TASK_STATE_IN_PROGRESS
-import org.muilab.notigpt.util.Constants.Companion.NOTI_TASK_STATE_NOT_STARTED
 import org.muilab.notigpt.util.SharedPreferencesManager
 import org.muilab.notigpt.util.replaceChars
 import org.muilab.notigpt.view.component.notification.action.NotiActionIconButton
@@ -109,7 +103,6 @@ import org.muilab.notigpt.view.utils.NotiExpandState
 import org.muilab.notigpt.viewModel.DrawerViewModel
 import kotlin.math.abs
 import kotlin.math.max
-import kotlin.math.min
 
 @OptIn(ExperimentalFoundationApi::class)
 @RequiresApi(Build.VERSION_CODES.S)
@@ -120,20 +113,17 @@ fun NotiCard( // REMOVED RECEIVER HERE
     isDragging: Boolean,
     drawerViewModel: DrawerViewModel,
     isCardVisible: Boolean,
-    onNotiCardRead: (Boolean) -> Unit,
-    onNotiRecordRead: (recordId: String) -> Unit,
+    parentViewport: Rect?,
     category: String,
     appCategory: String,
     isMergeTarget: Boolean = false,
     isInGroup: Boolean = false
 ) {
 
-    val hideComplexVisuals by SharedPreferencesManager.hideComplexVisualsFlow.collectAsState()
     val swipeDeleteLeft = SharedPreferencesManager.swipeDeleteLeft
     val isSortingMode by drawerViewModel.isSortingMode.collectAsState()
 
-    val readRecordIdsInCard = remember { mutableSetOf<String>() }
-    var recordsViewport: Rect? by remember { mutableStateOf<Rect?>(null) }
+    var recordsViewport: Rect? by remember { mutableStateOf(null) }
 
     var showOptionsDialog by remember { mutableStateOf(false) }
 
@@ -141,7 +131,7 @@ fun NotiCard( // REMOVED RECEIVER HERE
     val notiRecords = notiDisplayUnit.notiRecords
     val notiKey = notiUnit.notiKey
     val isPinned = notiUnit.isPinned
-    val isCompletelyRead = notiUnit.isCompletelyRead
+    val isRead = notiUnit.isRead
 
     val lastRecord = notiRecords.lastOrNull()
     val notiOverallTitle = when {
@@ -157,7 +147,9 @@ fun NotiCard( // REMOVED RECEIVER HERE
         else -> ""
     }
 
-    // Check Top Status
+    val isTask = notiUnit.category == NOTI_CATEGORY_MAKETASK
+    val isSave = notiUnit.category == NOTI_CATEGORY_SAVE
+    val isArchive = notiUnit.category == NOTI_CATEGORY_ARCHIVE
     val isSetToTop = notiUnit.isSetToTop
 
     val hasSecondTitle = notiSecondOverallTitle.isNotBlank() && notiSecondOverallTitle != notiOverallTitle
@@ -165,7 +157,6 @@ fun NotiCard( // REMOVED RECEIVER HERE
     val appName = notiUnit.appName
     val bitmap = notiUnit.bitmap
     val largeBitmap = notiUnit.largeBitmap
-    val isTask = notiUnit.category == NOTI_CATEGORY_MAKETASK && !hideComplexVisuals
     val summary = notiUnit.summary
     val hasSummary = summary.isNotEmpty()
 
@@ -175,21 +166,18 @@ fun NotiCard( // REMOVED RECEIVER HERE
         else -> MaterialTheme.colorScheme.surfaceBright
     }
 
+    // Border Color Logic
     val borderColor = when {
         isMergeTarget -> MaterialTheme.colorScheme.primary
+        !isRead -> MaterialTheme.colorScheme.error
         isSetToTop -> MaterialTheme.colorScheme.secondary
-        else -> MaterialTheme.colorScheme.outlineVariant
+        else -> MaterialTheme.colorScheme.outline
     }
 
     val borderWidth = if (isSetToTop || isMergeTarget) 2.dp else 0.5.dp
 
     // Floating visualization logic (simplified)
     val isFloating = false
-
-    val timeColor = when {
-        !isCompletelyRead && !hideComplexVisuals -> MaterialTheme.colorScheme.error
-        else -> backgroundColor
-    }
 
     var requiresExpansion by remember(notiRecords, summary, notiOverallTitle, isPeople) {
         mutableStateOf(
@@ -256,8 +244,8 @@ fun NotiCard( // REMOVED RECEIVER HERE
 
     val coroutineScope = rememberCoroutineScope()
     val horizontalOffsetX = remember { Animatable(0f) }
-    var endActionsWidth by remember { mutableStateOf(0f) }
-    var cardWidth by remember { mutableStateOf(0f) }
+    var endActionsWidth by remember { mutableFloatStateOf(0f) }
+    var cardWidth by remember { mutableFloatStateOf(0f) }
     val observedOffset = remember { mutableFloatStateOf(anchoredDraggableState.offset.coerceAtLeast(0f)) }
 
     LaunchedEffect(anchoredDraggableState) {
@@ -383,8 +371,6 @@ fun NotiCard( // REMOVED RECEIVER HERE
     }
 
     val showSummary = { anchoredDraggableState.offset < COLLAPSE_THRESHOLD && hasSummary }
-    val targetElevationDp = if (isDragging) 12.dp else if (isFloating) 6.dp else 0.dp
-    val elevation by animateDpAsState(targetElevationDp, label = "elevation")
     val scaleValue by animateFloatAsState(if (isDragging) 1.02f else 1f)
     val collapse: suspend () -> Unit = { try { horizontalOffsetX.animateTo(0f) } catch (_: Throwable) {} }
     val isDarkTheme = isSystemInDarkTheme()
@@ -402,6 +388,26 @@ fun NotiCard( // REMOVED RECEIVER HERE
             }
             .then(if (isSortingMode) Modifier else combinedDragHandler) // If sorting mode, DragGestures in NotiDrawer handles it
             .clip(MaterialTheme.shapes.large)
+            .onGloballyPositioned { coordinates ->
+                if (!isRead && parentViewport != null) {
+                    val cardBounds = coordinates.boundsInWindow()
+
+                    val tolerance = 1f
+
+                    val isTopVisible = cardBounds.top >= (parentViewport.top - tolerance)
+                    val isBottomVisible = cardBounds.bottom <= (parentViewport.bottom + tolerance)
+
+                    // Optional: Check X axis if you have horizontal scrolling,
+                    // but usually Y is sufficient for this specific Drawer design.
+                    // If you want strict X as well:
+                    // val isLeftVisible = cardBounds.left >= (parentViewport.left - tolerance)
+                    // val isRightVisible = cardBounds.right <= (parentViewport.right + tolerance)
+
+                    if (isTopVisible && isBottomVisible) {
+                        drawerViewModel.markNotificationAsRead(notiKey)
+                    }
+                }
+            }
     ) {
         val rimColor = if (isDarkTheme) Color.White.copy(alpha = 0.08f) else Color.Black.copy(alpha = 0.06f)
         val surfaceBorderModifier = if (isFloating) Modifier.border(1.dp, rimColor, shape = MaterialTheme.shapes.large) else Modifier
@@ -429,7 +435,7 @@ fun NotiCard( // REMOVED RECEIVER HERE
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            NotiActionIconButton(R.drawable.close, "Hide Actions", { if (abs(horizontalOffsetX.value) == endActionsWidth) coroutineScope.launch { collapse() } }, Color.Black)
+            NotiActionIconButton(R.drawable.close, "Hide Actions", { if (abs(horizontalOffsetX.value) == endActionsWidth) coroutineScope.launch { collapse() } })
 
             if (isInGroup) {
                 NotiActionIconButton(R.drawable.leave_group, "Remove from Group", {
@@ -437,21 +443,20 @@ fun NotiCard( // REMOVED RECEIVER HERE
                         drawerViewModel.removeFromGroup(notiKey)
                         coroutineScope.launch { collapse() }
                     }
-                }, Color.Black)
+                })
             } else {
                 NotiActionIconButton(
-                    if (notiUnit.category == NOTI_CATEGORY_MAKETASK) R.drawable.task_yes else R.drawable.task_no,
+                    if (isTask) R.drawable.task_yes else R.drawable.task_no,
                     "Make-Task",
                     {
                         if (abs(horizontalOffsetX.value) == endActionsWidth) {
-                            if (notiUnit.category == NOTI_CATEGORY_MAKETASK) drawerViewModel.actOnNoti(
+                            if (isTask) drawerViewModel.actOnNoti(
                                 notiKey,
                                 "dismiss_task"
                             ) else drawerViewModel.actOnNoti(notiKey, "make_task")
                             coroutineScope.launch { collapse() }
                         }
-                    },
-                    Color.Black
+                    }
                 )
                 NotiActionIconButton(
                     if (notiUnit.category == NOTI_CATEGORY_SAVE) R.drawable.save_yes else R.drawable.save_no,
@@ -464,8 +469,7 @@ fun NotiCard( // REMOVED RECEIVER HERE
                             ) else drawerViewModel.actOnNoti(notiKey, "save")
                             coroutineScope.launch { collapse() }
                         }
-                    },
-                    Color.Black
+                    }
                 )
                 NotiActionIconButton(
                     if (notiUnit.category == NOTI_CATEGORY_ARCHIVE) R.drawable.archive_yes else R.drawable.archive_no,
@@ -478,8 +482,17 @@ fun NotiCard( // REMOVED RECEIVER HERE
                             ) else drawerViewModel.actOnNoti(notiKey, "archive")
                             coroutineScope.launch { collapse() }
                         }
-                    },
-                    Color.Black
+                    }
+                )
+                NotiActionIconButton(
+                    R.drawable.totop,
+                    "To Top",
+                    {
+                        if (abs(horizontalOffsetX.value) == endActionsWidth) {
+                            drawerViewModel.actOnNoti(notiKey, "to_top")
+                            coroutineScope.launch { collapse() }
+                        }
+                    }
                 )
             }
         }
@@ -512,13 +525,11 @@ fun NotiCard( // REMOVED RECEIVER HERE
                                     Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE -> {
                                         val options = ActivityOptions.makeBasic()
                                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.BAKLAVA)
-                                            options.setPendingIntentBackgroundActivityStartMode(
+                                            options.pendingIntentBackgroundActivityStartMode =
                                                 ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOW_ALWAYS
-                                            )
                                         else
-                                            options.setPendingIntentBackgroundActivityStartMode(
+                                            options.pendingIntentBackgroundActivityStartMode =
                                                 ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
-                                            )
                                         options.toBundle()
                                     }
                                     // Android 11 (API 30) - Android 13: Good practice to provide basic options
@@ -587,31 +598,8 @@ fun NotiCard( // REMOVED RECEIVER HERE
 
                     if (showSummary()) Spacer(Modifier.size(3.dp))
 
-                    if (isTask && !hideComplexVisuals) {
-                        val taskState = notiUnit.taskState
-                        val iconRes = when (taskState) {
-                            NOTI_TASK_STATE_NOT_STARTED -> R.drawable.task_not_started
-                            NOTI_TASK_STATE_IN_PROGRESS -> R.drawable.task_in_progress
-                            NOTI_TASK_STATE_COMPLETED -> R.drawable.task_completed
-                            else -> R.drawable.task_no
-                        }
-                        val color = when (taskState) {
-                            NOTI_TASK_STATE_NOT_STARTED -> Color(234, 67, 53)
-                            NOTI_TASK_STATE_IN_PROGRESS -> Color(251, 188, 5)
-                            NOTI_TASK_STATE_COMPLETED -> Color(52, 168, 83)
-                            else -> Color.Unspecified
-                        }
-                        val action = when (taskState) {
-                            NOTI_TASK_STATE_NOT_STARTED -> "mark_task_in_progress"
-                            NOTI_TASK_STATE_IN_PROGRESS -> "mark_task_completed"
-                            NOTI_TASK_STATE_COMPLETED -> "mark_task_reset"
-                            else -> "dismiss_task"
-                        }
-                        NotiActionIconButton(iconRes, "Task Checkbox", { drawerViewModel.actOnNoti(notiKey, action) }, backgroundColor, false, color)
-                    }
-
                     if (imageToDisplay != null) {
-                        val iconModifier = Modifier.size(35.dp).padding(vertical = 3.dp, horizontal = if (isTask) 0.dp else 3.dp)
+                        val iconModifier = Modifier.size(35.dp).padding(3.dp)
                         if (anchoredDraggableState.offset > COLLAPSE_THRESHOLD && largeBitmap != null) {
                             Image(bitmap = imageToDisplay, contentDescription = "Notification Icon", modifier = iconModifier)
                         } else {
@@ -621,7 +609,7 @@ fun NotiCard( // REMOVED RECEIVER HERE
                 }
 
                 Column(Modifier.align(Alignment.TopEnd)) {
-                    Row(Modifier.wrapContentHeight().padding(start = if (isTask) 80.dp else 35.dp)) {
+                    Row(Modifier.wrapContentHeight().padding(start = 35.dp)) {
                         if (showSummary()) {
                             Text(summary, Modifier.weight(1f).padding(horizontal = 5.dp).align(Alignment.CenterVertically), fontSize = 15.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         } else {
@@ -632,13 +620,11 @@ fun NotiCard( // REMOVED RECEIVER HERE
                                         Spacer(Modifier.weight(1F))
                                     } else {
                                         Column(Modifier.wrapContentHeight().weight(1F)) {
-                                            Text(if (notiOverallTitle.isBlank()) appName else notiOverallTitle, style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.ExtraBold), maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 14.sp, onTextLayout = { if (it.hasVisualOverflow) requiresExpansion = true })
+                                            Text(notiOverallTitle.ifBlank { appName }, style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.ExtraBold), maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 14.sp, onTextLayout = { if (it.hasVisualOverflow) requiresExpansion = true })
                                             if (hasSecondTitle) Text(notiSecondOverallTitle, style = MaterialTheme.typography.labelSmall.copy(fontStyle = FontStyle.Italic), overflow = TextOverflow.Ellipsis, maxLines = 1, onTextLayout = { if (it.hasVisualOverflow) requiresExpansion = true })
                                         }
                                     }
-                                    Box(modifier = Modifier.background(timeColor, RoundedCornerShape(16.dp))) {
-                                        Text(notiDisplayUnit.latestUpdateRelTimeStr, Modifier.padding(horizontal = 5.dp), maxLines = 1, fontSize = 12.sp, fontStyle = FontStyle.Italic, color = contentColorFor(timeColor))
-                                    }
+                                    Text(notiDisplayUnit.latestUpdateRelTimeStr, Modifier.padding(horizontal = 5.dp), maxLines = 1, fontSize = 12.sp, fontStyle = FontStyle.Italic)
                                 }
                                 Row {
                                     if (anchoredDraggableState.offset > COLLAPSE_THRESHOLD) {
@@ -662,7 +648,7 @@ fun NotiCard( // REMOVED RECEIVER HERE
                         }
                         val fullRecordsFlow = drawerViewModel.getFullRecordsFlow(notiKey)
                         val fullRecords by fullRecordsFlow.collectAsState()
-                        val showingRecords = if (fullRecords.isNotEmpty()) fullRecords else notiRecords
+                        val showingRecords = fullRecords.ifEmpty { notiRecords }
                         val sampleCount = minOf(SAMPLE_LIMIT, showingRecords.size)
 
                         SubcomposeLayout(modifier = Modifier) { constraints ->
@@ -670,7 +656,7 @@ fun NotiCard( // REMOVED RECEIVER HERE
                             val toMeasure = showingRecords.take(sampleCount)
                             val measPlaceables = subcompose("measurer") {
                                 Column(modifier = Modifier.fillMaxWidth()) {
-                                    toMeasure.forEach { rec -> ExpandedNotiRecord(rec.getDisplayedTitle(isPeople), rec.time, rec.content, false, backgroundColor, rec.isRead, false, null, {}) }
+                                    toMeasure.forEach { rec -> ExpandedNotiRecord(rec.getDisplayedTitle(isPeople), rec.time, rec.content, false) }
                                 }
                             }.map { it.measure(measuringConstraints) }
                             val sampleTotalHeight = measPlaceables.sumOf { it.height }
@@ -700,8 +686,7 @@ fun NotiCard( // REMOVED RECEIVER HERE
                             if (fullRecords.isEmpty() && anchoredDraggableState.currentValue == NotiExpandState.Opened) item { CircularProgressIndicator(Modifier.padding(8.dp).size(24.dp)) }
                             items(showingRecords, key = { it.notiRecordId }) { notiRecord ->
                                 val notiTitle = notiRecord.getDisplayedTitle(isPeople)
-                                val infoTimeColor = when { !notiRecord.isRead && !hideComplexVisuals -> MaterialTheme.colorScheme.error else -> backgroundColor }
-                                ExpandedNotiRecord(notiTitle, notiRecord.time, notiRecord.content, false, infoTimeColor, notiRecord.isRead, isCardVisible, recordsViewport, { if (!notiRecord.isRead) { onNotiRecordRead(notiRecord.notiRecordId); readRecordIdsInCard.add(notiRecord.notiRecordId) } })
+                                ExpandedNotiRecord(notiTitle, notiRecord.time, notiRecord.content, false)
                             }
                         }
                     }
@@ -764,8 +749,6 @@ fun NotiCard( // REMOVED RECEIVER HERE
                         if (isPinned) R.drawable.pin_yes else R.drawable.pin_no,
                         "Pin",
                         { if (isPinned) drawerViewModel.actOnNoti(notiKey, "unpin") else drawerViewModel.actOnNoti(notiKey, "pin") },
-                        backgroundColor,
-                        false,
                         if (isPinned) Color(76, 139, 245) else Color.Unspecified
                     )
                 }
@@ -779,8 +762,112 @@ fun NotiCard( // REMOVED RECEIVER HERE
             title = { Text("Options") },
             text = {
                 Column {
+
+                    NotiActionIconButton(R.drawable.leave_group, "Remove from Group", {
+                        if (abs(horizontalOffsetX.value) == endActionsWidth) {
+                            drawerViewModel.removeFromGroup(notiKey)
+                            coroutineScope.launch { collapse() }
+                        }
+                    })
+
+                    if (isInGroup) {
+                        TextButton(
+                            onClick = {
+                                drawerViewModel.removeFromGroup(notiKey)
+                                showOptionsDialog = false
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Start,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Icon(
+                                    painter = painterResource(R.drawable.leave_group),
+                                    contentDescription = "Leave Group",
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                Spacer(Modifier.width(12.dp))
+                                Text("Remove from Group")
+                            }
+                        }
+                    }
+
+                    TextButton(
+                        onClick = {
+                            drawerViewModel.actOnNoti(notiKey, if (!isTask) "dismiss_task" else "make_task")
+                            showOptionsDialog = false
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Start,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(
+                                painter = painterResource(
+                                    id = if (isTask) R.drawable.task_yes else R.drawable.task_no
+                                ),
+                                contentDescription = "To Task",
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(Modifier.width(12.dp))
+                            Text(if (isTask) "Remove from Tasks" else "Move to Tasks")
+                        }
+                    }
+
+                    TextButton(
+                        onClick = {
+                            drawerViewModel.actOnNoti(notiKey, if (!isSave) "unsave" else "save")
+                            showOptionsDialog = false
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Start,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(
+                                painter = painterResource(
+                                    id = if (isSave) R.drawable.save_yes else R.drawable.save_no
+                                ),
+                                contentDescription = "To Save",
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(Modifier.width(12.dp))
+                            Text(if (isSave) "Remove from Save" else "Move to Save")
+                        }
+                    }
+
+                    TextButton(
+                        onClick = {
+                            drawerViewModel.actOnNoti(notiKey, if (!isArchive) "unarchive" else "archive")
+                            showOptionsDialog = false
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Start,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(
+                                painter = painterResource(
+                                    id = if (isSave) R.drawable.archive_yes else R.drawable.archive_no
+                                ),
+                                contentDescription = "To Archive",
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(Modifier.width(12.dp))
+                            Text(if (isSave) "Remove from Archive" else "Move to Archive")
+                        }
+                    }
+
+
                     // To Top Button (Always visible)
-                    // If already top, clicking this updates the timestamp (moves to very top)
                     TextButton(
                         onClick = {
                             drawerViewModel.actOnNoti(notiKey, "to_top")

@@ -9,20 +9,44 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.awaitTouchSlopOrCancellation
 import androidx.compose.foundation.gestures.drag
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.minimumInteractiveComponentSize
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
@@ -53,14 +77,14 @@ fun GroupCard(
     groupItem: NotiGroupItem,
     drawerViewModel: DrawerViewModel,
     isMergeTarget: Boolean,
-    isSortingMode: Boolean
+    isSortingMode: Boolean,
+    parentViewport: Rect?
 ) {
     val group = groupItem.group
     val children = groupItem.children
     val expanded = group.isExpanded
 
     // Determine Group Top Status: True if ANY child is set to top
-    val isGroupSetToTop = children.any { it.notiUnit.isSetToTop }
 
     // Feature 1 State: Rename Dialog
     var showRenameDialog by remember { mutableStateOf(false) }
@@ -70,8 +94,8 @@ fun GroupCard(
     val swipeDeleteLeft = SharedPreferencesManager.swipeDeleteLeft
     val coroutineScope = rememberCoroutineScope()
     val horizontalOffsetX = remember { Animatable(0f) }
-    var cardWidth by remember { mutableStateOf(0f) }
-    var endActionsWidth by remember { mutableStateOf(0f) }
+    var cardWidth by remember { mutableFloatStateOf(0f) }
+    var endActionsWidth by remember { mutableFloatStateOf(0f) }
 
     // Background color
     val backgroundColor = when {
@@ -190,7 +214,7 @@ fun GroupCard(
         ) {
             NotiActionIconButton(R.drawable.close, "Hide Actions", {
                 coroutineScope.launch { collapse() }
-            }, Color.Black)
+            })
 
             // NEW: Batch To-Top Action
             // Logic: If ANY child is to-topped, the button allows you to Undo all.
@@ -204,27 +228,26 @@ fun GroupCard(
                     val action = if (isAnyChildTopped) "undo_to_top" else "to_top"
                     drawerViewModel.actOnGroup(group.groupId, action)
                     coroutineScope.launch { collapse() }
-                },
-                Color.Black
+                }
             )
 
             NotiActionIconButton(if (representativeCategory == NOTI_CATEGORY_MAKETASK) R.drawable.task_yes else R.drawable.task_no, "Make-Task Group", {
                 val action = if (representativeCategory == NOTI_CATEGORY_MAKETASK) "dismiss_task" else "make_task"
                 drawerViewModel.actOnGroup(group.groupId, action)
                 coroutineScope.launch { collapse() }
-            }, Color.Black)
+            })
 
             NotiActionIconButton(if (representativeCategory == NOTI_CATEGORY_SAVE) R.drawable.save_yes else R.drawable.save_no, "Save Group", {
                 val action = if (representativeCategory == NOTI_CATEGORY_SAVE) "unsave" else "save"
                 drawerViewModel.actOnGroup(group.groupId, action)
                 coroutineScope.launch { collapse() }
-            }, Color.Black)
+            })
 
             NotiActionIconButton(if (representativeCategory == NOTI_CATEGORY_ARCHIVE) R.drawable.archive_yes else R.drawable.archive_no, "Archive Group", {
                 val action = if (representativeCategory == NOTI_CATEGORY_ARCHIVE) "unarchive" else "archive"
                 drawerViewModel.actOnGroup(group.groupId, action)
                 coroutineScope.launch { collapse() }
-            }, Color.Black)
+            })
         }
 
         // --- FOREGROUND CARD ---
@@ -293,21 +316,29 @@ fun GroupCard(
                         Icon(imageVector = Icons.Filled.Edit, contentDescription = "Edit group", modifier = Modifier.size(16.dp))
                     }
 
-                    IconButton(
-                        modifier = Modifier.minimumInteractiveComponentSize(),
-                        onClick = { drawerViewModel.onUngroup(group.groupId) }
-                    ) {
-                        Icon(
-                            painter = painterResource(id = R.drawable.leave_group),
-                            contentDescription = "Ungroup"
-                        )
+                    if (isSortingMode) {
+                        IconButton(
+                            modifier = Modifier.minimumInteractiveComponentSize(),
+                            onClick = { drawerViewModel.onUngroup(group.groupId) }
+                        ) {
+                            Icon(
+                                painter = painterResource(id = R.drawable.leave_group),
+                                contentDescription = "Ungroup"
+                            )
+                        }
                     }
                 }
 
                 Spacer(Modifier.height(8.dp))
 
                 // Children Container
-                val itemsToShow = if (expanded) children else children.take(1)
+
+                val unreadChildren = children.filter { !it.notiUnit.isRead }
+                val itemsToShow = if (expanded) {
+                    children
+                } else unreadChildren.ifEmpty {
+                    children.take(1)
+                }
 
                 Column(
                     modifier = Modifier
@@ -324,8 +355,7 @@ fun GroupCard(
                             isDragging = false,
                             drawerViewModel = drawerViewModel,
                             isCardVisible = true,
-                            onNotiCardRead = { m -> drawerViewModel.markNotificationAsRead(unit.notiKey, m) },
-                            onNotiRecordRead = { id -> drawerViewModel.markRecordAsRead(id) },
+                            parentViewport = parentViewport,
                             category = unit.category,
                             appCategory = unit.appCategory,
                             isMergeTarget = false,

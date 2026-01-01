@@ -2,14 +2,12 @@ package org.muilab.notigpt.util
 
 import android.content.Context
 import android.content.SharedPreferences
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import androidx.core.content.edit
 
 object SharedPreferencesManager {
 
-    private val KEY_LOCAL_PREFS = "local"
-    private val KEY_SERVER_PREFS = "server"
+    private const val KEY_LOCAL_PREFS = "local"
+    private const val KEY_SERVER_PREFS = "server"
     private lateinit var localSharedPrefs: SharedPreferences
     private lateinit var serverSharedPrefs: SharedPreferences
 
@@ -25,7 +23,7 @@ object SharedPreferencesManager {
             "server" -> serverSharedPrefs
             else -> localSharedPrefs
         }
-        with(sharedPrefs.edit()) {
+        sharedPrefs.edit {
             when (value) {
                 is String -> putString(key, value)
                 is Int -> putInt(key, value)
@@ -34,7 +32,6 @@ object SharedPreferencesManager {
                 is Long -> putLong(key, value)
                 else -> throw IllegalArgumentException("Unsupported Type")
             }
-            apply()
         }
     }
 
@@ -57,12 +54,12 @@ object SharedPreferencesManager {
 
     private const val KEY_USER_ID = "userId"
     var userId: String
-        get() = get(KEY_SERVER_PREFS, KEY_USER_ID, "").toString()
+        get() = get(KEY_SERVER_PREFS, KEY_USER_ID, "")
         set(value) = put(KEY_SERVER_PREFS, KEY_USER_ID, value)
 
     const val KEY_SERVER_URL = "SERVER_URL"
     var serverIP: String
-        get() = get(KEY_SERVER_PREFS, KEY_SERVER_URL, "dify.udchen.tw").toString()
+        get() = get(KEY_SERVER_PREFS, KEY_SERVER_URL, "dify.udchen.tw")
         set(value) = put(KEY_SERVER_PREFS, KEY_SERVER_URL, value)
 
     const val KEY_AUTO_ARCHIVE = "autoArchive"
@@ -99,9 +96,6 @@ object SharedPreferencesManager {
     var maxRecordsBeforeDrawerSync: Int
         get() = get(KEY_LOCAL_PREFS, KEY_MAX_RECORDS_BEFORE_DRAWER_SYNC, 5)
         set(value) = put(KEY_LOCAL_PREFS, KEY_MAX_RECORDS_BEFORE_DRAWER_SYNC, value)
-
-    private val _hideComplexVisualsFlow = MutableStateFlow(true)
-    val hideComplexVisualsFlow: StateFlow<Boolean> = _hideComplexVisualsFlow.asStateFlow()
 
     // --- Swipe Delete Direction ---
     const val KEY_SWIPE_DELETE_LEFT = "swipeDeleteLeft"
@@ -146,7 +140,7 @@ object SharedPreferencesManager {
         set(value) = put(KEY_LOCAL_PREFS, KEY_MAX_PAST_CONTEXT, value)
 
     fun clearAll() {
-        localSharedPrefs.edit().clear().apply()
-        serverSharedPrefs.edit().clear().apply()
+        localSharedPrefs.edit { clear() }
+        serverSharedPrefs.edit { clear() }
     }
 }

@@ -25,7 +25,6 @@ import org.json.JSONObject
 import org.muilab.notigpt.database.server.enqueueTaskScan
 import org.muilab.notigpt.database.server.enqueueTaskExtraction
 import org.muilab.notigpt.database.server.enqueueDelayedTaskExtraction
-import org.muilab.notigpt.database.room.AppDatabase
 import org.muilab.notigpt.database.room.NotiActionDao
 import org.muilab.notigpt.database.room.NotiDrawerDao
 import org.muilab.notigpt.database.room.NotiGroupDao
@@ -38,7 +37,6 @@ import org.muilab.notigpt.model.notifications.NotiDrawerItem
 import org.muilab.notigpt.model.notifications.NotiGroup
 import org.muilab.notigpt.model.notifications.NotiGroupItem
 import org.muilab.notigpt.model.notifications.NotiItem
-import org.muilab.notigpt.model.notifications.NotiUnitWithRecords
 import org.muilab.notigpt.util.Constants.Companion.MAX_EXPIRED_RECORDS_PER_KEY
 import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_ARCHIVE
 import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_GENERAL
@@ -51,7 +49,6 @@ import java.util.UUID
 
 class NotiRepository(
     private val appContext: Context,
-    private val db: AppDatabase,
     private val notiDrawerDao: NotiDrawerDao,
     private val notiActionDao: NotiActionDao,
     private val notiRecordDao: NotiRecordDao,
@@ -76,16 +73,14 @@ class NotiRepository(
     fun getGroupedNotifications(
         categoryFlow: Flow<String>,
         appCategoryFlow: Flow<String>,
-        isAppCategoryViewFlow: Flow<Boolean>
     ): Flow<List<NotiDrawerItem>> {
         return combine(
             categoryFlow,
             appCategoryFlow,
-            isAppCategoryViewFlow,
             notiGroupDao.getAllGroupsFlow()
-        ) { cat, appCat, isAppView, groups ->
-            Quadruple(cat, appCat, isAppView, groups)
-        }.flatMapLatest { (cat, appCat, isAppView, groups) ->
+        ) { cat, appCat, groups ->
+            Tuple(cat, appCat, groups)
+        }.flatMapLatest { (cat, appCat, groups) ->
             // This retrieves items already sorted by SQL (ToTop > Time)
             val unitsFlow = notiDrawerDao.getAutoSortedNotificationsNoRelation(cat, appCat)
 
@@ -93,7 +88,7 @@ class NotiRepository(
                 val keys = units.map { it.notiKey }
 
                 val displayUnitsFlow = if (keys.isEmpty()) {
-                    flowOf(emptyList<NotiDisplayUnit>())
+                    flowOf(emptyList())
                 } else {
                     notiRecordDao.getVisibleRecordsFlowByKeys(keys).map { recs ->
                         val groupedRecs = recs.groupBy { it.notiKey }
@@ -244,6 +239,7 @@ class NotiRepository(
             notiDrawerDao.insert(newNoti)
         } else if (!isInit) {
             existingNoti.updateNoti(context, sbn)
+            existingNoti.isRead = false
             notiDrawerDao.update(existingNoti)
         }
     }
@@ -360,9 +356,6 @@ class NotiRepository(
             "unsave" -> notiDrawerDao.updateCategory(notiKey, NOTI_CATEGORY_GENERAL)
             "unpin" -> setPinnedState(notiKey, true)
             "pin" -> setPinnedState(notiKey, false)
-            "mark_task_in_progress" -> notiDrawerDao.incrementTaskState(notiKey)
-            "mark_task_completed" -> notiDrawerDao.incrementTaskState(notiKey)
-            "mark_task_reset" -> notiDrawerDao.incrementTaskState(notiKey)
             "mark_read" -> markNotiRead(notiKey)
         }
         logAction(notiKey, action)
@@ -370,17 +363,14 @@ class NotiRepository(
 
     suspend fun markNotiRead(notiKey: String) {
         notiDrawerDao.setUnitReadByKey(notiKey)
-        notiRecordDao.setRecordsReadByKey(notiKey)
     }
 
     suspend fun markAllNotisRead(category: String) {
         val notReadNotiKeys = notiDrawerDao.getVisibleNotReadKeysByCategory(category)
-        val notiKeys = notiDrawerDao.getVisibleKeysByCategory(category)
         notReadNotiKeys.forEach { notiKey ->
             logAction(notiKey, "mark_all_read")
         }
         notiDrawerDao.setUnitsReadByKeys(notReadNotiKeys)
-        notiRecordDao.setRecordsReadByIds(notiKeys)
     }
 
     suspend fun deleteAllNotis(category: String) {
@@ -391,15 +381,13 @@ class NotiRepository(
         notiDrawerDao.setUnitsInvisibleByKeys(notiKeys)
         notiDrawerDao.setUnitsReadByKeys(notiKeys)
         notiRecordDao.setRecordsInvisibleByKeys(notiKeys)
-        notiRecordDao.setRecordsReadByIds(notiKeys)
     }
 
-    fun updateSeenNotifications(seenNotis: Set<Pair<String, Long>>, seenInfos: Set<String>) {
+    fun updateSeenNotifications(seenNotis: Set<String>) { // Changed signature
         CoroutineScope(Dispatchers.IO).launch {
-            notiDrawerDao.setUnitsReadByKeys(seenNotis.map { it.first }.toSet().toList())
-            notiRecordDao.setRecordsReadByIds(seenInfos.toList())
+            notiDrawerDao.setUnitsReadByKeys(seenNotis.toList())
             seenNotis.forEach {
-                logAction(it.first, "scroll_read", actionTime = it.second)
+                logAction(it, "scroll_read")
             }
         }
     }
@@ -461,7 +449,7 @@ class NotiRepository(
             val timelineDataArray = JSONArray()
             var logActions: Boolean = includeContext
 
-            mergedData.forEach {
+            mergedData.forEach { it ->
                 when (it.second) {
                     is NotiRecord -> {
                         val notiRecord = it.second as NotiRecord
@@ -470,7 +458,6 @@ class NotiRepository(
                         notiRecordJson.put("title", notiRecord.getDisplayedTitle(notiUnit.isPeople))
                         notiRecordJson.put("content", notiRecord.content.takeIf { it != "null" } ?: "")
                         notiRecordJson.put("time", notiRecord.time)
-                        notiRecordJson.put("is_read", notiRecord.isRead)
                         notiRecordJson.put("is_visible", notiRecord.isVisible)
                         timelineDataArray.put(notiRecordJson)
                         logActions = true
@@ -571,8 +558,7 @@ class NotiRepository(
             }
         } else {
             coroutineScope {
-                val chunkSize = safeThreshold
-                val deferred = keys.chunked(chunkSize).map { chunk ->
+                val deferred = keys.chunked(safeThreshold).map { chunk ->
                     async(Dispatchers.IO) {
                         notiRecordDao.getVisibleRecordsByKeys(chunk)
                     }
@@ -610,4 +596,4 @@ class NotiRepository(
     }
 }
 
-data class Quadruple<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)
+data class Tuple<A, B, C>(val first: A, val second: B, val third: C)

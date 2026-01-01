@@ -29,6 +29,5 @@ data class VisibleNotiRecord(
     val extraSubText: String,
 
     // STATUS
-    val isRead: Boolean,
     val isVisible: Boolean
 )

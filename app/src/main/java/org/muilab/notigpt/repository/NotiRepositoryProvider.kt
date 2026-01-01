@@ -8,7 +8,7 @@ object NotiRepositoryProvider {
         val appDatabase = AppDatabase.getInstance(context.applicationContext)
         return NotiRepository(
             context.applicationContext,
-            appDatabase, // Pass the whole database instance
+            // Pass the whole database instance
             appDatabase.drawerDao(),
             appDatabase.actionDao(),
             appDatabase.recordDao(),

@@ -2,16 +2,13 @@ package org.muilab.notigpt.model.notifications.components
 
 import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_GENERAL
 import org.muilab.notigpt.util.Constants.Companion.APP_CATEGORY_UNKNOWN
-import org.muilab.notigpt.util.Constants.Companion.NOTI_TASK_STATE_NOT_STARTED
 
 data class NotiDisplayState(
     var isPinned: Boolean,
     var isArchived: Boolean,
     var isVisible: Boolean,
-    var isCompletelyRead: Boolean,
-    var taskState: Int,
+    var isRead: Boolean,
 
-    // New Fields
     var isSetToTop: Boolean = false,
     var setToTopTime: Long = 0L,
 
@@ -26,8 +23,7 @@ data class NotiDisplayState(
         isPinned = false,
         isArchived = false,
         isVisible = true,
-        isCompletelyRead = false,
-        taskState = NOTI_TASK_STATE_NOT_STARTED,
+        isRead = false,
         isSetToTop = false,
         setToTopTime = 0L,
         explanation = "",
@@ -40,18 +36,15 @@ data class NotiDisplayState(
     fun resetUserState() {
         isArchived = false
         isVisible = true
-        taskState = NOTI_TASK_STATE_NOT_STARTED
         category = NOTI_CATEGORY_GENERAL
 
         // Reset To Top when state resets
         isSetToTop = false
         setToTopTime = 0L
-
-        resetReadState()
     }
 
     fun resetReadState() {
-        isCompletelyRead = false
+        isRead = false
     }
 
     fun resetLLMState() {
