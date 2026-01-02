@@ -12,11 +12,14 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.unit.Velocity
+import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.max
+
+private const val ACTIONS_REVEAL_EXTRA_DP = 8
 
 fun Modifier.notiCardSwipeHandler(
     enabled: Boolean,
@@ -32,10 +35,12 @@ fun Modifier.notiCardSwipeHandler(
 ): Modifier {
     if (!enabled) return this
 
-    // IMPORTANT: do NOT key pointerInput on overlayBoundsRelativeToSurface.
-    // Updating overlay bounds during a drag will otherwise recreate the pointerInput block,
-    // cancelling the active gesture.
     return this.pointerInput(endActionsWidth, cardWidth, viewTouchSlop, swipeDeleteLeft) {
+        val density = this
+        val extraPx = with(density) { ACTIONS_REVEAL_EXTRA_DP.dp.toPx() }
+        val maxActionsOffset = endActionsWidth + extraPx
+
+        // Restore thresholds
         val horizontalBiasFactor = 0.5f
         val minHorizontalPx = viewTouchSlop
 
@@ -95,8 +100,8 @@ fun Modifier.notiCardSwipeHandler(
                                     pendingDx = 0f
                                     if (dx == 0f) break
 
-                                    val base = horizontalOffsetX.targetValue
-                                    val newOffset = (base + dx).coerceIn(-cardWidth, endActionsWidth)
+                                    val base = horizontalOffsetX.value
+                                    val newOffset = (base + dx).coerceIn(-cardWidth, maxActionsOffset)
                                     horizontalOffsetX.snapTo(newOffset)
                                 }
                             }
@@ -152,11 +157,11 @@ fun Modifier.notiCardSwipeHandler(
                                         onDismiss()
                                         horizontalOffsetX.snapTo(0f)
                                     } else {
-                                        horizontalOffsetX.animateTo(-endActionsWidth)
+                                        horizontalOffsetX.animateTo(-maxActionsOffset)
                                     }
                                 } else {
                                     if (swipeDeleteLeft) {
-                                        horizontalOffsetX.animateTo(endActionsWidth)
+                                        horizontalOffsetX.animateTo(maxActionsOffset)
                                     } else {
                                         horizontalOffsetX.animateTo(cardWidth, tween(300))
                                         onDismiss()
@@ -190,7 +195,9 @@ fun Modifier.notiCardSwipeHandler(
 
                         if (offsetDir == actionsDir) {
                             if (abs(currentOffsetVal) >= actionsThresholdPx) {
-                                horizontalOffsetX.animateTo(actionsDir * endActionsWidth, tween(200))
+                                // Reveal full actions + a touch of breathing room.
+                                val target = actionsDir * maxActionsOffset
+                                horizontalOffsetX.animateTo(target, tween(200))
                             } else {
                                 horizontalOffsetX.animateTo(0f, tween(200))
                             }

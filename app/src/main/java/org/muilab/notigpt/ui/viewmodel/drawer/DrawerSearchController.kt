@@ -1,7 +1,6 @@
 package org.muilab.notigpt.ui.viewmodel.drawer
 
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.withContext
@@ -29,8 +28,6 @@ class DrawerSearchController(
 
     private val _searchUnits = MutableStateFlow<Map<String, NotiUnit>>(emptyMap())
     val searchUnits: StateFlow<Map<String, NotiUnit>> = _searchUnits
-
-    private var searchJob: Job? = null
 
     suspend fun performSearch(query: String) {
         if (query.isBlank()) {
@@ -94,4 +91,3 @@ class DrawerSearchController(
         }
     }
 }
-

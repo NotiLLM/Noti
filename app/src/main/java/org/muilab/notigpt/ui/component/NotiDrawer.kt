@@ -18,12 +18,9 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.Stable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -40,44 +37,20 @@ import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.muilab.notigpt.model.notifications.NotiGroupItem
 import org.muilab.notigpt.model.notifications.NotiItem
-import org.muilab.notigpt.ui.component.notification.GroupCard
+import org.muilab.notigpt.ui.component.notification.groupcard.GroupCard
 import org.muilab.notigpt.ui.component.notification.noticard.NotiCard
 import org.muilab.notigpt.ui.viewmodel.DrawerViewModel
-import kotlin.math.abs
-import kotlin.math.max
-import kotlin.math.min
+import org.muilab.notigpt.ui.component.drawer.drag.DragState
+import org.muilab.notigpt.ui.component.drawer.drag.findClosestHit
+import org.muilab.notigpt.ui.component.drawer.drag.unionRect
 
 private const val NEST_HOVER_MS = 450L
-
-@Stable
-class DragState {
-    var draggingId by mutableStateOf<String?>(null)
-    var dragStartPointerInRoot by mutableStateOf(Offset.Zero)
-    var dragOffsetY by mutableFloatStateOf(0f)
-
-    var hoverId by mutableStateOf<String?>(null)
-    var hoverStartMs by mutableStateOf<Long?>(null)
-
-    // bounds in ROOT coords of visible items
-    val boundsById = mutableStateMapOf<String, Rect>()
-
-    var boxTopLeftInRoot by mutableStateOf(Offset.Zero)
-    var boxSize by mutableStateOf(IntSize.Zero)
-
-    fun clear() {
-        draggingId = null
-        hoverId = null
-        hoverStartMs = null
-        dragOffsetY = 0f
-    }
-}
 
 @RequiresApi(Build.VERSION_CODES.S)
 @Composable
@@ -92,6 +65,13 @@ fun NotiDrawer(context: Context, drawerViewModel: DrawerViewModel) {
     val dragState = remember { DragState() }
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
+
+    // Reset list position on filter changes
+    LaunchedEffect(category, appCategory) {
+        // If the list has items, go back to the top immediately.
+        // Use scrollToItem to avoid long animations during filter changes.
+        listState.scrollToItem(0)
+    }
 
     // Sync stale bounds cleanup
     val validIds = remember(items) { items.map { it.id }.toSet() }
@@ -285,13 +265,3 @@ fun NotiDrawer(context: Context, drawerViewModel: DrawerViewModel) {
         }
     }
 }
-
-private fun findClosestHit(bounds: Map<String, Rect>, pointer: Offset, exclude: String?, valid: Set<String>): String? {
-    val candidates = bounds.entries.filter { it.key in valid && it.key != exclude && pointer.x in it.value.left..it.value.right }
-    val exact = candidates.firstOrNull { it.value.contains(pointer) }?.key
-    if (exact != null) return exact
-    return candidates.minByOrNull { abs(it.value.center.y - pointer.y) }?.key
-}
-
-private fun unionRect(a: Rect, b: Rect) = Rect(min(a.left, b.left), min(a.top, b.top), max(a.right, b.right), max(a.bottom, b.bottom))
-private fun Rect.inflate(p: Float) = Rect(left - p, top - p, right + p, bottom + p)

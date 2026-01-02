@@ -48,9 +48,13 @@ import org.muilab.notigpt.platform.NotiLogExporter
 import org.muilab.notigpt.platform.UserNotifier
 import org.muilab.notigpt.service.NotiListenerService
 import org.muilab.notigpt.ui.viewmodel.drawer.DrawerActionsController
+import org.muilab.notigpt.ui.viewmodel.drawer.DrawerFiltersState
+import org.muilab.notigpt.ui.viewmodel.drawer.DrawerGroupingActions
 import org.muilab.notigpt.ui.viewmodel.drawer.DrawerReadStateController
 import org.muilab.notigpt.ui.viewmodel.drawer.DrawerSearchController
 import org.muilab.notigpt.platform.NotificationLauncher
+import org.muilab.notigpt.ui.viewmodel.drawer.FullRecordsController
+import org.muilab.notigpt.ui.viewmodel.drawer.DrawerUnreadCounts
 
 class DrawerViewModel(
     application: Application,
@@ -60,48 +64,35 @@ class DrawerViewModel(
     private val logExporter: NotiLogExporter,
 ) : AndroidViewModel(application) {
 
-    private val _category = MutableStateFlow(NOTI_CATEGORY_GENERAL)
-    val category: StateFlow<String> = _category
+    private val filters = DrawerFiltersState()
 
-    private val _isTargetLoading = MutableStateFlow(false)
-    val isTargetLoading: StateFlow<Boolean> = _isTargetLoading.asStateFlow()
+    val category: StateFlow<String> = filters.category
+    val appCategory: StateFlow<String> = filters.appCategory
+    val isTargetLoading: StateFlow<Boolean> = filters.isTargetLoading
+    val isSortingMode: StateFlow<Boolean> = filters.isSortingMode
 
-    private val _targetLoadingToken = MutableStateFlow(0L)
-
-    private val _isSortingMode = MutableStateFlow(false)
-    val isSortingMode: StateFlow<Boolean> = _isSortingMode
-
-    fun toggleSortingMode() {
-        _isSortingMode.value = !_isSortingMode.value
-    }
+    fun toggleSortingMode() = filters.toggleSortingMode()
 
     @RequiresApi(Build.VERSION_CODES.S)
     fun updateCategory(newCategory: String) {
-        _isTargetLoading.value = true
-        _targetLoadingToken.value = System.currentTimeMillis()
-        _category.value = newCategory
+        filters.startTargetLoading()
+        filters.setCategory(newCategory)
         if (isSortingMode.value) toggleSortingMode()
         persistReadStatus()
-        updateUnreadCounts()
+        unreadCounts.refresh()
         updateAppCategory(APP_CATEGORY_ALL)
     }
 
-    private val _appCategory = MutableStateFlow(APP_CATEGORY_ALL)
-    val appCategory: StateFlow<String> = _appCategory
-
     @RequiresApi(Build.VERSION_CODES.S)
     fun updateAppCategory(newAppCategory: String) {
-        _isTargetLoading.value = true
-        _targetLoadingToken.value = System.currentTimeMillis()
+        filters.startTargetLoading()
         if (isSortingMode.value) toggleSortingMode()
         persistReadStatus()
-        updateUnreadCounts()
-        _appCategory.value = newAppCategory
+        unreadCounts.refresh()
+        filters.setAppCategory(newAppCategory)
     }
 
-    fun clearTargetLoading() {
-        _isTargetLoading.value = false
-    }
+    fun clearTargetLoading() = filters.clearTargetLoading()
 
     private val _queryString = MutableStateFlow("")
     val queryString: StateFlow<String> = _queryString
@@ -135,6 +126,21 @@ class DrawerViewModel(
     private val searchController = DrawerSearchController(notiRepository)
     private val readStateController = DrawerReadStateController(notiRepository)
     private val actionsController = DrawerActionsController(context, notiRepository)
+    private val groupingActions = DrawerGroupingActions(
+        scope = viewModelScope,
+        notiRepository = notiRepository,
+        actionsController = actionsController,
+    )
+    private val fullRecordsController = FullRecordsController(
+        scope = viewModelScope,
+        notiRepository = notiRepository,
+    )
+
+    private val unreadCounts = DrawerUnreadCounts(
+        scope = viewModelScope,
+        notiRepository = notiRepository,
+    )
+    val unreadCountsByCategory: StateFlow<Map<String, Int>> = unreadCounts.unreadCountsByCategory
 
     // Search state (delegated)
     val includeHistory: StateFlow<Boolean> = searchController.includeHistory
@@ -156,17 +162,16 @@ class DrawerViewModel(
 
         // Loading state management
         groupedNotifications.onEach { notifications ->
-            updateUnreadCounts()
-            Log.d("DrawerViewModel", "groupedNotifications emitted: size=${notifications.size}, isTargetLoading=${_isTargetLoading.value}")
+            unreadCounts.refresh()
+            Log.d("DrawerViewModel", "groupedNotifications emitted: size=${notifications.size}, isTargetLoading=${isTargetLoading.value}")
 
-            if (_targetLoadingToken.value != 0L) {
-                _isTargetLoading.value = false
-                _targetLoadingToken.value = 0L
-            } else if (_isTargetLoading.value) {
+            if (filters.shouldClearTargetLoading()) {
+                filters.clearTargetLoading()
+            } else if (isTargetLoading.value) {
                 // Check if items match current filters to decide if we stop loading
                 // Approximate check
                 if (notifications.isNotEmpty()) {
-                    _isTargetLoading.value = false
+                    filters.clearTargetLoading()
                 }
             }
         }.launchIn(viewModelScope)
@@ -181,11 +186,11 @@ class DrawerViewModel(
                         // controller handles clearing results
                         searchController.performSearch("")
                     } else {
-                        _isTargetLoading.value = true
+                        filters.startTargetLoading()
                         try {
                             searchController.performSearch(query)
                         } finally {
-                            _isTargetLoading.value = false
+                            filters.clearTargetLoading()
                         }
                     }
                 }
@@ -198,11 +203,11 @@ class DrawerViewModel(
         searchController.setIncludeHistory(enabled)
         if (_queryString.value.isNotBlank()) {
             viewModelScope.launch {
-                _isTargetLoading.value = true
+                filters.startTargetLoading()
                 try {
                     searchController.performSearch(_queryString.value)
                 } finally {
-                    _isTargetLoading.value = false
+                    filters.clearTargetLoading()
                 }
             }
         }
@@ -283,7 +288,7 @@ class DrawerViewModel(
             notiRepository.deleteAllNotis(category.value)
             postOngoingNotification(context)
         }
-        updateUnreadCounts()
+        unreadCounts.refresh()
     }
 
     @RequiresApi(Build.VERSION_CODES.S)
@@ -292,7 +297,7 @@ class DrawerViewModel(
         viewModelScope.launch(Dispatchers.IO) {
             notiRepository.markAllNotisRead(category.value)
         }
-        updateUnreadCounts()
+        unreadCounts.refresh()
     }
 
     fun exportPostContent(includeContext: Boolean, includeDismissed: Boolean) {
@@ -335,114 +340,21 @@ class DrawerViewModel(
         }
     }
 
-    private val _unreadCountsByCategory = MutableStateFlow<Map<String, Int>>(emptyMap())
-    val unreadCountsByCategory = _unreadCountsByCategory.asStateFlow()
+    // Merge Actions (delegated)
+    fun onMerge(dragId: String, targetId: String) = groupingActions.onMerge(dragId, targetId)
 
-    private fun updateUnreadCounts() {
-        viewModelScope.launch(Dispatchers.IO) {
-            val counts = mutableMapOf<String, Int>()
-            val cats = listOf(NOTI_CATEGORY_GENERAL, NOTI_CATEGORY_MAKETASK, NOTI_CATEGORY_SAVE, NOTI_CATEGORY_ARCHIVE)
+    fun onUngroup(groupId: String) = groupingActions.onUngroup(groupId)
 
-            cats.forEach { cat ->
-                counts[cat] = notiRepository.getVisibleNotReadNotificationCountByCategory(cat)
-                counts["$cat-Total"] = notiRepository.getVisibleNotiCountByCategory(cat)
-            }
+    fun toggleGroupExpansion(groupId: String, currentExpanded: Boolean) =
+        groupingActions.toggleGroupExpansion(groupId, currentExpanded)
 
-            Log.d("DrawerViewModel", "Unread counts updated: $counts")
-            _unreadCountsByCategory.value = counts
-        }
-    }
+    fun renameGroup(groupId: String, newTitle: String) = groupingActions.renameGroup(groupId, newTitle)
 
-    fun logAction(notiKey: String, action: String, metadata: String = "") {
-        viewModelScope.launch(Dispatchers.IO) {
-            notiRepository.logAction(notiKey, action, metadata)
-        }
-    }
+    fun actOnGroup(groupId: String, action: String) = groupingActions.actOnGroup(groupId, action)
 
-    fun extractRandomTasks(count: Int) {
-        viewModelScope.launch(Dispatchers.IO) {
-            notiRepository.requestRandomTaskExtraction(count)
-        }
-    }
+    fun actOnGroup(groupId: String, action: NotiActionType) = groupingActions.actOnGroup(groupId, action)
 
-    private val fullRecordsCache = ConcurrentHashMap<String, MutableStateFlow<List<NotiRecord>>>()
-    private val fullRecordsJobs = ConcurrentHashMap<String, kotlinx.coroutines.Job>()
-
-    fun getFullRecordsFlow(notiKey: String): StateFlow<List<NotiRecord>> {
-        return fullRecordsCache.getOrPut(notiKey) { MutableStateFlow(emptyList()) }
-    }
-
-    fun loadFullRecordsForKey(notiKey: String) {
-        if (fullRecordsJobs.containsKey(notiKey)) return
-        val stateFlow = fullRecordsCache.getOrPut(notiKey) { MutableStateFlow(emptyList()) }
-
-        val job = viewModelScope.launch(Dispatchers.IO) {
-            try {
-                notiRepository.visibleRecordsFlowForKey(notiKey)
-                    .collect { recs ->
-                        stateFlow.value = recs.sortedBy { it.time }
-                    }
-            } catch (e: Exception) {
-                Log.e("DrawerViewModel", "Error subscribing to full records for $notiKey", e)
-            } finally {
-                fullRecordsJobs.remove(notiKey)
-            }
-        }
-        fullRecordsJobs[notiKey] = job
-    }
-
-    fun clearFullRecordsForKey(notiKey: String) {
-        fullRecordsJobs.remove(notiKey)?.cancel()
-        fullRecordsCache.remove(notiKey)
-    }
-
-    // Merge Actions
-    fun onMerge(dragId: String, targetId: String) {
-        viewModelScope.launch(Dispatchers.IO) {
-            notiRepository.merge(dragId, targetId)
-        }
-    }
-
-    fun onUngroup(groupId: String) {
-        viewModelScope.launch(Dispatchers.IO) {
-            notiRepository.ungroup(groupId)
-        }
-    }
-
-    fun toggleGroupExpansion(groupId: String, currentExpanded: Boolean) {
-        viewModelScope.launch(Dispatchers.IO) {
-            notiRepository.updateGroupExpansion(groupId, !currentExpanded)
-        }
-    }
-
-    fun renameGroup(groupId: String, newTitle: String) {
-        viewModelScope.launch(Dispatchers.IO) {
-            notiRepository.updateGroupTitle(groupId, newTitle)
-        }
-    }
-
-    fun actOnGroup(groupId: String, action: String) {
-        val typed = NotiActionType.fromWireValue(action)
-        if (typed != null) {
-            actOnGroup(groupId, typed)
-            return
-        }
-        viewModelScope.launch {
-            actionsController.actOnGroupLegacy(groupId, action)
-        }
-    }
-
-    fun actOnGroup(groupId: String, action: NotiActionType) {
-        viewModelScope.launch {
-            actionsController.actOnGroup(groupId, action)
-        }
-    }
-
-    fun removeFromGroup(notiKey: String) {
-        viewModelScope.launch(Dispatchers.IO) {
-            notiRepository.removeFromGroup(notiKey)
-        }
-    }
+    fun removeFromGroup(notiKey: String) = groupingActions.removeFromGroup(notiKey)
 
     /**
      * Called by list items when a card is fully visible.
@@ -472,5 +384,21 @@ class DrawerViewModel(
 
     fun loadGapRecords(notiKey: String, startTime: Long, endTime: Long, fromStart: Boolean) {
         viewModelScope.launch { searchController.loadGapRecords(notiKey, startTime, endTime, fromStart) }
+    }
+
+    /**
+     * Full notification record streams (expanded card content).
+     *
+     * Kept as a small compatibility surface for UI composables.
+     */
+    fun getFullRecordsFlow(notiKey: String): StateFlow<List<NotiRecord>> =
+        fullRecordsController.getFlow(notiKey)
+
+    fun loadFullRecordsForKey(notiKey: String) {
+        fullRecordsController.loadForKey(notiKey)
+    }
+
+    fun clearFullRecordsForKey(notiKey: String) {
+        fullRecordsController.clearForKey(notiKey)
     }
 }

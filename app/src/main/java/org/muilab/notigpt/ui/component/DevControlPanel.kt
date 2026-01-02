@@ -64,14 +64,6 @@ fun DevControlPanel(context: Context, drawerViewModel: DrawerViewModel) {
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
 
-                Button(onClick = {
-                    // Example: extract 5 random tasks
-                    drawerViewModel.extractRandomTasks(100)
-                    Toast.makeText(context, "Requested extraction for 10 random notifications", Toast.LENGTH_SHORT).show()
-                }) {
-                    Text("Extract")
-                }
-
                 AutoControlBar()
                 Button(onClick = {
                     Toast.makeText(context, "Start Updating Notifications", Toast.LENGTH_SHORT).show()

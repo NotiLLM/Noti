@@ -4,38 +4,30 @@ import android.content.Context
 import android.os.Build
 import android.service.notification.StatusBarNotification
 import androidx.annotation.RequiresApi
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.muilab.notigpt.database.server.enqueueTaskExtraction
 import org.muilab.notigpt.database.room.NotiActionDao
 import org.muilab.notigpt.database.room.NotiDrawerDao
 import org.muilab.notigpt.database.room.NotiGroupDao
 import org.muilab.notigpt.database.room.NotiRecordDao
-import org.muilab.notigpt.domain.search.NotiSearchQueryBuilder
 import org.muilab.notigpt.domain.action.NotiActionType
 import org.muilab.notigpt.model.notifications.NotiAction
+import org.muilab.notigpt.model.notifications.NotiDrawerItem
 import org.muilab.notigpt.model.notifications.NotiRecord
 import org.muilab.notigpt.model.notifications.NotiUnit
-import org.muilab.notigpt.model.notifications.NotiDisplayUnit
-import org.muilab.notigpt.model.notifications.NotiDrawerItem
-import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_ARCHIVE
-import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_GENERAL
-import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_MAKETASK
-import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_SAVE
-import org.muilab.notigpt.util.SharedPreferencesManager
-import org.muilab.notigpt.util.getAppCategoryByAppName
 import org.muilab.notigpt.repository.noti.NotiActionsRepository
 import org.muilab.notigpt.repository.noti.NotiGroupingRepository
 import org.muilab.notigpt.repository.noti.NotiGroupRepository
+import org.muilab.notigpt.repository.noti.NotiExportRepository
+import org.muilab.notigpt.repository.noti.NotiMaintenanceRepository
+import org.muilab.notigpt.repository.noti.NotiRecordsRepository
 
 class NotiRepository(
     private val appContext: Context,
@@ -60,6 +52,22 @@ class NotiRepository(
     private val groupRepo = NotiGroupRepository(
         notiDrawerDao = notiDrawerDao,
         notiGroupDao = notiGroupDao,
+    )
+
+    private val recordsRepo = NotiRecordsRepository(
+        notiRecordDao = notiRecordDao,
+    )
+
+    private val exportRepo = NotiExportRepository(
+        notiDrawerDao = notiDrawerDao,
+        notiRecordDao = notiRecordDao,
+        notiActionDao = notiActionDao,
+    )
+
+    private val maintenanceRepo = NotiMaintenanceRepository(
+        notiDrawerDao = notiDrawerDao,
+        notiRecordDao = notiRecordDao,
+        notiActionDao = notiActionDao,
     )
 
     suspend fun removeExpiredNotiRecords() {
@@ -100,11 +108,11 @@ class NotiRepository(
     }
 
     fun getVisibleNotiCountByCategory(category: String): Int {
-        return notiDrawerDao.getVisibleNotiCountByCategory(category)
+        return maintenanceRepo.getVisibleNotiCountByCategory(category)
     }
 
     fun getVisibleNotReadNotificationCountByCategory(category: String): Int {
-        return notiDrawerDao.getVisibleNotReadCountByCategory(category)
+        return maintenanceRepo.getVisibleNotReadNotificationCountByCategory(category)
     }
 
     @RequiresApi(Build.VERSION_CODES.S)
@@ -148,12 +156,11 @@ class NotiRepository(
     }
 
     fun getVisibleRecordsCountForKey(notiKey: String): Int {
-        return notiRecordDao.getVisibleRecordsByKey(notiKey).size
+        return recordsRepo.getVisibleRecordsCountForKey(notiKey)
     }
 
     fun getVisibleRecordIdsForKey(notiKey: String, limit: Int = 5): List<String> {
-        val recs = notiRecordDao.getVisibleRecordsByKey(notiKey).sortedBy { it.time }
-        return recs.takeLast(limit.coerceAtLeast(1)).map { it.notiRecordId }
+        return recordsRepo.getVisibleRecordIdsForKey(notiKey, limit)
     }
 
     fun requestRandomTaskExtraction(count: Int) {
@@ -195,33 +202,25 @@ class NotiRepository(
     }
 
     fun getPreviewRecordsForKeys(keys: List<String>, perKeyLimit: Int = 3): List<NotiRecord> {
-        if (keys.isEmpty()) return emptyList()
-        val all = notiRecordDao.getVisibleRecordsByKeys(keys)
-        return all.groupBy { it.notiKey }
-            .flatMap { (_, list) -> list.sortedByDescending { if (it.whenTime != 0L) it.whenTime else it.postTime }.take(perKeyLimit) }
+        return recordsRepo.getPreviewRecordsForKeys(keys, perKeyLimit)
     }
 
     fun visibleRecordsFlowForKey(notiKey: String): Flow<List<NotiRecord>> {
-        return notiRecordDao.getVisibleRecordsFlowByKey(notiKey)
-            .map { it.sortedBy { r -> r.time } }
+        return recordsRepo.visibleRecordsFlowForKey(notiKey)
     }
 
     suspend fun fetchVisibleRecordsForKey(notiKey: String): List<NotiRecord> {
-        return withContext(Dispatchers.IO) {
-            notiRecordDao.getVisibleRecordsByKey(notiKey).sortedBy { it.time }
-        }
+        return recordsRepo.fetchVisibleRecordsForKey(notiKey)
     }
 
     // [NEW] Advanced Search Logic
     suspend fun searchNotifications(rawInput: String, includeHistory: Boolean): Map<String, List<NotiRecord>> {
-        val built = NotiSearchQueryBuilder.build(rawInput = rawInput, includeHistory = includeHistory)
-        val records = notiRecordDao.searchRecordsRaw(built.toSQLiteQuery())
-        return records.groupBy { it.notiKey }
+        return recordsRepo.searchNotifications(rawInput, includeHistory)
     }
 
     // [NEW] Gap Filling
     suspend fun getRecordsBetween(notiKey: String, start: Long, end: Long): List<NotiRecord> {
-        return notiRecordDao.getRecordsBetween(notiKey, start, end)
+        return recordsRepo.getRecordsBetween(notiKey, start, end)
     }
 
     suspend fun getContextRecords(
@@ -230,14 +229,7 @@ class NotiRepository(
         isOlder: Boolean,
         includeHistory: Boolean
     ): List<NotiRecord> {
-        return if (isOlder) {
-            // "Older" means time < pivot, ordered DESC.
-            // We want the result to be chronological eventually, but the DAO returns them closest to pivot first.
-            notiRecordDao.getContextOlder(notiKey, pivotTime, 10, includeHistory).sortedBy { it.time }
-        } else {
-            // "Newer" means time > pivot, ordered ASC.
-            notiRecordDao.getContextNewer(notiKey, pivotTime, 10, includeHistory)
-        }
+        return recordsRepo.getContextRecords(notiKey, pivotTime, isOlder, includeHistory)
     }
 
     suspend fun getGapRecords(
@@ -247,61 +239,15 @@ class NotiRepository(
         limit: Int,
         fromStart: Boolean
     ): List<NotiRecord> {
-        return if (fromStart) {
-            // Load "Next" records after minTime
-            notiRecordDao.getGapRecordsNewer(notiKey, minTime, maxTime, limit)
-        } else {
-            // Load "Previous" records before maxTime
-            // Note: DAO returns DESC, we might want to reverse here or let ViewModel sort
-            notiRecordDao.getGapRecordsOlder(notiKey, minTime, maxTime, limit)
-        }
+        return recordsRepo.getGapRecords(notiKey, minTime, maxTime, limit, fromStart)
     }
 
     suspend fun hasRecordsInGap(notiKey: String, minTime: Long, maxTime: Long, includeHistory: Boolean): Boolean {
-        return notiRecordDao.hasRecordsInGap(notiKey, minTime, maxTime, includeHistory) > 0
-    }
-
-    fun getNotSyncedNotiActions(notiKey: String, timestamp: Long): List<NotiAction> {
-        return notiActionDao.getNotSyncedActionsByKey(notiKey, timestamp)
-    }
-
-    fun getNotiUnit(notiKey: String): NotiUnit? {
-        return notiDrawerDao.getByNotiKey(notiKey)
-    }
-
-    fun getNotiUnitByKeys(notiKeys: List<String>): List<NotiUnit> {
-        return notiDrawerDao.getByNotiKeys(notiKeys)
+        return recordsRepo.hasRecordsInGap(notiKey, minTime, maxTime, includeHistory)
     }
 
     fun exportLog(includeContext: Boolean, includeDismissed: Boolean): JSONArray {
-        val notiUnits = if (includeDismissed)
-            notiDrawerDao.getAll()
-        else
-            notiDrawerDao.getAllVisible()
-
-        val notificationLogs = JSONArray()
-
-        notiUnits.forEach { notiUnit ->
-            val notiKey = notiUnit.notiKey
-            val notiRecords = if (includeContext) {
-                notiRecordDao.getRecordsByKey(notiKey)
-            } else {
-                notiRecordDao.getVisibleRecordsByKey(notiKey)
-            }.sortedBy { it.time }
-
-            val notiActions = notiActionDao.getActionsByKey(notiKey).sortedBy { it.time }
-
-            notificationLogs.put(
-                org.muilab.notigpt.repository.noti.NotiExportFormatter.formatUnit(
-                    notiUnit = notiUnit,
-                    records = notiRecords,
-                    actions = notiActions,
-                    includeContext = includeContext,
-                )
-            )
-        }
-
-        return notificationLogs
+        return exportRepo.exportLog(includeContext, includeDismissed)
     }
 
     fun logAction(
@@ -310,39 +256,23 @@ class NotiRepository(
         metadata: String = "",
         actionTime: Long = System.currentTimeMillis(),
     ) {
-        val lastAppResumeTime = SharedPreferencesManager.lastAppResumeTime
-        notiActionDao.insert(NotiAction(notiKey, action, actionTime, lastAppResumeTime, metadata))
+        maintenanceRepo.logAction(notiKey, action, metadata, actionTime)
     }
 
     suspend fun deleteAllNotis(category: String) {
-        val notiKeys = notiDrawerDao.getVisibleNotPinnedKeysByCategory(category)
-        notiKeys.forEach { k -> logAction(k, "delete_all") }
-        notiDrawerDao.setUnitsInvisibleByKeys(notiKeys)
-        notiDrawerDao.setUnitsReadByKeys(notiKeys)
-        notiRecordDao.setRecordsInvisibleByKeys(notiKeys)
+        maintenanceRepo.deleteAllNotis(category) { k, a -> logAction(k, a) }
     }
 
     suspend fun markAllNotisRead(category: String) {
-        val notReadNotiKeys = notiDrawerDao.getVisibleNotReadKeysByCategory(category)
-        notReadNotiKeys.forEach { k -> logAction(k, "mark_all_read") }
-        notiDrawerDao.setUnitsReadByKeys(notReadNotiKeys)
+        maintenanceRepo.markAllNotisRead(category) { k, a -> logAction(k, a) }
     }
 
     fun updateSeenNotifications(seenNotis: Set<String>) {
-        CoroutineScope(Dispatchers.IO).launch {
-            notiDrawerDao.setUnitsReadByKeys(seenNotis.toList())
-            seenNotis.forEach { logAction(it, "scroll_read") }
-        }
+        maintenanceRepo.updateSeenNotifications(seenNotis) { k, a -> logAction(k, a) }
     }
 
     fun syncAppCategories(context: Context) {
-        CoroutineScope(Dispatchers.IO).launch {
-            val notiUnits = notiDrawerDao.getAll()
-            notiUnits.forEach { notiUnit ->
-                notiUnit.displayState.appCategory = getAppCategoryByAppName(context, notiUnit.appName)
-                notiDrawerDao.update(notiUnit)
-            }
-        }
+        maintenanceRepo.syncAppCategories(context)
     }
 
     suspend fun actOnNoti(notiKey: String, action: String) {
@@ -352,6 +282,31 @@ class NotiRepository(
     suspend fun actOnNoti(notiKey: String, action: NotiActionType) {
         actionsRepo.actOnNoti(notiKey, action)
     }
-}
 
-data class Tuple<A, B, C>(val first: A, val second: B, val third: C)
+    /**
+     * Worker/adapter-friendly accessor.
+     * Keeps N8n workers independent of the Room DAO.
+     */
+    fun getNotiUnit(notiKey: String): NotiUnit? {
+        return notiDrawerDao.getByNotiKey(notiKey)
+    }
+
+    /**
+     * Convenience batch accessor for fetching NotiUnit rows.
+     * Used by DrawerSearchController to hydrate search results.
+     */
+    fun getNotiUnitByKeys(notiKeys: List<String>): List<NotiUnit> {
+        if (notiKeys.isEmpty()) return emptyList()
+        return notiDrawerDao.getByNotiKeys(notiKeys)
+    }
+
+    /**
+     * Returns actions since [sinceTimeMs].
+     * Used by N8n updateNotification sync.
+     */
+    fun getNotSyncedNotiActions(notiKey: String, sinceTimeMs: Long): List<NotiAction> {
+        // Prefer to let the DAO filter; if you later add a DAO query for this,
+        // update this method but keep the signature stable.
+        return notiActionDao.getActionsByKey(notiKey).filter { it.time > sinceTimeMs }
+    }
+}

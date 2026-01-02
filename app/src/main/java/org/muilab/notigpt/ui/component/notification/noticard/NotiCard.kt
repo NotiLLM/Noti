@@ -81,6 +81,7 @@ fun NotiCard(
     appCategory: String,
     isMergeTarget: Boolean = false,
     isInGroup: Boolean = false,
+    swipeEnabled: Boolean = true,
 ) {
     // These are part of the shared NotiCard API even if not used in this implementation yet.
     @Suppress("UNUSED_VARIABLE")
@@ -139,7 +140,7 @@ fun NotiCard(
         else -> MaterialTheme.colorScheme.outline
     }
 
-    val borderWidth = if (isSetToTop || isMergeTarget) 2.dp else 0.5.dp
+    val borderWidth = if (isSetToTop || isMergeTarget) 3.dp else 1.dp
 
     // Expand state
     val maxHeightDp = 200.dp
@@ -190,7 +191,7 @@ fun NotiCard(
     var isSwipeActive by remember { mutableStateOf(false) }
 
     val swipeModifier = Modifier.notiCardSwipeHandler(
-        enabled = !isDragging && !isSortingMode,
+        enabled = swipeEnabled && !isDragging && !isSortingMode,
         endActionsWidth = endActionsWidth,
         cardWidth = cardWidth,
         viewTouchSlop = viewTouchSlop,
@@ -393,4 +394,3 @@ fun NotiCard(
         ),
     )
 }
-

@@ -20,7 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import org.muilab.notigpt.ui.component.NotiDrawer
 import org.muilab.notigpt.ui.component.features.TaskList
-import org.muilab.notigpt.ui.component.notification.SearchNotiCard
+import org.muilab.notigpt.ui.component.notification.search.SearchNotiCard
 import org.muilab.notigpt.ui.utils.LifecycleObserver
 import org.muilab.notigpt.ui.viewmodel.DrawerViewModel
 import org.muilab.notigpt.ui.viewmodel.TaskViewModel
