@@ -5,7 +5,6 @@ import android.os.Build
 import android.service.notification.StatusBarNotification
 import android.util.Log
 import androidx.annotation.RequiresApi
-import androidx.sqlite.db.SimpleSQLiteQuery
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -30,14 +29,15 @@ import org.muilab.notigpt.database.room.NotiActionDao
 import org.muilab.notigpt.database.room.NotiDrawerDao
 import org.muilab.notigpt.database.room.NotiGroupDao
 import org.muilab.notigpt.database.room.NotiRecordDao
+import org.muilab.notigpt.domain.notification.DrawerGrouper
+import org.muilab.notigpt.domain.search.NotiSearchQueryBuilder
+import org.muilab.notigpt.domain.action.NotiActionType
 import org.muilab.notigpt.model.notifications.NotiAction
 import org.muilab.notigpt.model.notifications.NotiRecord
 import org.muilab.notigpt.model.notifications.NotiUnit
 import org.muilab.notigpt.model.notifications.NotiDisplayUnit
 import org.muilab.notigpt.model.notifications.NotiDrawerItem
 import org.muilab.notigpt.model.notifications.NotiGroup
-import org.muilab.notigpt.model.notifications.NotiGroupItem
-import org.muilab.notigpt.model.notifications.NotiItem
 import org.muilab.notigpt.util.Constants.Companion.MAX_EXPIRED_RECORDS_PER_KEY
 import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_ARCHIVE
 import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_GENERAL
@@ -101,40 +101,7 @@ class NotiRepository(
                 }
 
                 displayUnitsFlow.map { displayUnits ->
-                    val groupMap = groups.associateBy { it.groupId }
-
-                    // Grouping Logic
-                    val groupedItemsMap = displayUnits
-                        .filter { it.notiUnit.groupId != null }
-                        .groupBy { it.notiUnit.groupId!! }
-
-                    val looseItems = displayUnits.filter { it.notiUnit.groupId == null }.toMutableList()
-                    val result = mutableListOf<NotiDrawerItem>()
-
-                    groupedItemsMap.forEach { (groupId, children) ->
-                        val group = groupMap[groupId]
-                        if (group != null && children.size > 1) {
-                            // Sort children within group: Top > TopTime > UpdateTime
-                            val sortedChildren = children.sortedWith(
-                                compareByDescending<NotiDisplayUnit> { it.notiUnit.isSetToTop }
-                                    .thenByDescending { it.notiUnit.setToTopTime }
-                                    .thenByDescending { it.lastUpdateTime }
-                            )
-                            result.add(NotiGroupItem(group, sortedChildren))
-                        } else {
-                            looseItems.addAll(children)
-                        }
-                    }
-
-                    result.addAll(looseItems.map { NotiItem(it) })
-
-                    // Final Sort for the Drawer List
-                    // Priority: IsTop > TopTime > LatestTime
-                    result.sortedWith(
-                        compareByDescending<NotiDrawerItem> { it.isSetToTop }
-                            .thenByDescending { it.setToTopTime }
-                            .thenByDescending { it.latestTime }
-                    )
+                    DrawerGrouper.groupAndSort(displayUnits, groups)
                 }
             }
         }
@@ -364,6 +331,15 @@ class NotiRepository(
             "mark_read" -> markNotiRead(notiKey)
         }
         logAction(notiKey, action)
+    }
+
+    // Typed overloads (preferred)
+    suspend fun actOnNoti(notiKey: String, action: NotiActionType) {
+        actOnNoti(notiKey, action.wireValue)
+    }
+
+    suspend fun actOnGroup(groupId: String, action: NotiActionType) {
+        actOnGroup(groupId, action.wireValue)
     }
 
     suspend fun markNotiRead(notiKey: String) {
@@ -602,49 +578,8 @@ class NotiRepository(
 
     // [NEW] Advanced Search Logic
     suspend fun searchNotifications(rawInput: String, includeHistory: Boolean): Map<String, List<NotiRecord>> {
-        val conditions = mutableListOf<String>()
-        val args = mutableListOf<Any>()
-
-        // 1. Parse Exact Phrases (e.g., "baseball match")
-        val quoteRegex = "\"([^\"]*)\"".toRegex()
-        var remainingInput = rawInput
-
-        quoteRegex.findAll(rawInput).forEach { match ->
-            val phrase = match.groupValues[1]
-            if (phrase.isNotBlank()) {
-                // Condition: Phrase must be in text OR title
-                conditions.add("(extraText LIKE ? OR extraBigText LIKE ? OR extraTitle LIKE ? OR person LIKE ?)")
-                val likePhrase = "%$phrase%"
-                repeat(4) { args.add(likePhrase) }
-            }
-        }
-        // Remove quotes from input to process remaining keywords
-        remainingInput = quoteRegex.replace(remainingInput, " ")
-
-        // 2. Parse '+' combined keywords (AND logic)
-        // Split by + first, then trim. Empty parts are ignored.
-        val terms = remainingInput.split("+").map { it.trim() }.filter { it.isNotBlank() }
-
-        terms.forEach { term ->
-            conditions.add("(extraText LIKE ? OR extraBigText LIKE ? OR extraTitle LIKE ? OR person LIKE ?)")
-            val likeTerm = "%$term%"
-            repeat(4) { args.add(likeTerm) }
-        }
-
-        // 3. Construct Query
-        val whereClause = if (conditions.isNotEmpty()) {
-            conditions.joinToString(" AND ")
-        } else {
-            "1 = 1" // Fallback match all if parsing failed
-        }
-
-        val visibilityClause = if (includeHistory) "" else " AND isVisible = 1"
-
-        val finalSql = "SELECT * FROM noti_record WHERE $whereClause $visibilityClause ORDER BY whenTime DESC LIMIT 100"
-
-        val query = SimpleSQLiteQuery(finalSql, args.toTypedArray())
-        val records = notiRecordDao.searchRecordsRaw(query)
-
+        val built = NotiSearchQueryBuilder.build(rawInput = rawInput, includeHistory = includeHistory)
+        val records = notiRecordDao.searchRecordsRaw(built.toSQLiteQuery())
         return records.groupBy { it.notiKey }
     }
 

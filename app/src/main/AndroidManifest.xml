@@ -24,7 +24,7 @@
         <!-- TODO: Change cleartext traffic in the future -->
 
         <receiver
-            android:name=".reciever.BootUpReceiver"
+            android:name=".receiver.BootUpReceiver"
             android:enabled="true"
             android:exported="false">
             <intent-filter>

@@ -1,7 +1,5 @@
 package org.muilab.notigpt.service
 
-import android.app.AlarmManager
-import android.app.Notification
 import android.app.PendingIntent
 import android.content.ComponentName
 import android.content.Context
@@ -20,6 +18,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.muilab.notigpt.database.server.enqueueUpdateNotification
+import org.muilab.notigpt.domain.notification.NotificationFilter
 import org.muilab.notigpt.model.notifications.NotiUnit
 import org.muilab.notigpt.repository.NotiRepository
 import org.muilab.notigpt.repository.NotiRepositoryProvider
@@ -64,7 +63,7 @@ class NotiListenerService: NotificationListenerService() {
                 } else {
                     null
                 }
-            }  catch (e: Exception) {
+            }  catch (_: Exception) {
                 null
             }
         }
@@ -159,42 +158,20 @@ class NotiListenerService: NotificationListenerService() {
     @RequiresApi(Build.VERSION_CODES.S)
     private fun addNotification(sbn: StatusBarNotification, isInit: Boolean) {
 
-        // If notification is from our app, ignore
-        if (sbn.packageName.equals(packageName))
-            return
-
-        // If notification is ongoing or not clearable, ignore
-        if (sbn.isOngoing || !sbn.isClearable)
-            return
-
-        // If notification is a group summary, dismiss immediately
-        if ((sbn.notification?.flags as Int and Notification.FLAG_GROUP_SUMMARY) > 0) {
-            serviceScope.launch {
-                delay(NOTI_REMOVE_DELAY)
-                cancelNotification(sbn.key)
+        val ignoreReason = NotificationFilter.ignoreReason(sbn, appPackageName = packageName)
+        if (ignoreReason != null) {
+            // Preserve behavior: only group summary triggers delayed cancel.
+            if (ignoreReason == NotificationFilter.IgnoreReason.GROUP_SUMMARY) {
+                serviceScope.launch {
+                    delay(NOTI_REMOVE_DELAY)
+                    cancelNotification(sbn.key)
+                }
             }
             return
         }
 
-        // If notification is media style, ignore
-        val notiStyle = sbn.notification.extras.getCharSequence(Notification.EXTRA_TEMPLATE)
-        if (notiStyle == Notification.MediaStyle::class.java.canonicalName)
-            return
-
-        // If notification tag contains ConnectivityNotification, ignore
-        if (sbn.key.contains("ConnectivityNotification") == true)
-            return
-
-        // If notification is from com.android.wifi, ignore
-        if (sbn.key.contains("com.android.wifi"))
-            return
-
-        if (sbn.key.contains("com.google.android.networkstack"))
-            return
-
         // Store notification to DB
         serviceScope.launch {
-
             notiRepository.upsertNotiUnit(applicationContext, sbn, isInit)
             notiRepository.insertNotiRecord(sbn)
 
@@ -210,11 +187,11 @@ class NotiListenerService: NotificationListenerService() {
 
         val notification = sbn.notification
         if (notification != null) {
-            notification.contentIntent?.let { // Use safe call ?.let
+            notification.contentIntent?.let {
                 Log.d("NotiListenerService", "Caching content intent")
                 contentIntentCache.put(sbn.key, it)
             }
-            notification.deleteIntent?.let { // Use safe call ?.let
+            notification.deleteIntent?.let {
                 Log.d("NotiListenerService", "Caching delete intent")
                 deleteIntentCache.put(sbn.key, it)
             }

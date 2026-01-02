@@ -23,10 +23,10 @@ import org.muilab.notigpt.repository.TaskRepositoryProvider
 import org.muilab.notigpt.service.NotiListenerService
 import org.muilab.notigpt.ui.theme.NotiLLMTheme
 import org.muilab.notigpt.util.SharedPreferencesManager
-import org.muilab.notigpt.view.component.AppScaffold
-import org.muilab.notigpt.viewModel.DrawerViewModel
-import org.muilab.notigpt.viewModel.DrawerViewModelFactory
-import org.muilab.notigpt.viewModel.TaskViewModelFactory
+import org.muilab.notigpt.ui.component.AppScaffold
+import org.muilab.notigpt.ui.viewmodel.DrawerViewModel
+import org.muilab.notigpt.ui.viewmodel.DrawerViewModelFactory
+import org.muilab.notigpt.ui.viewmodel.TaskViewModelFactory
 
 class MainActivity : ComponentActivity() {
     @RequiresApi(Build.VERSION_CODES.S)
@@ -95,7 +95,7 @@ class MainActivity : ComponentActivity() {
         DrawerViewModelFactory(this.application, NotiRepositoryProvider.provideNotiRepository(applicationContext))
     }
 
-    private val taskViewModel: org.muilab.notigpt.viewModel.TaskViewModel by viewModels {
+    private val taskViewModel: org.muilab.notigpt.ui.viewmodel.TaskViewModel by viewModels {
         TaskViewModelFactory(this.application, TaskRepositoryProvider.provideTaskRepository(applicationContext))
     }
 

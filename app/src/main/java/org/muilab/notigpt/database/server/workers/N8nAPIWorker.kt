@@ -19,21 +19,16 @@ import org.muilab.notigpt.database.server.N8nAPIClient
 import org.muilab.notigpt.database.server.N8nUpdateNotificationPayload
 import org.muilab.notigpt.repository.NotiRepositoryProvider
 import org.muilab.notigpt.repository.TaskRepositoryProvider
-import org.muilab.notigpt.util.Constants.Companion.N8N_TASK_EXTRACTION
-import org.muilab.notigpt.util.Constants.Companion.DIFY_UPDATE_NOTIFICATION
-import org.muilab.notigpt.util.Constants.Companion.N8N_TASK_SCAN
 import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_ARCHIVE
 import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_DELETED
 import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_GENERAL
 import org.muilab.notigpt.util.SharedPreferencesManager
 import org.muilab.notigpt.util.toN8nNotiActions
 import org.muilab.notigpt.util.toN8nNotiRecords
-import java.time.OffsetDateTime
-import java.time.format.DateTimeParseException
-import org.muilab.notigpt.model.notifications.NotiRecord
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import org.muilab.notigpt.model.notifications.NotiRecord
 
 class N8nAPIWorker(
     context: Context,
@@ -43,21 +38,22 @@ class N8nAPIWorker(
     override suspend fun doWork(): Result {
         Log.d("N8nWebhook", "Running Worker")
 
+        val parsed = N8nWorkerInput.from(inputData)
+        if (parsed == null) {
+            Log.w("N8nWebhook", "Unknown or invalid input, skipping")
+            return Result.success()
+        }
+
         return try {
-            when (inputData.getString("api_type")) {
-                DIFY_UPDATE_NOTIFICATION -> updateNotification(inputData)
-                N8N_TASK_SCAN -> performTaskScan(inputData)
-                N8N_TASK_EXTRACTION -> performTaskExtraction(inputData)
-                // DIFY_POST_NOTIFICATION_ACTION -> postNotificationAction(inputData)
-                else -> Result.success()
-            }
+            N8nWorkerHandlers.dispatch(this, parsed, inputData)
         } catch (e: Exception) {
             Log.e("N8nWebhook", "Error in worker", e)
             Result.failure()
         }
     }
 
-    private suspend fun updateNotification(inputData: Data): Result = withContext(Dispatchers.IO) {
+    // Ensure these methods are declared 'internal' (not private)
+    internal suspend fun updateNotification(inputData: Data): Result = withContext(Dispatchers.IO) {
         Log.d("N8nWebhook", "Update Notification")
 
         val n8nAPIService = N8nAPIClient.n8nAPIService
@@ -236,7 +232,7 @@ class N8nAPIWorker(
         Result.success()
     }
 
-    private suspend fun performTaskScan(inputData: Data): Result = withContext(Dispatchers.IO) {
+    internal suspend fun performTaskScan(inputData: Data): Result = withContext(Dispatchers.IO) {
         val n8nAPIService = N8nAPIClient.n8nAPIService
         val gson = Gson()
 
@@ -322,7 +318,7 @@ class N8nAPIWorker(
         Result.success()
     }
 
-    private suspend fun performTaskExtraction(inputData: Data): Result = withContext(Dispatchers.IO) {
+    internal suspend fun performTaskExtraction(inputData: Data): Result = withContext(Dispatchers.IO) {
         val n8nAPIService = N8nAPIClient.n8nAPIService
         val gson = Gson()
 
@@ -334,7 +330,7 @@ class N8nAPIWorker(
         val keysJson = inputData.getString("noti_keys_json") ?: "[]"
         val notiKeys: List<String> = try {
             gson.fromJson(keysJson, Array<String>::class.java).toList()
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             emptyList()
         }
 
@@ -389,9 +385,17 @@ class N8nAPIWorker(
         // Group claimed records by notiKey so we can build payload per noti
         val claimedByKey: Map<String, List<NotiRecord>> = claimedRecords.groupBy { it.notiKey }
 
+        // Track ids/keys we actually submit so we can reliably update DB afterwards.
+        val submittedRecordIds = mutableListOf<String>()
+        val submittedKeys = mutableListOf<String>()
+
         val notisPayload = claimedByKey.map { (key, records) ->
             val unit = notiRepository.getNotiUnit(key)
             if (unit == null) return@map null
+
+            submittedKeys += key
+            submittedRecordIds += records.map { it.notiRecordId }
+
             val contents = records.sortedBy { it.time }.map { r -> formatNotiRecord(r, unit.isPeople) }
             val pastCnt = SharedPreferencesManager.maxPastContext
             val pastRecs = if (pastCnt > 0) db.recordDao().getLastExtractedRecordsByKey(key, pastCnt).sortedBy { it.time } else emptyList()
@@ -445,7 +449,7 @@ class N8nAPIWorker(
         // Include current uncompleted (visible) tasks in the payload for context to the extractor
         val visibleTasksList = try {
             taskRepository.observeVisibleTasks().first()
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             emptyList()
         }
 
@@ -524,15 +528,13 @@ class N8nAPIWorker(
             }
 
             // Collect all recordIds we actually sent and mark them extracted atomically
-            val allSentRecordIds = notisPayload.flatMap { it["recordIds"] as List<String> }
-            if (allSentRecordIds.isNotEmpty()) {
-                db.recordDao().setClaimedRecordsExtracted(allSentRecordIds)
+            if (submittedRecordIds.isNotEmpty()) {
+                db.recordDao().setClaimedRecordsExtracted(submittedRecordIds.distinct())
             }
 
             // Also clear shouldExtractTask flag for the submitted noti units
-            val submittedKeys = notisPayload.map { it["notiKey"] as String }
             if (submittedKeys.isNotEmpty()) {
-                drawerDao.setShouldExtractTaskByKeys(submittedKeys, false)
+                drawerDao.setShouldExtractTaskByKeys(submittedKeys.distinct(), false)
             }
 
         } catch (e: Exception) {
