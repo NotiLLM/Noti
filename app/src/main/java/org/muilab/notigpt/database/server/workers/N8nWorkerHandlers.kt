@@ -15,6 +15,7 @@ internal object N8nWorkerHandlers {
             is N8nWorkerInput.UpdateNotification -> worker.updateNotification(raw)
             is N8nWorkerInput.TaskScan -> worker.performTaskScan(raw)
             is N8nWorkerInput.TaskExtraction -> worker.performTaskExtraction(raw)
+            is N8nWorkerInput.PostNotificationAction -> worker.postNotificationAction(raw)
         }
     }
 }

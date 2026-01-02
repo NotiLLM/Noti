@@ -6,14 +6,19 @@ NotiGPT is an Android app that captures incoming notifications, persists them lo
 
 This project is evolving toward a clean-ish layering:
 
-- **UI (Compose)**: `org.muilab.notigpt.view.*`
-- **State**: `org.muilab.notigpt.viewModel.*`
+- **UI (Compose)**: `org.muilab.notigpt.ui.*`
+- **State**: `org.muilab.notigpt.ui.viewmodel.*`
 - **Repository / orchestration**: `org.muilab.notigpt.repository.*`
 - **Persistence**: Room DAOs and entities under `org.muilab.notigpt.database.room.*`
 - **Background work**: WorkManager worker under `org.muilab.notigpt.database.server.workers.*`
-- **Domain (pure Kotlin)**: `org.muilab.notigpt.domain.*` (new, testable logic)
+- **Domain (pure Kotlin)**: `org.muilab.notigpt.domain.*`
+- **Platform (Android wrappers)**: `org.muilab.notigpt.platform.*`
 
-The goal is to keep logic that doesn’t need Android (grouping/sorting rules, parsing, scoring, etc.) in `domain/` so it can be covered by fast JVM tests.
+See additional docs:
+- `docs/ARCHITECTURE.md`
+- `docs/UI.md`
+- `docs/DOMAIN.md`
+- `docs/PLATFORM.md`
 
 ## Notification pipeline
 
@@ -36,4 +41,3 @@ Principles:
 - Avoid behavior changes unless explicitly requested.
 - Prefer extracting logic into `domain/` with tests over editing UI or DAO code directly.
 - Add KDoc when a function encodes business rules.
-

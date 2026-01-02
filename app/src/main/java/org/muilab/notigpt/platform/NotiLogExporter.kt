@@ -34,4 +34,3 @@ class MediaStoreNotiLogExporter(private val context: Context) : NotiLogExporter 
         }
     }
 }
-

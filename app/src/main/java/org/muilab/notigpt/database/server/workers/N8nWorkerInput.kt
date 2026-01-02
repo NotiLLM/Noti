@@ -1,6 +1,7 @@
 package org.muilab.notigpt.database.server.workers
 
 import androidx.work.Data
+import org.muilab.notigpt.util.Constants.Companion.DIFY_POST_NOTIFICATION_ACTION
 import org.muilab.notigpt.util.Constants.Companion.DIFY_UPDATE_NOTIFICATION
 import org.muilab.notigpt.util.Constants.Companion.N8N_TASK_EXTRACTION
 import org.muilab.notigpt.util.Constants.Companion.N8N_TASK_SCAN
@@ -28,6 +29,13 @@ sealed interface N8nWorkerInput {
         val notiKeysJson: String,
     ) : N8nWorkerInput
 
+    data class PostNotificationAction(
+        override val webhookPath: String,
+        val notiKey: String,
+        val actionType: String,
+        val actionTime: Long,
+    ) : N8nWorkerInput
+
     companion object {
         /** Parses the legacy wire format used throughout the app. */
         fun from(input: Data): N8nWorkerInput? {
@@ -50,9 +58,15 @@ sealed interface N8nWorkerInput {
                     notiKeysJson = input.getString("noti_keys_json") ?: "[]",
                 )
 
+                DIFY_POST_NOTIFICATION_ACTION -> PostNotificationAction(
+                    webhookPath = webhookPath,
+                    notiKey = input.getString("noti_key") ?: return null,
+                    actionType = input.getString("action_type") ?: return null,
+                    actionTime = input.getLong("action_time", -1L),
+                )
+
                 else -> null
             }
         }
     }
 }
-

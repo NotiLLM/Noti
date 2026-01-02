@@ -96,11 +96,20 @@ class N8nAPIWorker(
         val mediaType = "application/json; charset=utf-8".toMediaType()
         val requestBody = json.toRequestBody(mediaType)
 
-        val response = n8nAPIService.postToWebhook(webhookPath, requestBody)
+        val response = try {
+            n8nAPIService.postToWebhook(webhookPath, requestBody)
+        } catch (t: Throwable) {
+            Log.e("N8nWebhook", "Network exception posting updateNotification", t)
+            return@withContext Result.retry()
+        }
 
         if (!response.isSuccessful) {
             Log.e("N8nWebhook", "API call unsuccessful: ${response.code()}")
-            return@withContext Result.failure()
+            return@withContext when {
+                response.code() == 429 -> Result.retry()
+                response.code() in 500..599 -> Result.retry()
+                else -> Result.failure()
+            }
         }
 
         val jsonString = response.body()?.string()
@@ -127,7 +136,8 @@ class N8nAPIWorker(
             val jsonOutputs = data.optJSONObject("outputs") ?: return@withContext Result.success()
 
             if (jsonOutputs.has("retry")) {
-                return@withContext Result.failure()
+                // The backend explicitly requested retry.
+                return@withContext Result.retry()
             }
 
             val featureStrRaw = jsonOutputs
@@ -299,8 +309,17 @@ class N8nAPIWorker(
         val json = gson.toJson(payload)
         val requestBody = json.toRequestBody("application/json; charset=utf-8".toMediaType())
 
-        val response = n8nAPIService.postToWebhook(webhookPath, requestBody)
-        if (!response.isSuccessful) return@withContext Result.failure()
+        val response = try {
+            n8nAPIService.postToWebhook(webhookPath, requestBody)
+        } catch (t: Throwable) {
+            Log.e("N8nWebhook", "TaskScan network exception", t)
+            return@withContext Result.retry()
+        }
+        if (!response.isSuccessful) return@withContext when {
+            response.code() == 429 -> Result.retry()
+            response.code() in 500..599 -> Result.retry()
+            else -> Result.failure()
+        }
 
         val bodyStr = response.body()?.string() ?: return@withContext Result.success()
         try {
@@ -486,11 +505,23 @@ class N8nAPIWorker(
 
         Log.d("N8nWebhook", "JSON Payload (claimed): $jsonPayload")
 
-        val response = n8nAPIService.postToWebhook(webhookPath, requestBody)
+        val response = try {
+            n8nAPIService.postToWebhook(webhookPath, requestBody)
+        } catch (t: Throwable) {
+            Log.e("N8nWebhook", "TaskExtraction network exception", t)
+            // Clear claims so records can be retried later
+            db.recordDao().clearClaimedRecords(candidateRecordIds)
+            return@withContext Result.retry()
+        }
+
         if (!response.isSuccessful) {
             // Clear claims so records can be retried later
             db.recordDao().clearClaimedRecords(candidateRecordIds)
-            return@withContext Result.failure()
+            return@withContext when {
+                response.code() == 429 -> Result.retry()
+                response.code() in 500..599 -> Result.retry()
+                else -> Result.failure()
+            }
         }
 
         val bodyStr = response.body()?.string() ?: return@withContext Result.success()
@@ -544,6 +575,44 @@ class N8nAPIWorker(
         }
 
         Result.success()
+    }
+
+    internal suspend fun postNotificationAction(inputData: Data): Result = withContext(Dispatchers.IO) {
+        val n8nAPIService = N8nAPIClient.n8nAPIService
+        val gson = Gson()
+
+        val webhookPath = inputData.getString("webhook_path") ?: run {
+            Log.e("N8nWebhook", "No webhook_path for postNotificationAction")
+            return@withContext Result.failure()
+        }
+
+        val notiKey = inputData.getString("noti_key") ?: return@withContext Result.failure()
+        val actionType = inputData.getString("action_type") ?: return@withContext Result.failure()
+        val actionTime = inputData.getLong("action_time", -1L)
+
+        val payload = mapOf(
+            "userId" to SharedPreferencesManager.userId,
+            "notiKey" to notiKey,
+            "actionType" to actionType,
+            "actionTime" to actionTime,
+        )
+
+        val json = gson.toJson(payload)
+        val requestBody = json.toRequestBody("application/json; charset=utf-8".toMediaType())
+
+        return@withContext try {
+            val response = n8nAPIService.postToWebhook(webhookPath, requestBody)
+            if (!response.isSuccessful) {
+                Log.e("N8nWebhook", "postNotificationAction failed: ${response.code()}")
+                // Prefer retry for transient server failures.
+                if (response.code() in 500..599 || response.code() == 429) Result.retry() else Result.failure()
+            } else {
+                Result.success()
+            }
+        } catch (t: Throwable) {
+            Log.e("N8nWebhook", "postNotificationAction exception", t)
+            Result.retry()
+        }
     }
 
     // If you later want to support postNotificationAction via n8n, you can adapt the commented

@@ -42,7 +42,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -361,6 +360,50 @@ fun NotiCard( // REMOVED RECEIVER HERE
                                     }
                                 }
                             }
+                        }
+                    }
+
+                    // Replace the existing extra coroutineScope.launch { ...settle... } with a directional settle
+                    // that matches the contract described by the user.
+                    coroutineScope.launch {
+                        // If a dismiss occurred in the main logic, horizontalOffsetX is already reset to 0f.
+                        if (horizontalOffsetX.value == 0f) return@launch
+
+                        // Move the dismissDir/actionsDir + offsetDir calculation BEFORE any pinned checks.
+                        val dismissDir = if (swipeDeleteLeft) -1 else 1
+                        val actionsDir = -dismissDir
+                        fun sign(x: Float) = when {
+                            x > 0f -> 1
+                            x < 0f -> -1
+                            else -> 0
+                        }
+                        val offsetDir = sign(horizontalOffsetX.value)
+
+                        // Thresholds (half-card for dismissal, half-actions for actions)
+                        val dismissThresholdPx = cardWidth * 0.50f
+                        val actionsHalfwayPx = endActionsWidth * 0.5f
+
+                        // Determine which direction should dismiss vs open actions.
+                        if (offsetDir == dismissDir) {
+                            // Swiping toward dismissal: past a threshold -> dismiss all the way, no stop.
+                            if (abs(horizontalOffsetX.value) >= dismissThresholdPx) {
+                                horizontalOffsetX.animateTo(dismissDir * cardWidth, tween(250))
+                                drawerViewModel.actOnNoti(notiKey, "dismiss_swipe")
+                                horizontalOffsetX.snapTo(0f)
+                            } else {
+                                // Not past threshold: slide back.
+                                horizontalOffsetX.animateTo(0f)
+                            }
+                        } else if (offsetDir == actionsDir) {
+                            // Swiping toward actions: past halfway -> settle to action stop-point.
+                            if (abs(horizontalOffsetX.value) >= actionsHalfwayPx) {
+                                horizontalOffsetX.animateTo(actionsDir * endActionsWidth)
+                            } else {
+                                horizontalOffsetX.animateTo(0f)
+                            }
+                        } else {
+                            // No meaningful offset.
+                            horizontalOffsetX.animateTo(0f)
                         }
                     }
                 }
@@ -793,77 +836,87 @@ fun NotiCard( // REMOVED RECEIVER HERE
                                 Text("Remove from Group")
                             }
                         }
-                    }
+                    } else {
 
-                    TextButton(
-                        onClick = {
-                            drawerViewModel.actOnNoti(notiKey, if (!isTask) "make_task" else "dismiss_task")
-                            showOptionsDialog = false
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Start,
+                        TextButton(
+                            onClick = {
+                                drawerViewModel.actOnNoti(
+                                    notiKey,
+                                    if (!isTask) "make_task" else "dismiss_task"
+                                )
+                                showOptionsDialog = false
+                            },
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Icon(
-                                painter = painterResource(
-                                    id = if (isTask) R.drawable.task_yes else R.drawable.task_no
-                                ),
-                                contentDescription = "To Task",
-                                modifier = Modifier.size(24.dp)
-                            )
-                            Spacer(Modifier.width(12.dp))
-                            Text(if (isTask) "Remove from Tasks" else "Move to Tasks")
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Start,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Icon(
+                                    painter = painterResource(
+                                        id = if (isTask) R.drawable.task_yes else R.drawable.task_no
+                                    ),
+                                    contentDescription = "To Task",
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                Spacer(Modifier.width(12.dp))
+                                Text(if (isTask) "Remove from Tasks" else "Move to Tasks")
+                            }
                         }
-                    }
 
-                    TextButton(
-                        onClick = {
-                            drawerViewModel.actOnNoti(notiKey, if (!isSave) "save" else "unsave")
-                            showOptionsDialog = false
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Start,
+                        TextButton(
+                            onClick = {
+                                drawerViewModel.actOnNoti(
+                                    notiKey,
+                                    if (!isSave) "save" else "unsave"
+                                )
+                                showOptionsDialog = false
+                            },
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Icon(
-                                painter = painterResource(
-                                    id = if (isSave) R.drawable.save_yes else R.drawable.save_no
-                                ),
-                                contentDescription = "To Save",
-                                modifier = Modifier.size(24.dp)
-                            )
-                            Spacer(Modifier.width(12.dp))
-                            Text(if (isSave) "Remove from Save" else "Move to Save")
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Start,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Icon(
+                                    painter = painterResource(
+                                        id = if (isSave) R.drawable.save_yes else R.drawable.save_no
+                                    ),
+                                    contentDescription = "To Save",
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                Spacer(Modifier.width(12.dp))
+                                Text(if (isSave) "Remove from Save" else "Move to Save")
+                            }
                         }
-                    }
 
-                    TextButton(
-                        onClick = {
-                            drawerViewModel.actOnNoti(notiKey, if (!isArchive) "archive" else "unarchive")
-                            showOptionsDialog = false
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Start,
+                        TextButton(
+                            onClick = {
+                                drawerViewModel.actOnNoti(
+                                    notiKey,
+                                    if (!isArchive) "archive" else "unarchive"
+                                )
+                                showOptionsDialog = false
+                            },
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Icon(
-                                painter = painterResource(
-                                    id = if (isArchive) R.drawable.archive_yes else R.drawable.archive_no
-                                ),
-                                contentDescription = "To Archive",
-                                modifier = Modifier.size(24.dp)
-                            )
-                            Spacer(Modifier.width(12.dp))
-                            Text(if (isArchive) "Remove from Archive" else "Move to Archive")
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Start,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Icon(
+                                    painter = painterResource(
+                                        id = if (isArchive) R.drawable.archive_yes else R.drawable.archive_no
+                                    ),
+                                    contentDescription = "To Archive",
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                Spacer(Modifier.width(12.dp))
+                                Text(if (isArchive) "Remove from Archive" else "Move to Archive")
+                            }
                         }
                     }
 

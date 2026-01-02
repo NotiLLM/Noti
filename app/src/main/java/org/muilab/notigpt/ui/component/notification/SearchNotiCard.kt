@@ -33,6 +33,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState // Import this
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -71,16 +72,33 @@ fun SearchNotiCard(
     // [FIX] Collect the StateFlow here instead of accessing .value in composition
     val includeHistory by drawerViewModel.includeHistory.collectAsState()
 
+    fun String?.cleanNullish(): String = when {
+        this == null -> ""
+        this.equals("null", ignoreCase = true) -> ""
+        else -> this
+    }
+
+    val gapCache = remember(notiUnit.notiKey, includeHistory) {
+        mutableStateMapOf<String, Boolean>()
+    }
+    fun gapKey(start: Long, end: Long): String = "${notiUnit.notiKey}|$start|$end|$includeHistory"
+
+    suspend fun checkGapCached(start: Long, end: Long): Boolean {
+        val key = gapKey(start, end)
+        val cached = gapCache[key]
+        if (cached != null) return cached
+        val computed = drawerViewModel.checkGapHasRecords(notiUnit.notiKey, start, end)
+        gapCache[key] = computed
+        return computed
+    }
+
     // (2a) Determine Overall Title
     val lastRecord = records.lastOrNull()
-    val lastRecordTitle = lastRecord?.getDisplayedTitle(isPeople) ?: "null"
+    val lastRecordTitle = lastRecord?.getDisplayedTitle(isPeople).cleanNullish()
     val notiOverallTitle = when {
-        // Priority 1: Conversation Title (Group chats usually)
-        lastRecord != null && lastRecord.extraConversationTitle != "null" -> lastRecord.extraConversationTitle
-        // Priority 2: The displayed title of the record itself (e.g., Sender Name or Notification Title)
-        lastRecordTitle != "null" -> lastRecordTitle
-        // Priority 3: Subtext (e.g., email account)
-        lastRecord != null && lastRecord.extraSubText != "null" -> lastRecord.extraSubText
+        lastRecord != null && lastRecord.extraConversationTitle.cleanNullish().isNotBlank() -> lastRecord.extraConversationTitle.cleanNullish()
+        lastRecordTitle.isNotBlank() -> lastRecordTitle
+        lastRecord != null && lastRecord.extraSubText.cleanNullish().isNotBlank() -> lastRecord.extraSubText.cleanNullish()
         else -> ""
     }
 
@@ -158,9 +176,7 @@ fun SearchNotiCard(
             LaunchedEffect(records, includeHistory) {
                 if (records.isNotEmpty()) {
                     val firstRecordTime = records.first().time
-                    hasOlderContextAtTop = drawerViewModel.checkGapHasRecords(
-                        notiUnit.notiKey, 0L, firstRecordTime
-                    )
+                    hasOlderContextAtTop = checkGapCached(0L, firstRecordTime)
                 } else {
                     hasOlderContextAtTop = false
                 }
@@ -195,11 +211,7 @@ fun SearchNotiCard(
                             var hasMoreInThisGap by remember(prevRecord.time, record.time, includeHistory) { mutableStateOf(false) }
 
                             LaunchedEffect(prevRecord.time, record.time, includeHistory) {
-                                hasMoreInThisGap = drawerViewModel.checkGapHasRecords(
-                                    notiUnit.notiKey,
-                                    prevRecord.time,
-                                    record.time
-                                )
+                                hasMoreInThisGap = checkGapCached(prevRecord.time, record.time)
                             }
 
                             if (hasMoreInThisGap) {
@@ -221,7 +233,7 @@ fun SearchNotiCard(
                                                     record.time,
                                                     fromStart = true // Load Newer
                                                 )
-                                                hasMoreInThisGap = drawerViewModel.checkGapHasRecords(notiUnit.notiKey, prevRecord.time, record.time)
+                                                gapCache.remove(gapKey(prevRecord.time, record.time))
                                             }
                                         },
                                         modifier = Modifier.height(30.dp),
@@ -246,7 +258,7 @@ fun SearchNotiCard(
                                                     record.time,
                                                     fromStart = false // Load Older
                                                 )
-                                                hasMoreInThisGap = drawerViewModel.checkGapHasRecords(notiUnit.notiKey, prevRecord.time, record.time)
+                                                gapCache.remove(gapKey(prevRecord.time, record.time))
                                             }
                                         },
                                         modifier = Modifier.height(30.dp),
@@ -266,13 +278,14 @@ fun SearchNotiCard(
                     }
 
                     // 2. RECORD CONTENT LOGIC
-                    val currentTitle = record.getDisplayedTitle(isPeople)
+                    val currentTitle = record.getDisplayedTitle(isPeople).cleanNullish()
+                    val contentText = record.content.cleanNullish()
 
                     // Determine if we should show the title header
                     val showTitle = if (index == 0) {
                         currentTitle != notiOverallTitle
                     } else {
-                        val prevTitle = records[index - 1].getDisplayedTitle(isPeople)
+                        val prevTitle = records[index - 1].getDisplayedTitle(isPeople).cleanNullish()
                         prevTitle != currentTitle
                     }
 
@@ -282,14 +295,13 @@ fun SearchNotiCard(
                             .combinedClickable(
                                 onClick = {},
                                 onLongClick = {
-                                    val text = record.content
-                                    if (text.isNotBlank() && text != "null") {
-                                        clipboard.copyPlainText("Noti record", text)
+                                    if (contentText.isNotBlank()) {
+                                        clipboard.copyPlainText("Noti record", contentText)
                                     }
                                 }
                             )
                     ) {
-                        ExpandedNotiRecord(currentTitle, record.time, record.content, showTitle)
+                        ExpandedNotiRecord(currentTitle, record.time, contentText, showTitle)
                     }
                 }
             }
@@ -301,9 +313,7 @@ fun SearchNotiCard(
             LaunchedEffect(records, includeHistory) {
                 if (records.isNotEmpty()) {
                     val lastRecordTime = records.last().time
-                    hasNewerContextAtBottom = drawerViewModel.checkGapHasRecords(
-                        notiUnit.notiKey, lastRecordTime, Long.MAX_VALUE
-                    )
+                    hasNewerContextAtBottom = checkGapCached(lastRecordTime, Long.MAX_VALUE)
                 } else {
                     hasNewerContextAtBottom = false
                 }

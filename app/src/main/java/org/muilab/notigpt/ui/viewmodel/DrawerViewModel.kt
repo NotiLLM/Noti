@@ -8,7 +8,6 @@ import android.util.Log
 import androidx.annotation.RequiresApi
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
@@ -284,25 +283,41 @@ class DrawerViewModel(
                         android.app.ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
                 }
                 contentIntent.send(context, 0, null, null, null, null, options.toBundle())
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 // Fallback launch
                 val launchIntent = context.packageManager.getLaunchIntentForPackage(notiUnit.metadata.pkgName)
                 if (launchIntent != null) {
                     launchIntent.flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
                     context.startActivity(launchIntent)
+                } else {
+                    openAppDetails(notiUnit.metadata.pkgName)
                 }
             }
         } else {
             // Simple fallback
             val launchIntent = context.packageManager.getLaunchIntentForPackage(notiUnit.metadata.pkgName)
             if (launchIntent != null) {
+                launchIntent.flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
                 context.startActivity(launchIntent)
+            } else {
+                openAppDetails(notiUnit.metadata.pkgName)
             }
         }
         // Log action
         actOnNoti(notiUnit.notiKey, NotiActionType.AccessClickSearch)
     }
 
+    private fun openAppDetails(pkg: String) {
+        try {
+            val intent = android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                data = android.net.Uri.parse("package:$pkg")
+                addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+        } catch (t: Throwable) {
+            Log.w("DrawerViewModel", "Unable to open app details for $pkg", t)
+        }
+    }
 
     @OptIn(ExperimentalCoroutinesApi::class)
     val availableAppCategories: StateFlow<List<Pair<String, Int>>> =
@@ -395,8 +410,12 @@ class DrawerViewModel(
             val notiLogs = notiRepository.exportLog(includeContext, includeDismissed)
             val notiLogsStr = notiLogs.toString(2)
 
+            val ts = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.getDefault())
+                .format(java.util.Date())
+            val filename = "notigpt_$ts.txt"
+
             // Persist file (best-effort)
-            logExporter.exportToDocuments(filename = "notigpt.txt", content = notiLogsStr)
+            logExporter.exportToDocuments(filename = filename, content = notiLogsStr)
 
             // Copy
             clipboard.copyPlainText(label = "NotiGPT logs", text = notiLogsStr)
@@ -434,7 +453,7 @@ class DrawerViewModel(
     fun persistReadStatus() {
         if (_seenNotiKeys.isEmpty()) return
 
-        CoroutineScope(Dispatchers.IO).launch {
+        viewModelScope.launch(Dispatchers.IO) {
             Log.d("ViewModelReadState", "Persisting seenNotis: ${_seenNotiKeys.size}")
             notiRepository.updateSeenNotifications(_seenNotiKeys.toSet())
             _seenNotiKeys.clear()

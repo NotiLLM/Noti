@@ -47,7 +47,8 @@ fun enqueueUpdateNotification(context: Context, notiKey: String) {
         .setInputData(inputData)
         .build()
 
-    WorkManager.getInstance(context).enqueue(workerRequest)
+    val uniqueName = "n8n_update_notification_$notiKey"
+    WorkManager.getInstance(context).enqueueUniqueWork(uniqueName, ExistingWorkPolicy.REPLACE, workerRequest)
 }
 
 fun enqueueNotificationAction(
@@ -74,7 +75,8 @@ fun enqueueNotificationAction(
         .setInputData(inputData)
         .build()
 
-    WorkManager.getInstance(context).enqueue(workerRequest)
+    val uniqueName = "n8n_post_action_${notiKey}_$actionType"
+    WorkManager.getInstance(context).enqueueUniqueWork(uniqueName, ExistingWorkPolicy.KEEP, workerRequest)
 }
 
 fun enqueueTaskScan(context: Context, notiKey: String) {
