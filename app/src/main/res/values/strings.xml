@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">NotiGPT</string>
+    <string name="app_name">Noti</string>
     <string name="summary_lead_prompt">These are notifications from a smartphone user\'s drawer. You should summarize each notification into a short sentence that covers the important elements mentioned in the notification times, titles and contents. If the notification shows clear emotion of the sender, you could also interpret it in the summary sentence. Each notification takes a single line INDIVIDUALLY.</string>
     <string name="summary_end_prompt">Each summary should be a short sentence within 15 full-width characters (or 30 half-width CHARACTERS). Use the most condensed form of text possible to convey information without losing the context. SUMMARIZE USING THE LANGUAGE OF THE GIVEN LOCALE. The summary sentence should have NO NEW LINE CHARACTERS.</string>
     <string name="category_lead_prompt">These are notifications from a smartphone user\'s drawer. You should classify them using a few categories according to each notification. Make sure these category names provide enough information to acknowledge the notification.</string>
@@ -11,4 +11,5 @@
         Content Attractiveness (0-10): If I may find the content it contains tasks that I MUST DO and MIGHT HAVE NOT DONE, rate it above 8. If it is a one-off notification that may catch my interest, you could rate it at least 6. If it looks like a periodically (e.g. daily bulletins) sent message or email with nothing in particular, rate it below 4. If from the time being it looks like a task I\'m clearly ignoring (e.g. warnings that had been a while ago that I should have dealt with it), rate it below 2.
     </string>
     <string name="sort_end_prompt">The three scores should each be a float within 0 to 10 (inclusive), with 10 being the most highly rated. Try to produce diversing scores unless you really rate them equal.</string>
+    <string name="service_name">NotiManager NotiListenerService</string>
 </resources>

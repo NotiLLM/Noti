@@ -1,0 +1,33 @@
+package org.muilab.notigpt.ui.viewmodel.drawer
+
+import android.util.Log
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import org.muilab.notigpt.repository.NotiRepository
+import java.util.concurrent.ConcurrentHashMap
+
+class DrawerReadStateController(
+    private val notiRepository: NotiRepository,
+) {
+    private val seenNotiKeys = ConcurrentHashMap.newKeySet<String>()
+
+    fun markSeenIfUnread(notiKey: String, isAlreadyRead: Boolean) {
+        if (isAlreadyRead) return
+        seenNotiKeys.add(notiKey)
+    }
+
+    fun hasPending(): Boolean = seenNotiKeys.isNotEmpty()
+
+    suspend fun persistSeen() {
+        if (seenNotiKeys.isEmpty()) return
+
+        val snapshot = seenNotiKeys.toSet()
+        seenNotiKeys.clear()
+
+        withContext(Dispatchers.IO) {
+            Log.d("ViewModelReadState", "Persisting seenNotis: ${snapshot.size}")
+            notiRepository.updateSeenNotifications(snapshot)
+        }
+    }
+}
+

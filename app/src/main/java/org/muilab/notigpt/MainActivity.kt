@@ -4,46 +4,48 @@ import android.app.ActivityManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.content.ServiceConnection
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
-import android.os.IBinder
 import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.livedata.observeAsState
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import androidx.core.app.NotificationManagerCompat
-import org.muilab.notigpt.database.room.DrawerDatabase
-import org.muilab.notigpt.paging.NotiRepository
-import org.muilab.notigpt.service.GeminiService
+import androidx.work.WorkManager
+import org.muilab.notigpt.repository.NotiRepositoryProvider
+import org.muilab.notigpt.repository.TaskRepositoryProvider
 import org.muilab.notigpt.service.NotiListenerService
-import org.muilab.notigpt.ui.theme.NotiTaskTheme
-import org.muilab.notigpt.view.screen.MainScreen
-import org.muilab.notigpt.viewModel.DrawerViewModel
-import org.muilab.notigpt.viewModel.DrawerViewModelFactory
-import org.muilab.notigpt.viewModel.GeminiViewModel
+import org.muilab.notigpt.ui.theme.NotiLLMTheme
+import org.muilab.notigpt.util.SharedPreferencesManager
+import org.muilab.notigpt.ui.component.AppScaffold
+import org.muilab.notigpt.ui.viewmodel.DrawerViewModel
+import org.muilab.notigpt.ui.viewmodel.DrawerViewModelFactory
+import org.muilab.notigpt.ui.viewmodel.TaskViewModelFactory
 
 class MainActivity : ComponentActivity() {
+    @RequiresApi(Build.VERSION_CODES.S)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        WorkManager.getInstance(applicationContext).cancelAllWork()
+        SharedPreferencesManager.init(this)
+        SharedPreferencesManager.userId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
+//        if (SharedPreferencesManager.baselineEmbeddingEn.isEmpty()
+//            || SharedPreferencesManager.baselineEmbeddingZhTW.isEmpty()) {
+//            val inputData = Data.Builder()
+//                .putString("api_type", API_FETCH_BASELINE_EMBEDDING)
+//                .build()
+//            val apiWorkerRequest = OneTimeWorkRequestBuilder<ApiWorker>()
+//                .setInputData(inputData)
+//                .build()
+//            WorkManager.getInstance(applicationContext).enqueue(apiWorkerRequest)
+//        }
 
         if (!NotificationManagerCompat.from(applicationContext).areNotificationsEnabled()) {
             val intent = Intent().apply {
@@ -73,43 +75,29 @@ class MainActivity : ComponentActivity() {
             startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
         }
 
-        val geminiServiceIntent = Intent(this, GeminiService::class.java)
-        if (!isServiceRunning(this, GeminiService::class.java)) {
-            startService(geminiServiceIntent)
-        }
-        bindService(geminiServiceIntent, gptServiceConnection, Context.BIND_AUTO_CREATE)
-
         setContent {
-            NotiTaskTheme {
-                // A surface container using the 'background' color from the theme
+            NotiLLMTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    MainScreen(applicationContext, drawerViewModel, geminiViewModel)
+                    AppScaffold(
+                        applicationContext,
+                        drawerViewModel,
+                        taskViewModel
+                    )
                 }
             }
         }
     }
 
     private val drawerViewModel: DrawerViewModel by viewModels {
-        val drawerDatabase = DrawerDatabase.getInstance(applicationContext)
-        val drawerDao = drawerDatabase.drawerDao()
-        DrawerViewModelFactory(this.application, NotiRepository(drawerDao))
+        DrawerViewModelFactory(this.application, NotiRepositoryProvider.provideNotiRepository(applicationContext))
     }
 
-    private val gptServiceConnection = object : ServiceConnection {
-        override fun onServiceConnected(className: ComponentName, service: IBinder) {
-            val binder = service as GeminiService.GPTBinder
-            geminiService = binder.getService()
-            geminiViewModel.setService(geminiService)
-        }
-
-        override fun onServiceDisconnected(className: ComponentName) {}
+    private val taskViewModel: org.muilab.notigpt.ui.viewmodel.TaskViewModel by viewModels {
+        TaskViewModelFactory(this.application, TaskRepositoryProvider.provideTaskRepository(applicationContext))
     }
-
-    private lateinit var geminiService: GeminiService
-    private val geminiViewModel by viewModels<GeminiViewModel>()
 
     private fun isNotiListenerEnabled(): Boolean {
         val cn = ComponentName(this, NotiListenerService::class.java)
@@ -119,40 +107,22 @@ class MainActivity : ComponentActivity() {
     }
 
     fun isBatteryOptimizationsIgnored(): Boolean {
-        val pm = getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+        val pm = getSystemService(POWER_SERVICE) as android.os.PowerManager
         return pm.isIgnoringBatteryOptimizations(packageName)
     }
 
     private fun isServiceRunning(context: Context, serviceClass: Class<*>): Boolean {
-        val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        val activityManager = context.getSystemService(ACTIVITY_SERVICE) as ActivityManager
         val services = activityManager.getRunningServices(Integer.MAX_VALUE)
         for (serviceInfo in services)
             if (serviceClass.name == serviceInfo.service.className)
                 return true
         return false
     }
-}
 
-@Composable
-fun TestCard(geminiViewModel: GeminiViewModel) {
-    val result by geminiViewModel.response.observeAsState("")
-    Card (
-        Modifier
-            .fillMaxHeight(0.4f)
-            .fillMaxWidth()
-            .padding(8.dp),
-        elevation = CardDefaults.cardElevation(
-            defaultElevation = 12.dp
-        )
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(
-                result,
-                Modifier
-                    .fillMaxHeight(0.8f)
-                    .padding(10.dp)
-                    .verticalScroll(rememberScrollState())
-            )
-        }
+    override fun onResume() {
+        SharedPreferencesManager.lastAppResumeTime = System.currentTimeMillis()
+        super.onResume()
     }
+    
 }

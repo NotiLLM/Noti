@@ -7,20 +7,23 @@ import android.service.notification.StatusBarNotification
 import androidx.annotation.RequiresApi
 import androidx.room.Embedded
 import androidx.room.Entity
-import org.muilab.notigpt.util.getDisplayTimeStr
+import androidx.room.Index
+import org.muilab.notigpt.model.notifications.components.NotiMetadata
+import org.muilab.notigpt.model.notifications.components.NotiDisplayState
+import org.muilab.notigpt.model.notifications.components.NotiTaskAttr
+import org.muilab.notigpt.util.getAppCategoryByAppName
 
-
-@Entity(tableName = "noti_drawer", primaryKeys = ["notiKey"])
+// Add index on groupId for faster lookups
+@Entity(tableName = "noti_drawer", primaryKeys = ["notiKey"], indices = [Index(value = ["groupId"])])
 data class NotiUnit(
-    // Fixed (On Init)
-    val notiKey: String, // primary key
+    val notiKey: String,
     @Embedded val metadata: NotiMetadata,
-    @Embedded val body: NotiBody = NotiBody(),
-    @Embedded val feature: NotiFeature = NotiFeature(),
-    @Embedded val actions: NotiActions = NotiActions(),
-    @Embedded val outcome: NotiOutcome = NotiOutcome(),
+    @Embedded val displayState: NotiDisplayState = NotiDisplayState(),
+    @Embedded val taskAttr: NotiTaskAttr = NotiTaskAttr(),
+    // NEW: Link to a parent group
+    val groupId: String? = null
 ) {
-
+    // ... existing constructors ...
     @RequiresApi(Build.VERSION_CODES.S)
     constructor(
         context: Context,
@@ -35,113 +38,65 @@ data class NotiUnit(
     @RequiresApi(Build.VERSION_CODES.S)
     fun updateNoti(context: Context, sbn: StatusBarNotification) {
         metadata.update(context, sbn)
-        val isPeople = getIsPeople()
-        body.update(sbn, isPeople)
-        resetSummary()
+        if (!isVisible)
+            displayState.resetUserState()
+        displayState.resetReadState()
+        displayState.resetLLMState()
+        displayState.appCategory = getAppCategoryByAppName(context, metadata.appName)
     }
 
-    // METADATA RELATED CALLS
+    // ... existing getters ...
+    val hashKey: Int get() = metadata.hashKey
+    val appName: String get() = metadata.appName
+    val pkgName: String get() = metadata.pkgName
+    val lastUpdateTime: Long get() = metadata.lastUpdateTime
+    val lastSyncTime: Long get() = metadata.lastSyncTime
+    val isPeople: Boolean get() = metadata.isPeople
+    val largeBitmap: Bitmap? get() = metadata.getLargeBitmap()
+    val bitmap: Bitmap? get() = metadata.getBitmap()
+    val isVisible: Boolean get() = displayState.isVisible
 
-    fun getHashKey(): Int {
-        return metadata.hashKey
-    }
+    var isPinned: Boolean
+        get() = displayState.isPinned
+        set(value) { displayState.isPinned = value }
 
-    fun getPkgName(): String {
-        return metadata.pkgName
-    }
+    var isRead: Boolean
+        get() = displayState.isRead
+        set(value) { displayState.isRead = value }
 
-    fun getAppName(): String {
-        return metadata.appName
-    }
+    var summary: String
+        get() = displayState.summary
+        set(value) { displayState.summary = value }
 
-    fun getIsPeople(): Boolean {
-        return metadata.isPeople
-    }
+    var sortScore: Double
+        get() = displayState.sortScore
+        set(value) { displayState.sortScore = value }
 
-    fun getLargeBitmap(): Bitmap? {
-        return metadata.getLargeBitmap()
-    }
+    var category: String
+        set(value) { displayState.category = value }
+        get() = displayState.category
 
-    fun getBitmap(): Bitmap? {
-        return metadata.getBitmap()
-    }
+    var explanation: String
+        get() = displayState.explanation
+        set(value) { displayState.explanation = value }
 
-    // BODY RELATED CALLS
+    val appCategory: String get() = displayState.appCategory
 
-    fun getWholeNotiRead(): Boolean {
-        return body.wholeNotiRead
-    }
+    // REMOVED: sortPosition, appCategorySortPosition logic
 
-    fun markAsRead() {
-        body.wholeNotiRead = true
-        for (notiInfo in body.notiInfos) {
-            notiInfo.notiSeen = true
-        }
-    }
+    var shouldExtractTask: Boolean
+        get() = taskAttr.shouldExtractTask
+        set(value) { taskAttr.shouldExtractTask = value }
 
-    fun markInfosAsRead(seenInfos: Set<Long>) {
-        var checkAllRead = true
-        for (notiInfo in body.notiInfos) {
-            for (infoTime in seenInfos)
-                if (infoTime == notiInfo.time)
-                    notiInfo.notiSeen = true
-            if (!notiInfo.notiSeen)
-                checkAllRead = false
-        }
-        if (checkAllRead)
-            body.wholeNotiRead = true
-    }
+    var hasGenuineTask: Boolean
+        get() = taskAttr.hasGenuineTask
+        set(value) { taskAttr.hasGenuineTask = value }
 
-    fun getNotiBody(): List<NotiInfo> {
-        return body.notiInfos.toList()
-    }
+    var isSetToTop: Boolean
+        get() = displayState.isSetToTop
+        set(value) { displayState.isSetToTop = value }
 
-    fun getPrevBody(): List<NotiInfo> {
-        return body.prevNotiInfos.toList()
-    }
-
-    fun getTitle(): String {
-        return body.title
-    }
-
-    fun getLatestTimeStr(): String {
-        return getDisplayTimeStr(body.latestTime)
-    }
-
-    // ACTIONS RELATED CALLS
-
-    fun flipNotiPin() {
-        actions.flipPin()
-    }
-
-    fun getPinned(): Boolean {
-        return actions.pinned
-    }
-
-    fun setPinned(isPinned: Boolean) {
-        actions.pinned = isPinned
-    }
-
-    fun removeNoti() {
-        metadata.isVisible = false
-        body.removeNoti()
-    }
-
-    // OUTCOMES RELATED CALLS
-
-    fun getScore(): Double {
-        return outcome.score
-    }
-
-    fun resetSummary() {
-        outcome.summary = ""
-    }
-
-    fun getSummary(): String {
-        return outcome.summary
-    }
-
-    fun resetGPTValues() {
-        outcome.resetOutcomes()
-    }
+    var setToTopTime: Long
+        get() = displayState.setToTopTime
+        set(value) { displayState.setToTopTime = value }
 }
