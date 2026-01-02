@@ -618,7 +618,7 @@ class N8nAPIWorker(
     // If you later want to support postNotificationAction via n8n, you can adapt the commented
     // method below similarly, using N8nPostNotificationActionPayload and webhook_path.
 
-    private fun formatNotiRecord(record: NotiRecord, isPeople: Boolean): String {
+    private fun formatNotiRecord(record: NotiRecord, isPeople: Boolean): Map<String, Any> {
          // Absolute time: use ISO-like timestamp (Locale.US for stable ASCII formatting)
          val absTime = SimpleDateFormat(
              "yyyy-MM-dd'T'HH:mm:ssXXX",
@@ -629,7 +629,12 @@ class N8nAPIWorker(
           val title = record.getDisplayedTitle(isPeople)
           val content = record.content
           val rel = relativeTime(record.time)
-          return "$absTime [$title] $content ($rel)"
+          return mapOf(
+              "abs_time" to absTime,
+              "title" to title,
+              "content" to content,
+              "rel_time" to rel
+          )
       }
 
     private fun relativeTime(timeMs: Long): String {

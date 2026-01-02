@@ -65,6 +65,7 @@ import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_MAKETASK
 import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_SAVE
 import org.muilab.notigpt.util.SharedPreferencesManager
 import org.muilab.notigpt.ui.component.notification.action.NotiActionIconButton
+import org.muilab.notigpt.ui.component.notification.noticard.NotiCard
 import org.muilab.notigpt.ui.viewmodel.DrawerViewModel
 import kotlin.math.abs
 import kotlin.math.max

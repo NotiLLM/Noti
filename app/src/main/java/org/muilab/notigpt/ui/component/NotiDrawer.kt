@@ -48,7 +48,7 @@ import kotlinx.coroutines.launch
 import org.muilab.notigpt.model.notifications.NotiGroupItem
 import org.muilab.notigpt.model.notifications.NotiItem
 import org.muilab.notigpt.ui.component.notification.GroupCard
-import org.muilab.notigpt.ui.component.notification.NotiCard
+import org.muilab.notigpt.ui.component.notification.noticard.NotiCard
 import org.muilab.notigpt.ui.viewmodel.DrawerViewModel
 import kotlin.math.abs
 import kotlin.math.max

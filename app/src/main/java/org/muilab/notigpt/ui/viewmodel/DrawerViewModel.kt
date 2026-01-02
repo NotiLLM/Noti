@@ -1,3 +1,5 @@
+@file:OptIn(kotlinx.coroutines.FlowPreview::class, kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+
 package org.muilab.notigpt.ui.viewmodel
 
 import android.annotation.SuppressLint
@@ -28,7 +30,6 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.muilab.notigpt.database.server.enqueueNotificationAction
 import org.muilab.notigpt.domain.action.NotiActionType
 import org.muilab.notigpt.model.notifications.NotiDrawerItem
 import org.muilab.notigpt.model.notifications.NotiRecord
@@ -39,7 +40,6 @@ import org.muilab.notigpt.util.Constants.Companion.APP_CATEGORY_ALL
 import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_ARCHIVE
 import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_MAKETASK
 import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_SAVE
-import org.muilab.notigpt.util.SharedPreferencesManager
 import org.muilab.notigpt.util.postOngoingNotification
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.collections.filter
@@ -47,6 +47,10 @@ import org.muilab.notigpt.platform.ClipboardController
 import org.muilab.notigpt.platform.NotiLogExporter
 import org.muilab.notigpt.platform.UserNotifier
 import org.muilab.notigpt.service.NotiListenerService
+import org.muilab.notigpt.ui.viewmodel.drawer.DrawerActionsController
+import org.muilab.notigpt.ui.viewmodel.drawer.DrawerReadStateController
+import org.muilab.notigpt.ui.viewmodel.drawer.DrawerSearchController
+import org.muilab.notigpt.platform.NotificationLauncher
 
 class DrawerViewModel(
     application: Application,
@@ -125,26 +129,17 @@ class DrawerViewModel(
         }
         .flowOn(Dispatchers.IO)
 
-    private val _includeHistory = MutableStateFlow(false)
-    val includeHistory: StateFlow<Boolean> = _includeHistory
+    @SuppressLint("StaticFieldLeak")
+    val context: Context = getApplication<Application>().applicationContext
 
-    fun toggleIncludeHistory(enabled: Boolean) {
-        _includeHistory.value = enabled
-        // Re-trigger search if query exists
-        if (_queryString.value.isNotBlank()) {
-            performSearch(_queryString.value)
-        }
-    }
+    private val searchController = DrawerSearchController(notiRepository)
+    private val readStateController = DrawerReadStateController(notiRepository)
+    private val actionsController = DrawerActionsController(context, notiRepository)
 
-    // Holds search results: Map of NotiKey -> List of Records to display
-    private val _searchResults = MutableStateFlow<Map<String, List<NotiRecord>>>(emptyMap())
-    val searchResults: StateFlow<Map<String, List<NotiRecord>>> = _searchResults
-
-    // Holds the NotiUnit data for the keys found in search
-    private val _searchUnits = MutableStateFlow<Map<String, NotiUnit>>(emptyMap())
-    val searchUnits: StateFlow<Map<String, NotiUnit>> = _searchUnits
-
-    private var searchJob: kotlinx.coroutines.Job? = null
+    // Search state (delegated)
+    val includeHistory: StateFlow<Boolean> = searchController.includeHistory
+    val searchResults: StateFlow<Map<String, List<NotiRecord>>> = searchController.searchResults
+    val searchUnits: StateFlow<Map<String, NotiUnit>> = searchController.searchUnits
 
     init {
         // Main subscription to the grouped data flow
@@ -181,90 +176,35 @@ class DrawerViewModel(
                 .debounce(300)
                 .distinctUntilChanged()
                 .collect { query ->
-                    performSearch(query)
+                    if (query.isBlank()) {
+                        // reset loading state for empty query
+                        // controller handles clearing results
+                        searchController.performSearch("")
+                    } else {
+                        _isTargetLoading.value = true
+                        try {
+                            searchController.performSearch(query)
+                        } finally {
+                            _isTargetLoading.value = false
+                        }
+                    }
                 }
         }
 
         removeExpiredRecords()
     }
 
-    private fun performSearch(query: String) {
-        if (query.isBlank()) {
-            _searchResults.value = emptyMap()
-            return
-        }
-
-        searchJob?.cancel()
-        searchJob = viewModelScope.launch(Dispatchers.IO) {
-            _isTargetLoading.value = true
-            val results = notiRepository.searchNotifications(query, _includeHistory.value)
-
-            // We also need the NotiUnits for these keys to display the app icon/name
-            val unitMap = mutableMapOf<String, NotiUnit>()
-            val keysToFetch = results.keys.filter { !_searchUnits.value.containsKey(it) }
-
-            if (keysToFetch.isNotEmpty()) {
-                val units = notiRepository.getNotiUnitByKeys(keysToFetch)
-                units.forEach { unitMap[it.notiKey] = it }
-            }
-            // Merge with existing cached units
-            _searchUnits.value += unitMap
-
-            // Sort records in each group chronologically
-            val sortedResults = results.mapValues { entry -> entry.value.sortedBy { it.time } }
-
-            _searchResults.value = sortedResults
-            _isTargetLoading.value = false
-        }
-    }
-
-    fun loadSearchContext(notiKey: String, isOlder: Boolean) {
-        val currentList = _searchResults.value[notiKey] ?: return
-        if (currentList.isEmpty()) return
-
-        viewModelScope.launch(Dispatchers.IO) {
-            val pivotTime = if (isOlder) currentList.first().time else currentList.last().time
-            val newRecords = notiRepository.getContextRecords(notiKey, pivotTime, isOlder, _includeHistory.value)
-
-            if (newRecords.isNotEmpty()) {
-                val updatedList = if (isOlder) {
-                    newRecords + currentList
-                } else {
-                    currentList + newRecords
+    fun toggleIncludeHistory(enabled: Boolean) {
+        searchController.setIncludeHistory(enabled)
+        if (_queryString.value.isNotBlank()) {
+            viewModelScope.launch {
+                _isTargetLoading.value = true
+                try {
+                    searchController.performSearch(_queryString.value)
+                } finally {
+                    _isTargetLoading.value = false
                 }
-                // Update state
-                val currentMap = _searchResults.value.toMutableMap()
-                currentMap[notiKey] = updatedList
-                _searchResults.value = currentMap
             }
-        }
-    }
-
-    // This helper will be used by the UI to check if gap buttons should be shown
-    suspend fun checkGapHasRecords(notiKey: String, startTime: Long, endTime: Long): Boolean {
-        return notiRepository.hasRecordsInGap(notiKey, startTime, endTime, _includeHistory.value)
-    }
-
-    // [UPDATED] Load records for a gap, either from the start (Newer) or end (Older)
-    fun loadGapRecords(notiKey: String, startTime: Long, endTime: Long, fromStart: Boolean) {
-        val currentList = _searchResults.value[notiKey] ?: return
-
-        viewModelScope.launch(Dispatchers.IO) {
-            // Fetch 10 records at a time
-            val gapRecords = notiRepository.getGapRecords(notiKey, startTime, endTime, 10, fromStart)
-
-            if (gapRecords.isNotEmpty()) {
-                // Merge, Dedup, Sort
-                val combined = (currentList + gapRecords)
-                    .distinctBy { it.notiRecordId }
-                    .sortedBy { it.time }
-
-                val currentMap = _searchResults.value.toMutableMap()
-                currentMap[notiKey] = combined
-                _searchResults.value = currentMap
-            }
-            // No need to explicitly re-check here. The `LaunchedEffect` in the UI
-            // reacting to `_searchResults.value` change will re-run `checkGapHasRecords`.
         }
     }
 
@@ -273,50 +213,15 @@ class DrawerViewModel(
     @RequiresApi(Build.VERSION_CODES.S)
     fun accessNotification(notiUnit: NotiUnit) {
         val contentIntent = NotiListenerService.getContentIntent(context, notiUnit)
-        if (contentIntent != null) {
-            try {
-                // Android 14+ background activity start options logic
-                // (Reuse the logic you had in NotiCard or simplify here)
-                val options = android.app.ActivityOptions.makeBasic()
-                if (Build.VERSION.SDK_INT >= 34) {
-                    options.pendingIntentBackgroundActivityStartMode =
-                        android.app.ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
-                }
-                contentIntent.send(context, 0, null, null, null, null, options.toBundle())
-            } catch (_: Exception) {
-                // Fallback launch
-                val launchIntent = context.packageManager.getLaunchIntentForPackage(notiUnit.metadata.pkgName)
-                if (launchIntent != null) {
-                    launchIntent.flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
-                    context.startActivity(launchIntent)
-                } else {
-                    openAppDetails(notiUnit.metadata.pkgName)
-                }
-            }
-        } else {
-            // Simple fallback
-            val launchIntent = context.packageManager.getLaunchIntentForPackage(notiUnit.metadata.pkgName)
-            if (launchIntent != null) {
-                launchIntent.flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
-                context.startActivity(launchIntent)
-            } else {
-                openAppDetails(notiUnit.metadata.pkgName)
-            }
-        }
+        NotificationLauncher.launchPendingIntentOrFallback(
+            context = context,
+            pendingIntent = contentIntent,
+            packageName = notiUnit.metadata.pkgName,
+            logTag = "DrawerViewModel",
+        )
+
         // Log action
         actOnNoti(notiUnit.notiKey, NotiActionType.AccessClickSearch)
-    }
-
-    private fun openAppDetails(pkg: String) {
-        try {
-            val intent = android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                data = android.net.Uri.parse("package:$pkg")
-                addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            context.startActivity(intent)
-        } catch (t: Throwable) {
-            Log.w("DrawerViewModel", "Unable to open app details for $pkg", t)
-        }
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -351,18 +256,14 @@ class DrawerViewModel(
             result
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    @SuppressLint("StaticFieldLeak")
-    val context: Context = getApplication<Application>().applicationContext
-
     @RequiresApi(Build.VERSION_CODES.S)
     fun actOnNoti(notiKey: String, action: String) {
         val typed = NotiActionType.fromWireValue(action)
         if (typed != null) {
             actOnNoti(notiKey, typed)
         } else {
-            // Fallback to legacy behavior for unknown action strings.
-            viewModelScope.launch(Dispatchers.IO) {
-                notiRepository.actOnNoti(notiKey, action)
+            viewModelScope.launch {
+                actionsController.actOnNotiLegacy(notiKey, action)
                 if (action.contains("dismiss")) postOngoingNotification(context)
             }
         }
@@ -370,19 +271,8 @@ class DrawerViewModel(
 
     @RequiresApi(Build.VERSION_CODES.S)
     fun actOnNoti(notiKey: String, action: NotiActionType) {
-
-        fun shouldTrackAction(action: NotiActionType): Boolean {
-            return when (action) {
-                NotiActionType.Pin -> SharedPreferencesManager.trackPin
-                NotiActionType.Archive -> SharedPreferencesManager.autoArchive
-                NotiActionType.DismissSwipe -> SharedPreferencesManager.autoDelete
-                else -> false
-            }
-        }
-
-        viewModelScope.launch(Dispatchers.IO) {
-            if (shouldTrackAction(action)) enqueueNotificationAction(context, notiKey, action.wireValue)
-            notiRepository.actOnNoti(notiKey, action)
+        viewModelScope.launch {
+            actionsController.actOnNoti(notiKey, action)
             if (action.wireValue.contains("dismiss")) postOngoingNotification(context)
         }
     }
@@ -432,31 +322,10 @@ class DrawerViewModel(
         }
     }
 
-
-    private val _seenNotiKeys = ConcurrentHashMap.newKeySet<String>()
-    fun markNotificationAsRead(notiKey: String) {
-        val currentItems = _groupedNotifications.value
-        val foundUnit = currentItems.asSequence().flatMap { item ->
-            when(item) {
-                is org.muilab.notigpt.model.notifications.NotiItem -> sequenceOf(item.displayUnit)
-                is org.muilab.notigpt.model.notifications.NotiGroupItem -> item.children.asSequence()
-            }
-        }.firstOrNull { it.notiKey == notiKey }
-
-        if (foundUnit != null) {
-            if (foundUnit.notiUnit.isRead) return
-            _seenNotiKeys.add(notiKey)
-        }
-    }
-
     @RequiresApi(Build.VERSION_CODES.S)
     fun persistReadStatus() {
-        if (_seenNotiKeys.isEmpty()) return
-
-        viewModelScope.launch(Dispatchers.IO) {
-            Log.d("ViewModelReadState", "Persisting seenNotis: ${_seenNotiKeys.size}")
-            notiRepository.updateSeenNotifications(_seenNotiKeys.toSet())
-            _seenNotiKeys.clear()
+        viewModelScope.launch {
+            readStateController.persistSeen()
         }
     }
 
@@ -558,14 +427,14 @@ class DrawerViewModel(
             actOnGroup(groupId, typed)
             return
         }
-        viewModelScope.launch(Dispatchers.IO) {
-            notiRepository.actOnGroup(groupId, action)
+        viewModelScope.launch {
+            actionsController.actOnGroupLegacy(groupId, action)
         }
     }
 
     fun actOnGroup(groupId: String, action: NotiActionType) {
-        viewModelScope.launch(Dispatchers.IO) {
-            notiRepository.actOnGroup(groupId, action)
+        viewModelScope.launch {
+            actionsController.actOnGroup(groupId, action)
         }
     }
 
@@ -573,5 +442,35 @@ class DrawerViewModel(
         viewModelScope.launch(Dispatchers.IO) {
             notiRepository.removeFromGroup(notiKey)
         }
+    }
+
+    /**
+     * Called by list items when a card is fully visible.
+     * We batch persistence via [persistReadStatus].
+     */
+    fun markNotificationAsRead(notiKey: String) {
+        val currentItems = _groupedNotifications.value
+        val foundUnit = currentItems.asSequence().flatMap { item ->
+            when (item) {
+                is org.muilab.notigpt.model.notifications.NotiItem -> sequenceOf(item.displayUnit)
+                is org.muilab.notigpt.model.notifications.NotiGroupItem -> item.children.asSequence()
+            }
+        }.firstOrNull { it.notiKey == notiKey }
+
+        if (foundUnit != null) {
+            readStateController.markSeenIfUnread(notiKey, foundUnit.notiUnit.isRead)
+        }
+    }
+
+    fun loadSearchContext(notiKey: String, isOlder: Boolean) {
+        viewModelScope.launch { searchController.loadSearchContext(notiKey, isOlder) }
+    }
+
+    suspend fun checkGapHasRecords(notiKey: String, startTime: Long, endTime: Long): Boolean {
+        return searchController.checkGapHasRecords(notiKey, startTime, endTime)
+    }
+
+    fun loadGapRecords(notiKey: String, startTime: Long, endTime: Long, fromStart: Boolean) {
+        viewModelScope.launch { searchController.loadGapRecords(notiKey, startTime, endTime, fromStart) }
     }
 }
