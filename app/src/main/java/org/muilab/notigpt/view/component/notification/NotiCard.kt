@@ -684,9 +684,17 @@ fun NotiCard( // REMOVED RECEIVER HERE
                         LazyColumn(state = listState, modifier = Modifier.height(with(density) { currentHeightPx.toDp() }).onGloballyPositioned { recordsViewport = it.boundsInWindow() }) {
                             item { HorizontalDivider(Modifier.padding(horizontal = 16.dp), 1.dp, Color.White) }
                             if (fullRecords.isEmpty() && anchoredDraggableState.currentValue == NotiExpandState.Opened) item { CircularProgressIndicator(Modifier.padding(8.dp).size(24.dp)) }
-                            items(showingRecords, key = { it.notiRecordId }) { notiRecord ->
-                                val notiTitle = notiRecord.getDisplayedTitle(isPeople)
-                                ExpandedNotiRecord(notiTitle, notiRecord.time, notiRecord.content, false)
+                            items(showingRecords.size, key = { showingRecords[it].notiRecordId }) { index ->
+                                val notiRecord = showingRecords[index]
+                                val currentTitle = notiRecord.getDisplayedTitle(isPeople)
+                                val showTitle = if (index == 0) {
+                                    currentTitle != notiOverallTitle
+                                } else {
+                                    val prevTitle = showingRecords[index - 1].getDisplayedTitle(isPeople)
+                                    currentTitle != prevTitle
+                                }
+
+                                ExpandedNotiRecord(currentTitle, notiRecord.time, notiRecord.content, showTitle)
                             }
                         }
                     }
@@ -763,13 +771,6 @@ fun NotiCard( // REMOVED RECEIVER HERE
             text = {
                 Column {
 
-                    NotiActionIconButton(R.drawable.leave_group, "Remove from Group", {
-                        if (abs(horizontalOffsetX.value) == endActionsWidth) {
-                            drawerViewModel.removeFromGroup(notiKey)
-                            coroutineScope.launch { collapse() }
-                        }
-                    })
-
                     if (isInGroup) {
                         TextButton(
                             onClick = {
@@ -796,7 +797,7 @@ fun NotiCard( // REMOVED RECEIVER HERE
 
                     TextButton(
                         onClick = {
-                            drawerViewModel.actOnNoti(notiKey, if (!isTask) "dismiss_task" else "make_task")
+                            drawerViewModel.actOnNoti(notiKey, if (!isTask) "make_task" else "dismiss_task")
                             showOptionsDialog = false
                         },
                         modifier = Modifier.fillMaxWidth()
@@ -820,7 +821,7 @@ fun NotiCard( // REMOVED RECEIVER HERE
 
                     TextButton(
                         onClick = {
-                            drawerViewModel.actOnNoti(notiKey, if (!isSave) "unsave" else "save")
+                            drawerViewModel.actOnNoti(notiKey, if (!isSave) "save" else "unsave")
                             showOptionsDialog = false
                         },
                         modifier = Modifier.fillMaxWidth()
@@ -844,7 +845,7 @@ fun NotiCard( // REMOVED RECEIVER HERE
 
                     TextButton(
                         onClick = {
-                            drawerViewModel.actOnNoti(notiKey, if (!isArchive) "unarchive" else "archive")
+                            drawerViewModel.actOnNoti(notiKey, if (!isArchive) "archive" else "unarchive")
                             showOptionsDialog = false
                         },
                         modifier = Modifier.fillMaxWidth()
@@ -856,13 +857,13 @@ fun NotiCard( // REMOVED RECEIVER HERE
                         ) {
                             Icon(
                                 painter = painterResource(
-                                    id = if (isSave) R.drawable.archive_yes else R.drawable.archive_no
+                                    id = if (isArchive) R.drawable.archive_yes else R.drawable.archive_no
                                 ),
                                 contentDescription = "To Archive",
                                 modifier = Modifier.size(24.dp)
                             )
                             Spacer(Modifier.width(12.dp))
-                            Text(if (isSave) "Remove from Archive" else "Move to Archive")
+                            Text(if (isArchive) "Remove from Archive" else "Move to Archive")
                         }
                     }
 

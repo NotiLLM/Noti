@@ -3,8 +3,10 @@ package org.muilab.notigpt.database.room
 import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.Query
+import androidx.room.RawQuery
 import androidx.room.RewriteQueriesToDropUnusedColumns
 import androidx.room.Upsert
+import androidx.sqlite.db.SupportSQLiteQuery
 import kotlinx.coroutines.flow.Flow
 import org.muilab.notigpt.model.notifications.NotiRecord
 
@@ -124,4 +126,85 @@ interface NotiRecordDao {
 
     @Query("SELECT * FROM noti_record WHERE taskExtractionClaimed = 0 AND taskExtracted = 0 AND notiKey = :notiKey ORDER BY whenTime ASC")
     fun getUnclaimedUnextractedByKey(notiKey: String): List<NotiRecord>
+
+    // Search Query: Matches text in titles or content.
+    // If includeHistory is false, strictly enforces isVisible = 1.
+    // If includeHistory is true, ignores isVisible status.
+    @Query("""
+        SELECT * FROM noti_record 
+        WHERE (
+            extraText LIKE '%' || :query || '%' OR 
+            extraBigText LIKE '%' || :query || '%' OR 
+            extraTitle LIKE '%' || :query || '%' OR
+            person LIKE '%' || :query || '%'
+        )
+        AND (:includeHistory = 1 OR isVisible = 1)
+        ORDER BY whenTime DESC
+        LIMIT 100
+    """)
+    suspend fun searchRecords(query: String, includeHistory: Boolean): List<NotiRecord>
+
+    // Context: Get Older
+    @Query("""
+        SELECT * FROM noti_record 
+        WHERE notiKey = :notiKey 
+        AND whenTime < :pivotTime 
+        AND (:includeHistory = 1 OR isVisible = 1)
+        ORDER BY whenTime DESC 
+        LIMIT :limit
+    """)
+    suspend fun getContextOlder(notiKey: String, pivotTime: Long, limit: Int, includeHistory: Boolean): List<NotiRecord>
+
+    // Context: Get Newer
+    @Query("""
+        SELECT * FROM noti_record 
+        WHERE notiKey = :notiKey 
+        AND whenTime > :pivotTime 
+        AND (:includeHistory = 1 OR isVisible = 1)
+        ORDER BY whenTime ASC 
+        LIMIT :limit
+    """)
+    suspend fun getContextNewer(notiKey: String, pivotTime: Long, limit: Int, includeHistory: Boolean): List<NotiRecord>
+
+    // [NEW] Dynamic Search using RawQuery
+    @RawQuery
+    suspend fun searchRecordsRaw(query: SupportSQLiteQuery): List<NotiRecord>
+
+    // [NEW] Fetch records between two timestamps for gap filling
+    @Query("""
+        SELECT * FROM noti_record 
+        WHERE notiKey = :notiKey 
+        AND whenTime > :startTime AND whenTime < :endTime
+        ORDER BY whenTime ASC
+    """)
+    suspend fun getRecordsBetween(notiKey: String, startTime: Long, endTime: Long): List<NotiRecord>
+
+    @Query("""
+        SELECT * FROM noti_record 
+        WHERE notiKey = :notiKey 
+        AND whenTime > :minTime AND whenTime < :maxTime 
+        ORDER BY whenTime ASC 
+        LIMIT :limit
+    """)
+    suspend fun getGapRecordsNewer(notiKey: String, minTime: Long, maxTime: Long, limit: Int): List<NotiRecord>
+
+    // Fetch records immediately BEFORE maxTime (Descending) -> "Load More ↑"
+    @Query("""
+        SELECT * FROM noti_record 
+        WHERE notiKey = :notiKey 
+        AND whenTime > :minTime AND whenTime < :maxTime 
+        ORDER BY whenTime DESC 
+        LIMIT :limit
+    """)
+    suspend fun getGapRecordsOlder(notiKey: String, minTime: Long, maxTime: Long, limit: Int): List<NotiRecord>
+
+    // [NEW] Check if any records exist in a given time gap (for button visibility)
+    @Query("""
+        SELECT COUNT(*) FROM noti_record
+        WHERE notiKey = :notiKey
+        AND whenTime > :minTime AND whenTime < :maxTime
+        AND (:includeHistory = 1 OR isVisible = 1)
+        LIMIT 1 -- We only need to know if at least one exists
+    """)
+    suspend fun hasRecordsInGap(notiKey: String, minTime: Long, maxTime: Long, includeHistory: Boolean): Int
 }

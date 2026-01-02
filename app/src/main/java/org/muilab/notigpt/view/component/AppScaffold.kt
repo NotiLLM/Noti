@@ -76,8 +76,9 @@ fun AppScaffold(
                     selectedCategory = selectedCategory.value,
                     onItemSelected = { category ->
                         drawerViewModel.updateCategory(category)
-                        // Reset the search state when a new category is selected
+                        drawerViewModel.updateQueryString("")
                         isSearchExpanded = false
+                        // Reset the search state when a new category is selected
                     },
                     unreadCounts = unreadCounts,
                 )

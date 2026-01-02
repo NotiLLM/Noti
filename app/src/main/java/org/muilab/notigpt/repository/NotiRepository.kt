@@ -5,6 +5,7 @@ import android.os.Build
 import android.service.notification.StatusBarNotification
 import android.util.Log
 import androidx.annotation.RequiresApi
+import androidx.sqlite.db.SimpleSQLiteQuery
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -324,6 +325,10 @@ class NotiRepository(
         return notiDrawerDao.getByNotiKey(notiKey)
     }
 
+    fun getNotiUnitByKeys(notiKeys: List<String>): List<NotiUnit> {
+        return notiDrawerDao.getByNotiKeys(notiKeys)
+    }
+
     suspend fun actOnNoti(notiKey: String, action: String) {
         when (action) {
             "dismiss_swipe" -> {
@@ -593,6 +598,96 @@ class NotiRepository(
 
     suspend fun removeFromGroup(notiKey: String) {
         setGroupId(notiKey, null)
+    }
+
+    // [NEW] Advanced Search Logic
+    suspend fun searchNotifications(rawInput: String, includeHistory: Boolean): Map<String, List<NotiRecord>> {
+        val conditions = mutableListOf<String>()
+        val args = mutableListOf<Any>()
+
+        // 1. Parse Exact Phrases (e.g., "baseball match")
+        val quoteRegex = "\"([^\"]*)\"".toRegex()
+        var remainingInput = rawInput
+
+        quoteRegex.findAll(rawInput).forEach { match ->
+            val phrase = match.groupValues[1]
+            if (phrase.isNotBlank()) {
+                // Condition: Phrase must be in text OR title
+                conditions.add("(extraText LIKE ? OR extraBigText LIKE ? OR extraTitle LIKE ? OR person LIKE ?)")
+                val likePhrase = "%$phrase%"
+                repeat(4) { args.add(likePhrase) }
+            }
+        }
+        // Remove quotes from input to process remaining keywords
+        remainingInput = quoteRegex.replace(remainingInput, " ")
+
+        // 2. Parse '+' combined keywords (AND logic)
+        // Split by + first, then trim. Empty parts are ignored.
+        val terms = remainingInput.split("+").map { it.trim() }.filter { it.isNotBlank() }
+
+        terms.forEach { term ->
+            conditions.add("(extraText LIKE ? OR extraBigText LIKE ? OR extraTitle LIKE ? OR person LIKE ?)")
+            val likeTerm = "%$term%"
+            repeat(4) { args.add(likeTerm) }
+        }
+
+        // 3. Construct Query
+        val whereClause = if (conditions.isNotEmpty()) {
+            conditions.joinToString(" AND ")
+        } else {
+            "1 = 1" // Fallback match all if parsing failed
+        }
+
+        val visibilityClause = if (includeHistory) "" else " AND isVisible = 1"
+
+        val finalSql = "SELECT * FROM noti_record WHERE $whereClause $visibilityClause ORDER BY whenTime DESC LIMIT 100"
+
+        val query = SimpleSQLiteQuery(finalSql, args.toTypedArray())
+        val records = notiRecordDao.searchRecordsRaw(query)
+
+        return records.groupBy { it.notiKey }
+    }
+
+    // [NEW] Gap Filling
+    suspend fun getRecordsBetween(notiKey: String, start: Long, end: Long): List<NotiRecord> {
+        return notiRecordDao.getRecordsBetween(notiKey, start, end)
+    }
+
+    suspend fun getContextRecords(
+        notiKey: String,
+        pivotTime: Long,
+        isOlder: Boolean,
+        includeHistory: Boolean
+    ): List<NotiRecord> {
+        return if (isOlder) {
+            // "Older" means time < pivot, ordered DESC.
+            // We want the result to be chronological eventually, but the DAO returns them closest to pivot first.
+            notiRecordDao.getContextOlder(notiKey, pivotTime, 10, includeHistory).sortedBy { it.time }
+        } else {
+            // "Newer" means time > pivot, ordered ASC.
+            notiRecordDao.getContextNewer(notiKey, pivotTime, 10, includeHistory)
+        }
+    }
+
+    suspend fun getGapRecords(
+        notiKey: String,
+        minTime: Long,
+        maxTime: Long,
+        limit: Int,
+        fromStart: Boolean
+    ): List<NotiRecord> {
+        return if (fromStart) {
+            // Load "Next" records after minTime
+            notiRecordDao.getGapRecordsNewer(notiKey, minTime, maxTime, limit)
+        } else {
+            // Load "Previous" records before maxTime
+            // Note: DAO returns DESC, we might want to reverse here or let ViewModel sort
+            notiRecordDao.getGapRecordsOlder(notiKey, minTime, maxTime, limit)
+        }
+    }
+
+    suspend fun hasRecordsInGap(notiKey: String, minTime: Long, maxTime: Long, includeHistory: Boolean): Boolean {
+        return notiRecordDao.hasRecordsInGap(notiKey, minTime, maxTime, includeHistory) > 0
     }
 }
 

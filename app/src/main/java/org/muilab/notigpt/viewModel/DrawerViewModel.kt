@@ -37,6 +37,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.muilab.notigpt.database.server.enqueueNotificationAction
 import org.muilab.notigpt.model.notifications.NotiDrawerItem
+import org.muilab.notigpt.model.notifications.NotiRecord
+import org.muilab.notigpt.model.notifications.NotiUnit
 import org.muilab.notigpt.repository.NotiRepository
 import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_GENERAL
 import org.muilab.notigpt.util.Constants.Companion.APP_CATEGORY_ALL
@@ -122,6 +124,27 @@ class DrawerViewModel(
         }
         .flowOn(Dispatchers.IO)
 
+    private val _includeHistory = MutableStateFlow(false)
+    val includeHistory: StateFlow<Boolean> = _includeHistory
+
+    fun toggleIncludeHistory(enabled: Boolean) {
+        _includeHistory.value = enabled
+        // Re-trigger search if query exists
+        if (_queryString.value.isNotBlank()) {
+            performSearch(_queryString.value)
+        }
+    }
+
+    // Holds search results: Map of NotiKey -> List of Records to display
+    private val _searchResults = MutableStateFlow<Map<String, List<NotiRecord>>>(emptyMap())
+    val searchResults: StateFlow<Map<String, List<NotiRecord>>> = _searchResults
+
+    // Holds the NotiUnit data for the keys found in search
+    private val _searchUnits = MutableStateFlow<Map<String, NotiUnit>>(emptyMap())
+    val searchUnits: StateFlow<Map<String, NotiUnit>> = _searchUnits
+
+    private var searchJob: kotlinx.coroutines.Job? = null
+
     init {
         // Main subscription to the grouped data flow
         notiRepository.getGroupedNotifications(category, appCategory)
@@ -152,8 +175,132 @@ class DrawerViewModel(
             }
         }.launchIn(viewModelScope)
 
+        viewModelScope.launch {
+            _queryString
+                .debounce(300)
+                .distinctUntilChanged()
+                .collect { query ->
+                    performSearch(query)
+                }
+        }
+
         removeExpiredRecords()
     }
+
+    private fun performSearch(query: String) {
+        if (query.isBlank()) {
+            _searchResults.value = emptyMap()
+            return
+        }
+
+        searchJob?.cancel()
+        searchJob = viewModelScope.launch(Dispatchers.IO) {
+            _isTargetLoading.value = true
+            val results = notiRepository.searchNotifications(query, _includeHistory.value)
+
+            // We also need the NotiUnits for these keys to display the app icon/name
+            val unitMap = mutableMapOf<String, NotiUnit>()
+            val keysToFetch = results.keys.filter { !_searchUnits.value.containsKey(it) }
+
+            if (keysToFetch.isNotEmpty()) {
+                val units = notiRepository.getNotiUnitByKeys(keysToFetch)
+                units.forEach { unitMap[it.notiKey] = it }
+            }
+            // Merge with existing cached units
+            _searchUnits.value += unitMap
+
+            // Sort records in each group chronologically
+            val sortedResults = results.mapValues { entry -> entry.value.sortedBy { it.time } }
+
+            _searchResults.value = sortedResults
+            _isTargetLoading.value = false
+        }
+    }
+
+    fun loadSearchContext(notiKey: String, isOlder: Boolean) {
+        val currentList = _searchResults.value[notiKey] ?: return
+        if (currentList.isEmpty()) return
+
+        viewModelScope.launch(Dispatchers.IO) {
+            val pivotTime = if (isOlder) currentList.first().time else currentList.last().time
+            val newRecords = notiRepository.getContextRecords(notiKey, pivotTime, isOlder, _includeHistory.value)
+
+            if (newRecords.isNotEmpty()) {
+                val updatedList = if (isOlder) {
+                    newRecords + currentList
+                } else {
+                    currentList + newRecords
+                }
+                // Update state
+                val currentMap = _searchResults.value.toMutableMap()
+                currentMap[notiKey] = updatedList
+                _searchResults.value = currentMap
+            }
+        }
+    }
+
+    // This helper will be used by the UI to check if gap buttons should be shown
+    suspend fun checkGapHasRecords(notiKey: String, startTime: Long, endTime: Long): Boolean {
+        return notiRepository.hasRecordsInGap(notiKey, startTime, endTime, _includeHistory.value)
+    }
+
+    // [UPDATED] Load records for a gap, either from the start (Newer) or end (Older)
+    fun loadGapRecords(notiKey: String, startTime: Long, endTime: Long, fromStart: Boolean) {
+        val currentList = _searchResults.value[notiKey] ?: return
+
+        viewModelScope.launch(Dispatchers.IO) {
+            // Fetch 10 records at a time
+            val gapRecords = notiRepository.getGapRecords(notiKey, startTime, endTime, 10, fromStart)
+
+            if (gapRecords.isNotEmpty()) {
+                // Merge, Dedup, Sort
+                val combined = (currentList + gapRecords)
+                    .distinctBy { it.notiRecordId }
+                    .sortedBy { it.time }
+
+                val currentMap = _searchResults.value.toMutableMap()
+                currentMap[notiKey] = combined
+                _searchResults.value = currentMap
+            }
+            // No need to explicitly re-check here. The `LaunchedEffect` in the UI
+            // reacting to `_searchResults.value` change will re-run `checkGapHasRecords`.
+        }
+    }
+
+    // [NEW] Helper to access notification (Launch Intent)
+    // This replicates the logic in NotiCard
+    @RequiresApi(Build.VERSION_CODES.S)
+    fun accessNotification(notiUnit: NotiUnit) {
+        val contentIntent = org.muilab.notigpt.service.NotiListenerService.getContentIntent(context, notiUnit)
+        if (contentIntent != null) {
+            try {
+                // Android 14+ background activity start options logic
+                // (Reuse the logic you had in NotiCard or simplify here)
+                val options = android.app.ActivityOptions.makeBasic()
+                if (Build.VERSION.SDK_INT >= 34) {
+                    options.pendingIntentBackgroundActivityStartMode =
+                        android.app.ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
+                }
+                contentIntent.send(context, 0, null, null, null, null, options.toBundle())
+            } catch (e: Exception) {
+                // Fallback launch
+                val launchIntent = context.packageManager.getLaunchIntentForPackage(notiUnit.metadata.pkgName)
+                if (launchIntent != null) {
+                    launchIntent.flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                    context.startActivity(launchIntent)
+                }
+            }
+        } else {
+            // Simple fallback
+            val launchIntent = context.packageManager.getLaunchIntentForPackage(notiUnit.metadata.pkgName)
+            if (launchIntent != null) {
+                context.startActivity(launchIntent)
+            }
+        }
+        // Log action
+        actOnNoti(notiUnit.notiKey, "access_click_search")
+    }
+
 
     @OptIn(ExperimentalCoroutinesApi::class)
     val availableAppCategories: StateFlow<List<Pair<String, Int>>> =
@@ -324,10 +471,10 @@ class DrawerViewModel(
         }
     }
 
-    private val fullRecordsCache = ConcurrentHashMap<String, MutableStateFlow<List<org.muilab.notigpt.model.notifications.NotiRecord>>>()
+    private val fullRecordsCache = ConcurrentHashMap<String, MutableStateFlow<List<NotiRecord>>>()
     private val fullRecordsJobs = ConcurrentHashMap<String, kotlinx.coroutines.Job>()
 
-    fun getFullRecordsFlow(notiKey: String): StateFlow<List<org.muilab.notigpt.model.notifications.NotiRecord>> {
+    fun getFullRecordsFlow(notiKey: String): StateFlow<List<NotiRecord>> {
         return fullRecordsCache.getOrPut(notiKey) { MutableStateFlow(emptyList()) }
     }
 
