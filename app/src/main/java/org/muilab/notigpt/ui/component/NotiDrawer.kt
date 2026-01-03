@@ -43,8 +43,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.muilab.notigpt.model.notifications.NotiGroupItem
 import org.muilab.notigpt.model.notifications.NotiItem
-import org.muilab.notigpt.ui.component.notification.groupcard.GroupCard
-import org.muilab.notigpt.ui.component.notification.noticard.NotiCard
+import org.muilab.notigpt.ui.component.notification.card.groupcard.GroupCard
+import org.muilab.notigpt.ui.component.notification.card.noticard.NotiCard
 import org.muilab.notigpt.ui.viewmodel.DrawerViewModel
 import org.muilab.notigpt.ui.component.drawer.drag.DragState
 import org.muilab.notigpt.ui.component.drawer.drag.findClosestHit
