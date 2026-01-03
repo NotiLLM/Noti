@@ -55,7 +55,7 @@ fun AppTopBar(
     TopAppBar(
         // 2. Customize colors to match your original design
         colors = TopAppBarDefaults.topAppBarColors(
-            containerColor = MaterialTheme.colorScheme.surface
+            containerColor = MaterialTheme.colorScheme.surface,
         ),
 
         // 3. Use the 'title' slot for your title or search bar
@@ -126,8 +126,7 @@ fun AppTopBar(
                     IconButton(
                         modifier = Modifier.minimumInteractiveComponentSize(),
                         colors = IconButtonDefaults.iconButtonColors(
-                            containerColor = if (isSortingMode.value) MaterialTheme.colorScheme.primary else Color.Transparent,
-                            contentColor = if (isSortingMode.value) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+                            containerColor = if (isSortingMode.value) MaterialTheme.colorScheme.primary else Color.Transparent
                         ),
                         onClick = { drawerViewModel.toggleSortingMode() }
                     ) {

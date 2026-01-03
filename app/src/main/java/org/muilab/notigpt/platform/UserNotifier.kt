@@ -1,19 +1,38 @@
 package org.muilab.notigpt.platform
 
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import android.widget.Toast
 
-/**
- * UI-facing notifications (Toast/snackbar etc.).
- *
- * This is intentionally tiny so ViewModels can depend on it without touching Android UI classes.
- */
 interface UserNotifier {
-    fun showShort(message: String)
+    fun showShort(message: String, duration: Long = 1_000L)
 }
 
-class ToastUserNotifier(private val context: Context) : UserNotifier {
-    override fun showShort(message: String) {
-        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+class ToastUserNotifier(context: Context) : UserNotifier {
+
+    // Use applicationContext to avoid leaking an Activity
+    private val appContext = context.applicationContext
+
+    private val handler = Handler(Looper.getMainLooper())
+    private var lastToast: Toast? = null
+    private var lastCancelRunnable: Runnable? = null
+
+    override fun showShort(message: String, duration: Long) {
+        // Cancel previous toast + pending cancel callback
+        lastCancelRunnable?.let(handler::removeCallbacks)
+        lastToast?.cancel()
+
+        val toast = Toast.makeText(appContext, message, Toast.LENGTH_SHORT)
+        lastToast = toast
+
+        toast.show()
+
+        val r = Runnable {
+            // Only cancel if it's still the latest toast
+            if (lastToast === toast) toast.cancel()
+        }
+        lastCancelRunnable = r
+        handler.postDelayed(r, duration.coerceAtLeast(0L))
     }
 }
