@@ -15,7 +15,7 @@ import org.muilab.notigpt.model.notifications.VisibleNotiRecord
 @Database(
     entities = [NotiUnit::class, NotiRecord::class, NotiAction::class, TaskUnit::class, NotiGroup::class],
     views = [VisibleNotiRecord::class],
-    version = 17, // Increment version
+    version = 19, // Increment version
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -55,6 +55,8 @@ abstract class AppDatabase : RoomDatabase() {
                 .addMigrations(AppDatabaseMigrations.MIGRATION_14_15)
                 .addMigrations(AppDatabaseMigrations.MIGRATION_15_16)
                 .addMigrations(AppDatabaseMigrations.MIGRATION_16_17)
+                .addMigrations(AppDatabaseMigrations.MIGRATION_17_18)
+                .addMigrations(AppDatabaseMigrations.MIGRATION_18_19)
                 .setJournalMode(JournalMode.TRUNCATE)
                 .build()
         }

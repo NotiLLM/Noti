@@ -359,5 +359,80 @@ internal object AppDatabaseMigrations {
             db.execSQL("CREATE VIEW `VisibleNotiRecord` AS SELECT * FROM noti_record WHERE isVisible = 1")
         }
     }
+
+    val MIGRATION_17_18 = object : Migration(17, 18) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                    CREATE TABLE IF NOT EXISTS `esm_pending` (
+                        `pendingId` TEXT NOT NULL,
+                        `triggerKey` TEXT NOT NULL,
+                        `createdAtMs` INTEGER NOT NULL,
+                        `eligibleAtMs` INTEGER NOT NULL,
+                        `expiresAtMs` INTEGER NOT NULL,
+                        `subjectType` TEXT,
+                        `subjectId` TEXT,
+                        `subjectMetadataJson` TEXT,
+                        `questionnaireId` TEXT NOT NULL,
+                        `questionnaireTitle` TEXT NOT NULL,
+                        `specJson` TEXT NOT NULL,
+                        `notified` INTEGER NOT NULL,
+                        PRIMARY KEY(`pendingId`)
+                    )
+                """.trimIndent()
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_esm_pending_eligibleAtMs` ON `esm_pending` (`eligibleAtMs`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_esm_pending_expiresAtMs` ON `esm_pending` (`expiresAtMs`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_esm_pending_triggerKey` ON `esm_pending` (`triggerKey`)")
+
+            db.execSQL(
+                """
+                    CREATE TABLE IF NOT EXISTS `esm_cooldown` (
+                        `triggerKey` TEXT NOT NULL,
+                        `lastAcceptedAtMs` INTEGER NOT NULL,
+                        PRIMARY KEY(`triggerKey`)
+                    )
+                """.trimIndent()
+            )
+
+            db.execSQL(
+                """
+                    CREATE TABLE IF NOT EXISTS `esm_response` (
+                        `responseId` TEXT NOT NULL,
+                        `questionnaireId` TEXT NOT NULL,
+                        `questionnaireTitle` TEXT NOT NULL,
+                        `triggerKey` TEXT NOT NULL,
+                        `triggeredAtMs` INTEGER NOT NULL,
+                        `deliveredAtMs` INTEGER NOT NULL,
+                        `expiresAtMs` INTEGER NOT NULL,
+                        `submittedAtMs` INTEGER NOT NULL,
+                        `subjectType` TEXT,
+                        `subjectId` TEXT,
+                        `subjectMetadataJson` TEXT,
+                        `answersJson` TEXT NOT NULL,
+                        PRIMARY KEY(`responseId`)
+                    )
+                """.trimIndent()
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_esm_response_questionnaireId` ON `esm_response` (`questionnaireId`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_esm_response_submittedAtMs` ON `esm_response` (`submittedAtMs`)")
+        }
+    }
+
+    val MIGRATION_18_19 = object : Migration(18, 19) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            // indices (optional)
+            db.execSQL("DROP INDEX IF EXISTS `index_esm_pending_eligibleAtMs`")
+            db.execSQL("DROP INDEX IF EXISTS `index_esm_pending_expiresAtMs`")
+            db.execSQL("DROP INDEX IF EXISTS `index_esm_pending_triggerKey`")
+            db.execSQL("DROP INDEX IF EXISTS `index_esm_response_questionnaireId`")
+            db.execSQL("DROP INDEX IF EXISTS `index_esm_response_submittedAtMs`")
+
+            // tables
+            db.execSQL("DROP TABLE IF EXISTS `esm_pending`")
+            db.execSQL("DROP TABLE IF EXISTS `esm_cooldown`")
+            db.execSQL("DROP TABLE IF EXISTS `esm_response`")
+        }
+    }
 }
 
