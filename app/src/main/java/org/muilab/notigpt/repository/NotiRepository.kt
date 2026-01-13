@@ -6,7 +6,6 @@ import android.service.notification.StatusBarNotification
 import androidx.annotation.RequiresApi
 import kotlinx.coroutines.flow.Flow
 import org.json.JSONArray
-import org.muilab.notigpt.database.server.enqueueTaskExtraction
 import org.muilab.notigpt.database.room.NotiActionDao
 import org.muilab.notigpt.database.room.NotiDrawerDao
 import org.muilab.notigpt.database.room.NotiGroupDao
@@ -119,18 +118,13 @@ class NotiRepository(
         actionsRepo.markNotiRead(notiKey)
     }
 
-    suspend fun setHasGenuineTask(notiKey: String, hasGenuine: Boolean) {
-        actionsRepo.setHasGenuineTask(notiKey, hasGenuine)
+    suspend fun setScanStates(notiKey: String, hasTask: Boolean, hasMemo: Boolean) {
+        actionsRepo.setHasTask(notiKey, hasTask)
+        actionsRepo.setHasMemo(notiKey, hasMemo)
     }
 
     suspend fun setPinnedState(notiKey: String, pinned: Boolean) {
-        actionsRepo.setPinnedState(notiKey, pinned)
-    }
-
-    suspend fun recomputeShouldExtractForKey(notiKey: String) {
-        val current = notiDrawerDao.getByNotiKey(notiKey) ?: return
-        val should = current.hasGenuineTask || current.isPinned
-        notiDrawerDao.setShouldExtractTaskByKey(notiKey, should)
+        actionsRepo.setPinnedState(notiKey)
     }
 
     /** Active (not dismissed) notification keys. */
@@ -146,34 +140,12 @@ class NotiRepository(
         return recordsRepo.getActiveRecordIdsForKey(notiKey, limit)
     }
 
-    fun requestRandomTaskExtraction(count: Int) {
-        val keys = getActiveNotificationKeys()
-        if (keys.isEmpty() || count <= 0) return
-        val randomKeys = keys.shuffled().take(count)
-        if (randomKeys.isNotEmpty()) {
-            enqueueTaskExtraction(appContext, randomKeys)
-        }
-    }
-
-    fun getPreviewRecordsForKeys(keys: List<String>, perKeyLimit: Int = 3): List<NotiRecord> {
-        return recordsRepo.getPreviewRecordsForKeys(keys, perKeyLimit)
-    }
-
     fun activeRecordsFlowForKey(notiKey: String): Flow<List<NotiRecord>> {
         return recordsRepo.activeRecordsFlowForKey(notiKey)
     }
 
-    suspend fun fetchActiveRecordsForKey(notiKey: String): List<NotiRecord> {
-        return recordsRepo.fetchActiveRecordsForKey(notiKey)
-    }
-
     suspend fun searchNotifications(rawInput: String): Map<String, List<NotiRecord>> {
         return recordsRepo.searchNotifications(rawInput)
-    }
-
-    // Gap Filling
-    suspend fun getRecordsBetween(notiKey: String, start: Long, end: Long): List<NotiRecord> {
-        return recordsRepo.getRecordsBetween(notiKey, start, end)
     }
 
     suspend fun getContextRecords(

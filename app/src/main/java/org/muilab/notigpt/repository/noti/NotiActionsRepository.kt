@@ -72,8 +72,8 @@ class NotiActionsRepository(
         try {
             val existing = notiDrawerDao.getByNotiKey(notiRecord.notiKey)
             if (existing != null && existing.isPinned) {
-                if (!existing.shouldExtractTask) {
-                    notiDrawerDao.setShouldExtractTaskByKey(notiRecord.notiKey, true)
+                if (!existing.shouldExtractReminder) {
+                    notiDrawerDao.setShouldExtractReminderByKey(notiRecord.notiKey, true)
                     registerShouldExtractForNotiUnit(notiRecord.notiKey)
                 }
             }
@@ -114,9 +114,9 @@ class NotiActionsRepository(
 
         if (totalPending >= maxCount) {
             val candidateKeys: List<String> = synchronized(extractionCounters) { extractionCounters.keys.toList() }
-            val toSubmit = candidateKeys.filter { k -> notiDrawerDao.getByNotiKey(k)?.shouldExtractTask == true }
+            val toSubmit = candidateKeys.filter { k -> notiDrawerDao.getByNotiKey(k)?.shouldExtractReminder == true }
             if (toSubmit.isNotEmpty()) {
-                notiDrawerDao.setShouldExtractTaskByKeys(toSubmit, false)
+                notiDrawerDao.setShouldExtractReminderByKeys(toSubmit, false)
                 enqueueTaskExtraction(appContext, toSubmit)
             }
             synchronized(extractionCounters) { extractionCounters.clear() }
@@ -156,39 +156,36 @@ class NotiActionsRepository(
             }
             "to_top" -> notiDrawerDao.updateToTopStatus(notiKey, true, System.currentTimeMillis())
             "undo_to_top" -> notiDrawerDao.updateToTopStatus(notiKey, false, 0L)
-            "unpin" -> setPinnedState(notiKey, pinned = false)
-            "pin" -> setPinnedState(notiKey, pinned = true)
+            "unpin" -> setPinnedState(notiKey)
+            "pin" -> setPinnedState(notiKey)
             "mark_read" -> markNotiRead(notiKey)
         }
     }
 
-    suspend fun setPinnedState(notiKey: String, pinned: Boolean) {
-        val existing = notiDrawerDao.getByNotiKey(notiKey) ?: return
-        val prevPinned = existing.isPinned
+    suspend fun setPinnedState(notiKey: String) {
         notiDrawerDao.flipPin(notiKey)
+    }
 
-        if (!prevPinned && pinned) {
-            notiDrawerDao.setShouldExtractTaskByKey(notiKey, true)
+    suspend fun setHasTask(notiKey: String, hasTask: Boolean) {
+        val existing = notiDrawerDao.getByNotiKey(notiKey) ?: return
+        val prevHasTask = existing.hasTask
+        val prevShouldExtract = existing.shouldExtractReminder
+        notiDrawerDao.setHasTaskByKey(notiKey, hasTask)
+        if (hasTask && (!prevHasTask || !prevShouldExtract)) {
+            notiDrawerDao.setShouldExtractReminderByKey(notiKey, true)
             registerShouldExtractForNotiUnit(notiKey)
-        } else if (prevPinned && !pinned) {
-            if (!existing.hasGenuineTask) {
-                notiDrawerDao.setShouldExtractTaskByKey(notiKey, false)
-            }
         }
     }
 
-    suspend fun setHasGenuineTask(notiKey: String, hasGenuine: Boolean) {
+    suspend fun setHasMemo(notiKey: String, hasMemo: Boolean) {
         val existing = notiDrawerDao.getByNotiKey(notiKey) ?: return
-        val prev = existing.hasGenuineTask
-        notiDrawerDao.setHasGenuineTaskByKey(notiKey, hasGenuine)
+        val prevHasMemo = existing.hasMemo
+        val prevShouldExtract = existing.shouldExtractReminder
+        notiDrawerDao.setHasMemoByKey(notiKey, hasMemo)
 
-        if (!prev && hasGenuine) {
-            notiDrawerDao.setShouldExtractTaskByKey(notiKey, true)
+        if (hasMemo && (!prevHasMemo || !prevShouldExtract)) {
+            notiDrawerDao.setShouldExtractReminderByKey(notiKey, true)
             registerShouldExtractForNotiUnit(notiKey)
-        } else if (prev && !hasGenuine) {
-            if (!existing.isPinned) {
-                notiDrawerDao.setShouldExtractTaskByKey(notiKey, false)
-            }
         }
     }
 }

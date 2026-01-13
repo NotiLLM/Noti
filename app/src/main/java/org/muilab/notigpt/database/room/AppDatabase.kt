@@ -15,7 +15,7 @@ import org.muilab.notigpt.model.notifications.VisibleNotiRecord
 @Database(
     entities = [NotiUnit::class, NotiRecord::class, NotiAction::class, ReminderUnit::class, NotiGroup::class],
     views = [VisibleNotiRecord::class],
-    version = 22,
+    version = 23,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -39,27 +39,28 @@ abstract class AppDatabase : RoomDatabase() {
 
         private fun buildDatabase(context: Context): AppDatabase {
             return Room.databaseBuilder(context, AppDatabase::class.java, DATABASE_NAME)
-                .addMigrations(org.muilab.notigpt.database.room.AppDatabaseMigrations.MIGRATION_1_2)
-                .addMigrations(org.muilab.notigpt.database.room.AppDatabaseMigrations.MIGRATION_2_3)
-                .addMigrations(org.muilab.notigpt.database.room.AppDatabaseMigrations.MIGRATION_3_4)
-                .addMigrations(org.muilab.notigpt.database.room.AppDatabaseMigrations.MIGRATION_4_5)
-                .addMigrations(org.muilab.notigpt.database.room.AppDatabaseMigrations.MIGRATION_5_6)
-                .addMigrations(org.muilab.notigpt.database.room.AppDatabaseMigrations.MIGRATION_6_7)
-                .addMigrations(org.muilab.notigpt.database.room.AppDatabaseMigrations.MIGRATION_7_8)
-                .addMigrations(org.muilab.notigpt.database.room.AppDatabaseMigrations.MIGRATION_8_9)
-                .addMigrations(org.muilab.notigpt.database.room.AppDatabaseMigrations.MIGRATION_9_10)
-                .addMigrations(org.muilab.notigpt.database.room.AppDatabaseMigrations.MIGRATION_10_11)
-                .addMigrations(org.muilab.notigpt.database.room.AppDatabaseMigrations.MIGRATION_11_12)
-                .addMigrations(org.muilab.notigpt.database.room.AppDatabaseMigrations.MIGRATION_12_13)
-                .addMigrations(org.muilab.notigpt.database.room.AppDatabaseMigrations.MIGRATION_13_14)
-                .addMigrations(org.muilab.notigpt.database.room.AppDatabaseMigrations.MIGRATION_14_15)
-                .addMigrations(org.muilab.notigpt.database.room.AppDatabaseMigrations.MIGRATION_15_16)
-                .addMigrations(org.muilab.notigpt.database.room.AppDatabaseMigrations.MIGRATION_16_17)
-                .addMigrations(org.muilab.notigpt.database.room.AppDatabaseMigrations.MIGRATION_17_18)
-                .addMigrations(org.muilab.notigpt.database.room.AppDatabaseMigrations.MIGRATION_18_19)
-                .addMigrations(org.muilab.notigpt.database.room.AppDatabaseMigrations.MIGRATION_19_20)
-                .addMigrations(org.muilab.notigpt.database.room.AppDatabaseMigrations.MIGRATION_20_21)
-                .addMigrations(org.muilab.notigpt.database.room.AppDatabaseMigrations.MIGRATION_21_22)
+                .addMigrations(AppDatabaseMigrations.MIGRATION_1_2)
+                .addMigrations(AppDatabaseMigrations.MIGRATION_2_3)
+                .addMigrations(AppDatabaseMigrations.MIGRATION_3_4)
+                .addMigrations(AppDatabaseMigrations.MIGRATION_4_5)
+                .addMigrations(AppDatabaseMigrations.MIGRATION_5_6)
+                .addMigrations(AppDatabaseMigrations.MIGRATION_6_7)
+                .addMigrations(AppDatabaseMigrations.MIGRATION_7_8)
+                .addMigrations(AppDatabaseMigrations.MIGRATION_8_9)
+                .addMigrations(AppDatabaseMigrations.MIGRATION_9_10)
+                .addMigrations(AppDatabaseMigrations.MIGRATION_10_11)
+                .addMigrations(AppDatabaseMigrations.MIGRATION_11_12)
+                .addMigrations(AppDatabaseMigrations.MIGRATION_12_13)
+                .addMigrations(AppDatabaseMigrations.MIGRATION_13_14)
+                .addMigrations(AppDatabaseMigrations.MIGRATION_14_15)
+                .addMigrations(AppDatabaseMigrations.MIGRATION_15_16)
+                .addMigrations(AppDatabaseMigrations.MIGRATION_16_17)
+                .addMigrations(AppDatabaseMigrations.MIGRATION_17_18)
+                .addMigrations(AppDatabaseMigrations.MIGRATION_18_19)
+                .addMigrations(AppDatabaseMigrations.MIGRATION_19_20)
+                .addMigrations(AppDatabaseMigrations.MIGRATION_20_21)
+                .addMigrations(AppDatabaseMigrations.MIGRATION_21_22)
+                .addMigrations(AppDatabaseMigrations.MIGRATION_22_23)
                 .setJournalMode(JournalMode.TRUNCATE)
                 .build()
         }

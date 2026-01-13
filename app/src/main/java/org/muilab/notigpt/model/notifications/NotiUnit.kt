@@ -10,7 +10,7 @@ import androidx.room.Entity
 import androidx.room.Index
 import org.muilab.notigpt.model.notifications.components.NotiMetadata
 import org.muilab.notigpt.model.notifications.components.NotiDisplayState
-import org.muilab.notigpt.model.notifications.components.NotiTaskAttr
+import org.muilab.notigpt.model.notifications.components.NotiReminderAttr
 
 // Add index on groupId for faster lookups
 @Entity(tableName = "noti_drawer", primaryKeys = ["notiKey"], indices = [Index(value = ["groupId"])])
@@ -18,7 +18,7 @@ data class NotiUnit(
     val notiKey: String,
     @Embedded val metadata: NotiMetadata,
     @Embedded val displayState: NotiDisplayState = NotiDisplayState(),
-    @Embedded val taskAttr: NotiTaskAttr = NotiTaskAttr(),
+    @Embedded val reminderAttr: NotiReminderAttr = NotiReminderAttr(),
     // Link to a parent group
     val groupId: String? = null
 ) {
@@ -82,13 +82,17 @@ data class NotiUnit(
         set(value) { displayState.sortPosition = value }
 
 
-    var shouldExtractTask: Boolean
-        get() = taskAttr.shouldExtractTask
-        set(value) { taskAttr.shouldExtractTask = value }
+    var shouldExtractReminder: Boolean
+        get() = reminderAttr.shouldExtractReminder
+        set(value) { reminderAttr.shouldExtractReminder = value }
 
-    var hasGenuineTask: Boolean
-        get() = taskAttr.hasGenuineTask
-        set(value) { taskAttr.hasGenuineTask = value }
+    var hasTask: Boolean
+        get() = reminderAttr.hasTask
+        set(value) { reminderAttr.hasTask = value }
+
+    var hasMemo: Boolean
+        get() = reminderAttr.hasMemo
+        set(value) { reminderAttr.hasMemo = value }
 
     var isSetToTop: Boolean
         get() = displayState.isSetToTop

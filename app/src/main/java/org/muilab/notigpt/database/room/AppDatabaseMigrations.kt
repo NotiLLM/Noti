@@ -406,4 +406,15 @@ public object AppDatabaseMigrations {
             db.execSQL("ALTER TABLE noti_drawer ADD COLUMN sortPosition INTEGER NOT NULL DEFAULT -1")
         }
     }
+
+    val MIGRATION_22_23 = object : Migration(22, 23) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            // Rename columns (SQLite 3.25+; Android has it for a long time now)
+            db.execSQL("ALTER TABLE noti_drawer RENAME COLUMN hasGenuineTask TO hasTask")
+            db.execSQL("ALTER TABLE noti_drawer RENAME COLUMN shouldExtractTask TO shouldExtractReminder")
+
+            // Add new column (booleans are INTEGER 0/1 in SQLite)
+            db.execSQL("ALTER TABLE noti_drawer ADD COLUMN hasMemo INTEGER NOT NULL DEFAULT 0")
+        }
+    }
 }

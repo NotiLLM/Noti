@@ -9,7 +9,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import org.muilab.notigpt.util.SharedPreferencesManager
 
-internal object TaskScanHandler {
+internal object ReminderScanHandler {
 
     suspend fun handle(ctx: N8nWorkerContext, inputData: Data): ListenableWorker.Result {
         Log.d("N8nWebhook", "Performing Task Scan")
@@ -87,9 +87,10 @@ internal object TaskScanHandler {
         val bodyStr = response.body()?.string() ?: return ctx.success()
         try {
             val root = JSONObject(bodyStr)
-            val hasGenuine = root.optBoolean("hasGenuineTask", false)
+            val hasMemo = root.optBoolean("hasMemo", false)
+            val hasTask = root.optBoolean("hasTask", false)
 
-            ctx.notiRepository.setHasGenuineTask(notiKey, hasGenuine)
+            ctx.notiRepository.setScanStates(notiKey, hasTask, hasMemo)
             ctx.database.recordDao().setRecordsTaskScannedByIds(notiRecords.map { it.notiRecordId })
         } catch (e: Exception) {
             Log.e("N8nWebhook", "Error parsing scan response", e)

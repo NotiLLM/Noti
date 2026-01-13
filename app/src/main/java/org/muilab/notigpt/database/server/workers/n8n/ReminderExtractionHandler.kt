@@ -15,7 +15,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-internal object TaskExtractionHandler {
+internal object ReminderExtractionHandler {
 
     suspend fun handle(ctx: N8nWorkerContext, inputData: Data): ListenableWorker.Result {
         val gson = Gson()
@@ -39,7 +39,7 @@ internal object TaskExtractionHandler {
 
         val keysToProcess: List<String> = if (notiKeys.isEmpty()) {
             val active = drawerDao.getAllActive()
-            active.filter { it.shouldExtractTask }.map { it.notiKey }
+            active.filter { it.shouldExtractReminder }.map { it.notiKey }
         } else {
             notiKeys
         }
@@ -122,8 +122,8 @@ internal object TaskExtractionHandler {
                 "secondOverallTitle" to notiSecondOverallTitle,
                 "notiContent" to contents,
                 "pastContext" to pastCtx,
-                "hasTask" to unit.hasGenuineTask,
-                "isPinned" to unit.isPinned,
+                "hasTask" to unit.hasTask,
+                "hasMemo" to unit.hasMemo,
                 "recordIds" to records.map { it.notiRecordId }
             )
         }.filterNotNull()
@@ -228,7 +228,7 @@ internal object TaskExtractionHandler {
             }
 
             if (submittedKeys.isNotEmpty()) {
-                drawerDao.setShouldExtractTaskByKeys(submittedKeys.distinct(), false)
+                drawerDao.setShouldExtractReminderByKeys(submittedKeys.distinct(), false)
             }
 
         } catch (e: Exception) {

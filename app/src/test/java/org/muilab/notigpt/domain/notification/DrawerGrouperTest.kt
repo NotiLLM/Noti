@@ -112,9 +112,9 @@ class DrawerGrouperTest {
                 isPinned = false
                 isRead = true
             },
-            taskAttr = org.muilab.notigpt.model.notifications.components.NotiTaskAttr(
-                shouldExtractTask = false,
-                hasGenuineTask = false
+            reminderAttr = org.muilab.notigpt.model.notifications.components.NotiReminderAttr(
+                shouldExtractReminder = false,
+                hasTask = false
             ),
             groupId = groupId
         )
