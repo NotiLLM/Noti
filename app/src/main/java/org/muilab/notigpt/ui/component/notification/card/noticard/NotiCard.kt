@@ -138,10 +138,6 @@ fun NotiCard(
         else -> MaterialTheme.colorScheme.outline
     }
 
-    Log.d("NotiCard", "NotiCard: $notiOverallTitle")
-    Log.d("NotiCard", notiUnit.sortPosition.toString())
-    Log.d("NotiCard", isMergeTarget.toString())
-
     val borderWidth = if (notiUnit.sortPosition != -1 || isMergeTarget) 3.dp else 1.dp
 
     // Expand state

@@ -5,21 +5,17 @@ import android.util.Log
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import org.muilab.notigpt.R
 import org.muilab.notigpt.model.notifications.NotiUnit
 import org.muilab.notigpt.ui.component.notification.action.NotiActionIconButton
 import org.muilab.notigpt.ui.viewmodel.DrawerViewModel
-import org.muilab.notigpt.util.Constants
-import kotlin.math.abs
 import kotlin.math.max
 
 private const val NOTI_SWIPE_TAG = "NotiSwipe"
@@ -70,6 +66,17 @@ fun NotiCardBackgroundActions(
                 "Hide Actions",
                 {
                     if (canClickActions.value) onCollapseActions()
+                },
+            )
+
+            NotiActionIconButton(
+                R.drawable.task_yes,
+                "Extract Reminder",
+                {
+                    if (canClickActions.value) {
+                        drawerViewModel.actOnNoti(notiUnit.notiKey, "extract_reminder")
+                        onCollapseActions()
+                    }
                 },
             )
 

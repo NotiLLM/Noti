@@ -75,11 +75,11 @@ interface NotiDrawerDao {
     }
 
     // Dismiss unit by key (Also set isRead = 1)
-    @Query("UPDATE noti_drawer SET isDismissed = 1, isRead = 1 WHERE notiKey = :notiKey")
+    @Query("UPDATE noti_drawer SET isDismissed = 1, isRead = 1, sortPosition = -1 WHERE notiKey = :notiKey")
     suspend fun dismissUnitByKey(notiKey: String)
 
     // Dismiss units by keys
-    @Query("UPDATE noti_drawer SET isDismissed = 1, isRead = 1 WHERE notiKey IN (:notiKeys)")
+    @Query("UPDATE noti_drawer SET isDismissed = 1, isRead = 1, sortPosition = -1 WHERE notiKey IN (:notiKeys)")
     suspend fun dismissUnitsByKeys(notiKeys: List<String>)
 
     // Set unit read by key

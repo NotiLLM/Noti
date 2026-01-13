@@ -25,6 +25,8 @@ internal object ReminderExtractionHandler {
             return ctx.failure()
         }
 
+        val userTriggered = inputData.getBoolean("user_triggered", false)
+
         val keysJson = inputData.getString("noti_keys_json") ?: "[]"
         val notiKeys: List<String> = try {
             gson.fromJson(keysJson, Array<String>::class.java).toList()
@@ -36,6 +38,173 @@ internal object ReminderExtractionHandler {
         val reminderRepository = ctx.reminderRepository
 
         val drawerDao = db.drawerDao()
+
+        // === User-triggered (single notification) ===
+        // UI passes exactly one notiKey. For this path we IGNORE extracted/claimed flags and
+        // send visible records + a few older records for context, but we still upsert reminders.
+        if (userTriggered) {
+            val notiKey = notiKeys.firstOrNull()
+            if (notiKey.isNullOrBlank()) {
+                Log.d("N8nWebhook", "User-triggered extraction: missing notiKey")
+                return ctx.success()
+            }
+
+            val unit = ctx.getNotiUnit(notiKey) ?: return ctx.success()
+            val recordDao = db.recordDao()
+
+            val visible = recordDao.getActiveRecordsByKey(notiKey).sortedBy { it.time }
+            val pastCnt = SharedPreferencesManager.maxPastContext
+            val older = if (pastCnt > 0) {
+                recordDao.getRecordsByKey(notiKey).sortedByDescending { it.time }.take(pastCnt)
+            } else {
+                emptyList()
+            }
+
+            val combined = (visible + older)
+                .distinctBy { it.notiRecordId }
+                .sortedBy { it.time }
+
+            if (combined.isEmpty()) {
+                Log.d("N8nWebhook", "User-triggered extraction: no records found for key=$notiKey")
+                return ctx.success()
+            }
+
+            val contents = combined.map { r -> N8nRecordFormatter.format(r, unit.isPeople) }
+
+            // Keep schema compatible with periodic payload.
+            val lastRecord = combined.lastOrNull()
+            val lastTitle = lastRecord?.title ?: ""
+            val overallTitle = if (lastRecord != null) {
+                when {
+                    lastRecord.extraConversationTitle != "null" -> lastRecord.extraConversationTitle
+                    lastTitle != "null" -> lastTitle
+                    lastRecord.extraSubText != "null" -> lastRecord.extraSubText
+                    else -> ""
+                }
+            } else ""
+            val secondOverallTitle = if (lastRecord != null) {
+                when {
+                    lastRecord.extraConversationTitle != "null" && lastTitle != "null" -> lastTitle
+                    lastRecord.extraConversationTitle == "null" && lastTitle != "null" && lastRecord.extraSubText != "null" -> lastRecord.extraSubText
+                    lastRecord.extraConversationTitle == "null" && lastTitle != "null" -> ""
+                    else -> ""
+                }
+            } else ""
+
+            val notisPayload = listOf(
+                mapOf(
+                    "notiKey" to notiKey,
+                    "appName" to unit.appName,
+                    "overallTitle" to overallTitle,
+                    "secondOverallTitle" to secondOverallTitle,
+                    "notiContent" to contents,
+                    // Don't rely on previously-extracted context; we already included older records in notiContent.
+                    "pastContext" to emptyList<Any>(),
+                    "hasTask" to unit.hasTask,
+                    "hasMemo" to unit.hasMemo
+                )
+            )
+
+            val currentReminders: List<ReminderUnit> = try {
+                reminderRepository.observeAll().first()
+            } catch (_: Exception) {
+                emptyList<ReminderUnit>()
+            }
+
+            val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.getDefault())
+            val remindersForPayload = currentReminders.map { r ->
+                val deadlineIso = if (r.deadlineTimestamp > 0L) sdf.format(Date(r.deadlineTimestamp)) else -1L
+                mapOf(
+                    "reminderId" to r.reminderId,
+                    "reminderTitle" to r.reminderTitle,
+                    "reminderContent" to r.reminderContent,
+                    "isTask" to r.isTask,
+                    "deadlineTimestamp" to deadlineIso,
+                    "estimatedCompletionMinutes" to r.estimatedCompletionTime,
+                    "associatedNotis" to r.associatedNotis.toList(),
+                    "userEdited" to r.userEdited,
+                    "isCompleted" to r.isCompleted
+                )
+            }
+
+            val payload = mapOf(
+                "userId" to SharedPreferencesManager.userId,
+                "language" to Locale.getDefault().toLanguageTag(),
+                "currentTime" to SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.getDefault()).format(Date()),
+                "userTriggered" to true,
+                "notis" to notisPayload,
+                "currentReminders" to remindersForPayload
+            )
+
+            val jsonPayload = gson.toJson(payload)
+            val requestBody = jsonPayload.toRequestBody("application/json; charset=utf-8".toMediaType())
+
+            Log.d("N8nWebhook", "JSON Payload (user-triggered): $jsonPayload")
+
+            val response = try {
+                ctx.n8nApiService.postToWebhook(webhookPath, requestBody)
+            } catch (t: Throwable) {
+                Log.e("N8nWebhook", "TaskExtraction network exception", t)
+                return ctx.retry()
+            }
+
+            if (!response.isSuccessful) {
+                return when {
+                    response.code() == 429 -> ctx.retry()
+                    response.code() in 500..599 -> ctx.retry()
+                    else -> ctx.failure()
+                }
+            }
+
+            val bodyStr = response.body()?.string() ?: return ctx.success()
+            Log.d("N8nWebhook", "Extraction Response (user-triggered): $bodyStr")
+
+            try {
+                val arr = JSONArray(bodyStr)
+                for (i in 0 until arr.length()) {
+                    val it = arr.getJSONObject(i)
+                    val reminderId = it.optString("reminderId", it.optString("taskId"))
+                    val reminderTitle = it.optString("reminderTitle", "")
+                    val reminderContent = it.optString("reminderContent", it.optString("taskDescription"))
+                    val deadlineMs = if (it.has("deadlineTimestamp") && !it.isNull("deadlineTimestamp")) it.optLong("deadlineTimestamp", -1L) else -1L
+                    val estimate = it.optLong("estimatedCompletionTime", it.optLong("estimatedCompletionMinutes", 0L))
+                    val assocKeys = mutableSetOf<String>()
+                    val assoc = it.optJSONArray("associatedNotis")
+                    if (assoc != null) {
+                        for (j in 0 until assoc.length()) {
+                            assocKeys.add(assoc.optString(j))
+                        }
+                    }
+                    val isCompleted = it.optBoolean("isCompleted", false)
+
+                    val newUnit = ReminderUnit(
+                        reminderId = reminderId,
+                        reminderTitle = reminderTitle,
+                        reminderContent = reminderContent,
+                        isTask = true,
+                        isCompleted = isCompleted,
+                        lastUpdateTimestamp = System.currentTimeMillis(),
+                        deadlineTimestamp = deadlineMs,
+                        estimatedCompletionTime = estimate,
+                        associatedNotis = assocKeys.toSet(),
+                        userEdited = false,
+                    )
+
+                    reminderRepository.upsert(newUnit)
+                }
+
+                // Don't touch taskExtracted/taskExtractionClaimed flags for user-triggered.
+                // Clear the per-notification extraction request flag so periodic flow doesn't keep picking it up.
+                drawerDao.setShouldExtractReminderByKeys(listOf(notiKey), false)
+            } catch (e: Exception) {
+                Log.e("N8nWebhook", "Error parsing extract response (user-triggered)", e)
+                return ctx.failure()
+            }
+
+            return ctx.success()
+        }
+
+        // === Periodic flow below remains unchanged ===
 
         val keysToProcess: List<String> = if (notiKeys.isEmpty()) {
             val active = drawerDao.getAllActive()
@@ -123,8 +292,7 @@ internal object ReminderExtractionHandler {
                 "notiContent" to contents,
                 "pastContext" to pastCtx,
                 "hasTask" to unit.hasTask,
-                "hasMemo" to unit.hasMemo,
-                "recordIds" to records.map { it.notiRecordId }
+                "hasMemo" to unit.hasMemo
             )
         }.filterNotNull()
 

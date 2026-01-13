@@ -134,6 +134,28 @@ fun NotiCardOptionsDialog(
                         Text("Dismiss")
                     }
                 }
+
+                TextButton(
+                    onClick = {
+                        drawerViewModel.actOnNoti(notiKey, "extract_reminder")
+                        onDismiss()
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Start,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.task_yes),
+                            contentDescription = "Extract Reminder",
+                            modifier = Modifier.size(24.dp),
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Text("Extract Reminder")
+                    }
+                }
             }
         },
         confirmButton = {

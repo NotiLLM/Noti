@@ -159,6 +159,17 @@ class NotiActionsRepository(
             "unpin" -> setPinnedState(notiKey)
             "pin" -> setPinnedState(notiKey)
             "mark_read" -> markNotiRead(notiKey)
+            "extract_reminder" -> {
+                // User-triggered extraction should only apply to this one notification.
+                val existing = notiDrawerDao.getByNotiKey(notiKey) ?: return
+                if (!existing.shouldExtractReminder) {
+                    notiDrawerDao.setShouldExtractReminderByKey(notiKey, true)
+                }
+
+                // Immediately enqueue extraction for this key only.
+                // IMPORTANT: do not touch other keys or the periodic batching counters.
+                enqueueTaskExtraction(appContext, listOf(notiKey), userTriggered = true)
+            }
         }
     }
 
