@@ -76,6 +76,11 @@ data class NotiUnit(
         get() = displayState.explanation
         set(value) { displayState.explanation = value }
 
+    /** Manual sort position in the active drawer. -1 means unset (auto-fill by time). */
+    var sortPosition: Int
+        get() = displayState.sortPosition
+        set(value) { displayState.sortPosition = value }
+
 
     var shouldExtractTask: Boolean
         get() = taskAttr.shouldExtractTask

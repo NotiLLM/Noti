@@ -259,4 +259,114 @@ class NotiRepository(
     fun getNotSyncedNotiActions(notiKey: String, sinceTimeMs: Long): List<NotiAction> {
         return notiActionDao.getActionsByKey(notiKey).filter { it.time > sinceTimeMs }
     }
+
+    /**
+     * Move a loose notification into a manual ordering slot and shift existing manual items to avoid collisions.
+     *
+     * Semantics:
+     * - Only notifications that were already manual (sortPosition != -1) are affected, plus the moved key.
+     * - Existing manual positions are treated as absolute "slots"; moving into an occupied slot shifts
+     *   the collided manual item (and any subsequent collisions) forward by 1.
+     * - Non-manual items remain sortPosition = -1.
+     */
+    suspend fun moveLooseManualSlot(notiKey: String, targetIndex: Int) {
+        notiDrawerDao.clearSortPositionsForGroupedItems()
+
+        // Read the authoritative set of *currently manual* loose items from DB.
+        // This ensures we only ever adjust items that already had manual positions.
+        val manualKeyPositions = notiDrawerDao.getActiveLooseManualKeyPositionsOrdered()
+
+        val existingManual = manualKeyPositions
+            .asSequence()
+            .filter { it.notiKey != notiKey }
+            .map { it.notiKey to it.sortPosition }
+            .toList()
+
+        val desired = targetIndex.coerceAtLeast(0)
+
+        val used = HashSet<Int>()
+        val result = LinkedHashMap<String, Int>()
+
+        // Reserve desired slot for the moved key.
+        result[notiKey] = desired
+        used.add(desired)
+
+        // Keep original manual positions when possible; shift forward only on collision.
+        for ((key, pos) in existingManual) {
+            var p = pos
+            while (p in used) p++
+            result[key] = p
+            used.add(p)
+        }
+
+        // Persist: clear only the currently-manual loose set, then write back result mapping.
+        notiDrawerDao.resetActiveLooseManualPositions()
+        result.forEach { (key, pos) ->
+            notiDrawerDao.updateSortPosition(key, pos)
+        }
+    }
+
+    /** Persist manual sort position for a single loose item. */
+    suspend fun setManualSortPosition(notiKey: String, newPosition: Int) {
+        // Defensive: groups should never have manual positions.
+        notiDrawerDao.clearSortPositionsForGroupedItems()
+        notiDrawerDao.updateSortPosition(notiKey, newPosition)
+    }
+
+    /**
+     * Persist manual sort positions for *all* loose items (legacy behavior).
+     * Kept for potential future batch-mode sorting.
+     */
+    suspend fun commitManualSortPositions(keysInOrder: List<String>) {
+        // Defensive: groups should never have manual positions.
+        notiDrawerDao.clearSortPositionsForGroupedItems()
+
+        keysInOrder.forEachIndexed { index, key ->
+            notiDrawerDao.updateSortPosition(key, index)
+        }
+    }
+
+    suspend fun resetAllManualSortPositions() {
+        notiDrawerDao.resetAllSortPositions()
+    }
+
+    /**
+     * Commit manual sort positions for the provided [manualKeys] based on their final positions in [finalLooseOrder].
+     *
+     * Rules:
+     * - Only keys in [manualKeys] are assigned a sortPosition.
+     * - Keys not in [finalLooseOrder] are ignored (they may have been dismissed/grouped).
+     * - Collisions are resolved by shifting forward to the next free slot.
+     */
+    suspend fun commitManualKeysFromFinalOrder(
+        manualKeys: Set<String>,
+        finalLooseOrder: List<String>,
+    ) {
+        if (manualKeys.isEmpty() || finalLooseOrder.isEmpty()) return
+
+        notiDrawerDao.clearSortPositionsForGroupedItems()
+
+        // Determine desired positions for keys that still exist in the final order.
+        val desiredPairs = finalLooseOrder
+            .withIndex()
+            .asSequence()
+            .filter { (_, key) -> key in manualKeys }
+            .map { (idx, key) -> key to idx }
+            .toList()
+
+        if (desiredPairs.isEmpty()) return
+
+        // Resolve collisions by shifting forward.
+        val used = HashSet<Int>()
+        val updates = mutableListOf<Pair<String, Int>>()
+        desiredPairs.forEach { (key, desired) ->
+            var p = desired
+            while (p in used) p++
+            used.add(p)
+            updates.add(key to p)
+        }
+
+        // Persist only these keys. (Do NOT reset others here; we are tracking explicit manual keys.)
+        notiDrawerDao.updateSortPositionsBulk(updates)
+    }
 }

@@ -2,6 +2,7 @@ package org.muilab.notigpt.ui.component.notification.card.noticard
 
 import android.content.Context
 import android.os.Build
+import android.util.Log
 import androidx.annotation.RequiresApi
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateDpAsState
@@ -35,6 +36,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -62,6 +64,7 @@ import org.muilab.notigpt.ui.component.notification.card.noticard.elements.remem
 import org.muilab.notigpt.ui.utils.NotiExpandState
 import org.muilab.notigpt.ui.viewmodel.DrawerViewModel
 import org.muilab.notigpt.util.SharedPreferencesManager
+import sh.calvin.reorderable.ReorderableCollectionItemScope
 import kotlin.math.max
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -77,6 +80,13 @@ fun NotiCard(
     isMergeTarget: Boolean = false,
     isInGroup: Boolean = false,
     swipeEnabled: Boolean = true,
+    // Reorder: handle-only (long-press) callbacks. No-op defaults keep API stable for other call sites.
+    reorderEnabled: Boolean = false,
+    // Optional when rendered inside ReorderableItem; enables native handle dragging.
+    reorderScope: ReorderableCollectionItemScope? = null,
+    onStartReorderDrag: (Offset) -> Unit = {},
+    onReorderDrag: (Offset) -> Unit = {},
+    onStopReorderDrag: () -> Unit = {},
 ) {
     // These are part of the shared NotiCard API even if not used in this implementation yet.
     @Suppress("UNUSED_VARIABLE")
@@ -125,11 +135,14 @@ fun NotiCard(
     val borderColor = when {
         isMergeTarget -> MaterialTheme.colorScheme.primary
         !isRead -> MaterialTheme.colorScheme.error
-        isPinned -> MaterialTheme.colorScheme.secondary
         else -> MaterialTheme.colorScheme.outline
     }
 
-    val borderWidth = if (notiUnit.isSetToTop || isMergeTarget) 3.dp else 1.dp
+    Log.d("NotiCard", "NotiCard: $notiOverallTitle")
+    Log.d("NotiCard", notiUnit.sortPosition.toString())
+    Log.d("NotiCard", isMergeTarget.toString())
+
+    val borderWidth = if (notiUnit.sortPosition != -1 || isMergeTarget) 3.dp else 1.dp
 
     // Expand state
     val maxHeightDp = 200.dp
@@ -314,7 +327,7 @@ fun NotiCard(
                                 .fillMaxHeight()
                                 .zIndex(2f),
                         ) {
-                            NotiCardOverlayButtons(
+                            org.muilab.notigpt.ui.component.notification.card.noticard.elements.NotiCardOverlayButtons(
                                 translationX = 0f,
                                 requiresExpansion = requiresExpansion,
                                 progress = (
@@ -344,6 +357,11 @@ fun NotiCard(
                                         )
                                     }
                                 },
+                                reorderEnabled = reorderEnabled,
+                                reorderScope = reorderScope,
+                                onStartReorderDrag = onStartReorderDrag,
+                                onReorderDrag = onReorderDrag,
+                                onStopReorderDrag = onStopReorderDrag,
                             )
                         }
                     }

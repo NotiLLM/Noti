@@ -103,11 +103,50 @@ interface NotiDrawerDao {
     @Query("UPDATE noti_drawer SET hasGenuineTask = :value WHERE notiKey IN (:notiKeys)")
     fun setHasGenuineTaskByKeys(notiKeys: List<String>, value: Boolean)
 
-    // Active drawer stream, auto-sorted (no category/appCategory filtering)
+    // Manual ordering
+    @Query("UPDATE noti_drawer SET sortPosition = :newPosition WHERE notiKey = :notiKey")
+    suspend fun updateSortPosition(notiKey: String, newPosition: Int)
+
+    @Query("UPDATE noti_drawer SET sortPosition = -1 WHERE notiKey = :notiKey")
+    suspend fun resetSortPosition(notiKey: String)
+
+    @Query("UPDATE noti_drawer SET sortPosition = -1")
+    suspend fun resetAllSortPositions()
+
+    /** Any notification inside a group should not have a manual position. */
+    @Query("UPDATE noti_drawer SET sortPosition = -1 WHERE groupId IS NOT NULL")
+    suspend fun clearSortPositionsForGroupedItems()
+
+    /** Current manual positions for active loose (non-grouped) notifications. */
+    @Query("""
+        SELECT notiKey FROM noti_drawer
+        WHERE isDismissed = 0 AND groupId IS NULL AND sortPosition != -1
+        ORDER BY sortPosition ASC
+    """)
+    suspend fun getActiveLooseManualKeysOrdered(): List<String>
+
+    data class ManualKeyPos(
+        val notiKey: String,
+        val sortPosition: Int,
+    )
+
+    /** Current manual positions (key + position) for active loose (non-grouped) notifications. */
+    @Query("""
+        SELECT notiKey, sortPosition FROM noti_drawer
+        WHERE isDismissed = 0 AND groupId IS NULL AND sortPosition != -1
+        ORDER BY sortPosition ASC
+    """)
+    suspend fun getActiveLooseManualKeyPositionsOrdered(): List<ManualKeyPos>
+
+    /** Reset manual positions for active loose (non-grouped) notifications. */
+    @Query("UPDATE noti_drawer SET sortPosition = -1 WHERE isDismissed = 0 AND groupId IS NULL AND sortPosition != -1")
+    suspend fun resetActiveLooseManualPositions()
+
+    // Active drawer stream, auto-sorted (manual positions will be applied in domain layer)
     @Query("""
         SELECT * FROM noti_drawer
         WHERE isDismissed = 0
-        ORDER BY isSetToTop DESC, setToTopTime DESC, sortScore DESC, isRead ASC, lastUpdateTime DESC
+        ORDER BY sortScore DESC, isRead ASC, lastUpdateTime DESC
     """)
     fun getAutoSortedActiveNotificationsNoRelation(): Flow<List<NotiUnit>>
 
@@ -132,5 +171,11 @@ interface NotiDrawerDao {
     // Remove group association for a specific group (used for cleanup)
     @Query("UPDATE noti_drawer SET groupId = NULL WHERE groupId = :groupId")
     suspend fun ungroupItems(groupId: String)
-}
 
+    @Transaction
+    suspend fun updateSortPositionsBulk(updates: List<Pair<String, Int>>) {
+        updates.forEach { (key, pos) ->
+            updateSortPosition(key, pos)
+        }
+    }
+}

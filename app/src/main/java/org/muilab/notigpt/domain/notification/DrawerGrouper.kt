@@ -10,13 +10,11 @@ import org.muilab.notigpt.model.notifications.NotiItem
  * Pure drawer grouping/sorting logic.
  *
  * Contract:
- * - Input: display units in any order + the full list of groups.
- * - Output: drawer items with groups formed iff a group has >= 2 children.
- * - Sorting (matches previous repository behavior):
- *   - Within group: isTop desc, setToTopTime desc, lastUpdateTime desc
- *   - Final list: isTop desc, setToTopTime desc, latestTime desc
- *
- * This is deliberately Android-free to allow fast JVM unit tests.
+ * - Grouping: unchanged; groups are formed iff a group has >= 2 children.
+ * - Manual ordering: applies to loose (non-grouped) items only.
+ *   - If a loose unit has sortPosition >= 0, it is placed at that position (clamped).
+ *   - Remaining loose units fill the remaining gaps by latestTime desc.
+ * - Groups are inserted after, and are not manually ordered (sortPosition ignored).
  */
 object DrawerGrouper {
 
@@ -30,30 +28,88 @@ object DrawerGrouper {
             .filter { it.notiUnit.groupId != null }
             .groupBy { it.notiUnit.groupId!! }
 
-        val looseItems = displayUnits.filter { it.notiUnit.groupId == null }.toMutableList()
-        val result = mutableListOf<NotiDrawerItem>()
+        // Loose items are candidates for manual ordering.
+        val looseUnits = displayUnits.filter { it.notiUnit.groupId == null }
 
+        // Build grouped items first (children sorted purely by time desc for stability).
+        val groupItems = mutableListOf<NotiGroupItem>()
         groupedItemsMap.forEach { (groupId, children) ->
             val group = groupMap[groupId]
             if (group != null && children.size > 1) {
-                val sortedChildren = children.sortedWith(
-                    compareByDescending<NotiDisplayUnit> { it.notiUnit.isSetToTop }
-                        .thenByDescending { it.notiUnit.setToTopTime }
-                        .thenByDescending { it.lastUpdateTime }
-                )
-                result.add(NotiGroupItem(group, sortedChildren))
-            } else {
-                looseItems.addAll(children)
+                val sortedChildren = children.sortedByDescending { it.lastUpdateTime }
+
+                // Ensure children inherit "no manual sort" semantics.
+                // This is defensive: DB layer also enforces sortPosition=-1 for grouped items.
+                sortedChildren.forEach { child ->
+                    if (child.notiUnit.sortPosition != -1) {
+                        child.notiUnit.sortPosition = -1
+                    }
+                }
+
+                groupItems.add(NotiGroupItem(group, sortedChildren))
             }
         }
 
-        result.addAll(looseItems.map { NotiItem(it) })
+        // If some children belong to a groupId that doesn't exist or has only 1 child, treat them as loose.
+        val orphanedChildren = groupedItemsMap
+            .filter { (gid, children) -> groupMap[gid] == null || children.size <= 1 }
+            .values
+            .flatten()
 
-        return result.sortedWith(
-            compareByDescending<NotiDrawerItem> { it.isSetToTop }
-                .thenByDescending { it.setToTopTime }
-                .thenByDescending { it.latestTime }
-        )
+        val allLoose = (looseUnits + orphanedChildren)
+
+        val finalLooseItems = applyManualPositions(allLoose)
+            .map { NotiItem(it) }
+
+        // Final list = manual-sorted loose items first, then groups, both stable.
+        // Sort groups by latest child time desc.
+        return finalLooseItems + groupItems.sortedByDescending { gi ->
+            gi.children.maxOfOrNull { it.lastUpdateTime } ?: 0L
+        }
+    }
+
+    private fun applyManualPositions(units: List<NotiDisplayUnit>): List<NotiDisplayUnit> {
+        if (units.isEmpty()) return emptyList()
+
+        val size = units.size
+
+        // Step 1: place manual items into slots
+        val slots: Array<NotiDisplayUnit?> = arrayOfNulls(size)
+
+        // IMPORTANT: only sortPosition >= 0 is considered "manual".
+        // Items with sortPosition == -1 are treated as auto-filled.
+        val (manual, auto) = units.partition { it.notiUnit.sortPosition >= 0 }
+
+        // Stable manual placement: if collisions happen, earlier ones win and the rest will be treated as auto.
+        val overflowAuto = mutableListOf<NotiDisplayUnit>()
+        manual
+            .sortedBy { it.notiUnit.sortPosition }
+            .forEach { du ->
+                val clamped = du.notiUnit.sortPosition.coerceIn(0, size - 1)
+                if (slots[clamped] == null) {
+                    slots[clamped] = du
+                } else {
+                    // Collision: treat as auto-fill.
+                    overflowAuto.add(du)
+                }
+            }
+
+        // Step 2: fill gaps by latest time desc
+        val filler = (auto + overflowAuto)
+            .sortedByDescending { it.lastUpdateTime }
+            .iterator()
+
+        for (i in 0 until size) {
+            if (slots[i] == null && filler.hasNext()) {
+                slots[i] = filler.next()
+            }
+        }
+
+        // Step 3: return the final ordered list.
+        // DO NOT mutate sortPosition for auto items here.
+        // - Mutating them to 0..N would make them look "manually sorted" in the UI (bold border)
+        //   and would also cause them to be persisted as manual positions if any code writes back.
+        // Manual items keep their existing sortPosition >= 0; auto items should remain -1.
+        return slots.filterNotNull()
     }
 }
-
