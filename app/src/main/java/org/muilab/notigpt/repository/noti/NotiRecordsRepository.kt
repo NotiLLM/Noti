@@ -1,10 +1,6 @@
 package org.muilab.notigpt.repository.noti
 
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
@@ -14,55 +10,23 @@ import org.muilab.notigpt.model.notifications.NotiRecord
 
 /**
  * Read/query operations for NotiRecord.
- *
- * Extracted from NotiRepository to keep NotiRepository as an orchestrator/facade.
  */
 class NotiRecordsRepository(
     private val notiRecordDao: NotiRecordDao,
 ) {
 
-    fun getVisibleRecordsCountForKey(notiKey: String): Int {
-        return notiRecordDao.getVisibleRecordsByKey(notiKey).size
+    fun getActiveRecordsCountForKey(notiKey: String): Int {
+        return notiRecordDao.getActiveRecordsByKey(notiKey).size
     }
 
-    fun getVisibleRecordIdsForKey(notiKey: String, limit: Int = 5): List<String> {
-        val recs = notiRecordDao.getVisibleRecordsByKey(notiKey).sortedBy { it.time }
+    fun getActiveRecordIdsForKey(notiKey: String, limit: Int = 5): List<String> {
+        val recs = notiRecordDao.getActiveRecordsByKey(notiKey).sortedBy { it.time }
         return recs.takeLast(limit.coerceAtLeast(1)).map { it.notiRecordId }
-    }
-
-    @Suppress("unused")
-    private suspend fun fetchLatestRecordsConcurrently(keys: List<String>, perKeyLimit: Int = 1): List<NotiRecord> {
-        if (keys.isEmpty()) return emptyList()
-        val safeThreshold = 900
-        return if (keys.size <= safeThreshold) {
-            withContext(Dispatchers.IO) {
-                val allRecs = notiRecordDao.getVisibleRecordsByKeys(keys)
-                val grouped = allRecs.groupBy { it.notiKey }
-                grouped.flatMap { (_, list) ->
-                    list.sortedByDescending { if (it.whenTime != 0L) it.whenTime else it.postTime }
-                        .take(perKeyLimit)
-                }
-            }
-        } else {
-            coroutineScope {
-                val deferred = keys.chunked(safeThreshold).map { chunk ->
-                    async(Dispatchers.IO) {
-                        notiRecordDao.getVisibleRecordsByKeys(chunk)
-                    }
-                }
-                val results = deferred.awaitAll().flatten()
-                val grouped = results.groupBy { it.notiKey }
-                grouped.flatMap { (_, list) ->
-                    list.sortedByDescending { if (it.whenTime != 0L) it.whenTime else it.postTime }
-                        .take(perKeyLimit)
-                }
-            }
-        }
     }
 
     fun getPreviewRecordsForKeys(keys: List<String>, perKeyLimit: Int = 3): List<NotiRecord> {
         if (keys.isEmpty()) return emptyList()
-        val all = notiRecordDao.getVisibleRecordsByKeys(keys)
+        val all = notiRecordDao.getActiveRecordsByKeys(keys)
         return all.groupBy { it.notiKey }
             .flatMap { (_, list) ->
                 list.sortedByDescending { if (it.whenTime != 0L) it.whenTime else it.postTime }
@@ -70,14 +34,14 @@ class NotiRecordsRepository(
             }
     }
 
-    fun visibleRecordsFlowForKey(notiKey: String): Flow<List<NotiRecord>> {
-        return notiRecordDao.getVisibleRecordsFlowByKey(notiKey)
+    fun activeRecordsFlowForKey(notiKey: String): Flow<List<NotiRecord>> {
+        return notiRecordDao.getActiveRecordsFlowByKey(notiKey)
             .map { it.sortedBy { r -> r.time } }
     }
 
-    suspend fun fetchVisibleRecordsForKey(notiKey: String): List<NotiRecord> {
+    suspend fun fetchActiveRecordsForKey(notiKey: String): List<NotiRecord> {
         return withContext(Dispatchers.IO) {
-            notiRecordDao.getVisibleRecordsByKey(notiKey).sortedBy { it.time }
+            notiRecordDao.getActiveRecordsByKey(notiKey).sortedBy { it.time }
         }
     }
 
@@ -89,13 +53,12 @@ class NotiRecordsRepository(
         notiKey: String,
         pivotTime: Long,
         isOlder: Boolean,
-        includeHistory: Boolean,
         limit: Int = 10,
     ): List<NotiRecord> {
         return if (isOlder) {
-            notiRecordDao.getContextOlder(notiKey, pivotTime, limit, includeHistory).sortedBy { it.time }
+            notiRecordDao.getContextOlder(notiKey, pivotTime, limit).sortedBy { it.time }
         } else {
-            notiRecordDao.getContextNewer(notiKey, pivotTime, limit, includeHistory)
+            notiRecordDao.getContextNewer(notiKey, pivotTime, limit)
         }
     }
 
@@ -113,14 +76,25 @@ class NotiRecordsRepository(
         }
     }
 
-    suspend fun hasRecordsInGap(notiKey: String, minTime: Long, maxTime: Long, includeHistory: Boolean): Boolean {
-        return notiRecordDao.hasRecordsInGap(notiKey, minTime, maxTime, includeHistory) > 0
+    suspend fun hasRecordsInGap(notiKey: String, minTime: Long, maxTime: Long): Boolean {
+        return notiRecordDao.hasRecordsInGap(notiKey, minTime, maxTime) > 0
     }
 
-    // Advanced Search Logic
-    @OptIn(ExperimentalCoroutinesApi::class)
-    suspend fun searchNotifications(rawInput: String, includeHistory: Boolean): Map<String, List<NotiRecord>> {
-        val built = NotiSearchQueryBuilder.build(rawInput = rawInput, includeHistory = includeHistory)
+    suspend fun getLatestRecords(limit: Int): List<NotiRecord> {
+        return notiRecordDao.getLatestRecords(limit)
+    }
+
+    suspend fun getRecordsBefore(pivotTime: Long, limit: Int): List<NotiRecord> {
+        return notiRecordDao.getRecordsBefore(pivotTime, limit)
+    }
+
+    suspend fun getRecordsAfter(pivotTime: Long, limit: Int): List<NotiRecord> {
+        return notiRecordDao.getRecordsAfter(pivotTime, limit)
+    }
+
+    // Advanced Search Logic: always searches across all records.
+    suspend fun searchNotifications(rawInput: String): Map<String, List<NotiRecord>> {
+        val built = NotiSearchQueryBuilder.build(rawInput = rawInput)
         val records = notiRecordDao.searchRecordsRaw(built.toSQLiteQuery())
         return records.groupBy { it.notiKey }
     }

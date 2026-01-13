@@ -28,9 +28,9 @@ internal fun GroupCardActionsRow(
     isAnyChildTopped: Boolean,
     onHideActions: () -> Unit,
     onGroupTopToggle: () -> Unit,
-    onMakeTaskToggle: () -> Unit,
-    onSaveToggle: () -> Unit,
-    onArchiveToggle: () -> Unit,
+    onMakeTaskToggle: (() -> Unit)?,
+    onSaveToggle: (() -> Unit)?,
+    onArchiveToggle: (() -> Unit)?,
 ) {
     Row(
         modifier = modifier
@@ -55,22 +55,28 @@ internal fun GroupCardActionsRow(
             { onGroupTopToggle() }
         )
 
-        NotiActionIconButton(
-            if (representativeCategory == NOTI_CATEGORY_MAKETASK) R.drawable.task_yes else R.drawable.task_no,
-            "Make-Task Group",
-            { onMakeTaskToggle() }
-        )
+        if (onMakeTaskToggle != null) {
+            NotiActionIconButton(
+                if (representativeCategory == NOTI_CATEGORY_MAKETASK) R.drawable.task_yes else R.drawable.task_no,
+                "Make-Task Group",
+                { onMakeTaskToggle() }
+            )
+        }
 
-        NotiActionIconButton(
-            if (representativeCategory == NOTI_CATEGORY_SAVE) R.drawable.save_yes else R.drawable.save_no,
-            "Save Group",
-            { onSaveToggle() }
-        )
+        if (onSaveToggle != null) {
+            NotiActionIconButton(
+                if (representativeCategory == NOTI_CATEGORY_SAVE) R.drawable.save_yes else R.drawable.save_no,
+                "Save Group",
+                { onSaveToggle() }
+            )
+        }
 
-        NotiActionIconButton(
-            if (representativeCategory == NOTI_CATEGORY_ARCHIVE) R.drawable.archive_yes else R.drawable.archive_no,
-            "Archive Group",
-            { onArchiveToggle() }
-        )
+        if (onArchiveToggle != null) {
+            NotiActionIconButton(
+                if (representativeCategory == NOTI_CATEGORY_ARCHIVE) R.drawable.archive_yes else R.drawable.archive_no,
+                "Archive Group",
+                { onArchiveToggle() }
+            )
+        }
     }
 }

@@ -66,16 +66,7 @@ fun DevControlPanel(context: Context, drawerViewModel: DrawerViewModel) {
 
                 AutoControlBar()
                 Button(onClick = {
-                    Toast.makeText(context, "Start Updating Notifications", Toast.LENGTH_SHORT).show()
-//                    CoroutineScope(Dispatchers.IO).launch {
-//                        val notiRepository = NotiRepositoryProvider.provideNotiRepository(context)
-//                        val notiKeys = notiRepository.getNotificationKeys()
-//                        notiKeys.forEach { notiKey ->
-//                            enqueueUpdateNotification(context, notiKey)
-//                            delay(30 * 1000)
-//                        }
-//                    }
-                    drawerViewModel.syncAppCategory()
+                    Toast.makeText(context, "Sync Noti Status (WIP)", Toast.LENGTH_SHORT).show()
                 }) {
                     Text("Sync Noti Status")
                 }

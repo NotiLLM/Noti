@@ -8,7 +8,7 @@ import kotlinx.coroutines.flow.first
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
-import org.muilab.notigpt.model.features.TaskUnit
+import org.muilab.notigpt.model.features.ReminderUnit
 import org.muilab.notigpt.model.notifications.NotiRecord
 import org.muilab.notigpt.util.SharedPreferencesManager
 import java.text.SimpleDateFormat
@@ -33,14 +33,13 @@ internal object TaskExtractionHandler {
         }
 
         val db = ctx.database
-        val notiRepository = ctx.notiRepository
-        val taskRepository = ctx.taskRepository
+        val reminderRepository = ctx.reminderRepository
 
         val drawerDao = db.drawerDao()
 
         val keysToProcess: List<String> = if (notiKeys.isEmpty()) {
-            val visible = drawerDao.getAllVisible()
-            visible.filter { it.shouldExtractTask }.map { it.notiKey }
+            val active = drawerDao.getAllActive()
+            active.filter { it.shouldExtractTask }.map { it.notiKey }
         } else {
             notiKeys
         }
@@ -119,7 +118,6 @@ internal object TaskExtractionHandler {
             mapOf(
                 "notiKey" to key,
                 "appName" to unit.appName,
-                "appCategory" to unit.category,
                 "overallTitle" to notiOverallTitle,
                 "secondOverallTitle" to notiSecondOverallTitle,
                 "notiContent" to contents,
@@ -135,23 +133,26 @@ internal object TaskExtractionHandler {
             return ctx.success()
         }
 
-        val visibleTasksList = try {
-            taskRepository.observeVisibleTasks().first()
+        // Include current reminders (tasks + memos) as context for extraction.
+        val currentReminders: List<ReminderUnit> = try {
+            reminderRepository.observeAll().first()
         } catch (_: Exception) {
-            emptyList()
+            emptyList<ReminderUnit>()
         }
 
         val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.getDefault())
-        val tasksForPayload = visibleTasksList.filter { !it.isCompleted }.map { t ->
-            val deadlineIso = if (t.deadlineTimestamp > 0L) sdf.format(Date(t.deadlineTimestamp)) else -1L
+        val remindersForPayload = currentReminders.map { r ->
+            val deadlineIso = if (r.deadlineTimestamp > 0L) sdf.format(Date(r.deadlineTimestamp)) else -1L
             mapOf(
-                "taskId" to t.taskId,
-                "taskDescription" to t.taskDescription,
+                "reminderId" to r.reminderId,
+                "reminderTitle" to r.reminderTitle,
+                "reminderContent" to r.reminderContent,
+                "isTask" to r.isTask,
                 "deadlineTimestamp" to deadlineIso,
-                "estimatedCompletionMinutes" to t.estimatedCompletionTime,
-                "associatedNotis" to t.associatedNotis.toList(),
-                "userEdited" to t.userEdited,
-                "isCompleted" to t.isCompleted
+                "estimatedCompletionMinutes" to r.estimatedCompletionTime,
+                "associatedNotis" to r.associatedNotis.toList(),
+                "userEdited" to r.userEdited,
+                "isCompleted" to r.isCompleted
             )
         }
 
@@ -160,7 +161,7 @@ internal object TaskExtractionHandler {
             "language" to Locale.getDefault().toLanguageTag(),
             "currentTime" to SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.getDefault()).format(Date()),
             "notis" to notisPayload,
-            "currentTasks" to tasksForPayload
+            "currentReminders" to remindersForPayload
         )
 
         val jsonPayload = gson.toJson(payload)
@@ -192,10 +193,11 @@ internal object TaskExtractionHandler {
             val arr = JSONArray(bodyStr)
             for (i in 0 until arr.length()) {
                 val it = arr.getJSONObject(i)
-                val taskId = it.optString("taskId")
-                val taskDescription = it.optString("taskDescription")
+                val reminderId = it.optString("reminderId", it.optString("taskId"))
+                val reminderTitle = it.optString("reminderTitle", "")
+                val reminderContent = it.optString("reminderContent", it.optString("taskDescription"))
                 val deadlineMs = if (it.has("deadlineTimestamp") && !it.isNull("deadlineTimestamp")) it.optLong("deadlineTimestamp", -1L) else -1L
-                val estimate = it.optLong("estimatedCompletionTime", 0L)
+                val estimate = it.optLong("estimatedCompletionTime", it.optLong("estimatedCompletionMinutes", 0L))
                 val assocKeys = mutableSetOf<String>()
                 val assoc = it.optJSONArray("associatedNotis")
                 if (assoc != null) {
@@ -204,17 +206,21 @@ internal object TaskExtractionHandler {
                     }
                 }
                 val isCompleted = it.optBoolean("isCompleted", false)
-                val taskUnit = TaskUnit(
-                    taskId = taskId,
+
+                val unit = ReminderUnit(
+                    reminderId = reminderId,
+                    reminderTitle = reminderTitle,
+                    reminderContent = reminderContent,
+                    isTask = true,
                     isCompleted = isCompleted,
-                    isVisible = true,
-                    taskDescription = taskDescription,
+                    lastUpdateTimestamp = System.currentTimeMillis(),
                     deadlineTimestamp = deadlineMs,
                     estimatedCompletionTime = estimate,
                     associatedNotis = assocKeys.toSet(),
-                    userEdited = false
+                    userEdited = false,
                 )
-                taskRepository.upsert(taskUnit)
+
+                reminderRepository.upsert(unit)
             }
 
             if (submittedRecordIds.isNotEmpty()) {

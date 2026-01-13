@@ -85,52 +85,6 @@ fun NotiCardBackgroundActions(
                     },
                 )
             } else {
-                val isTask = notiUnit.category == Constants.NOTI_CATEGORY_MAKETASK
-                val isSave = notiUnit.category == Constants.NOTI_CATEGORY_SAVE
-                val isArchive = notiUnit.category == Constants.NOTI_CATEGORY_ARCHIVE
-
-                NotiActionIconButton(
-                    if (isTask) R.drawable.task_yes else R.drawable.task_no,
-                    "Make-Task",
-                    {
-                        if (canClickActions.value) {
-                            drawerViewModel.actOnNoti(
-                                notiUnit.notiKey,
-                                if (isTask) "dismiss_task" else "make_task",
-                            )
-                            onCollapseActions()
-                        }
-                    },
-                )
-
-                NotiActionIconButton(
-                    if (isSave) R.drawable.save_yes else R.drawable.save_no,
-                    "Save",
-                    {
-                        if (canClickActions.value) {
-                            drawerViewModel.actOnNoti(
-                                notiUnit.notiKey,
-                                if (isSave) "unsave" else "save",
-                            )
-                            onCollapseActions()
-                        }
-                    },
-                )
-
-                NotiActionIconButton(
-                    if (isArchive) R.drawable.archive_yes else R.drawable.archive_no,
-                    "Archive",
-                    {
-                        if (canClickActions.value) {
-                            drawerViewModel.actOnNoti(
-                                notiUnit.notiKey,
-                                if (isArchive) "unarchive" else "archive",
-                            )
-                            onCollapseActions()
-                        }
-                    },
-                )
-
                 NotiActionIconButton(
                     R.drawable.totop,
                     "To Top",

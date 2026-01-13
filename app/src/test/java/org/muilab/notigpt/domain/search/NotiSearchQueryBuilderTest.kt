@@ -7,21 +7,18 @@ import org.junit.Test
 class NotiSearchQueryBuilderTest {
 
     @Test
-    fun `build with empty input matches all and respects includeHistory`() {
-        val qNoHistory = NotiSearchQueryBuilder.build(rawInput = "   ", includeHistory = false)
-        assertTrue(qNoHistory.sql.contains("1 = 1"))
-        assertTrue(qNoHistory.sql.contains("AND isVisible = 1"))
-        assertEquals(emptyList<Any>(), qNoHistory.args)
-
-        val qHistory = NotiSearchQueryBuilder.build(rawInput = "", includeHistory = true)
-        assertTrue(qHistory.sql.contains("1 = 1"))
-        assertTrue(!qHistory.sql.contains("isVisible = 1"))
-        assertEquals(emptyList<Any>(), qHistory.args)
+    fun `build with empty input matches all records`() {
+        val q = NotiSearchQueryBuilder.build(rawInput = "   ")
+        assertTrue(q.sql.contains("1 = 1"))
+        // Search always scans all noti_record rows (no isVisible/isDismissed filter at query-builder level)
+        assertTrue(!q.sql.contains("isVisible"))
+        assertTrue(!q.sql.contains("isDismissed"))
+        assertEquals(emptyList<Any>(), q.args)
     }
 
     @Test
     fun `build parses quoted phrases into LIKE args`() {
-        val built = NotiSearchQueryBuilder.build(rawInput = "\"baseball match\"", includeHistory = false)
+        val built = NotiSearchQueryBuilder.build(rawInput = "\"baseball match\"")
 
         // One phrase => 1 condition with 4 LIKE placeholders
         assertTrue(built.sql.contains("extraText LIKE ?"))
@@ -31,7 +28,7 @@ class NotiSearchQueryBuilderTest {
 
     @Test
     fun `build parses plus terms as AND`() {
-        val built = NotiSearchQueryBuilder.build(rawInput = "urgent+tomorrow", includeHistory = true)
+        val built = NotiSearchQueryBuilder.build(rawInput = "urgent+tomorrow")
 
         // Two terms => 2 conditions => 8 args
         assertEquals(8, built.args.size)
@@ -46,7 +43,7 @@ class NotiSearchQueryBuilderTest {
 
     @Test
     fun `build supports quotes plus remaining plus terms`() {
-        val built = NotiSearchQueryBuilder.build(rawInput = "\"pay rent\"+today", includeHistory = false)
+        val built = NotiSearchQueryBuilder.build(rawInput = "\"pay rent\"+today")
 
         // One phrase (4 args) + one term (4 args) => 8 args
         assertEquals(8, built.args.size)
@@ -54,4 +51,3 @@ class NotiSearchQueryBuilderTest {
         assertEquals("%today%", built.args[4])
     }
 }
-

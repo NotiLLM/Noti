@@ -19,14 +19,12 @@ import androidx.compose.ui.Modifier
 import androidx.core.app.NotificationManagerCompat
 import androidx.work.WorkManager
 import org.muilab.notigpt.repository.NotiRepositoryProvider
-import org.muilab.notigpt.repository.TaskRepositoryProvider
 import org.muilab.notigpt.service.NotiListenerService
 import org.muilab.notigpt.ui.theme.NotiLLMTheme
 import org.muilab.notigpt.util.SharedPreferencesManager
 import org.muilab.notigpt.ui.component.AppScaffold
 import org.muilab.notigpt.ui.viewmodel.DrawerViewModel
 import org.muilab.notigpt.ui.viewmodel.DrawerViewModelFactory
-import org.muilab.notigpt.ui.viewmodel.TaskViewModelFactory
 
 class MainActivity : ComponentActivity() {
     @RequiresApi(Build.VERSION_CODES.S)
@@ -82,9 +80,7 @@ class MainActivity : ComponentActivity() {
                     color = MaterialTheme.colorScheme.background
                 ) {
                     AppScaffold(
-                        applicationContext,
-                        drawerViewModel,
-                        taskViewModel
+                        drawerViewModel = drawerViewModel,
                     )
                 }
             }
@@ -95,9 +91,6 @@ class MainActivity : ComponentActivity() {
         DrawerViewModelFactory(this.application, NotiRepositoryProvider.provideNotiRepository(applicationContext))
     }
 
-    private val taskViewModel: org.muilab.notigpt.ui.viewmodel.TaskViewModel by viewModels {
-        TaskViewModelFactory(this.application, TaskRepositoryProvider.provideTaskRepository(applicationContext))
-    }
 
     private fun isNotiListenerEnabled(): Boolean {
         val cn = ComponentName(this, NotiListenerService::class.java)

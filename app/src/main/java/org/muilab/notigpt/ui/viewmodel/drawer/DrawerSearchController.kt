@@ -16,13 +16,6 @@ class DrawerSearchController(
     private val notiRepository: NotiRepository,
 ) {
 
-    private val _includeHistory = MutableStateFlow(false)
-    val includeHistory: StateFlow<Boolean> = _includeHistory
-
-    fun setIncludeHistory(enabled: Boolean) {
-        _includeHistory.value = enabled
-    }
-
     private val _searchResults = MutableStateFlow<Map<String, List<NotiRecord>>>(emptyMap())
     val searchResults: StateFlow<Map<String, List<NotiRecord>>> = _searchResults
 
@@ -36,7 +29,7 @@ class DrawerSearchController(
         }
 
         val results = withContext(Dispatchers.IO) {
-            notiRepository.searchNotifications(query, _includeHistory.value)
+            notiRepository.searchNotifications(query)
         }
 
         val unitMap = mutableMapOf<String, NotiUnit>()
@@ -56,7 +49,7 @@ class DrawerSearchController(
 
         val pivotTime = if (isOlder) currentList.first().time else currentList.last().time
         val newRecords = withContext(Dispatchers.IO) {
-            notiRepository.getContextRecords(notiKey, pivotTime, isOlder, _includeHistory.value)
+            notiRepository.getContextRecords(notiKey, pivotTime, isOlder)
         }
 
         if (newRecords.isNotEmpty()) {
@@ -69,7 +62,7 @@ class DrawerSearchController(
 
     suspend fun checkGapHasRecords(notiKey: String, startTime: Long, endTime: Long): Boolean {
         return withContext(Dispatchers.IO) {
-            notiRepository.hasRecordsInGap(notiKey, startTime, endTime, _includeHistory.value)
+            notiRepository.hasRecordsInGap(notiKey, startTime, endTime)
         }
     }
 

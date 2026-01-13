@@ -1,6 +1,5 @@
 package org.muilab.notigpt.model.notifications
 
-import org.muilab.notigpt.util.getAbsoluteTimeStr
 import org.muilab.notigpt.util.getRelativeTimeStr
 
 class NotiDisplayUnit (
@@ -9,18 +8,16 @@ class NotiDisplayUnit (
 ) {
     val notiKey: String
         get() = notiUnit.notiKey
+
     val title: String
-        get() {
-            return notiRecords.lastOrNull()?.getDisplayedTitle(notiUnit.isPeople) ?: ""
-        }
-    val category: String
-        get() = notiUnit.category
-    val appCategory: String
-        get() = notiUnit.appCategory
+        get() = notiRecords.lastOrNull()?.getDisplayedTitle(notiUnit.isPeople) ?: ""
+
     val sortScore: Double
         get() = notiUnit.sortScore
+
     val lastUpdateTime: Long
         get() = notiRecords.lastOrNull()?.time ?: 0L
+
     val latestUpdateRelTimeStr: String
         get() = getRelativeTimeStr(lastUpdateTime)
 }

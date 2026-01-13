@@ -5,7 +5,7 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
-import org.muilab.notigpt.model.features.TaskUnit
+import org.muilab.notigpt.model.features.ReminderUnit
 import org.muilab.notigpt.model.notifications.NotiAction
 import org.muilab.notigpt.model.notifications.NotiGroup
 import org.muilab.notigpt.model.notifications.NotiRecord
@@ -13,9 +13,9 @@ import org.muilab.notigpt.model.notifications.NotiUnit
 import org.muilab.notigpt.model.notifications.VisibleNotiRecord
 
 @Database(
-    entities = [NotiUnit::class, NotiRecord::class, NotiAction::class, TaskUnit::class, NotiGroup::class],
+    entities = [NotiUnit::class, NotiRecord::class, NotiAction::class, ReminderUnit::class, NotiGroup::class],
     views = [VisibleNotiRecord::class],
-    version = 19, // Increment version
+    version = 21,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -24,7 +24,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun drawerDao(): NotiDrawerDao
     abstract fun recordDao(): NotiRecordDao
     abstract fun actionDao(): NotiActionDao
-    abstract fun taskListDao(): TaskListDao
+    abstract fun reminderListDao(): ReminderListDao
     abstract fun groupDao(): NotiGroupDao
 
     companion object {
@@ -57,6 +57,8 @@ abstract class AppDatabase : RoomDatabase() {
                 .addMigrations(AppDatabaseMigrations.MIGRATION_16_17)
                 .addMigrations(AppDatabaseMigrations.MIGRATION_17_18)
                 .addMigrations(AppDatabaseMigrations.MIGRATION_18_19)
+                .addMigrations(AppDatabaseMigrations.MIGRATION_19_20)
+                .addMigrations(AppDatabaseMigrations.MIGRATION_20_21)
                 .setJournalMode(JournalMode.TRUNCATE)
                 .build()
         }

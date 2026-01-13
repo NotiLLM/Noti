@@ -64,7 +64,6 @@ internal object TaskScanHandler {
             "userId" to SharedPreferencesManager.userId,
             "notiKey" to notiKey,
             "appName" to notiUnit.appName,
-            "appCategory" to notiUnit.category,
             "overallTitle" to notiOverallTitle,
             "secondOverallTitle" to notiSecondOverallTitle,
             "notiContent" to notiContentList,

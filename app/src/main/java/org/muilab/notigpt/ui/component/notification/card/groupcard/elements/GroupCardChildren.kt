@@ -50,8 +50,6 @@ internal fun GroupCardChildren(
                 drawerViewModel = drawerViewModel,
                 isCardVisible = true,
                 parentViewport = parentViewport,
-                category = unit.category,
-                appCategory = unit.appCategory,
                 isMergeTarget = isMergeTarget,
                 isInGroup = true,
                 swipeEnabled = enableChildSwipe,

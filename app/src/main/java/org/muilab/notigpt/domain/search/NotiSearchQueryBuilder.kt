@@ -3,16 +3,12 @@ package org.muilab.notigpt.domain.search
 import androidx.sqlite.db.SimpleSQLiteQuery
 
 /**
- * Builds the same raw SQL query previously assembled inside `NotiRepository.searchNotifications`.
- *
- * Why:
- * - The parsing rules (quotes + '+' AND-composition) are business logic and should be testable on the JVM.
- * - Keeping SQL generation in one place reduces regressions when tweaking search behavior.
+ * Builds the raw SQL query used for notification search.
  *
  * Contract:
  * - `rawInput` may contain quoted phrases: "baseball match"
  * - `+` combines terms using AND logic: urgent+tomorrow
- * - If `includeHistory` is false, we add `AND isVisible = 1`
+ * - Search always scans all notification records ever received.
  */
 object NotiSearchQueryBuilder {
 
@@ -23,7 +19,7 @@ object NotiSearchQueryBuilder {
         fun toSQLiteQuery(): SimpleSQLiteQuery = SimpleSQLiteQuery(sql, args.toTypedArray())
     }
 
-    fun build(rawInput: String, includeHistory: Boolean): BuiltQuery {
+    fun build(rawInput: String): BuiltQuery {
         val conditions = mutableListOf<String>()
         val args = mutableListOf<Any>()
 
@@ -56,11 +52,8 @@ object NotiSearchQueryBuilder {
         }
 
         val whereClause = if (conditions.isNotEmpty()) conditions.joinToString(" AND ") else "1 = 1"
-        val visibilityClause = if (includeHistory) "" else " AND isVisible = 1"
-
-        val sql = "SELECT * FROM noti_record WHERE $whereClause $visibilityClause ORDER BY whenTime DESC LIMIT 100"
+        val sql = "SELECT * FROM noti_record WHERE $whereClause ORDER BY whenTime DESC LIMIT 100"
 
         return BuiltQuery(sql = sql, args = args)
     }
 }
-

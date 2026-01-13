@@ -3,16 +3,10 @@ package org.muilab.notigpt.repository.noti
 import org.muilab.notigpt.database.room.NotiDrawerDao
 import org.muilab.notigpt.database.room.NotiGroupDao
 import org.muilab.notigpt.model.notifications.NotiGroup
-import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_ARCHIVE
-import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_GENERAL
-import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_MAKETASK
-import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_SAVE
 import java.util.UUID
 
 /**
  * Owns all group mutation logic: merge/ungroup/metadata updates and group-level actions.
- *
- * NotiRepository should stay a thin orchestrator façade.
  */
 class NotiGroupRepository(
     private val notiDrawerDao: NotiDrawerDao,
@@ -24,19 +18,13 @@ class NotiGroupRepository(
             "to_top" -> notiDrawerDao.updateToTopStatusByGroupId(groupId, true, System.currentTimeMillis())
             "undo_to_top" -> notiDrawerDao.updateToTopStatusByGroupId(groupId, false, 0L)
             "dismiss_swipe" -> {
-                notiDrawerDao.setGroupInvisible(groupId)
-                val remainingVisibleItems = notiDrawerDao.getVisibleCountForGroup(groupId)
-                if (remainingVisibleItems <= 1) {
+                notiDrawerDao.dismissGroup(groupId)
+                val remainingActiveItems = notiDrawerDao.getActiveCountForGroup(groupId)
+                if (remainingActiveItems <= 1) {
                     notiDrawerDao.ungroupItems(groupId)
                     notiGroupDao.deleteGroup(groupId)
                 }
             }
-            "archive" -> notiDrawerDao.updateCategoryByGroupId(groupId, NOTI_CATEGORY_ARCHIVE)
-            "unarchive" -> notiDrawerDao.updateCategoryByGroupId(groupId, NOTI_CATEGORY_GENERAL)
-            "make_task" -> notiDrawerDao.updateCategoryByGroupId(groupId, NOTI_CATEGORY_MAKETASK)
-            "dismiss_task" -> notiDrawerDao.updateCategoryByGroupId(groupId, NOTI_CATEGORY_GENERAL)
-            "save" -> notiDrawerDao.updateCategoryByGroupId(groupId, NOTI_CATEGORY_SAVE)
-            "unsave" -> notiDrawerDao.updateCategoryByGroupId(groupId, NOTI_CATEGORY_GENERAL)
         }
     }
 
@@ -105,4 +93,3 @@ class NotiGroupRepository(
         notiDrawerDao.moveGroupChildren(oldGroupId, newGroupId)
     }
 }
-

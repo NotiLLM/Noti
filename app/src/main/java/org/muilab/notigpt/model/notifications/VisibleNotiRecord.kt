@@ -3,7 +3,7 @@ package org.muilab.notigpt.model.notifications
 import androidx.room.DatabaseView
 
 @DatabaseView("""
-    SELECT * FROM noti_record WHERE isVisible = 1
+    SELECT * FROM noti_record WHERE isDismissed = 0
 """)
 data class VisibleNotiRecord(
     // KEYS
@@ -29,5 +29,5 @@ data class VisibleNotiRecord(
     val extraSubText: String,
 
     // STATUS
-    val isVisible: Boolean
+    val isDismissed: Boolean
 )

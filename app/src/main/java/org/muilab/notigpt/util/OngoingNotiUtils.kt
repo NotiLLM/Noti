@@ -80,7 +80,7 @@ fun postOngoingNotification(context: Context) {
         val appDatabase = AppDatabase.getInstance(context)
         val drawerDao = appDatabase.drawerDao()
 
-        val allNotiCount = drawerDao.getVisibleNotiCount()
+        val allNotiCount = drawerDao.getActiveNotiCount()
         val notiTitle = "$allNotiCount notifications"
         val smallIcon = createCountIcon(context, allNotiCount, false)
 

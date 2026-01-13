@@ -11,7 +11,6 @@ import androidx.room.Index
 import org.muilab.notigpt.model.notifications.components.NotiMetadata
 import org.muilab.notigpt.model.notifications.components.NotiDisplayState
 import org.muilab.notigpt.model.notifications.components.NotiTaskAttr
-import org.muilab.notigpt.util.getAppCategoryByAppName
 
 // Add index on groupId for faster lookups
 @Entity(tableName = "noti_drawer", primaryKeys = ["notiKey"], indices = [Index(value = ["groupId"])])
@@ -20,10 +19,9 @@ data class NotiUnit(
     @Embedded val metadata: NotiMetadata,
     @Embedded val displayState: NotiDisplayState = NotiDisplayState(),
     @Embedded val taskAttr: NotiTaskAttr = NotiTaskAttr(),
-    // NEW: Link to a parent group
+    // Link to a parent group
     val groupId: String? = null
 ) {
-    // ... existing constructors ...
     @RequiresApi(Build.VERSION_CODES.S)
     constructor(
         context: Context,
@@ -38,14 +36,14 @@ data class NotiUnit(
     @RequiresApi(Build.VERSION_CODES.S)
     fun updateNoti(context: Context, sbn: StatusBarNotification) {
         metadata.update(context, sbn)
-        if (!isVisible)
+        // If the unit was previously dismissed, treat the incoming noti as a fresh active one.
+        if (isDismissed) {
             displayState.resetUserState()
+        }
         displayState.resetReadState()
         displayState.resetLLMState()
-        displayState.appCategory = getAppCategoryByAppName(context, metadata.appName)
     }
 
-    // ... existing getters ...
     val hashKey: Int get() = metadata.hashKey
     val appName: String get() = metadata.appName
     val pkgName: String get() = metadata.pkgName
@@ -54,7 +52,9 @@ data class NotiUnit(
     val isPeople: Boolean get() = metadata.isPeople
     val largeBitmap: Bitmap? get() = metadata.getLargeBitmap()
     val bitmap: Bitmap? get() = metadata.getBitmap()
-    val isVisible: Boolean get() = displayState.isVisible
+
+    /** Active drawer state: dismissed items are hidden from the active list. */
+    val isDismissed: Boolean get() = displayState.isDismissed
 
     var isPinned: Boolean
         get() = displayState.isPinned
@@ -72,17 +72,10 @@ data class NotiUnit(
         get() = displayState.sortScore
         set(value) { displayState.sortScore = value }
 
-    var category: String
-        set(value) { displayState.category = value }
-        get() = displayState.category
-
     var explanation: String
         get() = displayState.explanation
         set(value) { displayState.explanation = value }
 
-    val appCategory: String get() = displayState.appCategory
-
-    // REMOVED: sortPosition, appCategorySortPosition logic
 
     var shouldExtractTask: Boolean
         get() = taskAttr.shouldExtractTask

@@ -23,10 +23,7 @@ import org.muilab.notigpt.ui.viewmodel.DrawerViewModel
 
 data class NotiCardOptionsState(
     val isInGroup: Boolean,
-    val isTask: Boolean,
-    val isSave: Boolean,
-    val isArchive: Boolean,
-    val isSetToTop: Boolean,
+    val isPinned: Boolean,
 )
 
 @RequiresApi(Build.VERSION_CODES.S)
@@ -67,74 +64,30 @@ fun NotiCardOptionsDialog(
                             Text("Remove from Group")
                         }
                     }
-                } else {
-                    TextButton(
-                        onClick = {
-                            drawerViewModel.actOnNoti(
-                                notiKey,
-                                if (!state.isTask) "make_task" else "dismiss_task",
-                            )
-                            onDismiss()
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Start,
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Icon(
-                                painter = painterResource(if (state.isTask) R.drawable.task_yes else R.drawable.task_no),
-                                contentDescription = "To Task",
-                                modifier = Modifier.size(24.dp),
-                            )
-                            Spacer(Modifier.width(12.dp))
-                            Text(if (state.isTask) "Remove from Tasks" else "Move to Tasks")
-                        }
-                    }
+                }
 
-                    TextButton(
-                        onClick = {
-                            drawerViewModel.actOnNoti(notiKey, if (!state.isSave) "save" else "unsave")
-                            onDismiss()
-                        },
+                TextButton(
+                    onClick = {
+                        drawerViewModel.actOnNoti(
+                            notiKey,
+                            if (state.isPinned) "unpin" else "pin",
+                        )
+                        onDismiss()
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Start,
                         modifier = Modifier.fillMaxWidth(),
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Start,
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Icon(
-                                painter = painterResource(if (state.isSave) R.drawable.save_yes else R.drawable.save_no),
-                                contentDescription = "To Save",
-                                modifier = Modifier.size(24.dp),
-                            )
-                            Spacer(Modifier.width(12.dp))
-                            Text(if (state.isSave) "Remove from Save" else "Move to Save")
-                        }
-                    }
-
-                    TextButton(
-                        onClick = {
-                            drawerViewModel.actOnNoti(notiKey, if (!state.isArchive) "archive" else "unarchive")
-                            onDismiss()
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Start,
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Icon(
-                                painter = painterResource(if (state.isArchive) R.drawable.archive_yes else R.drawable.archive_no),
-                                contentDescription = "To Archive",
-                                modifier = Modifier.size(24.dp),
-                            )
-                            Spacer(Modifier.width(12.dp))
-                            Text(if (state.isArchive) "Remove from Archive" else "Move to Archive")
-                        }
+                        Icon(
+                            painter = painterResource(if (state.isPinned) R.drawable.pin_yes else R.drawable.pin_no),
+                            contentDescription = "Pin",
+                            modifier = Modifier.size(24.dp),
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Text(if (state.isPinned) "Unpin" else "Pin")
                     }
                 }
 
@@ -156,31 +109,29 @@ fun NotiCardOptionsDialog(
                             modifier = Modifier.size(24.dp),
                         )
                         Spacer(Modifier.width(12.dp))
-                        Text(if (state.isSetToTop) "Move to Top (Update Time)" else "Set To Top")
+                        Text("To Top")
                     }
                 }
 
-                if (state.isSetToTop) {
-                    TextButton(
-                        onClick = {
-                            drawerViewModel.actOnNoti(notiKey, "undo_to_top")
-                            onDismiss()
-                        },
+                TextButton(
+                    onClick = {
+                        drawerViewModel.actOnNoti(notiKey, "dismiss")
+                        onDismiss()
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Start,
                         modifier = Modifier.fillMaxWidth(),
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Start,
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Icon(
-                                painter = painterResource(R.drawable.undo_totop),
-                                contentDescription = "Undo To Top",
-                                modifier = Modifier.size(24.dp),
-                            )
-                            Spacer(Modifier.width(12.dp))
-                            Text("Undo To Top")
-                        }
+                        Icon(
+                            painter = painterResource(R.drawable.close),
+                            contentDescription = "Dismiss",
+                            modifier = Modifier.size(24.dp),
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Text("Dismiss")
                     }
                 }
             }

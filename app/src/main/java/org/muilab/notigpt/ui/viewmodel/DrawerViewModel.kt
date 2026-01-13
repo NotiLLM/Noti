@@ -66,8 +66,6 @@ class DrawerViewModel(
 
     private val filters = DrawerFiltersState()
 
-    val category: StateFlow<String> = filters.category
-    val appCategory: StateFlow<String> = filters.appCategory
     val isTargetLoading: StateFlow<Boolean> = filters.isTargetLoading
     val isSortingMode: StateFlow<Boolean> = filters.isSortingMode
 
@@ -142,19 +140,42 @@ class DrawerViewModel(
     )
     val unreadCountsByCategory: StateFlow<Map<String, Int>> = unreadCounts.unreadCountsByCategory
 
+    /** Total unread notifications in the active drawer (not dismissed). */
+    val unreadActiveCount: StateFlow<Int> = groupedNotifications
+        .map { items ->
+            items.asSequence().flatMap { item ->
+                when (item) {
+                    is org.muilab.notigpt.model.notifications.NotiItem -> sequenceOf(item.displayUnit)
+                    is org.muilab.notigpt.model.notifications.NotiGroupItem -> item.children.asSequence()
+                }
+            }.count { du -> !du.notiUnit.isDismissed && !du.notiUnit.isRead }
+        }
+        .distinctUntilChanged()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+
+    /** Total active (not dismissed) notifications currently in the drawer. */
+    val activeNotDismissedCount: StateFlow<Int> = groupedNotifications
+        .map { items ->
+            items.asSequence().flatMap { item ->
+                when (item) {
+                    is org.muilab.notigpt.model.notifications.NotiItem -> sequenceOf(item.displayUnit)
+                    is org.muilab.notigpt.model.notifications.NotiGroupItem -> item.children.asSequence()
+                }
+            }.count { du -> !du.notiUnit.isDismissed }
+        }
+        .distinctUntilChanged()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+
     // Search state (delegated)
-    val includeHistory: StateFlow<Boolean> = searchController.includeHistory
     val searchResults: StateFlow<Map<String, List<NotiRecord>>> = searchController.searchResults
     val searchUnits: StateFlow<Map<String, NotiUnit>> = searchController.searchUnits
 
     init {
         // Main subscription to the grouped data flow
-        notiRepository.getGroupedNotifications(category, appCategory)
+        notiRepository.getGroupedNotifications()
             .debounce(60)
             .onEach { newList ->
                 val prev = _groupedNotifications.value
-                // Simple reference/size check to avoid some recompositions,
-                // though NotiDrawerItem equality checks would be better.
                 if (prev.size != newList.size || prev != newList) {
                     _groupedNotifications.value = newList
                 }
@@ -168,8 +189,6 @@ class DrawerViewModel(
             if (filters.shouldClearTargetLoading()) {
                 filters.clearTargetLoading()
             } else if (isTargetLoading.value) {
-                // Check if items match current filters to decide if we stop loading
-                // Approximate check
                 if (notifications.isNotEmpty()) {
                     filters.clearTargetLoading()
                 }
@@ -182,8 +201,6 @@ class DrawerViewModel(
                 .distinctUntilChanged()
                 .collect { query ->
                     if (query.isBlank()) {
-                        // reset loading state for empty query
-                        // controller handles clearing results
                         searchController.performSearch("")
                     } else {
                         filters.startTargetLoading()
@@ -197,20 +214,6 @@ class DrawerViewModel(
         }
 
         removeExpiredRecords()
-    }
-
-    fun toggleIncludeHistory(enabled: Boolean) {
-        searchController.setIncludeHistory(enabled)
-        if (_queryString.value.isNotBlank()) {
-            viewModelScope.launch {
-                filters.startTargetLoading()
-                try {
-                    searchController.performSearch(_queryString.value)
-                } finally {
-                    filters.clearTargetLoading()
-                }
-            }
-        }
     }
 
     // [NEW] Helper to access notification (Launch Intent)
@@ -228,38 +231,6 @@ class DrawerViewModel(
         // Log action
         actOnNoti(notiUnit.notiKey, NotiActionType.AccessClickSearch)
     }
-
-    @OptIn(ExperimentalCoroutinesApi::class)
-    val availableAppCategories: StateFlow<List<Pair<String, Int>>> =
-        groupedNotifications.map { list ->
-            // Extract leaf nodes (NotiDisplayUnit) from the polymorphic list
-            val leaves = list.flatMap { item ->
-                when(item) {
-                    is org.muilab.notigpt.model.notifications.NotiItem -> listOf(item.displayUnit)
-                    is org.muilab.notigpt.model.notifications.NotiGroupItem -> item.children
-                }
-            }
-
-            val categoryCounts = leaves
-                .groupBy { it.notiUnit.appCategory }
-                .mapValues { it.value.size }
-                .toMutableMap()
-
-            val totalCount = leaves.size
-            val result = mutableListOf<Pair<String, Int>>()
-            if (totalCount > 0) {
-                result.add(APP_CATEGORY_ALL to totalCount)
-            }
-
-            categoryCounts.entries
-                .filter { it.value > 0 }
-                .sortedByDescending { it.value }
-                .forEach { (category, count) ->
-                    result.add(category to count)
-                }
-
-            result
-        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     @RequiresApi(Build.VERSION_CODES.S)
     fun actOnNoti(notiKey: String, action: String) {
@@ -285,7 +256,7 @@ class DrawerViewModel(
     @RequiresApi(Build.VERSION_CODES.S)
     fun deleteAllNotis() {
         viewModelScope.launch(Dispatchers.IO) {
-            notiRepository.deleteAllNotis(category.value)
+            notiRepository.deleteAllNotis()
             postOngoingNotification(context)
         }
         unreadCounts.refresh()
@@ -295,7 +266,7 @@ class DrawerViewModel(
     fun markAllNotisRead() {
         persistReadStatus()
         viewModelScope.launch(Dispatchers.IO) {
-            notiRepository.markAllNotisRead(category.value)
+            notiRepository.markAllNotisRead()
         }
         unreadCounts.refresh()
     }
@@ -318,12 +289,6 @@ class DrawerViewModel(
             withContext(Dispatchers.Main) {
                 notifier.showShort("Copied to clipboard")
             }
-        }
-    }
-
-    fun syncAppCategory() {
-        viewModelScope.launch(Dispatchers.IO) {
-            notiRepository.syncAppCategories(context)
         }
     }
 
@@ -400,5 +365,36 @@ class DrawerViewModel(
 
     fun clearFullRecordsForKey(notiKey: String) {
         fullRecordsController.clearForKey(notiKey)
+    }
+
+    // --- History helpers (Gmail-style "All Notifications") ---
+    suspend fun getLatestRecordsForHistory(limit: Int): List<NotiRecord> {
+        return withContext(Dispatchers.IO) { notiRepository.getLatestRecords(limit.coerceAtLeast(1)) }
+    }
+
+    suspend fun getRecordsBeforeForHistory(pivotTime: Long, limit: Int): List<NotiRecord> {
+        return withContext(Dispatchers.IO) {
+            notiRepository.getRecordsBefore(pivotTime, limit.coerceAtLeast(1))
+        }
+    }
+
+    suspend fun getRecordsAfterForHistory(pivotTime: Long, limit: Int): List<NotiRecord> {
+        return withContext(Dispatchers.IO) {
+            notiRepository.getRecordsAfter(pivotTime, limit.coerceAtLeast(1))
+        }
+    }
+
+    suspend fun getNotiUnitForHistory(notiKey: String): NotiUnit? {
+        return withContext(Dispatchers.IO) { notiRepository.getNotiUnit(notiKey) }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.S)
+    fun accessNotificationByKey(notiKey: String) {
+        viewModelScope.launch {
+            val unit = withContext(Dispatchers.IO) { notiRepository.getNotiUnit(notiKey) }
+            if (unit != null) {
+                accessNotification(unit)
+            }
+        }
     }
 }

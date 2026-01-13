@@ -24,8 +24,6 @@ object NotiExportFormatter {
         notificationJson.put("id", notiUnit.notiKey)
         notificationJson.put("app", notiUnit.appName)
         notificationJson.put("isPeople", notiUnit.isPeople)
-        notificationJson.put("category", notiUnit.category)
-        notificationJson.put("appCategory", notiUnit.appCategory)
 
         val lastRecord = records.lastOrNull()
         val lastTitle = lastRecord?.title ?: ""
@@ -59,7 +57,7 @@ object NotiExportFormatter {
                     recordJson.put("title", item.getDisplayedTitle(notiUnit.isPeople))
                     recordJson.put("content", item.content.takeIf { it != "null" } ?: "")
                     recordJson.put("time", item.time)
-                    recordJson.put("is_visible", item.isVisible)
+                    recordJson.put("is_dismissed", item.isDismissed)
                     timelineDataArray.put(recordJson)
                     logActions = true
                 }
@@ -81,4 +79,3 @@ object NotiExportFormatter {
         return notificationJson
     }
 }
-

@@ -79,9 +79,8 @@ fun GroupCard(
         else -> MaterialTheme.colorScheme.surfaceDim
     }
 
-    // Determinate Category of the group (based on the first child, or mixed)
-    // We use this to toggle action icons (e.g., Unarchive vs Archive)
-    val representativeCategory = children.firstOrNull()?.category ?: ""
+    // Categories have been removed.
+    val representativeCategory = ""
 
     // NEW: Batch To-Top Action
     // Logic: If ANY child is to-topped, the button allows you to Undo all.
@@ -146,21 +145,9 @@ fun GroupCard(
                 drawerViewModel.actOnGroup(group.groupId, action)
                 coroutineScope.launch { collapse() }
             },
-            onMakeTaskToggle = {
-                val action = if (representativeCategory == NOTI_CATEGORY_MAKETASK) "dismiss_task" else "make_task"
-                drawerViewModel.actOnGroup(group.groupId, action)
-                coroutineScope.launch { collapse() }
-            },
-            onSaveToggle = {
-                val action = if (representativeCategory == NOTI_CATEGORY_SAVE) "unsave" else "save"
-                drawerViewModel.actOnGroup(group.groupId, action)
-                coroutineScope.launch { collapse() }
-            },
-            onArchiveToggle = {
-                val action = if (representativeCategory == NOTI_CATEGORY_ARCHIVE) "unarchive" else "archive"
-                drawerViewModel.actOnGroup(group.groupId, action)
-                coroutineScope.launch { collapse() }
-            }
+            onMakeTaskToggle = null,
+            onSaveToggle = null,
+            onArchiveToggle = null,
         )
 
         // --- FOREGROUND CARD ---

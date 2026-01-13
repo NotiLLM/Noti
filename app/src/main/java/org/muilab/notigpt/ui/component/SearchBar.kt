@@ -10,7 +10,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -21,7 +20,6 @@ import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
@@ -36,7 +34,6 @@ fun SearchBar(
     onSearchToggled: (Boolean) -> Unit
 ) {
     val queryString by drawerViewModel.queryString.collectAsState()
-    val includeHistory by drawerViewModel.includeHistory.collectAsState()
 
     val keyboardController = LocalSoftwareKeyboardController.current
     val currentFocus = LocalFocusManager.current
@@ -76,24 +73,6 @@ fun SearchBar(
                     focusedIndicatorColor = MaterialTheme.colorScheme.primary,
                     unfocusedIndicatorColor = MaterialTheme.colorScheme.outline
                 )
-            )
-        }
-
-        // History Toggle Row
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 15.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Checkbox(
-                checked = includeHistory,
-                onCheckedChange = { drawerViewModel.toggleIncludeHistory(it) }
-            )
-            Text(
-                text = "Search History (Hidden/Deleted)",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }

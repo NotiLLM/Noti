@@ -4,13 +4,7 @@ import android.content.Context
 import android.os.Build
 import android.service.notification.StatusBarNotification
 import androidx.annotation.RequiresApi
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.muilab.notigpt.database.server.enqueueTaskExtraction
 import org.muilab.notigpt.database.room.NotiActionDao
@@ -74,12 +68,8 @@ class NotiRepository(
         actionsRepo.removeExpiredNotiRecords()
     }
 
-    @OptIn(ExperimentalCoroutinesApi::class)
-    fun getGroupedNotifications(
-        categoryFlow: Flow<String>,
-        appCategoryFlow: Flow<String>,
-    ): Flow<List<NotiDrawerItem>> {
-        return groupingRepo.getGroupedNotifications(categoryFlow, appCategoryFlow)
+    fun getGroupedNotifications(): Flow<List<NotiDrawerItem>> {
+        return groupingRepo.getGroupedNotifications()
     }
 
     // --- Group operations (delegated) ---
@@ -105,14 +95,6 @@ class NotiRepository(
 
     suspend fun removeFromGroup(notiKey: String) {
         groupRepo.removeFromGroup(notiKey)
-    }
-
-    fun getVisibleNotiCountByCategory(category: String): Int {
-        return maintenanceRepo.getVisibleNotiCountByCategory(category)
-    }
-
-    fun getVisibleNotReadNotificationCountByCategory(category: String): Int {
-        return maintenanceRepo.getVisibleNotReadNotificationCountByCategory(category)
     }
 
     @RequiresApi(Build.VERSION_CODES.S)
@@ -151,20 +133,21 @@ class NotiRepository(
         notiDrawerDao.setShouldExtractTaskByKey(notiKey, should)
     }
 
-    fun getVisibleNotificationKeys(): List<String> {
-        return notiDrawerDao.getAllVisibleKeys()
+    /** Active (not dismissed) notification keys. */
+    fun getActiveNotificationKeys(): List<String> {
+        return notiDrawerDao.getAllActiveKeys()
     }
 
-    fun getVisibleRecordsCountForKey(notiKey: String): Int {
-        return recordsRepo.getVisibleRecordsCountForKey(notiKey)
+    fun getActiveRecordsCountForKey(notiKey: String): Int {
+        return recordsRepo.getActiveRecordsCountForKey(notiKey)
     }
 
-    fun getVisibleRecordIdsForKey(notiKey: String, limit: Int = 5): List<String> {
-        return recordsRepo.getVisibleRecordIdsForKey(notiKey, limit)
+    fun getActiveRecordIdsForKey(notiKey: String, limit: Int = 5): List<String> {
+        return recordsRepo.getActiveRecordIdsForKey(notiKey, limit)
     }
 
     fun requestRandomTaskExtraction(count: Int) {
-        val keys = getVisibleNotificationKeys()
+        val keys = getActiveNotificationKeys()
         if (keys.isEmpty() || count <= 0) return
         val randomKeys = keys.shuffled().take(count)
         if (randomKeys.isNotEmpty()) {
@@ -172,53 +155,23 @@ class NotiRepository(
         }
     }
 
-    private suspend fun fetchLatestRecordsConcurrently(keys: List<String>, perKeyLimit: Int = 1): List<NotiRecord> {
-        if (keys.isEmpty()) return emptyList()
-        val safeThreshold = 900
-        return if (keys.size <= safeThreshold) {
-            withContext(Dispatchers.IO) {
-                val allRecs = notiRecordDao.getVisibleRecordsByKeys(keys)
-                val grouped = allRecs.groupBy { it.notiKey }
-                grouped.flatMap { (_, list) ->
-                    list.sortedByDescending { if (it.whenTime != 0L) it.whenTime else it.postTime }
-                        .take(perKeyLimit)
-                }
-            }
-        } else {
-            coroutineScope {
-                val deferred = keys.chunked(safeThreshold).map { chunk ->
-                    async(Dispatchers.IO) {
-                        notiRecordDao.getVisibleRecordsByKeys(chunk)
-                    }
-                }
-                val results = deferred.awaitAll().flatten()
-                val grouped = results.groupBy { it.notiKey }
-                grouped.flatMap { (_, list) ->
-                    list.sortedByDescending { if (it.whenTime != 0L) it.whenTime else it.postTime }
-                        .take(perKeyLimit)
-                }
-            }
-        }
-    }
-
     fun getPreviewRecordsForKeys(keys: List<String>, perKeyLimit: Int = 3): List<NotiRecord> {
         return recordsRepo.getPreviewRecordsForKeys(keys, perKeyLimit)
     }
 
-    fun visibleRecordsFlowForKey(notiKey: String): Flow<List<NotiRecord>> {
-        return recordsRepo.visibleRecordsFlowForKey(notiKey)
+    fun activeRecordsFlowForKey(notiKey: String): Flow<List<NotiRecord>> {
+        return recordsRepo.activeRecordsFlowForKey(notiKey)
     }
 
-    suspend fun fetchVisibleRecordsForKey(notiKey: String): List<NotiRecord> {
-        return recordsRepo.fetchVisibleRecordsForKey(notiKey)
+    suspend fun fetchActiveRecordsForKey(notiKey: String): List<NotiRecord> {
+        return recordsRepo.fetchActiveRecordsForKey(notiKey)
     }
 
-    // [NEW] Advanced Search Logic
-    suspend fun searchNotifications(rawInput: String, includeHistory: Boolean): Map<String, List<NotiRecord>> {
-        return recordsRepo.searchNotifications(rawInput, includeHistory)
+    suspend fun searchNotifications(rawInput: String): Map<String, List<NotiRecord>> {
+        return recordsRepo.searchNotifications(rawInput)
     }
 
-    // [NEW] Gap Filling
+    // Gap Filling
     suspend fun getRecordsBetween(notiKey: String, start: Long, end: Long): List<NotiRecord> {
         return recordsRepo.getRecordsBetween(notiKey, start, end)
     }
@@ -227,9 +180,8 @@ class NotiRepository(
         notiKey: String,
         pivotTime: Long,
         isOlder: Boolean,
-        includeHistory: Boolean
     ): List<NotiRecord> {
-        return recordsRepo.getContextRecords(notiKey, pivotTime, isOlder, includeHistory)
+        return recordsRepo.getContextRecords(notiKey, pivotTime, isOlder)
     }
 
     suspend fun getGapRecords(
@@ -242,8 +194,21 @@ class NotiRepository(
         return recordsRepo.getGapRecords(notiKey, minTime, maxTime, limit, fromStart)
     }
 
-    suspend fun hasRecordsInGap(notiKey: String, minTime: Long, maxTime: Long, includeHistory: Boolean): Boolean {
-        return recordsRepo.hasRecordsInGap(notiKey, minTime, maxTime, includeHistory)
+    suspend fun hasRecordsInGap(notiKey: String, minTime: Long, maxTime: Long): Boolean {
+        return recordsRepo.hasRecordsInGap(notiKey, minTime, maxTime)
+    }
+
+    // History paging
+    suspend fun getLatestRecords(limit: Int): List<NotiRecord> {
+        return recordsRepo.getLatestRecords(limit)
+    }
+
+    suspend fun getRecordsBefore(pivotTime: Long, limit: Int): List<NotiRecord> {
+        return recordsRepo.getRecordsBefore(pivotTime, limit)
+    }
+
+    suspend fun getRecordsAfter(pivotTime: Long, limit: Int): List<NotiRecord> {
+        return recordsRepo.getRecordsAfter(pivotTime, limit)
     }
 
     fun exportLog(includeContext: Boolean, includeDismissed: Boolean): JSONArray {
@@ -259,20 +224,16 @@ class NotiRepository(
         maintenanceRepo.logAction(notiKey, action, metadata, actionTime)
     }
 
-    suspend fun deleteAllNotis(category: String) {
-        maintenanceRepo.deleteAllNotis(category) { k, a -> logAction(k, a) }
+    suspend fun deleteAllNotis() {
+        maintenanceRepo.deleteAllNotis { k, a -> logAction(k, a) }
     }
 
-    suspend fun markAllNotisRead(category: String) {
-        maintenanceRepo.markAllNotisRead(category) { k, a -> logAction(k, a) }
+    suspend fun markAllNotisRead() {
+        maintenanceRepo.markAllNotisRead { k, a -> logAction(k, a) }
     }
 
     fun updateSeenNotifications(seenNotis: Set<String>) {
         maintenanceRepo.updateSeenNotifications(seenNotis) { k, a -> logAction(k, a) }
-    }
-
-    fun syncAppCategories(context: Context) {
-        maintenanceRepo.syncAppCategories(context)
     }
 
     suspend fun actOnNoti(notiKey: String, action: String) {
@@ -283,30 +244,19 @@ class NotiRepository(
         actionsRepo.actOnNoti(notiKey, action)
     }
 
-    /**
-     * Worker/adapter-friendly accessor.
-     * Keeps N8n workers independent of the Room DAO.
-     */
+    /** Worker/adapter-friendly accessor. */
     fun getNotiUnit(notiKey: String): NotiUnit? {
         return notiDrawerDao.getByNotiKey(notiKey)
     }
 
-    /**
-     * Convenience batch accessor for fetching NotiUnit rows.
-     * Used by DrawerSearchController to hydrate search results.
-     */
+    /** Convenience batch accessor for fetching NotiUnit rows. */
     fun getNotiUnitByKeys(notiKeys: List<String>): List<NotiUnit> {
         if (notiKeys.isEmpty()) return emptyList()
         return notiDrawerDao.getByNotiKeys(notiKeys)
     }
 
-    /**
-     * Returns actions since [sinceTimeMs].
-     * Used by N8n updateNotification sync.
-     */
+    /** Returns actions since [sinceTimeMs]. */
     fun getNotSyncedNotiActions(notiKey: String, sinceTimeMs: Long): List<NotiAction> {
-        // Prefer to let the DAO filter; if you later add a DAO query for this,
-        // update this method but keep the signature stable.
         return notiActionDao.getActionsByKey(notiKey).filter { it.time > sinceTimeMs }
     }
 }

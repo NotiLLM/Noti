@@ -61,9 +61,6 @@ import org.muilab.notigpt.ui.component.notification.card.noticard.elements.notiC
 import org.muilab.notigpt.ui.component.notification.card.noticard.elements.rememberNotiCardExpansionState
 import org.muilab.notigpt.ui.utils.NotiExpandState
 import org.muilab.notigpt.ui.viewmodel.DrawerViewModel
-import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_ARCHIVE
-import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_MAKETASK
-import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_SAVE
 import org.muilab.notigpt.util.SharedPreferencesManager
 import kotlin.math.max
 
@@ -77,15 +74,13 @@ fun NotiCard(
     drawerViewModel: DrawerViewModel,
     isCardVisible: Boolean,
     parentViewport: Rect?,
-    category: String,
-    appCategory: String,
     isMergeTarget: Boolean = false,
     isInGroup: Boolean = false,
     swipeEnabled: Boolean = true,
 ) {
     // These are part of the shared NotiCard API even if not used in this implementation yet.
     @Suppress("UNUSED_VARIABLE")
-    val _unusedApiParams = Triple(isCardVisible, category, appCategory)
+    val _unusedApiParams = isCardVisible
 
     val swipeDeleteLeft = SharedPreferencesManager.swipeDeleteLeft
     val isSortingMode by drawerViewModel.isSortingMode.collectAsState()
@@ -116,11 +111,6 @@ fun NotiCard(
         else -> ""
     }
 
-    val isTask = notiUnit.category == NOTI_CATEGORY_MAKETASK
-    val isSave = notiUnit.category == NOTI_CATEGORY_SAVE
-    val isArchive = notiUnit.category == NOTI_CATEGORY_ARCHIVE
-    val isSetToTop = notiUnit.isSetToTop
-
     val hasSecondTitle = notiSecondOverallTitle.isNotBlank() && notiSecondOverallTitle != notiOverallTitle
     val isPeople = notiUnit.isPeople
 
@@ -129,18 +119,17 @@ fun NotiCard(
 
     val backgroundColor = when {
         isMergeTarget -> MaterialTheme.colorScheme.primaryContainer
-        isSetToTop -> MaterialTheme.colorScheme.surfaceContainerHigh
         else -> MaterialTheme.colorScheme.surfaceBright
     }
 
     val borderColor = when {
         isMergeTarget -> MaterialTheme.colorScheme.primary
         !isRead -> MaterialTheme.colorScheme.error
-        isSetToTop -> MaterialTheme.colorScheme.secondary
+        isPinned -> MaterialTheme.colorScheme.secondary
         else -> MaterialTheme.colorScheme.outline
     }
 
-    val borderWidth = if (isSetToTop || isMergeTarget) 3.dp else 1.dp
+    val borderWidth = if (notiUnit.isSetToTop || isMergeTarget) 3.dp else 1.dp
 
     // Expand state
     val maxHeightDp = 200.dp
@@ -388,10 +377,7 @@ fun NotiCard(
         notiKey = notiKey,
         state = NotiCardOptionsState(
             isInGroup = isInGroup,
-            isTask = isTask,
-            isSave = isSave,
-            isArchive = isArchive,
-            isSetToTop = isSetToTop,
+            isPinned = isPinned,
         ),
     )
 }

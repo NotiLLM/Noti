@@ -36,7 +36,7 @@ class NotiActionsRepository(
 
     suspend fun removeExpiredNotiRecords() {
         val expireTimestamp = System.currentTimeMillis() - NOTI_RECORD_EXPIRE_TIME_MS
-        notiRecordDao.removeExpiredReadRecords(expireTimestamp, MAX_EXPIRED_RECORDS_PER_KEY)
+        notiRecordDao.dismissExpiredReadRecords(expireTimestamp, MAX_EXPIRED_RECORDS_PER_KEY)
     }
 
     @RequiresApi(Build.VERSION_CODES.S)
@@ -58,8 +58,9 @@ class NotiActionsRepository(
     }
 
     suspend fun removeNotiUnit(notiKey: String) {
-        notiDrawerDao.setUnitInvisibleByKey(notiKey)
-        notiRecordDao.setRecordsInvisibleByKey(notiKey)
+        // Soft-delete: mark dismissed.
+        notiDrawerDao.dismissUnitByKey(notiKey)
+        notiRecordDao.dismissRecordsByKey(notiKey)
     }
 
     @RequiresApi(Build.VERSION_CODES.S)
@@ -138,7 +139,8 @@ class NotiActionsRepository(
             "dismiss_swipe" -> {
                 val noti = notiDrawerDao.getByNotiKey(notiKey)
                 if (noti != null && !noti.isPinned) {
-                    notiDrawerDao.setUnitInvisibleByKey(notiKey)
+                    notiDrawerDao.dismissUnitByKey(notiKey)
+                    notiRecordDao.dismissRecordsByKey(notiKey)
                 }
                 return
             }
@@ -146,19 +148,14 @@ class NotiActionsRepository(
                 val noti = notiDrawerDao.getByNotiKey(notiKey)
                 if (noti != null) {
                     if (!noti.isPinned) {
-                        notiDrawerDao.setUnitInvisibleByKey(notiKey)
+                        notiDrawerDao.dismissUnitByKey(notiKey)
+                        notiRecordDao.dismissRecordsByKey(notiKey)
                     }
                 }
                 return
             }
             "to_top" -> notiDrawerDao.updateToTopStatus(notiKey, true, System.currentTimeMillis())
             "undo_to_top" -> notiDrawerDao.updateToTopStatus(notiKey, false, 0L)
-            "archive" -> notiDrawerDao.updateCategory(notiKey, org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_ARCHIVE)
-            "unarchive" -> notiDrawerDao.updateCategory(notiKey, org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_GENERAL)
-            "make_task" -> notiDrawerDao.updateCategory(notiKey, org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_MAKETASK)
-            "dismiss_task" -> notiDrawerDao.updateCategory(notiKey, org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_GENERAL)
-            "save" -> notiDrawerDao.updateCategory(notiKey, org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_SAVE)
-            "unsave" -> notiDrawerDao.updateCategory(notiKey, org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_GENERAL)
             "unpin" -> setPinnedState(notiKey, pinned = false)
             "pin" -> setPinnedState(notiKey, pinned = true)
             "mark_read" -> markNotiRead(notiKey)
@@ -195,4 +192,3 @@ class NotiActionsRepository(
         }
     }
 }
-

@@ -39,7 +39,11 @@ data class NotiRecord (
     val extraSubText: String = "",
 
     // STATUS
-    var isVisible: Boolean = true,
+    /**
+     * New semantics: dismissed records are hidden from the active drawer context.
+     * This replaces the previous isVisible flag (flipped).
+     */
+    var isDismissed: Boolean = false,
 
     // TASK DETECTION/EXTRACTION FLAGS
     @ColumnInfo(defaultValue = "0")
