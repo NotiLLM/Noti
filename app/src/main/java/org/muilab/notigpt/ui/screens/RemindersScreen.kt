@@ -1,6 +1,11 @@
 package org.muilab.notigpt.ui.screens
 
+import android.app.TimePickerDialog
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,28 +17,41 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
@@ -42,18 +60,36 @@ import org.muilab.notigpt.model.features.ReminderUnit
 import org.muilab.notigpt.ui.viewmodel.ReminderViewModel
 import org.muilab.notigpt.util.getAbsoluteTimeStr
 import org.muilab.notigpt.util.getRelativeTimeStr
+import java.util.Calendar
 
 @Composable
 fun RemindersScreen(
-    reminderViewModel: ReminderViewModel = viewModel(),
+    reminderViewModel: ReminderViewModel? = null,
 ) {
-    val reminders by reminderViewModel.reminders.collectAsState()
-    val filter by reminderViewModel.filter.collectAsState()
+    val vm: ReminderViewModel = reminderViewModel ?: viewModel()
+    val reminders by vm.reminders.collectAsState()
+    val filter by vm.filter.collectAsState()
 
     var showAddDialog by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<ReminderUnit?>(null) }
+    var editingId by remember { mutableStateOf<String?>(null) }
+    var editingInitialSnapshot by remember { mutableStateOf<ReminderUnit?>(null) }
+
+    // Keep list state while editor is shown.
+    val listState = rememberLazyListState()
+
+    var pendingScrollToTopId by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(reminders, pendingScrollToTopId) {
+        val targetId = pendingScrollToTopId ?: return@LaunchedEffect
+        if (reminders.firstOrNull()?.reminderId == targetId) {
+            listState.animateScrollToItem(0)
+        }
+        pendingScrollToTopId = null
+    }
 
     Box(Modifier.fillMaxSize()) {
+        // LIST
         Column(Modifier.fillMaxSize()) {
             // Simple tab row (chip-like)
             Row(
@@ -62,21 +98,26 @@ fun RemindersScreen(
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                FilterChip("All", filter == ReminderViewModel.FilterTab.All) { reminderViewModel.setFilter(ReminderViewModel.FilterTab.All) }
-                FilterChip("Tasks", filter == ReminderViewModel.FilterTab.Tasks) { reminderViewModel.setFilter(ReminderViewModel.FilterTab.Tasks) }
-                FilterChip("Memos", filter == ReminderViewModel.FilterTab.Memos) { reminderViewModel.setFilter(ReminderViewModel.FilterTab.Memos) }
+                FilterChip("All", filter == ReminderViewModel.FilterTab.All) { vm.setFilter(ReminderViewModel.FilterTab.All) }
+                FilterChip("Tasks", filter == ReminderViewModel.FilterTab.Tasks) { vm.setFilter(ReminderViewModel.FilterTab.Tasks) }
+                FilterChip("Memos", filter == ReminderViewModel.FilterTab.Memos) { vm.setFilter(ReminderViewModel.FilterTab.Memos) }
             }
 
             LazyColumn(
+                state = listState,
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 96.dp)
             ) {
                 items(reminders, key = { it.reminderId }) { reminder ->
                     ReminderCard(
                         reminder = reminder,
-                        onDelete = { reminderViewModel.delete(reminder.reminderId) },
-                        onToggleCompleted = { completed -> reminderViewModel.toggleCompleted(reminder, completed) },
-                        onEdit = { editing = reminder },
+                        onDelete = { vm.delete(reminder.reminderId) },
+                        onToggleCompleted = { completed: Boolean -> vm.toggleCompleted(reminder, completed) },
+                        onEdit = {
+                            editing = reminder
+                            editingId = reminder.reminderId
+                            editingInitialSnapshot = reminder
+                        },
                     )
                 }
             }
@@ -99,35 +140,101 @@ fun RemindersScreen(
                 confirmButton = {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         TextButton(onClick = {
-                            reminderViewModel.addNew(isTask = true)
+                            vm.addNew(isTask = true)
                             showAddDialog = false
                         }) { Text("Task") }
                         TextButton(onClick = {
-                            reminderViewModel.addNew(isTask = false)
+                            vm.addNew(isTask = false)
                             showAddDialog = false
                         }) { Text("Memo") }
                     }
                 },
-                dismissButton = {
-                    TextButton(onClick = { showAddDialog = false }) { Text("Cancel") }
-                }
+                dismissButton = { TextButton(onClick = { showAddDialog = false }) { Text("Cancel") } }
             )
         }
 
-        editing?.let { r ->
-            ReminderEditDialog(
-                reminder = r,
-                onDismiss = { editing = null },
-                onSave = { updated ->
-                    // If both empty, delete.
-                    if (updated.reminderTitle.isBlank() && updated.reminderContent.isBlank()) {
-                        reminderViewModel.delete(updated.reminderId)
-                    } else {
-                        reminderViewModel.upsert(updated.copy(userEdited = true))
-                    }
-                    editing = null
-                }
-            )
+        // EDITOR OVERLAY
+        editing?.let { current ->
+            // Full-screen overlay that blocks/consumes all clicks so nothing underneath is clickable.
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.background)
+                    .clickable(
+                        indication = null,
+                        interactionSource = remember { MutableInteractionSource() },
+                        onClick = { /* consume */ }
+                    )
+            ) {
+                ReminderDetailScreen(
+                    initial = current,
+                    onBack = { updatedOrNull: ReminderUnit? ->
+                        val base = editingInitialSnapshot
+                        val changed = base != null && updatedOrNull != null && (
+                                base.reminderTitle != updatedOrNull.reminderTitle ||
+                                        base.reminderContent != updatedOrNull.reminderContent ||
+                                        base.isTask != updatedOrNull.isTask ||
+                                        base.isCompleted != updatedOrNull.isCompleted ||
+                                        base.deadlineTimestamp != updatedOrNull.deadlineTimestamp ||
+                                        base.estimatedCompletionTime != updatedOrNull.estimatedCompletionTime
+                                )
+
+                        if (updatedOrNull != null) {
+                            if (updatedOrNull.reminderTitle.isBlank() && updatedOrNull.reminderContent.isBlank()) {
+                                vm.delete(updatedOrNull.reminderId)
+                            } else if (changed) {
+                                vm.upsert(
+                                    updatedOrNull.copy(
+                                        userEdited = true,
+                                        lastUpdateTimestamp = System.currentTimeMillis(),
+                                    )
+                                )
+                            }
+                        }
+
+                        val id = if (changed) editingId else null
+                        editing = null
+                        editingId = null
+                        editingInitialSnapshot = null
+                        if (id != null) pendingScrollToTopId = id
+                    },
+                    onDelete = { id: String ->
+                        vm.delete(id)
+                        editing = null
+                        editingId = null
+                        editingInitialSnapshot = null
+                        pendingScrollToTopId = null
+                    },
+                    onSave = { updated: ReminderUnit ->
+                        val base = editingInitialSnapshot
+                        val changed = base != null && (
+                                base.reminderTitle != updated.reminderTitle ||
+                                        base.reminderContent != updated.reminderContent ||
+                                        base.isTask != updated.isTask ||
+                                        base.isCompleted != updated.isCompleted ||
+                                        base.deadlineTimestamp != updated.deadlineTimestamp ||
+                                        base.estimatedCompletionTime != updated.estimatedCompletionTime
+                                )
+
+                        if (updated.reminderTitle.isBlank() && updated.reminderContent.isBlank()) {
+                            vm.delete(updated.reminderId)
+                        } else if (changed) {
+                            vm.upsert(
+                                updated.copy(
+                                    userEdited = true,
+                                    lastUpdateTimestamp = System.currentTimeMillis(),
+                                )
+                            )
+                        }
+
+                        val id = if (changed) editingId else null
+                        editing = null
+                        editingId = null
+                        editingInitialSnapshot = null
+                        if (id != null) pendingScrollToTopId = id
+                    },
+                )
+            }
         }
     }
 }
@@ -228,54 +335,198 @@ private fun ReminderCard(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ReminderEditDialog(
-    reminder: ReminderUnit,
-    onDismiss: () -> Unit,
+private fun ReminderDetailScreen(
+    initial: ReminderUnit,
+    onBack: (ReminderUnit?) -> Unit,
+    onDelete: (String) -> Unit,
     onSave: (ReminderUnit) -> Unit,
 ) {
-    var title by remember(reminder.reminderId) { mutableStateOf(reminder.reminderTitle) }
-    var content by remember(reminder.reminderId) { mutableStateOf(reminder.reminderContent) }
-    var isTask by remember(reminder.reminderId) { mutableStateOf(reminder.isTask) }
-    var deadline by remember(reminder.reminderId) { mutableStateOf(reminder.deadlineTimestamp.toString()) }
-    var ect by remember(reminder.reminderId) { mutableStateOf(reminder.estimatedCompletionTime.toString()) }
+    val context = LocalContext.current
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Edit") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("Title") })
-                OutlinedTextField(
-                    value = content,
-                    onValueChange = { content = it },
-                    label = { Text("Content") },
-                    minLines = 5
+    var title by remember(initial.reminderId) { mutableStateOf(initial.reminderTitle) }
+    var content by remember(initial.reminderId) { mutableStateOf(initial.reminderContent) }
+    var isTask by remember(initial.reminderId) { mutableStateOf(initial.isTask) }
+    var isCompleted by remember(initial.reminderId) { mutableStateOf(initial.isCompleted) }
+    var deadlineTimestamp by remember(initial.reminderId) { mutableStateOf(initial.deadlineTimestamp) }
+    var ectMinutes by remember(initial.reminderId) { mutableStateOf(initial.estimatedCompletionTime) }
+
+    fun buildUpdated(): ReminderUnit {
+        return initial.copy(
+            reminderTitle = title,
+            reminderContent = content,
+            isTask = isTask,
+            isCompleted = if (isTask) isCompleted else false,
+            deadlineTimestamp = if (isTask) deadlineTimestamp else 0L,
+            estimatedCompletionTime = if (isTask) ectMinutes else 0L,
+        )
+    }
+
+    // Handle system back (gesture / nav button) like in-app navigation.
+    BackHandler(enabled = true) {
+        onBack(buildUpdated())
+    }
+
+    var showDatePicker by remember { mutableStateOf(false) }
+
+    Column(Modifier.fillMaxSize()) {
+        TopAppBar(
+            title = {
+                BasicTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.titleLarge.copy(color = MaterialTheme.colorScheme.onSurface),
+                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                    modifier = Modifier.fillMaxWidth(),
+                    decorationBox = { innerTextField ->
+                        if (title.isBlank()) {
+                            Text(
+                                text = "Untitled",
+                                style = MaterialTheme.typography.titleLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        innerTextField()
+                    }
                 )
+            },
+            navigationIcon = {
+                IconButton(onClick = { onBack(buildUpdated()) }) {
+                    Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                }
+            },
+            actions = {
+                IconButton(onClick = { onDelete(initial.reminderId) }) {
+                    Icon(Icons.Default.Delete, contentDescription = "Delete")
+                }
+                TextButton(onClick = { onSave(buildUpdated()) }) {
+                    Text("Save")
+                }
+            }
+        )
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = isTask, onCheckedChange = { isTask = it })
-                    Text("Is task")
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Text("Task", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                Switch(checked = isTask, onCheckedChange = { isTask = it })
+            }
+
+            if (isTask) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                    Checkbox(checked = isCompleted, onCheckedChange = { isCompleted = it })
+                    Spacer(Modifier.width(8.dp))
+                    Text("Completed", style = MaterialTheme.typography.bodyMedium)
                 }
 
-                OutlinedTextField(value = deadline, onValueChange = { deadline = it }, label = { Text("Deadline timestamp (ms)") })
-                OutlinedTextField(value = ect, onValueChange = { ect = it }, label = { Text("Estimated completion time (minutes)") })
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = {
-                val updated = reminder.copy(
-                    reminderTitle = title,
-                    reminderContent = content,
-                    isTask = isTask,
-                    deadlineTimestamp = deadline.toLongOrNull() ?: 0L,
-                    estimatedCompletionTime = ect.toLongOrNull() ?: 0L,
+                HorizontalDivider()
+
+                val deadlineStr = if (deadlineTimestamp > 0L) {
+                    val abs = getAbsoluteTimeStr(deadlineTimestamp)
+                    val rel = getRelativeTimeStr(deadlineTimestamp)
+                    "$abs ($rel)"
+                } else {
+                    "No deadline"
+                }
+
+                TextButton(onClick = { showDatePicker = true }) {
+                    Text(
+                        text = deadlineStr,
+                        color = if (deadlineTimestamp > 0L && deadlineTimestamp < System.currentTimeMillis())
+                            MaterialTheme.colorScheme.error
+                        else
+                            MaterialTheme.colorScheme.primary
+                    )
+                }
+
+                OutlinedTextField(
+                    value = if (ectMinutes == 0L) "" else ectMinutes.toString(),
+                    onValueChange = { ectMinutes = it.toLongOrNull() ?: 0L },
+                    label = { Text("Estimated completion time (minutes)") },
+                    singleLine = true,
                 )
-                onSave(updated)
-            }) { Text("Save") }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            }
+
+            Text("Note", style = MaterialTheme.typography.titleMedium)
+
+            // Note-like editor (no outlined box)
+            Surface(
+                tonalElevation = 0.dp,
+                shape = MaterialTheme.shapes.medium,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                BasicTextField(
+                    value = content,
+                    onValueChange = { content = it },
+                    textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
+                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(4.dp),
+                    decorationBox = { innerTextField ->
+                        if (content.isBlank()) {
+                            Text(
+                                text = "Write something…",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        innerTextField()
+                    }
+                )
+            }
         }
-    )
+    }
+
+    if (showDatePicker) {
+        val datePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = if (deadlineTimestamp > 0L) deadlineTimestamp else System.currentTimeMillis()
+        )
+
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val selectedDate = datePickerState.selectedDateMillis
+                        if (selectedDate != null) {
+                            // After selecting date, choose time via native TimePickerDialog
+                            val cal = Calendar.getInstance().apply { timeInMillis = selectedDate }
+                            val initialHour = cal.get(Calendar.HOUR_OF_DAY)
+                            val initialMinute = cal.get(Calendar.MINUTE)
+
+                            TimePickerDialog(
+                                context,
+                                { _, hour, minute ->
+                                    val c = Calendar.getInstance().apply {
+                                        timeInMillis = selectedDate
+                                        set(Calendar.HOUR_OF_DAY, hour)
+                                        set(Calendar.MINUTE, minute)
+                                        set(Calendar.SECOND, 0)
+                                        set(Calendar.MILLISECOND, 0)
+                                    }
+                                    deadlineTimestamp = c.timeInMillis
+                                },
+                                initialHour,
+                                initialMinute,
+                                true
+                            ).show()
+                        }
+                        showDatePicker = false
+                    }
+                ) { Text("OK") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePicker = false }) { Text("Cancel") }
+            }
+        ) {
+            DatePicker(state = datePickerState)
+        }
+    }
 }
