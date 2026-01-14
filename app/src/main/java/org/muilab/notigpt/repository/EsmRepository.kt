@@ -1,0 +1,211 @@
+package org.muilab.notigpt.repository
+
+import android.content.Context
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import org.muilab.notigpt.database.room.AppDatabase
+import org.muilab.notigpt.domain.esm.EsmSnapshotStatuses
+import org.muilab.notigpt.domain.esm.EsmStatuses
+import org.muilab.notigpt.domain.esm.EsmTriggerTypes
+import org.muilab.notigpt.domain.esm.IRBShortSurveyV2
+import org.muilab.notigpt.model.esm.EsmExtractionSnapshot
+import org.muilab.notigpt.model.esm.EsmInstance
+import org.muilab.notigpt.model.features.ReminderUnit
+import org.muilab.notigpt.util.postEsmIndicatorNotification
+import java.util.UUID
+
+class EsmRepository(
+    private val appContext: Context,
+    private val db: AppDatabase = AppDatabase.getInstance(appContext),
+) {
+    private val esmDao = db.esmDao()
+
+    suspend fun getNewestAvailable(): EsmInstance? = withContext(Dispatchers.IO) {
+        esmDao.getNewestAvailable()
+    }
+
+    suspend fun getActiveCount(): Int = withContext(Dispatchers.IO) {
+        esmDao.getActiveCount()
+    }
+
+    suspend fun getInstancesByStatuses(statuses: List<String>): List<EsmInstance> = withContext(Dispatchers.IO) {
+        esmDao.getInstancesByStatuses(statuses)
+    }
+
+    suspend fun getSnapshot(snapshotId: String): EsmExtractionSnapshot? = withContext(Dispatchers.IO) {
+        esmDao.getSnapshot(snapshotId)
+    }
+
+    suspend fun setTriggerType(instanceId: String, triggerType: String) = withContext(Dispatchers.IO) {
+        esmDao.setTriggerType(instanceId, triggerType)
+    }
+
+    /**
+     * Create a test ESM for a given generated reminder.
+     *
+     * Snapshot policy (per your request):
+     * - If we already have a stored extraction snapshot for this reminder, reuse it.
+     * - Else build a snapshot from the reminder's associated notification keys:
+     *   - If the notification is still active: include its latest active record (approx. display snapshot).
+     *   - If dismissed: include its NotiUnit + last record (latest record regardless of dismissal).
+     */
+    suspend fun createTestEsmForReminder(reminder: ReminderUnit): EsmInstance = withContext(Dispatchers.IO) {
+        require(reminder.associatedNotis.isNotEmpty()) { "Reminder has no associated notifications" }
+
+        val now = System.currentTimeMillis()
+        val snapshotId = "snap_${UUID.randomUUID()}"
+
+        val notiKeys = reminder.associatedNotis.toList()
+
+        val drawerDao = db.drawerDao()
+        val recordDao = db.recordDao()
+
+        val units = drawerDao.getByNotiKeys(notiKeys)
+        val activeRecords = recordDao.getLatestActiveRecordsByKeys(notiKeys)
+        val activeRecordMap = activeRecords.associateBy { it.notiKey }
+
+        // Fallback for dismissed: get ALL records and take max whenTime.
+        val allRecords = recordDao.getRecordsByKeys(notiKeys)
+        val lastRecordMap = allRecords.groupBy { it.notiKey }
+            .mapValues { (_, recs) -> recs.maxByOrNull { it.whenTime } }
+
+        val payload = org.json.JSONObject().apply {
+            put("reminder", org.json.JSONObject().apply {
+                put("title", reminder.reminderTitle.ifBlank { "(Untitled)" })
+                put("content", reminder.reminderContent)
+                put("isTask", reminder.isTask)
+                put("deadlineTimestamp", reminder.deadlineTimestamp)
+                put("estimatedCompletionMinutes", reminder.estimatedCompletionTime)
+            })
+
+            val arr = org.json.JSONArray()
+            for (key in notiKeys) {
+                val unit = units.firstOrNull { it.notiKey == key }
+                val activeRec = activeRecordMap[key]
+                val lastRec = lastRecordMap[key]
+                val rec = activeRec ?: lastRec
+
+                val obj = org.json.JSONObject().apply {
+                    // For internal linking only; UI should not display it.
+                    put("notiKey", key)
+
+                    put("notiUnit", unit?.let {
+                        org.json.JSONObject().apply {
+                            put("notiKey", it.notiKey)
+                            put("groupId", it.groupId)
+                            put("appName", it.appName)
+                            put("pkgName", it.pkgName)
+                            put("isPeople", it.isPeople)
+                            put("isDismissed", it.isDismissed)
+                            put("isPinned", it.isPinned)
+                            put("isRead", it.isRead)
+                            put("summary", it.summary)
+                            put("sortScore", it.sortScore)
+                            put("lastUpdateTime", it.lastUpdateTime)
+                            put("lastSyncTime", it.lastSyncTime)
+                            put("sortPosition", it.sortPosition)
+
+                            // Include icon blobs for UI parity.
+                            put("icon", it.metadata.icon)
+                            put("largeIcon", it.metadata.largeIcon)
+                        }
+                    } ?: org.json.JSONObject())
+
+                    put("notiRecords", org.json.JSONArray().apply {
+                        // Keep it minimal: one record snapshot is enough for card rendering.
+                        val r = rec
+                        if (r != null) {
+                            put(org.json.JSONObject().apply {
+                                put("notiRecordId", r.notiRecordId)
+                                put("notiKey", r.notiKey)
+                                put("whenTime", r.whenTime)
+                                put("postTime", r.postTime)
+                                put("person", r.person)
+                                put("extraTitle", r.extraTitle)
+                                put("extraBigTitle", r.extraBigTitle)
+                                put("extraConversationTitle", r.extraConversationTitle)
+                                put("extraBigText", r.extraBigText)
+                                put("extraText", r.extraText)
+                                put("extraTextLines", r.extraTextLines)
+                                put("extraSummaryText", r.extraSummaryText)
+                                put("extraInfoText", r.extraInfoText)
+                                put("extraSubText", r.extraSubText)
+                                put("isDismissed", r.isDismissed)
+                            })
+                        }
+                    })
+
+                    put("snapshotSource", if (activeRec != null) "active_latest" else "dismissed_last")
+                }
+
+                arr.put(obj)
+            }
+            put("notis", arr)
+        }.toString()
+
+        esmDao.upsertSnapshot(
+            EsmExtractionSnapshot(
+                snapshotId = snapshotId,
+                status = EsmSnapshotStatuses.KEPT,
+                reminderId = reminder.reminderId,
+                payloadJson = payload,
+                createdAt = now,
+            )
+        )
+
+        val inst = EsmInstance(
+            instanceId = "esm_${UUID.randomUUID()}",
+            questionnaireId = IRBShortSurveyV2.questionnaireId,
+            questionnaireVersion = IRBShortSurveyV2.questionnaireVersion,
+            triggerType = EsmTriggerTypes.B_ENTERED_EDIT_PAGE,
+            reminderId = reminder.reminderId,
+            snapshotId = snapshotId,
+            createdAt = now,
+            availableAt = now,
+            expiresAt = now + 60 * 60 * 1000L,
+            status = EsmStatuses.AVAILABLE,
+        )
+        esmDao.insertInstance(inst)
+
+        // Post indicator.
+        postEsmIndicatorNotification(appContext)
+
+        inst
+    }
+
+    /**
+     * For debug/testing: creates a synthetic ESM + snapshot.
+     */
+    suspend fun createDebugEsmNow(): EsmInstance = withContext(Dispatchers.IO) {
+        val snapshotId = "snap_${UUID.randomUUID()}"
+        val now = System.currentTimeMillis()
+        val payload = org.json.JSONObject().apply {
+            put("notes", "DEBUG snapshot")
+            put("notis", org.json.JSONArray())
+        }.toString()
+        esmDao.upsertSnapshot(
+            EsmExtractionSnapshot(
+                snapshotId = snapshotId,
+                status = EsmSnapshotStatuses.KEPT,
+                reminderId = "debug_reminder",
+                payloadJson = payload,
+                createdAt = now,
+            )
+        )
+
+        val inst = EsmInstance(
+            instanceId = "esm_${UUID.randomUUID()}",
+            questionnaireId = IRBShortSurveyV2.questionnaireId,
+            questionnaireVersion = IRBShortSurveyV2.questionnaireVersion,
+            triggerType = EsmTriggerTypes.DEBUG,
+            reminderId = "debug_reminder",
+            snapshotId = snapshotId,
+            createdAt = now,
+            availableAt = now,
+            expiresAt = now + 60 * 60 * 1000L,
+            status = EsmStatuses.AVAILABLE,
+        )
+        esmDao.insertInstance(inst)
+        inst
+    }
+}

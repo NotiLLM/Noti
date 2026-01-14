@@ -8,12 +8,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -24,17 +19,16 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.minimumInteractiveComponentSize
-import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import org.muilab.notigpt.R
-import org.muilab.notigpt.util.SharedPreferencesManager
 import org.muilab.notigpt.ui.component.SearchBar
 import org.muilab.notigpt.ui.viewmodel.DrawerViewModel
 
@@ -51,14 +45,10 @@ fun AppTopBar(
 
     val isSortingMode = drawerViewModel.isSortingMode.collectAsState()
 
-    // 1. Replace the Row with TopAppBar
     TopAppBar(
-        // 2. Customize colors to match your original design
         colors = TopAppBarDefaults.topAppBarColors(
             containerColor = MaterialTheme.colorScheme.surface,
         ),
-
-        // 3. Use the 'title' slot for your title or search bar
         title = {
 
             if (isSettingsShown) {
@@ -93,12 +83,11 @@ fun AppTopBar(
                 }
             }
         },
-
-        // 4. Use the 'actions' slot for your IconButtons
         actions = {
             // Hide actions when search is expanded to make space
             if (!isSettingsShown) {
                 if (!isSearchExpanded) {
+
                     IconButton(
                         modifier = Modifier.minimumInteractiveComponentSize(),
                         onClick = { onSearchToggled(true) }
@@ -114,27 +103,36 @@ fun AppTopBar(
                             contentDescription = "Sweep"
                         )
                     }
-//                IconButton(
-//                    modifier = Modifier.minimumInteractiveComponentSize(),
-//                    onClick = { drawerViewModel.markAllNotisRead() }
-//                ) {
-//                    Icon(
-//                        painter = painterResource(id = R.drawable.mark_read),
-//                        contentDescription = "Mark Read"
-//                    )
-//                }
+
+                    // Reorder / Sorting mode toggle
                     IconButton(
                         modifier = Modifier.minimumInteractiveComponentSize(),
                         colors = IconButtonDefaults.iconButtonColors(
-                            containerColor = if (isSortingMode.value) MaterialTheme.colorScheme.primary else Color.Transparent
+                            containerColor = if (isSortingMode.value) MaterialTheme.colorScheme.primary else Color.Transparent,
+                            contentColor = if (isSortingMode.value) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
                         ),
                         onClick = { drawerViewModel.toggleSortingMode() }
                     ) {
                         Icon(
-                            painter = painterResource(id = R.drawable.group),
-                            contentDescription = "Group"
+                            painter = painterResource(id = R.drawable.reorder),
+                            contentDescription = "Reorder"
                         )
                     }
+
+                    // Merge/Group button is intentionally hidden for now.
+                    // IconButton(
+                    //     modifier = Modifier.minimumInteractiveComponentSize(),
+                    //     colors = IconButtonDefaults.iconButtonColors(
+                    //         containerColor = if (isSortingMode.value) MaterialTheme.colorScheme.primary else Color.Transparent
+                    //     ),
+                    //     onClick = { drawerViewModel.toggleSortingMode() }
+                    // ) {
+                    //     Icon(
+                    //         painter = painterResource(id = R.drawable.group),
+                    //         contentDescription = "Group"
+                    //     )
+                    // }
+
                     IconButton(
                         modifier = Modifier.minimumInteractiveComponentSize(),
                         onClick = { onSettingsShown(true) }
@@ -144,12 +142,6 @@ fun AppTopBar(
                             contentDescription = "Settings"
                         )
                     }
-//                IconButton(
-//                    modifier = Modifier.minimumInteractiveComponentSize(),
-//                    onClick = {  }
-//                ) {
-//                    Icon(Icons.Default.MoreVert, contentDescription = "More Options")
-//                }
                 }
             } else {
                 IconButton(

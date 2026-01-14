@@ -2,6 +2,7 @@ package org.muilab.notigpt.ui.component.notification.card.noticard
 
 import android.content.Context
 import android.os.Build
+import android.util.Log
 import androidx.annotation.RequiresApi
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateDpAsState
@@ -35,6 +36,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -61,10 +63,8 @@ import org.muilab.notigpt.ui.component.notification.card.noticard.elements.notiC
 import org.muilab.notigpt.ui.component.notification.card.noticard.elements.rememberNotiCardExpansionState
 import org.muilab.notigpt.ui.utils.NotiExpandState
 import org.muilab.notigpt.ui.viewmodel.DrawerViewModel
-import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_ARCHIVE
-import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_MAKETASK
-import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_SAVE
 import org.muilab.notigpt.util.SharedPreferencesManager
+import sh.calvin.reorderable.ReorderableCollectionItemScope
 import kotlin.math.max
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -77,15 +77,20 @@ fun NotiCard(
     drawerViewModel: DrawerViewModel,
     isCardVisible: Boolean,
     parentViewport: Rect?,
-    category: String,
-    appCategory: String,
     isMergeTarget: Boolean = false,
     isInGroup: Boolean = false,
     swipeEnabled: Boolean = true,
+    // Reorder: handle-only (long-press) callbacks. No-op defaults keep API stable for other call sites.
+    reorderEnabled: Boolean = false,
+    // Optional when rendered inside ReorderableItem; enables native handle dragging.
+    reorderScope: ReorderableCollectionItemScope? = null,
+    onStartReorderDrag: (Offset) -> Unit = {},
+    onReorderDrag: (Offset) -> Unit = {},
+    onStopReorderDrag: () -> Unit = {},
 ) {
     // These are part of the shared NotiCard API even if not used in this implementation yet.
     @Suppress("UNUSED_VARIABLE")
-    val _unusedApiParams = Triple(isCardVisible, category, appCategory)
+    val _unusedApiParams = isCardVisible
 
     val swipeDeleteLeft = SharedPreferencesManager.swipeDeleteLeft
     val isSortingMode by drawerViewModel.isSortingMode.collectAsState()
@@ -116,11 +121,6 @@ fun NotiCard(
         else -> ""
     }
 
-    val isTask = notiUnit.category == NOTI_CATEGORY_MAKETASK
-    val isSave = notiUnit.category == NOTI_CATEGORY_SAVE
-    val isArchive = notiUnit.category == NOTI_CATEGORY_ARCHIVE
-    val isSetToTop = notiUnit.isSetToTop
-
     val hasSecondTitle = notiSecondOverallTitle.isNotBlank() && notiSecondOverallTitle != notiOverallTitle
     val isPeople = notiUnit.isPeople
 
@@ -129,18 +129,16 @@ fun NotiCard(
 
     val backgroundColor = when {
         isMergeTarget -> MaterialTheme.colorScheme.primaryContainer
-        isSetToTop -> MaterialTheme.colorScheme.surfaceContainerHigh
         else -> MaterialTheme.colorScheme.surfaceBright
     }
 
     val borderColor = when {
         isMergeTarget -> MaterialTheme.colorScheme.primary
         !isRead -> MaterialTheme.colorScheme.error
-        isSetToTop -> MaterialTheme.colorScheme.secondary
         else -> MaterialTheme.colorScheme.outline
     }
 
-    val borderWidth = if (isSetToTop || isMergeTarget) 3.dp else 1.dp
+    val borderWidth = if (notiUnit.sortPosition != -1 || isMergeTarget) 3.dp else 1.dp
 
     // Expand state
     val maxHeightDp = 200.dp
@@ -325,7 +323,7 @@ fun NotiCard(
                                 .fillMaxHeight()
                                 .zIndex(2f),
                         ) {
-                            NotiCardOverlayButtons(
+                            org.muilab.notigpt.ui.component.notification.card.noticard.elements.NotiCardOverlayButtons(
                                 translationX = 0f,
                                 requiresExpansion = requiresExpansion,
                                 progress = (
@@ -355,6 +353,11 @@ fun NotiCard(
                                         )
                                     }
                                 },
+                                reorderEnabled = reorderEnabled,
+                                reorderScope = reorderScope,
+                                onStartReorderDrag = onStartReorderDrag,
+                                onReorderDrag = onReorderDrag,
+                                onStopReorderDrag = onStopReorderDrag,
                             )
                         }
                     }
@@ -388,10 +391,7 @@ fun NotiCard(
         notiKey = notiKey,
         state = NotiCardOptionsState(
             isInGroup = isInGroup,
-            isTask = isTask,
-            isSave = isSave,
-            isArchive = isArchive,
-            isSetToTop = isSetToTop,
+            isPinned = isPinned,
         ),
     )
 }

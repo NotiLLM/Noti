@@ -6,15 +6,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -24,12 +19,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import org.muilab.notigpt.database.server.N8nAPIClient
-import org.muilab.notigpt.util.SharedPreferencesManager
-import org.muilab.notigpt.util.SharedPreferencesManager.KEY_HISTORY_NOTI_COUNT_THRESHOLD
-import org.muilab.notigpt.util.SharedPreferencesManager.KEY_HISTORY_NOTI_HOURS_THRESHOLD
-import org.muilab.notigpt.util.SharedPreferencesManager.KEY_SERVER_URL
 import org.muilab.notigpt.ui.component.notification.AutoControlBar
 import org.muilab.notigpt.ui.viewmodel.DrawerViewModel
 
@@ -66,16 +55,7 @@ fun DevControlPanel(context: Context, drawerViewModel: DrawerViewModel) {
 
                 AutoControlBar()
                 Button(onClick = {
-                    Toast.makeText(context, "Start Updating Notifications", Toast.LENGTH_SHORT).show()
-//                    CoroutineScope(Dispatchers.IO).launch {
-//                        val notiRepository = NotiRepositoryProvider.provideNotiRepository(context)
-//                        val notiKeys = notiRepository.getNotificationKeys()
-//                        notiKeys.forEach { notiKey ->
-//                            enqueueUpdateNotification(context, notiKey)
-//                            delay(30 * 1000)
-//                        }
-//                    }
-                    drawerViewModel.syncAppCategory()
+                    Toast.makeText(context, "Sync Noti Status (WIP)", Toast.LENGTH_SHORT).show()
                 }) {
                     Text("Sync Noti Status")
                 }
@@ -110,12 +90,6 @@ fun DevControlPanel(context: Context, drawerViewModel: DrawerViewModel) {
                 }) {
                     Text("Copy Data")
                 }
-//            Button(onClick = {
-//                drawerViewModel.resetGPTValues()
-//                Toast.makeText(context, "GPT Values Reset", Toast.LENGTH_SHORT).show()
-//            }) {
-//                Text("Reset")
-//            }
 //                SharedPrefsButton("Set History Count", KEY_HISTORY_NOTI_COUNT_THRESHOLD)
 //                SharedPrefsButton("Set History Time", KEY_HISTORY_NOTI_HOURS_THRESHOLD)
 //                SharedPrefsButton("Set IP", KEY_SERVER_URL)

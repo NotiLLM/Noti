@@ -16,6 +16,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -26,9 +27,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import kotlinx.coroutines.launch
 import org.muilab.notigpt.R
+import org.muilab.notigpt.ui.component.drawer.drag.longPressDragHandle
 import org.muilab.notigpt.ui.component.notification.action.NotiActionIconButton
 import org.muilab.notigpt.ui.utils.NotiExpandState
 import org.muilab.notigpt.ui.viewmodel.DrawerViewModel
+import org.muilab.notigpt.domain.action.NotiActionType
+import sh.calvin.reorderable.ReorderableCollectionItemScope
 
 @Composable
 fun NotiCardOverlayButtons(
@@ -44,6 +48,13 @@ fun NotiCardOverlayButtons(
     notiKey: String,
     drawerViewModel: DrawerViewModel,
     onOverlayBoundsChange: (Rect?) -> Unit,
+    reorderEnabled: Boolean = false,
+    // If provided by a parent ReorderableItem, this enables library-native drag/auto-scroll.
+    reorderScope: ReorderableCollectionItemScope? = null,
+    // Fallback callbacks (used when reorderScope == null).
+    onStartReorderDrag: (Offset) -> Unit = {},
+    onReorderDrag: (Offset) -> Unit = {},
+    onStopReorderDrag: () -> Unit = {},
 ) {
     val coroutineScope = rememberCoroutineScope()
 
@@ -82,18 +93,32 @@ fun NotiCardOverlayButtons(
         }
 
         if (isSortingMode) {
+            val handleModifier = if (reorderEnabled && reorderScope != null) {
+                with(reorderScope) { Modifier.minimumInteractiveComponentSize().longPressDraggableHandle() }
+            } else {
+                Modifier
+                    .minimumInteractiveComponentSize()
+                    .longPressDragHandle(
+                        enabled = reorderEnabled,
+                        onDragStartInParent = { start -> onStartReorderDrag(start) },
+                        onDragDelta = { delta -> onReorderDrag(delta) },
+                        onDragEnd = { onStopReorderDrag() },
+                        onDragCancel = { onStopReorderDrag() },
+                    )
+            }
+
             Icon(
                 painter = painterResource(R.drawable.drag_handle),
                 contentDescription = "Drag to reorder",
-                modifier = Modifier.minimumInteractiveComponentSize(),
+                modifier = handleModifier,
             )
         } else {
             NotiActionIconButton(
                 if (isPinned) R.drawable.pin_yes else R.drawable.pin_no,
                 "Pin",
                 {
-                    if (isPinned) drawerViewModel.actOnNoti(notiKey, "unpin")
-                    else drawerViewModel.actOnNoti(notiKey, "pin")
+                    if (isPinned) drawerViewModel.actOnNoti(notiKey, NotiActionType.Unpin)
+                    else drawerViewModel.actOnNoti(notiKey, NotiActionType.Pin)
                 },
                 if (isPinned) Color(76, 139, 245) else Color.Unspecified,
             )

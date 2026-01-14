@@ -116,13 +116,9 @@ internal object UpdateNotificationHandler {
 
             val assignedCategory = evaluations.optJSONObject("assigned-category")
             assignedCategory?.let {
-                val newCategory = it.getString("category")
-                explanationSB.append("[Assigned Category] $newCategory\n${it.getString("reason")}\n")
-                notiUnit.category = when {
-                    SharedPreferencesManager.autoArchive && newCategory == NOTI_CATEGORY_ARCHIVE -> NOTI_CATEGORY_ARCHIVE
-                    SharedPreferencesManager.autoDelete && newCategory == NOTI_CATEGORY_DELETED -> NOTI_CATEGORY_DELETED
-                    else -> NOTI_CATEGORY_GENERAL
-                }
+                // Categories have been removed. Keep the explanation text for transparency.
+                val newCategory = it.optString("category")
+                explanationSB.append("[Assigned Category] $newCategory\n${it.optString("reason")}\n")
             }
 
             val textSummary = evaluations.optJSONObject("text-summary")

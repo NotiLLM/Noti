@@ -19,12 +19,12 @@ sealed interface N8nWorkerInput {
         val notiKey: String,
     ) : N8nWorkerInput
 
-    data class TaskScan(
+    data class ReminderScan(
         override val webhookPath: String,
         val notiKey: String,
     ) : N8nWorkerInput
 
-    data class TaskExtraction(
+    data class ReminderExtraction(
         override val webhookPath: String,
         val notiKeysJson: String,
     ) : N8nWorkerInput
@@ -48,12 +48,12 @@ sealed interface N8nWorkerInput {
                     notiKey = input.getString("noti_key") ?: "",
                 )
 
-                N8N_TASK_SCAN -> TaskScan(
+                N8N_TASK_SCAN -> ReminderScan(
                     webhookPath = webhookPath,
                     notiKey = input.getString("noti_key") ?: return null,
                 )
 
-                N8N_TASK_EXTRACTION -> TaskExtraction(
+                N8N_TASK_EXTRACTION -> ReminderExtraction(
                     webhookPath = webhookPath,
                     notiKeysJson = input.getString("noti_keys_json") ?: "[]",
                 )

@@ -100,11 +100,12 @@ fun enqueueTaskScan(context: Context, notiKey: String) {
      WorkManager.getInstance(context).enqueue(workerRequest)
  }
 
- fun enqueueTaskExtraction(context: Context, notiKeys: List<String>) {
-    Log.d("N8nAPI", "enqueueTaskExtraction: keys=${notiKeys.size} ${notiKeys.take(5)}")
+ fun enqueueTaskExtraction(context: Context, notiKeys: List<String>, userTriggered: Boolean = false) {
+    Log.d("N8nAPI", "enqueueTaskExtraction: keys=${notiKeys.size} ${notiKeys.take(5)} userTriggered=$userTriggered")
      val inputDataBuilder = Data.Builder()
          .putString("api_type", N8N_TASK_EXTRACTION)
          .putString("webhook_path", BuildConfig.N8N_TASK_EXTRACTION_PATH)
+         .putBoolean("user_triggered", userTriggered)
      // Put the list as a JSON string to pass through WorkManager
      val gson = com.google.gson.Gson()
      inputDataBuilder.putString("noti_keys_json", gson.toJson(notiKeys))
@@ -129,11 +130,12 @@ fun enqueueTaskScan(context: Context, notiKey: String) {
   * the timer restarts when another trigger comes in. This makes the debounce robust even
   * when the app process dies or is backgrounded.
   */
- fun enqueueDelayedTaskExtraction(context: Context, delaySeconds: Long) {
-    Log.d("N8nAPI", "enqueueDelayedTaskExtraction: delaySeconds=$delaySeconds")
+ fun enqueueDelayedTaskExtraction(context: Context, delaySeconds: Long, userTriggered: Boolean = false) {
+    Log.d("N8nAPI", "enqueueDelayedTaskExtraction: delaySeconds=$delaySeconds userTriggered=$userTriggered")
      val inputData = Data.Builder()
          .putString("api_type", N8N_TASK_EXTRACTION)
          .putString("webhook_path", BuildConfig.N8N_TASK_EXTRACTION_PATH)
+         .putBoolean("user_triggered", userTriggered)
          // No noti_keys_json passed -> worker will query DB for shouldExtractTask==true
          .putString("noti_keys_json", "[]")
          .build()

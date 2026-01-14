@@ -6,8 +6,7 @@ import org.muilab.notigpt.database.room.AppDatabase
 import org.muilab.notigpt.database.server.N8nAPIClient
 import org.muilab.notigpt.repository.NotiRepository
 import org.muilab.notigpt.repository.NotiRepositoryProvider
-import org.muilab.notigpt.repository.TaskRepository
-import org.muilab.notigpt.repository.TaskRepositoryProvider
+import org.muilab.notigpt.repository.ReminderRepository
 
 /**
  * Common dependencies for N8n worker handlers.
@@ -22,8 +21,8 @@ internal class N8nWorkerContext(
         NotiRepositoryProvider.provideNotiRepository(appContext)
     }
 
-    val taskRepository: TaskRepository by lazy {
-        TaskRepositoryProvider.provideTaskRepository(appContext)
+    val reminderRepository: ReminderRepository by lazy {
+        ReminderRepository(database.reminderListDao())
     }
 
     @Suppress("unused")

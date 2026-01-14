@@ -8,7 +8,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  *
  * NOTE: These migrations are referenced from AppDatabase.buildDatabase().
  */
-internal object AppDatabaseMigrations {
+public object AppDatabaseMigrations {
 
     val MIGRATION_1_2 = object : Migration(1, 2) {
         override fun migrate(db: SupportSQLiteDatabase) {
@@ -304,8 +304,9 @@ internal object AppDatabaseMigrations {
                     )
                     SELECT 
                         notiKey, appCategory, appName, category, explanation, groupId, groupKey, 
-                        hasGenuineTask, hashKey, icon, isAppGroup, isArchived, isCompletelyRead, isGroupChat, 
-                        isPeople, isPinned, isVisible, largeIcon, lastSyncTime, lastUpdateTime, 
+                        hasGenuineTask, hashKey, icon, isAppGroup, 
+                        isArchived, isCompletelyRead, isGroupChat, isPeople, isPinned, 
+                        isVisible, largeIcon, lastSyncTime, lastUpdateTime, 
                         pkgName, shouldExtractTask, sortKey, sortScore, summary, isSetToTop, setToTopTime
                     FROM `noti_drawer`
                 """.trimIndent()
@@ -331,7 +332,7 @@ internal object AppDatabaseMigrations {
                         `extraSummaryText` TEXT NOT NULL,
                         `extraInfoText` TEXT NOT NULL,
                         `extraSubText` TEXT NOT NULL,
-                        `isVisible` INTEGER NOT NULL,
+                        `isDismissed` INTEGER NOT NULL DEFAULT 0,
                         `taskScanned` INTEGER NOT NULL DEFAULT 0,
                         `taskExtracted` INTEGER NOT NULL DEFAULT 0,
                         `taskExtractionClaimed` INTEGER NOT NULL DEFAULT 0,
@@ -342,97 +343,133 @@ internal object AppDatabaseMigrations {
             )
             db.execSQL(
                 """
-                    INSERT INTO noti_record_new 
-                    SELECT 
-                        notiRecordId, notiKey, whenTime, postTime, person, extraTitle, extraBigTitle, 
-                        extraConversationTitle, extraBigText, extraText, extraTextLines, extraSummaryText, 
-                        extraInfoText, extraSubText, isVisible, taskScanned, taskExtracted, 
-                        taskExtractionClaimed, taskExtractionClaimedAt
-                    FROM noti_record
+                    INSERT INTO `noti_record_new` (
+                        notiRecordId, notiKey, whenTime, postTime, person,
+                        extraTitle, extraBigTitle, extraConversationTitle,
+                        extraBigText, extraText, extraTextLines, extraSummaryText,
+                        extraInfoText, extraSubText,
+                        isDismissed,
+                        taskScanned, taskExtracted, taskExtractionClaimed, taskExtractionClaimedAt
+                    )
+                    SELECT
+                        notiRecordId, notiKey, whenTime, postTime, person,
+                        extraTitle, extraBigTitle, extraConversationTitle,
+                        extraBigText, extraText, extraTextLines, extraSummaryText,
+                        extraInfoText, extraSubText,
+                        CASE WHEN COALESCE(isVisible, 1) = 1 THEN 0 ELSE 1 END AS isDismissed,
+                        taskScanned, taskExtracted, taskExtractionClaimed, taskExtractionClaimedAt
+                    FROM `noti_record`
                 """.trimIndent()
             )
-            db.execSQL("DROP TABLE noti_record")
-            db.execSQL("ALTER TABLE noti_record_new RENAME TO noti_record")
-            db.execSQL("CREATE INDEX IF NOT EXISTS `idx_record_notiKey_whenTime` ON `noti_record` (`notiKey`, `whenTime`)")
 
+            db.execSQL("DROP TABLE `noti_record`")
+            db.execSQL("ALTER TABLE `noti_record_new` RENAME TO `noti_record`")
+            db.execSQL("CREATE INDEX IF NOT EXISTS idx_record_notiKey_whenTime ON noti_record(notiKey, whenTime)")
+
+            // --- View: VisibleNotiRecord should reflect isDismissed semantics.
             db.execSQL("DROP VIEW IF EXISTS `VisibleNotiRecord`")
-            db.execSQL("CREATE VIEW `VisibleNotiRecord` AS SELECT * FROM noti_record WHERE isVisible = 1")
+            db.execSQL("CREATE VIEW IF NOT EXISTS `VisibleNotiRecord` AS SELECT * FROM noti_record WHERE isDismissed = 0")
         }
     }
 
+    /**
+     * NOTE: Versions 17+ existed in some released builds.
+     * Keep these migrations as no-ops so Room has a valid path when opening older DBs.
+     */
     val MIGRATION_17_18 = object : Migration(17, 18) {
         override fun migrate(db: SupportSQLiteDatabase) {
-            db.execSQL(
-                """
-                    CREATE TABLE IF NOT EXISTS `esm_pending` (
-                        `pendingId` TEXT NOT NULL,
-                        `triggerKey` TEXT NOT NULL,
-                        `createdAtMs` INTEGER NOT NULL,
-                        `eligibleAtMs` INTEGER NOT NULL,
-                        `expiresAtMs` INTEGER NOT NULL,
-                        `subjectType` TEXT,
-                        `subjectId` TEXT,
-                        `subjectMetadataJson` TEXT,
-                        `questionnaireId` TEXT NOT NULL,
-                        `questionnaireTitle` TEXT NOT NULL,
-                        `specJson` TEXT NOT NULL,
-                        `notified` INTEGER NOT NULL,
-                        PRIMARY KEY(`pendingId`)
-                    )
-                """.trimIndent()
-            )
-            db.execSQL("CREATE INDEX IF NOT EXISTS `index_esm_pending_eligibleAtMs` ON `esm_pending` (`eligibleAtMs`)")
-            db.execSQL("CREATE INDEX IF NOT EXISTS `index_esm_pending_expiresAtMs` ON `esm_pending` (`expiresAtMs`)")
-            db.execSQL("CREATE INDEX IF NOT EXISTS `index_esm_pending_triggerKey` ON `esm_pending` (`triggerKey`)")
-
-            db.execSQL(
-                """
-                    CREATE TABLE IF NOT EXISTS `esm_cooldown` (
-                        `triggerKey` TEXT NOT NULL,
-                        `lastAcceptedAtMs` INTEGER NOT NULL,
-                        PRIMARY KEY(`triggerKey`)
-                    )
-                """.trimIndent()
-            )
-
-            db.execSQL(
-                """
-                    CREATE TABLE IF NOT EXISTS `esm_response` (
-                        `responseId` TEXT NOT NULL,
-                        `questionnaireId` TEXT NOT NULL,
-                        `questionnaireTitle` TEXT NOT NULL,
-                        `triggerKey` TEXT NOT NULL,
-                        `triggeredAtMs` INTEGER NOT NULL,
-                        `deliveredAtMs` INTEGER NOT NULL,
-                        `expiresAtMs` INTEGER NOT NULL,
-                        `submittedAtMs` INTEGER NOT NULL,
-                        `subjectType` TEXT,
-                        `subjectId` TEXT,
-                        `subjectMetadataJson` TEXT,
-                        `answersJson` TEXT NOT NULL,
-                        PRIMARY KEY(`responseId`)
-                    )
-                """.trimIndent()
-            )
-            db.execSQL("CREATE INDEX IF NOT EXISTS `index_esm_response_questionnaireId` ON `esm_response` (`questionnaireId`)")
-            db.execSQL("CREATE INDEX IF NOT EXISTS `index_esm_response_submittedAtMs` ON `esm_response` (`submittedAtMs`)")
+            // no-op
         }
     }
 
     val MIGRATION_18_19 = object : Migration(18, 19) {
         override fun migrate(db: SupportSQLiteDatabase) {
-            // indices (optional)
-            db.execSQL("DROP INDEX IF EXISTS `index_esm_pending_eligibleAtMs`")
-            db.execSQL("DROP INDEX IF EXISTS `index_esm_pending_expiresAtMs`")
-            db.execSQL("DROP INDEX IF EXISTS `index_esm_pending_triggerKey`")
-            db.execSQL("DROP INDEX IF EXISTS `index_esm_response_questionnaireId`")
-            db.execSQL("DROP INDEX IF EXISTS `index_esm_response_submittedAtMs`")
+            // no-op
+        }
+    }
 
-            // tables
-            db.execSQL("DROP TABLE IF EXISTS `esm_pending`")
-            db.execSQL("DROP TABLE IF EXISTS `esm_cooldown`")
-            db.execSQL("DROP TABLE IF EXISTS `esm_response`")
+    val MIGRATION_19_20 = object : Migration(19, 20) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            // no-op
+        }
+    }
+
+    val MIGRATION_20_21 = object : Migration(20, 21) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            // no-op
+        }
+    }
+
+    val MIGRATION_21_22 = object : Migration(21, 22) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            // Manual drawer ordering: -1 means unset
+            db.execSQL("ALTER TABLE noti_drawer ADD COLUMN sortPosition INTEGER NOT NULL DEFAULT -1")
+        }
+    }
+
+    val MIGRATION_22_23 = object : Migration(22, 23) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            // Rename columns (SQLite 3.25+; Android has it for a long time now)
+            db.execSQL("ALTER TABLE noti_drawer RENAME COLUMN hasGenuineTask TO hasTask")
+            db.execSQL("ALTER TABLE noti_drawer RENAME COLUMN shouldExtractTask TO shouldExtractReminder")
+
+            // Add new column (booleans are INTEGER 0/1 in SQLite)
+            db.execSQL("ALTER TABLE noti_drawer ADD COLUMN hasMemo INTEGER NOT NULL DEFAULT 0")
+        }
+    }
+
+    val MIGRATION_23_24 = object : Migration(23, 24) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `esm_extraction_snapshot` (
+                    `snapshotId` TEXT NOT NULL,
+                    `status` TEXT NOT NULL,
+                    `reminderId` TEXT,
+                    `payloadJson` TEXT NOT NULL,
+                    `createdAt` INTEGER NOT NULL,
+                    PRIMARY KEY(`snapshotId`)
+                )
+                """.trimIndent()
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS `idx_esm_snap_status_time` ON `esm_extraction_snapshot` (`status`, `createdAt`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `idx_esm_snap_reminderId` ON `esm_extraction_snapshot` (`reminderId`)")
+
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `esm_instance` (
+                    `instanceId` TEXT NOT NULL,
+                    `questionnaireId` TEXT NOT NULL,
+                    `questionnaireVersion` INTEGER NOT NULL,
+                    `triggerType` TEXT NOT NULL,
+                    `reminderId` TEXT NOT NULL,
+                    `snapshotId` TEXT NOT NULL,
+                    `createdAt` INTEGER NOT NULL,
+                    `availableAt` INTEGER NOT NULL,
+                    `expiresAt` INTEGER NOT NULL,
+                    `status` TEXT NOT NULL,
+                    `answeredAt` INTEGER NOT NULL DEFAULT 0,
+                    `isLate` INTEGER NOT NULL DEFAULT 0,
+                    PRIMARY KEY(`instanceId`)
+                )
+                """.trimIndent()
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS `idx_esm_status_available` ON `esm_instance` (`status`, `availableAt`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `idx_esm_status_expires` ON `esm_instance` (`status`, `expiresAt`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `idx_esm_reminderId` ON `esm_instance` (`reminderId`)")
+
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `esm_answer_event` (
+                    `instanceId` TEXT NOT NULL,
+                    `questionId` TEXT NOT NULL,
+                    `answerJson` TEXT NOT NULL,
+                    `answeredAt` INTEGER NOT NULL,
+                    PRIMARY KEY(`instanceId`, `questionId`)
+                )
+                """.trimIndent()
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS `idx_esm_answer_instance` ON `esm_answer_event` (`instanceId`)")
         }
     }
 }
-

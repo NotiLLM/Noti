@@ -33,8 +33,8 @@ android {
         // in your app build.gradle
         buildConfigField("String", "N8N_UPDATE_NOTIFICATION_PATH", "\"webhook-test/update-notification\"")
         buildConfigField("String", "N8N_POST_NOTIFICATION_ACTION_PATH", "\"webhook-test/notification-action\"")
-        buildConfigField("String", "N8N_TASK_SCAN_PATH", "\"webhook/task-scan\"")
-        buildConfigField("String", "N8N_TASK_EXTRACTION_PATH", "\"webhook/task-extraction\"")
+        buildConfigField("String", "N8N_TASK_SCAN_PATH", "\"webhook/task-scan-developers\"")
+        buildConfigField("String", "N8N_TASK_EXTRACTION_PATH", "\"webhook/task-extraction-developers\"")
     }
 
     buildTypes {

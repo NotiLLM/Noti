@@ -35,8 +35,8 @@ class FullRecordsController(
 
         val job = scope.launch(Dispatchers.IO) {
             try {
-                notiRepository.visibleRecordsFlowForKey(notiKey)
-                    .collect { recs ->
+                notiRepository.activeRecordsFlowForKey(notiKey)
+                    .collect { recs: List<NotiRecord> ->
                         stateFlow.value = recs.sortedBy { it.time }
                     }
             } catch (e: Exception) {
@@ -61,4 +61,3 @@ class FullRecordsController(
         }
     }
 }
-

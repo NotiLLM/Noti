@@ -5,17 +5,29 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
-import org.muilab.notigpt.model.features.TaskUnit
+import org.muilab.notigpt.model.features.ReminderUnit
 import org.muilab.notigpt.model.notifications.NotiAction
 import org.muilab.notigpt.model.notifications.NotiGroup
 import org.muilab.notigpt.model.notifications.NotiRecord
 import org.muilab.notigpt.model.notifications.NotiUnit
 import org.muilab.notigpt.model.notifications.VisibleNotiRecord
+import org.muilab.notigpt.model.esm.EsmAnswerEvent
+import org.muilab.notigpt.model.esm.EsmExtractionSnapshot
+import org.muilab.notigpt.model.esm.EsmInstance
 
 @Database(
-    entities = [NotiUnit::class, NotiRecord::class, NotiAction::class, TaskUnit::class, NotiGroup::class],
+    entities = [
+        NotiUnit::class,
+        NotiRecord::class,
+        NotiAction::class,
+        ReminderUnit::class,
+        NotiGroup::class,
+        EsmInstance::class,
+        EsmAnswerEvent::class,
+        EsmExtractionSnapshot::class,
+    ],
     views = [VisibleNotiRecord::class],
-    version = 19, // Increment version
+    version = 24,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -24,8 +36,9 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun drawerDao(): NotiDrawerDao
     abstract fun recordDao(): NotiRecordDao
     abstract fun actionDao(): NotiActionDao
-    abstract fun taskListDao(): TaskListDao
+    abstract fun reminderListDao(): ReminderListDao
     abstract fun groupDao(): NotiGroupDao
+    abstract fun esmDao(): EsmDao
 
     companion object {
         @Volatile
@@ -57,6 +70,11 @@ abstract class AppDatabase : RoomDatabase() {
                 .addMigrations(AppDatabaseMigrations.MIGRATION_16_17)
                 .addMigrations(AppDatabaseMigrations.MIGRATION_17_18)
                 .addMigrations(AppDatabaseMigrations.MIGRATION_18_19)
+                .addMigrations(AppDatabaseMigrations.MIGRATION_19_20)
+                .addMigrations(AppDatabaseMigrations.MIGRATION_20_21)
+                .addMigrations(AppDatabaseMigrations.MIGRATION_21_22)
+                .addMigrations(AppDatabaseMigrations.MIGRATION_22_23)
+                .addMigrations(org.muilab.notigpt.database.room.AppDatabaseMigrations.MIGRATION_23_24)
                 .setJournalMode(JournalMode.TRUNCATE)
                 .build()
         }

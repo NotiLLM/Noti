@@ -35,6 +35,8 @@ sealed class NotiActionType(val wireValue: String) {
 
     data object DeleteAll : NotiActionType("delete_all")
 
+    data object ExtractReminder : NotiActionType("extract_reminder")
+
     companion object {
         /**
          * Best-effort mapper for legacy call sites.
@@ -58,8 +60,8 @@ sealed class NotiActionType(val wireValue: String) {
             "mark_all_read" -> MarkAllRead
             "scroll_read" -> ScrollRead
             "delete_all" -> DeleteAll
+            "extract_reminder" -> ExtractReminder
             else -> null
         }
     }
 }
-

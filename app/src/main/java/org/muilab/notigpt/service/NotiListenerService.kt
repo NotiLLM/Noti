@@ -177,9 +177,9 @@ class NotiListenerService: NotificationListenerService() {
 
             // Debug: log visible record count and sample ids for this key
             try {
-                val count = notiRepository.getVisibleRecordsCountForKey(sbn.key)
-                val sampleIds = notiRepository.getVisibleRecordIdsForKey(sbn.key, limit = 5)
-                Log.d("NotiListenerService", "Inserted record for key=${sbn.key}; visibleCount=$count; sampleIds=${sampleIds.joinToString(separator = ",")}")
+                val count = notiRepository.getActiveRecordsCountForKey(sbn.key)
+                val sampleIds = notiRepository.getActiveRecordIdsForKey(sbn.key, limit = 5)
+                Log.d("NotiListenerService", "Inserted record for key=${sbn.key}; activeCount=$count; sampleIds=${sampleIds.joinToString(separator = ",")}")
             } catch (e: Exception) {
                 Log.d("NotiListenerService", "Debug logging failed for key=${sbn.key}", e)
             }

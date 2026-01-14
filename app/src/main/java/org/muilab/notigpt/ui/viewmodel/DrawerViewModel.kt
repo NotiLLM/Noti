@@ -1,4 +1,4 @@
-@file:OptIn(kotlinx.coroutines.FlowPreview::class, kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+@file:OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
 
 package org.muilab.notigpt.ui.viewmodel
 
@@ -35,14 +35,8 @@ import org.muilab.notigpt.model.notifications.NotiDrawerItem
 import org.muilab.notigpt.model.notifications.NotiRecord
 import org.muilab.notigpt.model.notifications.NotiUnit
 import org.muilab.notigpt.repository.NotiRepository
-import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_GENERAL
 import org.muilab.notigpt.util.Constants.Companion.APP_CATEGORY_ALL
-import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_ARCHIVE
-import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_MAKETASK
-import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_SAVE
 import org.muilab.notigpt.util.postOngoingNotification
-import java.util.concurrent.ConcurrentHashMap
-import kotlin.collections.filter
 import org.muilab.notigpt.platform.ClipboardController
 import org.muilab.notigpt.platform.NotiLogExporter
 import org.muilab.notigpt.platform.UserNotifier
@@ -66,18 +60,15 @@ class DrawerViewModel(
 
     private val filters = DrawerFiltersState()
 
-    val category: StateFlow<String> = filters.category
-    val appCategory: StateFlow<String> = filters.appCategory
     val isTargetLoading: StateFlow<Boolean> = filters.isTargetLoading
     val isSortingMode: StateFlow<Boolean> = filters.isSortingMode
-
-    fun toggleSortingMode() = filters.toggleSortingMode()
 
     @RequiresApi(Build.VERSION_CODES.S)
     fun updateCategory(newCategory: String) {
         filters.startTargetLoading()
         filters.setCategory(newCategory)
         if (isSortingMode.value) toggleSortingMode()
+        // Persist read + commit manual sort session (if any)
         persistReadStatus()
         unreadCounts.refresh()
         updateAppCategory(APP_CATEGORY_ALL)
@@ -87,6 +78,7 @@ class DrawerViewModel(
     fun updateAppCategory(newAppCategory: String) {
         filters.startTargetLoading()
         if (isSortingMode.value) toggleSortingMode()
+        // Persist read + commit manual sort session (if any)
         persistReadStatus()
         unreadCounts.refresh()
         filters.setAppCategory(newAppCategory)
@@ -142,19 +134,42 @@ class DrawerViewModel(
     )
     val unreadCountsByCategory: StateFlow<Map<String, Int>> = unreadCounts.unreadCountsByCategory
 
+    /** Total unread notifications in the active drawer (not dismissed). */
+    val unreadActiveCount: StateFlow<Int> = groupedNotifications
+        .map { items ->
+            items.asSequence().flatMap { item ->
+                when (item) {
+                    is org.muilab.notigpt.model.notifications.NotiItem -> sequenceOf(item.displayUnit)
+                    is org.muilab.notigpt.model.notifications.NotiGroupItem -> item.children.asSequence()
+                }
+            }.count { du -> !du.notiUnit.isDismissed && !du.notiUnit.isRead }
+        }
+        .distinctUntilChanged()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+
+    /** Total active (not dismissed) notifications currently in the drawer. */
+    val activeNotDismissedCount: StateFlow<Int> = groupedNotifications
+        .map { items ->
+            items.asSequence().flatMap { item ->
+                when (item) {
+                    is org.muilab.notigpt.model.notifications.NotiItem -> sequenceOf(item.displayUnit)
+                    is org.muilab.notigpt.model.notifications.NotiGroupItem -> item.children.asSequence()
+                }
+            }.count { du -> !du.notiUnit.isDismissed }
+        }
+        .distinctUntilChanged()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+
     // Search state (delegated)
-    val includeHistory: StateFlow<Boolean> = searchController.includeHistory
     val searchResults: StateFlow<Map<String, List<NotiRecord>>> = searchController.searchResults
     val searchUnits: StateFlow<Map<String, NotiUnit>> = searchController.searchUnits
 
     init {
         // Main subscription to the grouped data flow
-        notiRepository.getGroupedNotifications(category, appCategory)
+        notiRepository.getGroupedNotifications()
             .debounce(60)
             .onEach { newList ->
                 val prev = _groupedNotifications.value
-                // Simple reference/size check to avoid some recompositions,
-                // though NotiDrawerItem equality checks would be better.
                 if (prev.size != newList.size || prev != newList) {
                     _groupedNotifications.value = newList
                 }
@@ -168,8 +183,6 @@ class DrawerViewModel(
             if (filters.shouldClearTargetLoading()) {
                 filters.clearTargetLoading()
             } else if (isTargetLoading.value) {
-                // Check if items match current filters to decide if we stop loading
-                // Approximate check
                 if (notifications.isNotEmpty()) {
                     filters.clearTargetLoading()
                 }
@@ -182,8 +195,6 @@ class DrawerViewModel(
                 .distinctUntilChanged()
                 .collect { query ->
                     if (query.isBlank()) {
-                        // reset loading state for empty query
-                        // controller handles clearing results
                         searchController.performSearch("")
                     } else {
                         filters.startTargetLoading()
@@ -197,20 +208,6 @@ class DrawerViewModel(
         }
 
         removeExpiredRecords()
-    }
-
-    fun toggleIncludeHistory(enabled: Boolean) {
-        searchController.setIncludeHistory(enabled)
-        if (_queryString.value.isNotBlank()) {
-            viewModelScope.launch {
-                filters.startTargetLoading()
-                try {
-                    searchController.performSearch(_queryString.value)
-                } finally {
-                    filters.clearTargetLoading()
-                }
-            }
-        }
     }
 
     // [NEW] Helper to access notification (Launch Intent)
@@ -228,38 +225,6 @@ class DrawerViewModel(
         // Log action
         actOnNoti(notiUnit.notiKey, NotiActionType.AccessClickSearch)
     }
-
-    @OptIn(ExperimentalCoroutinesApi::class)
-    val availableAppCategories: StateFlow<List<Pair<String, Int>>> =
-        groupedNotifications.map { list ->
-            // Extract leaf nodes (NotiDisplayUnit) from the polymorphic list
-            val leaves = list.flatMap { item ->
-                when(item) {
-                    is org.muilab.notigpt.model.notifications.NotiItem -> listOf(item.displayUnit)
-                    is org.muilab.notigpt.model.notifications.NotiGroupItem -> item.children
-                }
-            }
-
-            val categoryCounts = leaves
-                .groupBy { it.notiUnit.appCategory }
-                .mapValues { it.value.size }
-                .toMutableMap()
-
-            val totalCount = leaves.size
-            val result = mutableListOf<Pair<String, Int>>()
-            if (totalCount > 0) {
-                result.add(APP_CATEGORY_ALL to totalCount)
-            }
-
-            categoryCounts.entries
-                .filter { it.value > 0 }
-                .sortedByDescending { it.value }
-                .forEach { (category, count) ->
-                    result.add(category to count)
-                }
-
-            result
-        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     @RequiresApi(Build.VERSION_CODES.S)
     fun actOnNoti(notiKey: String, action: String) {
@@ -285,7 +250,7 @@ class DrawerViewModel(
     @RequiresApi(Build.VERSION_CODES.S)
     fun deleteAllNotis() {
         viewModelScope.launch(Dispatchers.IO) {
-            notiRepository.deleteAllNotis(category.value)
+            notiRepository.deleteAllNotis()
             postOngoingNotification(context)
         }
         unreadCounts.refresh()
@@ -295,7 +260,7 @@ class DrawerViewModel(
     fun markAllNotisRead() {
         persistReadStatus()
         viewModelScope.launch(Dispatchers.IO) {
-            notiRepository.markAllNotisRead(category.value)
+            notiRepository.markAllNotisRead()
         }
         unreadCounts.refresh()
     }
@@ -321,16 +286,12 @@ class DrawerViewModel(
         }
     }
 
-    fun syncAppCategory() {
-        viewModelScope.launch(Dispatchers.IO) {
-            notiRepository.syncAppCategories(context)
-        }
-    }
-
     @RequiresApi(Build.VERSION_CODES.S)
     fun persistReadStatus() {
         viewModelScope.launch {
             readStateController.persistSeen()
+            // Also commit manual sort on pause-style persistence.
+            commitManualSortSessionIfNeeded()
         }
     }
 
@@ -400,5 +361,114 @@ class DrawerViewModel(
 
     fun clearFullRecordsForKey(notiKey: String) {
         fullRecordsController.clearForKey(notiKey)
+    }
+
+    // --- History helpers (Gmail-style "All Notifications") ---
+    suspend fun getLatestRecordsForHistory(limit: Int): List<NotiRecord> {
+        return withContext(Dispatchers.IO) { notiRepository.getLatestRecords(limit.coerceAtLeast(1)) }
+    }
+
+    suspend fun getRecordsBeforeForHistory(pivotTime: Long, limit: Int): List<NotiRecord> {
+        return withContext(Dispatchers.IO) {
+            notiRepository.getRecordsBefore(pivotTime, limit.coerceAtLeast(1))
+        }
+    }
+
+    suspend fun getRecordsAfterForHistory(pivotTime: Long, limit: Int): List<NotiRecord> {
+        return withContext(Dispatchers.IO) {
+            notiRepository.getRecordsAfter(pivotTime, limit.coerceAtLeast(1))
+        }
+    }
+
+    suspend fun getNotiUnitForHistory(notiKey: String): NotiUnit? {
+        return withContext(Dispatchers.IO) { notiRepository.getNotiUnit(notiKey) }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.S)
+    fun accessNotificationByKey(notiKey: String) {
+        viewModelScope.launch {
+            val unit = withContext(Dispatchers.IO) { notiRepository.getNotiUnit(notiKey) }
+            if (unit != null) {
+                accessNotification(unit)
+            }
+        }
+    }
+
+    // --- Manual sort (loose items only) ---
+    private val manualSortKeys = MutableStateFlow<List<String>>(emptyList())
+
+    // Snapshot of keys that were already manual when entering sort mode.
+    private var manualKeysAtSessionStart: Set<String> = emptySet()
+    // Keys the user moved during the current session.
+    private val manuallyTouchedKeysInSession = LinkedHashSet<String>()
+
+    /** Called by UI when entering sorting mode; captures current loose order and existing manual keys. */
+    fun startManualSortSession() {
+        val loose = _groupedNotifications.value
+            .asSequence()
+            .filterIsInstance<org.muilab.notigpt.model.notifications.NotiItem>()
+            .map { it.displayUnit.notiKey to it.displayUnit.notiUnit.sortPosition }
+            .toList()
+
+        manualSortKeys.value = loose.map { it.first }
+
+        // Snapshot all keys that were already manual (sortPosition != -1) at session start.
+        manualKeysAtSessionStart = loose.asSequence().filter { it.second != -1 }.map { it.first }.toSet()
+        manuallyTouchedKeysInSession.clear()
+    }
+
+    /** Commit session manual sort positions using the final in-memory order. Safe to call multiple times. */
+    fun commitManualSortSessionIfNeeded() {
+        val finalOrder = manualSortKeys.value
+        if (finalOrder.isEmpty()) return
+
+        // All keys we should treat as manual for this commit.
+        val commitKeys = LinkedHashSet<String>()
+        commitKeys.addAll(manualKeysAtSessionStart)
+        commitKeys.addAll(manuallyTouchedKeysInSession)
+        if (commitKeys.isEmpty()) return
+
+        viewModelScope.launch(Dispatchers.IO) {
+            notiRepository.commitManualKeysFromFinalOrder(commitKeys, finalOrder)
+        }
+    }
+
+    /**
+     * Move a loose item within the in-memory order list.
+     * Persistence:
+     * - We do NOT write to DB on every move.
+     * - We record the moved key as "touched".
+     * - Final sortPosition for touched + initially-manual keys is persisted on exit/pause.
+     */
+    fun moveLooseItem(key: String, fromIndex: Int, toIndex: Int) {
+        val current = manualSortKeys.value
+        if (current.isEmpty()) return
+
+        val from = fromIndex.coerceIn(0, current.lastIndex)
+        val to = toIndex.coerceIn(0, current.lastIndex)
+        if (from == to) return
+
+        if (current.getOrNull(from) != key) {
+            val actualFrom = current.indexOf(key)
+            if (actualFrom == -1) return
+            return moveLooseItem(key, actualFrom, to)
+        }
+
+        manualSortKeys.value = current.toMutableList().apply {
+            add(to, removeAt(from))
+        }
+
+        manuallyTouchedKeysInSession.add(key)
+    }
+
+    fun getManualSortKeys(): StateFlow<List<String>> = manualSortKeys.asStateFlow()
+
+    fun toggleSortingMode() {
+        val wasSorting = isSortingMode.value
+        filters.toggleSortingMode()
+        // If exiting sorting mode, commit.
+        if (wasSorting && !isSortingMode.value) {
+            commitManualSortSessionIfNeeded()
+        }
     }
 }

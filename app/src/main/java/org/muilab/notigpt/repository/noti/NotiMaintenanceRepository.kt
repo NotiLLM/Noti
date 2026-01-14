@@ -1,6 +1,5 @@
 package org.muilab.notigpt.repository.noti
 
-import android.content.Context
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -8,7 +7,6 @@ import org.muilab.notigpt.database.room.NotiActionDao
 import org.muilab.notigpt.database.room.NotiDrawerDao
 import org.muilab.notigpt.database.room.NotiRecordDao
 import org.muilab.notigpt.util.SharedPreferencesManager
-import org.muilab.notigpt.util.getAppCategoryByAppName
 
 /**
  * Bulk operations / maintenance tasks extracted from NotiRepository.
@@ -19,16 +17,16 @@ class NotiMaintenanceRepository(
     private val notiActionDao: NotiActionDao,
 ) {
 
-    suspend fun deleteAllNotis(category: String, logAction: (String, String) -> Unit) {
-        val notiKeys = notiDrawerDao.getVisibleNotPinnedKeysByCategory(category)
+    suspend fun deleteAllNotis(logAction: (String, String) -> Unit) {
+        val notiKeys = notiDrawerDao.getActiveNotPinnedKeys()
         notiKeys.forEach { k -> logAction(k, "delete_all") }
-        notiDrawerDao.setUnitsInvisibleByKeys(notiKeys)
+        notiDrawerDao.dismissUnitsByKeys(notiKeys)
         notiDrawerDao.setUnitsReadByKeys(notiKeys)
-        notiRecordDao.setRecordsInvisibleByKeys(notiKeys)
+        notiRecordDao.dismissRecordsByKeys(notiKeys)
     }
 
-    suspend fun markAllNotisRead(category: String, logAction: (String, String) -> Unit) {
-        val notReadNotiKeys = notiDrawerDao.getVisibleNotReadKeysByCategory(category)
+    suspend fun markAllNotisRead(logAction: (String, String) -> Unit) {
+        val notReadNotiKeys = notiDrawerDao.getActiveUnreadKeys()
         notReadNotiKeys.forEach { k -> logAction(k, "mark_all_read") }
         notiDrawerDao.setUnitsReadByKeys(notReadNotiKeys)
     }
@@ -38,24 +36,6 @@ class NotiMaintenanceRepository(
             notiDrawerDao.setUnitsReadByKeys(seenNotis.toList())
             seenNotis.forEach { logAction(it, "scroll_read") }
         }
-    }
-
-    fun syncAppCategories(context: Context) {
-        CoroutineScope(Dispatchers.IO).launch {
-            val notiUnits = notiDrawerDao.getAll()
-            notiUnits.forEach { notiUnit ->
-                notiUnit.displayState.appCategory = getAppCategoryByAppName(context, notiUnit.appName)
-                notiDrawerDao.update(notiUnit)
-            }
-        }
-    }
-
-    fun getVisibleNotiCountByCategory(category: String): Int {
-        return notiDrawerDao.getVisibleNotiCountByCategory(category)
-    }
-
-    fun getVisibleNotReadNotificationCountByCategory(category: String): Int {
-        return notiDrawerDao.getVisibleNotReadCountByCategory(category)
     }
 
     fun logAction(
@@ -68,4 +48,3 @@ class NotiMaintenanceRepository(
         notiActionDao.insert(org.muilab.notigpt.model.notifications.NotiAction(notiKey, action, actionTime, lastAppResumeTime, metadata))
     }
 }
-

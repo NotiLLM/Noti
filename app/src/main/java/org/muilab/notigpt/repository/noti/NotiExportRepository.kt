@@ -17,7 +17,7 @@ class NotiExportRepository(
         val notiUnits = if (includeDismissed)
             notiDrawerDao.getAll()
         else
-            notiDrawerDao.getAllVisible()
+            notiDrawerDao.getAllActive()
 
         val notificationLogs = JSONArray()
 
@@ -26,7 +26,7 @@ class NotiExportRepository(
             val notiRecords = if (includeContext) {
                 notiRecordDao.getRecordsByKey(notiKey)
             } else {
-                notiRecordDao.getVisibleRecordsByKey(notiKey)
+                notiRecordDao.getActiveRecordsByKey(notiKey)
             }.sortedBy { it.time }
 
             val notiActions = notiActionDao.getActionsByKey(notiKey).sortedBy { it.time }
@@ -44,4 +44,3 @@ class NotiExportRepository(
         return notificationLogs
     }
 }
-

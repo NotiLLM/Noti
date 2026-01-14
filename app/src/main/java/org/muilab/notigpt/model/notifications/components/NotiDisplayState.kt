@@ -1,46 +1,51 @@
 package org.muilab.notigpt.model.notifications.components
 
-import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_GENERAL
-import org.muilab.notigpt.util.Constants.Companion.APP_CATEGORY_UNKNOWN
-
 data class NotiDisplayState(
     var isPinned: Boolean,
     var isArchived: Boolean,
-    var isVisible: Boolean,
+    /**
+     * New semantics: isDismissed = true means the notification is hidden from the active drawer.
+     * This replaces the previous isVisible flag (flipped).
+     */
+    var isDismissed: Boolean,
     var isRead: Boolean,
 
     var isSetToTop: Boolean = false,
     var setToTopTime: Long = 0L,
 
+    /**
+     * Manual drawer ordering.
+     * -1 means "unset" (auto-fill by time for remaining gaps).
+     */
+    var sortPosition: Int = -1,
+
     var explanation: String,
     var summary: String,
     var sortScore: Double,
-
-    var category: String,
-    var appCategory: String
 ) {
     constructor() : this(
         isPinned = false,
         isArchived = false,
-        isVisible = true,
+        isDismissed = false,
         isRead = false,
         isSetToTop = false,
         setToTopTime = 0L,
+        sortPosition = -1,
         explanation = "",
         summary = "",
         sortScore = 100.0,
-        category = NOTI_CATEGORY_GENERAL,
-        appCategory = APP_CATEGORY_UNKNOWN
     )
 
     fun resetUserState() {
         isArchived = false
-        isVisible = true
-        category = NOTI_CATEGORY_GENERAL
+        isDismissed = false
 
         // Reset To Top when state resets
         isSetToTop = false
         setToTopTime = 0L
+
+        // Reset manual ordering
+        sortPosition = -1
     }
 
     fun resetReadState() {
