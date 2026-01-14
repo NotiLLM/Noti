@@ -24,8 +24,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import org.muilab.notigpt.R
 import org.muilab.notigpt.ui.viewmodel.DrawerViewModel
 
 @Composable
@@ -47,7 +49,7 @@ fun SearchBar(
             OutlinedTextField(
                 value = queryString,
                 onValueChange = { drawerViewModel.updateQueryString(it) },
-                placeholder = { Text("Search...") },
+                placeholder = { Text(stringResource(R.string.ui_search_placeholder)) },
                 modifier = Modifier.fillMaxWidth().minimumInteractiveComponentSize(),
                 shape = RoundedCornerShape(percent = 100),
                 leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
@@ -58,7 +60,7 @@ fun SearchBar(
                             onSearchToggled(false)
                         }
                     ) {
-                        Icon(Icons.Default.Close, contentDescription = "Close Search")
+                        Icon(Icons.Default.Close, contentDescription = stringResource(R.string.a11y_close_search))
                     }
                 },
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),

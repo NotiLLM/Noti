@@ -18,6 +18,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -25,7 +26,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.scale
 import org.muilab.notigpt.model.notifications.NotiDisplayUnit
-import org.muilab.notigpt.util.replaceChars
+import org.muilab.notigpt.util.time.getRelativeTimeStr
+import org.muilab.notigpt.util.unescapeUserText
 
 @Composable
 fun NotiCardHeaderContent(
@@ -113,8 +115,9 @@ fun NotiCardHeaderContent(
                         }
                     }
                 }
+                val ctx = LocalContext.current
                 Text(
-                    notiDisplayUnit.latestUpdateRelTimeStr,
+                    getRelativeTimeStr(notiDisplayUnit.lastUpdateTime, ctx),
                     Modifier.padding(horizontal = 5.dp),
                     maxLines = 1,
                     fontSize = 12.sp,
@@ -143,7 +146,7 @@ fun NotiCardHeaderContent(
                     } else {
                         val notiContent = notiRecords.lastOrNull()?.content ?: ""
                         Text(
-                            if (notiContent == "null") "" else replaceChars(notiContent),
+                            if (notiContent == "null") "" else unescapeUserText(notiContent),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             onTextLayout = { if (it.hasVisualOverflow) requiresExpansionSetter(true) },

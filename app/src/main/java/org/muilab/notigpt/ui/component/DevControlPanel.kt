@@ -18,7 +18,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import org.muilab.notigpt.R
 import org.muilab.notigpt.ui.component.notification.AutoControlBar
 import org.muilab.notigpt.ui.viewmodel.DrawerViewModel
 
@@ -37,9 +39,9 @@ fun DevControlPanel(context: Context, drawerViewModel: DrawerViewModel) {
         ) {
             Text(
                 if (!showPanel) {
-                    "Open Control Panel"
+                    stringResource(R.string.ui_dev_open_control_panel)
                 } else {
-                    "Close Control Panel"
+                    stringResource(R.string.ui_dev_close_control_panel)
                 },
                 color = Color.Gray
             )
@@ -55,44 +57,30 @@ fun DevControlPanel(context: Context, drawerViewModel: DrawerViewModel) {
 
                 AutoControlBar()
                 Button(onClick = {
-                    Toast.makeText(context, "Sync Noti Status (WIP)", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, context.getString(R.string.ui_dev_sync_noti_status_toast), Toast.LENGTH_SHORT).show()
                 }) {
-                    Text("Sync Noti Status")
+                    Text(stringResource(R.string.ui_dev_sync_noti_status))
                 }
                 Button(onClick = {
-                    Toast.makeText(context, "Work In Progress", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, context.getString(R.string.ui_dev_work_in_progress), Toast.LENGTH_SHORT).show()
                 }) {
-                    Text("Update User")
+                    Text(stringResource(R.string.ui_dev_update_user))
                 }
-//            Button(onClick = {
-//                Toast.makeText(context, "Start Categorizing", Toast.LENGTH_SHORT).show()
-//                geminiViewModel.getCategories()
-//            }) {
-//                Text("Classify")
-//            }
-//            Button(onClick = {
-//                Toast.makeText(context, "Work In Progress", Toast.LENGTH_SHORT).show()
-//            }) {
-//                Text("Extract Tasks")
-//            }
                 Button(onClick = {
                     drawerViewModel.exportPostContent(true, true)
                 }) {
-                    Text("Export Data")
+                    Text(stringResource(R.string.ui_dev_export_data))
                 }
                 Button(onClick = {
                     drawerViewModel.exportPostContent(true, false)
                 }) {
-                    Text("Copy Data with History")
+                    Text(stringResource(R.string.ui_dev_copy_data_with_history))
                 }
                 Button(onClick = {
                     drawerViewModel.exportPostContent(false, false)
                 }) {
-                    Text("Copy Data")
+                    Text(stringResource(R.string.ui_dev_copy_data))
                 }
-//                SharedPrefsButton("Set History Count", KEY_HISTORY_NOTI_COUNT_THRESHOLD)
-//                SharedPrefsButton("Set History Time", KEY_HISTORY_NOTI_HOURS_THRESHOLD)
-//                SharedPrefsButton("Set IP", KEY_SERVER_URL)
             }
         }
     }

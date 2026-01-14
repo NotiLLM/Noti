@@ -12,7 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -31,7 +31,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -39,12 +40,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
+import org.muilab.notigpt.R
 import org.muilab.notigpt.model.notifications.NotiRecord
 import org.muilab.notigpt.model.notifications.NotiUnit
 import org.muilab.notigpt.ui.viewmodel.DrawerViewModel
-import org.muilab.notigpt.util.Constants
 import org.muilab.notigpt.util.getRelativeTimeStr
-import org.muilab.notigpt.util.replaceChars
+import org.muilab.notigpt.util.unescapeUserText
+import org.muilab.notigpt.platform.AndroidClipboardController
 
 /**
  * One card per notiKey.
@@ -63,7 +65,8 @@ fun NotiRecordContextCard(
     // Optional unit from search cache to avoid extra DB fetch.
     cachedUnit: NotiUnit? = null
 ) {
-    val clipboard = LocalClipboardManager.current
+    val context = LocalContext.current
+    val clipboard = remember(context) { AndroidClipboardController(context) }
     val coroutineScope = rememberCoroutineScope()
     var showLoadButtons by remember { mutableStateOf(false) }
 
@@ -157,10 +160,10 @@ fun NotiRecordContextCard(
                 }
 
                 IconButton(onClick = { showLoadButtons = !showLoadButtons }) {
-                    Icon(Icons.Default.MoreVert, contentDescription = "Show more context")
+                    Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.a11y_show_more_context))
                 }
                 IconButton(onClick = { drawerViewModel.accessNotificationByKey(notiKey) }) {
-                    Icon(Icons.Default.ArrowForward, contentDescription = "Open")
+                    Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = stringResource(R.string.ui_action_open))
                 }
             }
 
@@ -182,14 +185,14 @@ fun NotiRecordContextCard(
                         },
                         modifier = Modifier.align(Alignment.CenterHorizontally).minimumInteractiveComponentSize()
                     ) {
-                        Text("Load older")
+                        Text(stringResource(R.string.ui_noti_load_older))
                     }
                 }
             }
 
             // Records content
             safeRecords.forEach { record ->
-                val content = record.content.takeIf { it.isNotBlank() && it != "null" } ?: ""
+                val content = record.content.takeIf { it.isNotBlank() && it != "null" }?.let { unescapeUserText(it) } ?: ""
                 if (content.isBlank()) return@forEach
 
                 Column(
@@ -198,18 +201,18 @@ fun NotiRecordContextCard(
                         .combinedClickable(
                             onClick = { /* no-op */ },
                             onLongClick = {
-                                clipboard.setText(AnnotatedString(content))
+                                clipboard.copyPlainText("record", content)
                             }
                         )
                         .padding(vertical = 6.dp)
                 ) {
                     Text(
-                        text = getRelativeTimeStr(record.time),
+                        text = getRelativeTimeStr(record.time, context),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Text(
-                        text = replaceChars(content),
+                        text = content,
                         style = MaterialTheme.typography.bodyMedium,
                     )
                 }
@@ -233,7 +236,7 @@ fun NotiRecordContextCard(
                         },
                         modifier = Modifier.align(Alignment.CenterHorizontally).minimumInteractiveComponentSize()
                     ) {
-                        Text("Load newer")
+                        Text(stringResource(R.string.ui_noti_load_newer))
                     }
                 }
             }

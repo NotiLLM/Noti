@@ -1,15 +1,131 @@
 <resources>
-    <string name="app_name">Noti</string>
-    <string name="summary_lead_prompt">These are notifications from a smartphone user\'s drawer. You should summarize each notification into a short sentence that covers the important elements mentioned in the notification times, titles and contents. If the notification shows clear emotion of the sender, you could also interpret it in the summary sentence. Each notification takes a single line INDIVIDUALLY.</string>
-    <string name="summary_end_prompt">Each summary should be a short sentence within 15 full-width characters (or 30 half-width CHARACTERS). Use the most condensed form of text possible to convey information without losing the context. SUMMARIZE USING THE LANGUAGE OF THE GIVEN LOCALE. The summary sentence should have NO NEW LINE CHARACTERS.</string>
-    <string name="category_lead_prompt">These are notifications from a smartphone user\'s drawer. You should classify them using a few categories according to each notification. Make sure these category names provide enough information to acknowledge the notification.</string>
-    <string name="category_end_prompt">Each category should have a name within 4 characters in Traditional Chinese. Do not use more than 5 categories.</string>
-    <string name="sort_lead_prompt">
+    <!-- Mark non-localizable strings so they don't require zh translations. -->
+    <string name="app_name" translatable="false">Noti</string>
+    <string name="summary_lead_prompt" translatable="false">These are notifications from a smartphone user\'s drawer. You should summarize each notification into a short sentence that covers the important elements mentioned in the notification times, titles and contents. If the notification shows clear emotion of the sender, you could also interpret it in the summary sentence. Each notification takes a single line INDIVIDUALLY.</string>
+    <string name="summary_end_prompt" translatable="false">Each summary should be a short sentence within 15 full-width characters (or 30 half-width CHARACTERS). Use the most condensed form of text possible to convey information without losing the context. SUMMARIZE USING THE LANGUAGE OF THE GIVEN LOCALE. The summary sentence should have NO NEW LINE CHARACTERS.</string>
+    <string name="category_lead_prompt" translatable="false">These are notifications from a smartphone user\'s drawer. You should classify them using a few categories according to each notification. Make sure these category names provide enough information to acknowledge the notification.</string>
+    <string name="category_end_prompt" translatable="false">Each category should have a name within 4 characters in Traditional Chinese. Do not use more than 5 categories.</string>
+    <string name="sort_lead_prompt" translatable="false">
         These are notifications from my smartphone\'s drawer. You could score of notifications judging on four aspects, namely the potential perceived time sensitiveness, sender attractiveness and content attractiveness of the notification. The rationales are listed below.\n
         Time Sensitiveness (0-10): If the notification was received quite recently or the current moment is close to the dates and times mentioned in the notification, rate it at least 8. If from the time being it looks like a task I\'m clearly ignoring, rate it below 3. If it is clearly outdated, then rate this figure below 2.\n
         Sender Attractiveness (0-10): A notification should be rated above 8 if it\'s a message from individuals, especially if from friends or family. The second tier is human-sent emails or work messages sent by individuals, while chat group notifications follow them in terms of this figure, all at least 6. If the notification is triggered by system or sent by companies, apps or services (in other words, NON-HUMAN), rate it below 3. Note that some service-related or app-related emails could come from human senders, if that\'s the case give them also the bottom tier rating.\n
         Content Attractiveness (0-10): If I may find the content it contains tasks that I MUST DO and MIGHT HAVE NOT DONE, rate it above 8. If it is a one-off notification that may catch my interest, you could rate it at least 6. If it looks like a periodically (e.g. daily bulletins) sent message or email with nothing in particular, rate it below 4. If from the time being it looks like a task I\'m clearly ignoring (e.g. warnings that had been a while ago that I should have dealt with it), rate it below 2.
     </string>
-    <string name="sort_end_prompt">The three scores should each be a float within 0 to 10 (inclusive), with 10 being the most highly rated. Try to produce diversing scores unless you really rate them equal.</string>
-    <string name="service_name">NotiManager NotiListenerService</string>
+    <string name="sort_end_prompt" translatable="false">The three scores should each be a float within 0 to 10 (inclusive), with 10 being the most highly rated. Try to produce diversing scores unless you really rate them equal.</string>
+    <string name="service_name" translatable="false">NotiManager NotiListenerService</string>
+
+    <!-- UI strings (default: English). Notifications text and ESM questionnaires are intentionally NOT localized here. -->
+
+    <!-- Common / actions -->
+    <string name="ui_action_add">Add</string>
+    <string name="ui_action_back">Back</string>
+    <string name="ui_action_cancel">Cancel</string>
+    <string name="ui_action_delete">Delete</string>
+    <string name="ui_action_ok">OK</string>
+    <string name="ui_action_save">Save</string>
+
+    <!-- Settings -->
+    <string name="ui_settings_delete_on_swipe">Delete on swipe:</string>
+    <string name="ui_settings_left">Left</string>
+    <string name="ui_settings_right">Right</string>
+    <string name="ui_settings_expand_task_list">Expand Task List on startup</string>
+
+    <!-- Reminders -->
+    <string name="ui_reminders_filter_all">All</string>
+    <string name="ui_reminders_filter_tasks">Tasks</string>
+    <string name="ui_reminders_filter_memos">Memos</string>
+    <string name="ui_reminders_add_dialog_title">Add</string>
+    <string name="ui_reminders_add_dialog_body">Create a Task or a Memo</string>
+    <string name="ui_reminders_add_dialog_task">Task</string>
+    <string name="ui_reminders_add_dialog_memo">Memo</string>
+    <string name="ui_reminders_untitled_task">(Untitled task)</string>
+    <string name="ui_reminders_untitled_memo">(Untitled memo)</string>
+    <string name="ui_reminders_no_deadline">No deadline</string>
+    <string name="ui_reminders_ect_short">ECT: %1$dm</string>
+    <string name="ui_reminders_editor_title_placeholder">Untitled</string>
+    <string name="ui_reminders_editor_task_label">Task</string>
+    <string name="ui_reminders_editor_completed">Completed</string>
+    <string name="ui_reminders_editor_ect_label">Estimated completion time (minutes)</string>
+    <string name="ui_reminders_editor_note">Note</string>
+    <string name="ui_reminders_editor_note_placeholder">Write something…</string>
+
+    <!-- Accessibility -->
+    <string name="a11y_add">Add</string>
+    <string name="a11y_back">Back</string>
+    <string name="a11y_delete">Delete</string>
+    <string name="a11y_test_esm">Test ESM</string>
+    <string name="a11y_close_search">Close search</string>
+
+    <!-- Relative / absolute time (used in reminders and elsewhere). -->
+    <string name="time_now">now</string>
+    <string name="time_in_a_moment">in a moment</string>
+    <string name="time_moments_ago">moments ago</string>
+    <string name="time_yesterday">Yesterday</string>
+    <string name="time_tomorrow">Tomorrow</string>
+    <string name="time_today">Today</string>
+    <string name="time_today_hhmm">Today %1$s</string>
+    <string name="time_yesterday_hhmm">Yesterday %1$s</string>
+    <string name="time_tomorrow_hhmm">Tomorrow %1$s</string>
+    <string name="time_pattern_time">HH:mm</string>
+    <string name="time_pattern_month_day">M/d</string>
+    <string name="time_pattern_month_day_time">M/d HH:mm</string>
+
+    <!-- Home / Search -->
+    <string name="ui_home_no_results">No results found.</string>
+    <string name="ui_search_placeholder">Search…</string>
+
+    <!-- User control panel -->
+    <string name="ui_user_close_app">Close app</string>
+    <string name="ui_user_clear_all">Clear all</string>
+    <string name="ui_user_all_notifications_deleted">All notifications deleted</string>
+
+    <!-- Dev control panel (debug UI) -->
+    <string name="ui_dev_open_control_panel">Open Control Panel</string>
+    <string name="ui_dev_close_control_panel">Close Control Panel</string>
+    <string name="ui_dev_sync_noti_status">Sync Noti Status</string>
+    <string name="ui_dev_update_user">Update User</string>
+    <string name="ui_dev_export_data">Export Data</string>
+    <string name="ui_dev_copy_data_with_history">Copy Data with History</string>
+    <string name="ui_dev_copy_data">Copy Data</string>
+    <string name="ui_dev_sync_noti_status_toast">Sync Noti Status (WIP)</string>
+    <string name="ui_dev_work_in_progress">Work In Progress</string>
+
+    <!-- SharedPrefsButton (debug UI) -->
+    <string name="ui_debug_enter_integer_for">Enter an Integer for %1$s</string>
+    <string name="ui_debug_enter_value">Enter value</string>
+    <string name="ui_debug_invalid_integer">Invalid integer!</string>
+    <string name="ui_debug_invalid_ip">Invalid IP!</string>
+
+    <!-- Notifications screen (UI chrome only; not notification content) -->
+    <string name="ui_notifications_new">New Notifications (%1$d)</string>
+    <string name="ui_notifications_all">All Notifications</string>
+
+    <!-- Noti record context (history expand/collapse) -->
+    <string name="ui_noti_load_older">Load older</string>
+    <string name="ui_noti_load_newer">Load newer</string>
+    <string name="a11y_show_more_context">Show more context</string>
+    <string name="ui_action_open">Open</string>
+
+    <!-- Bottom bar tabs -->
+    <string name="tab_notifications">Notifications</string>
+    <string name="tab_reminders">Reminders</string>
+    <string name="tab_esm">Short survey</string>
+
+    <!-- ESM screen (UI chrome only; do not translate question/option content) -->
+    <string name="esm_short_survey">Short survey</string>
+    <string name="esm_short_surveys">Short surveys</string>
+    <string name="esm_no_short_surveys">No short surveys right now.</string>
+    <string name="esm_available_count">Available (%1$d)</string>
+    <string name="esm_expires">Expires: %1$s (%2$s)</string>
+    <string name="esm_loading_context">Loading reminder &amp; notifications…</string>
+    <string name="esm_cannot_show_context">Can\'t show reminder/notifications for this short survey.</string>
+    <string name="esm_reminder">Reminder</string>
+    <string name="esm_related_notifications">Related notifications (%1$d)</string>
+    <string name="esm_no_related_notifications">No related notifications.</string>
+    <string name="a11y_expand">Expand</string>
+    <string name="a11y_collapse">Collapse</string>
+
+    <string name="ui_action_next">Next</string>
+    <string name="ui_action_close">Close</string>
+    <string name="ui_action_other">Other</string>
 </resources>

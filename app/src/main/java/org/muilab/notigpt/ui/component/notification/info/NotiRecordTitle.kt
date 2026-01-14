@@ -13,7 +13,7 @@ import androidx.compose.ui.unit.sp
 fun NotiInfoTitle(notiTitle: String, modifier: Modifier = Modifier) {
     Text(
         modifier = Modifier
-            .padding(start = 16.dp)
+            .padding(start = 16.dp, top = 8.dp)
             .then(modifier),
         text = if (notiTitle == "null") "" else notiTitle,
         style = MaterialTheme.typography.bodySmall.copy(

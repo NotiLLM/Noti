@@ -1,5 +1,6 @@
 package org.muilab.notigpt.util
 
+import android.content.Context
 import android.graphics.Bitmap
 import org.muilab.notigpt.domain.math.compressedBase64ToDoubleArray as decodeEmbedding
 import org.muilab.notigpt.domain.math.computeCosine as computeCosineDomain
@@ -9,7 +10,14 @@ import org.muilab.notigpt.util.time.getAbsoluteTimeStr as getAbsoluteTimeStrImpl
 import org.muilab.notigpt.util.time.getRelativeTimeStr as getRelativeTimeStrImpl
 
 fun replaceChars(str: String): String {
-    return str.replace("\n", " ").replace(",", " ")
+    // Some content arrives with literal escape sequences like "\\n" in the text.
+    // Convert those to real newlines so Compose renders multi-line text.
+    // Also normalize Windows/Mac newlines.
+    return str
+        .replace("\\r\\n", "\n")
+        .replace("\\r", "\n")
+        .replace("\\\\n", "\n")
+        .replace(",", " ")
 }
 
 fun hasTransparentPixels(bitmap: Bitmap, threshold: Float): Boolean {
@@ -24,11 +32,23 @@ fun hasTransparentPixels(bitmap: Bitmap, threshold: Float): Boolean {
     return minOf(ratio, 1 - ratio) > threshold
 }
 
-fun getRelativeTimeStr(unixTime: Long, locale: java.util.Locale = java.util.Locale("zh", "TW")): String =
+fun getRelativeTimeStr(unixTime: Long, locale: java.util.Locale = java.util.Locale.getDefault()): String =
     getRelativeTimeStrImpl(unixTime, locale)
 
-fun getAbsoluteTimeStr(unixTime: Long, locale: java.util.Locale = java.util.Locale("zh", "TW")): String =
+fun getAbsoluteTimeStr(unixTime: Long, locale: java.util.Locale = java.util.Locale.getDefault()): String =
     getAbsoluteTimeStrImpl(unixTime, locale)
+
+fun getRelativeTimeStr(
+    unixTime: Long,
+    context: Context,
+    locale: java.util.Locale = java.util.Locale.getDefault()
+): String = getRelativeTimeStrImpl(unixTime, context, locale)
+
+fun getAbsoluteTimeStr(
+    unixTime: Long,
+    context: Context,
+    locale: java.util.Locale = java.util.Locale.getDefault()
+): String = getAbsoluteTimeStrImpl(unixTime, context, locale)
 
 fun doubleArrayToCompressedBase64(doubleArray: DoubleArray): String = encodeEmbedding(doubleArray)
 

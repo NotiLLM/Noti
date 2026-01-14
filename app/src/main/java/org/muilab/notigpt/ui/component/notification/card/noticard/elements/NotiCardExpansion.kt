@@ -7,7 +7,7 @@ import androidx.compose.foundation.gestures.AnchoredDraggableState
 import androidx.compose.foundation.gestures.DraggableAnchors
 import androidx.compose.foundation.gestures.FlingBehavior
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.height
@@ -101,10 +101,17 @@ fun NotiCardExpandedRecords(
     SubcomposeLayout(modifier = Modifier) { constraints ->
         val measuringConstraints = constraints.copy(maxHeight = Int.MAX_VALUE)
         val toMeasure = showingRecords.take(sampleCount)
+        val overallTitle = showingRecords.lastOrNull()?.getDisplayedTitle(isPeople).orEmpty()
         val measPlaceables = subcompose("measurer") {
             Column {
-                toMeasure.forEach { rec ->
-                    ExpandedNotiRecord(rec.getDisplayedTitle(isPeople), rec.time, rec.content, false)
+                toMeasure.forEachIndexed { index, rec ->
+                    val currentTitle = rec.getDisplayedTitle(isPeople)
+                    val prevTitle = if (index > 0) toMeasure[index - 1].getDisplayedTitle(isPeople) else null
+                    val showTitle = when {
+                        index == 0 -> currentTitle.isNotBlank() && currentTitle != overallTitle
+                        else -> currentTitle.isNotBlank() && currentTitle != prevTitle
+                    }
+                    ExpandedNotiRecord(currentTitle, rec.time, rec.content, showTitle)
                 }
             }
         }.map { it.measure(measuringConstraints) }
@@ -165,12 +172,21 @@ fun NotiCardExpandedRecords(
             }
         }
 
-        items(showingRecords, key = { it.notiRecordId }) { notiRecord ->
+        val overallTitle = showingRecords.lastOrNull()?.getDisplayedTitle(isPeople).orEmpty()
+
+        itemsIndexed(showingRecords, key = { _, it -> it.notiRecordId }) { index, notiRecord ->
+            val currentTitle = notiRecord.getDisplayedTitle(isPeople)
+            val prevTitle = if (index > 0) showingRecords[index - 1].getDisplayedTitle(isPeople) else null
+            val showTitle = when {
+                index == 0 -> currentTitle.isNotBlank() && currentTitle != overallTitle
+                else -> currentTitle.isNotBlank() && currentTitle != prevTitle
+            }
+
             ExpandedNotiRecord(
-                notiRecord.getDisplayedTitle(isPeople),
+                currentTitle,
                 notiRecord.time,
                 notiRecord.content,
-                false,
+                showTitle,
             )
         }
     }

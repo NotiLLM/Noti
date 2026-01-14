@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.material3.RadioButton
-import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -19,8 +18,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
+import org.muilab.notigpt.R
 import org.muilab.notigpt.util.SharedPreferencesManager
 
 @Composable
@@ -30,7 +31,7 @@ fun SettingsScreen() {
 
         // Simple radio row to choose swipe-delete direction
         Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("Delete on swipe: ", modifier = Modifier.padding(end = 8.dp))
+            Text(stringResource(R.string.ui_settings_delete_on_swipe), modifier = Modifier.padding(end = 8.dp))
 
             // Left Option
             Row(modifier = Modifier.selectable(
@@ -48,7 +49,7 @@ fun SettingsScreen() {
                         SharedPreferencesManager.swipeDeleteLeft = true
                     }
                 )
-                Text("Left", modifier = Modifier.padding(start = 4.dp, top = 12.dp))
+                Text(stringResource(R.string.ui_settings_left), modifier = Modifier.padding(start = 4.dp, top = 12.dp))
             }
 
             Spacer(modifier = Modifier.size(16.dp))
@@ -69,7 +70,7 @@ fun SettingsScreen() {
                         SharedPreferencesManager.swipeDeleteLeft = false
                     }
                 )
-                Text("Right", modifier = Modifier.padding(start = 4.dp, top = 12.dp))
+                Text(stringResource(R.string.ui_settings_right), modifier = Modifier.padding(start = 4.dp, top = 12.dp))
             }
         }
 
@@ -79,7 +80,7 @@ fun SettingsScreen() {
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("Expand Task List on startup", modifier = Modifier.weight(1f))
+            Text(stringResource(R.string.ui_settings_expand_task_list), modifier = Modifier.weight(1f))
             Switch(
                 checked = isTaskExpandedDefault,
                 onCheckedChange = {

@@ -27,10 +27,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.muilab.notigpt.R
 import org.muilab.notigpt.model.notifications.NotiDrawerItem
 import org.muilab.notigpt.model.notifications.NotiGroupItem
 import org.muilab.notigpt.model.notifications.NotiItem
@@ -212,7 +214,7 @@ fun NotificationsScreen(
         ) {
             item {
                 Text(
-                    text = "New Notifications (${activeCount})",
+                    text = stringResource(R.string.ui_notifications_new, activeCount),
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                 )
@@ -277,7 +279,7 @@ fun NotificationsScreen(
 
             item {
                 Text(
-                    text = "All Notifications",
+                    text = stringResource(R.string.ui_notifications_all),
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                 )

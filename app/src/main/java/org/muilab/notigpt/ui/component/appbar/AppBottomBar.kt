@@ -3,7 +3,6 @@ package org.muilab.notigpt.ui.component.appbar
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
@@ -17,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -80,13 +80,13 @@ fun AppBottomBar(
             icon = {
                 BadgeIcon(
                     iconRes = R.drawable.notifications,
-                    contentDescription = "Notifications",
+                    contentDescription = stringResource(R.string.tab_notifications),
                     badgeCount = unreadNotificationCount,
                     badgeColor = MaterialTheme.colorScheme.error,
                     badgeTextColor = MaterialTheme.colorScheme.onError,
                 )
             },
-            label = { Text("Notifications") }
+            label = { Text(stringResource(R.string.tab_notifications)) }
         )
         NavigationBarItem(
             selected = selectedTab == Tab.Reminders,
@@ -94,13 +94,13 @@ fun AppBottomBar(
             icon = {
                 BadgeIcon(
                     iconRes = R.drawable.task_no,
-                    contentDescription = "Reminders",
+                    contentDescription = stringResource(R.string.tab_reminders),
                     badgeCount = pendingTaskCount,
                     badgeColor = MaterialTheme.colorScheme.primary,
                     badgeTextColor = MaterialTheme.colorScheme.onPrimary,
                 )
             },
-            label = { Text("Reminders") }
+            label = { Text(stringResource(R.string.tab_reminders)) }
         )
         NavigationBarItem(
             selected = selectedTab == Tab.ESM,
@@ -108,13 +108,13 @@ fun AppBottomBar(
             icon = {
                 BadgeIcon(
                     iconRes = R.drawable.settings,
-                    contentDescription = "ESM",
+                    contentDescription = stringResource(R.string.tab_esm),
                     badgeCount = 0,
                     badgeColor = MaterialTheme.colorScheme.tertiary,
                     badgeTextColor = MaterialTheme.colorScheme.onTertiary,
                 )
             },
-            label = { Text("ESM") }
+            label = { Text(stringResource(R.string.tab_esm)) }
         )
     }
 }

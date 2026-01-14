@@ -4,7 +4,6 @@ import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -15,8 +14,9 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import org.muilab.notigpt.ui.component.DevControlPanel
+import org.muilab.notigpt.R
 import org.muilab.notigpt.ui.component.notification.card.notirecord.NotiRecordContextCard
 import org.muilab.notigpt.ui.screens.NotificationsScreen
 import org.muilab.notigpt.ui.utils.LifecycleObserver
@@ -37,7 +37,7 @@ fun HomeScreen(drawerViewModel: DrawerViewModel) {
 
             if (searchResults.isEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("No results found.")
+                    Text(stringResource(R.string.ui_home_no_results))
                 }
             } else {
                 LazyColumn(

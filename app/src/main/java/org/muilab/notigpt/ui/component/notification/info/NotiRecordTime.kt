@@ -9,17 +9,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import org.muilab.notigpt.util.getRelativeTimeStr
+import androidx.compose.ui.platform.LocalContext
+import org.muilab.notigpt.util.time.getRelativeTimeStr
 
 @Composable
 fun NotiInfoTime(notiTime: Long, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
     Box(
         modifier = modifier
     ) {
         Text(
             modifier = Modifier
                 .padding(end = 16.dp),
-            text = getRelativeTimeStr(notiTime),
+            text = getRelativeTimeStr(notiTime, context),
             style = MaterialTheme.typography.bodySmall.copy(
                 fontSize = 12.sp,
                 fontStyle = FontStyle.Italic

@@ -32,10 +32,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import org.json.JSONArray
 import org.json.JSONObject
+import org.muilab.notigpt.R
 import org.muilab.notigpt.domain.esm.EsmUserSnapshot
 import org.muilab.notigpt.domain.esm.IRBShortSurveyV2
 import org.muilab.notigpt.ui.screens.esm.EsmNotiCardLikePreview
@@ -47,6 +50,7 @@ import org.muilab.notigpt.util.time.getRelativeTimeStr
 @RequiresApi(Build.VERSION_CODES.S)
 @Composable
 fun EsmScreen(esmViewModel: EsmViewModel? = null) {
+    val ctx = LocalContext.current
     val vm: EsmViewModel = esmViewModel ?: viewModel()
     val available by vm.available.collectAsState()
     val active by vm.activeInstance.collectAsState()
@@ -63,16 +67,16 @@ fun EsmScreen(esmViewModel: EsmViewModel? = null) {
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text("Questionnaires", style = MaterialTheme.typography.titleLarge)
+            Text(stringResource(R.string.esm_short_surveys), style = MaterialTheme.typography.titleLarge)
 
             if (available.isEmpty()) {
-                Text("No questionnaires right now.")
+                Text(stringResource(R.string.esm_no_short_surveys))
             } else {
-                Text("Available (${available.size})")
+                Text(stringResource(R.string.esm_available_count, available.size))
                 available.forEach { inst ->
-                    var ctx by remember(inst.snapshotId) { mutableStateOf<EsmUserSnapshot.SurveyContext?>(null) }
+                    var surveyCtx by remember(inst.snapshotId) { mutableStateOf<EsmUserSnapshot.SurveyContext?>(null) }
                     LaunchedEffect(inst.snapshotId) {
-                        ctx = vm.loadSnapshotJson(inst.snapshotId)?.let { EsmUserSnapshot.parse(it) }
+                        surveyCtx = vm.loadSnapshotJson(inst.snapshotId)?.let { EsmUserSnapshot.parse(it) }
                     }
 
                     Row(
@@ -82,17 +86,22 @@ fun EsmScreen(esmViewModel: EsmViewModel? = null) {
                     ) {
                         Column(Modifier.weight(1f)) {
                             Text(
-                                text = ctx?.reminder?.title ?: "Questionnaire",
+                                // Only UI chrome: fallback title
+                                text = surveyCtx?.reminder?.title ?: stringResource(R.string.esm_short_survey),
                                 style = MaterialTheme.typography.titleMedium
                             )
                             Text(
-                                text = "Expires: ${getAbsoluteTimeStr(inst.expiresAt)} (${getRelativeTimeStr(inst.expiresAt)})",
+                                text = stringResource(
+                                    R.string.esm_expires,
+                                    getAbsoluteTimeStr(inst.expiresAt),
+                                    getRelativeTimeStr(inst.expiresAt, ctx)
+                                ),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                         Button(onClick = { vm.openInstance(inst) }) {
-                            Text("Open")
+                            Text(stringResource(R.string.ui_action_open))
                         }
                     }
                 }
@@ -142,41 +151,40 @@ fun EsmScreen(esmViewModel: EsmViewModel? = null) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text("Questionnaire", style = MaterialTheme.typography.titleSmall)
+            Text(stringResource(R.string.esm_short_survey), style = MaterialTheme.typography.titleSmall)
             if (trail.size > 1) {
                 IconButton(onClick = { vm.goBackQuestion() }) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.ui_action_back))
                 }
             }
         }
 
+        // introText intentionally stays as-is (Taiwan-focused content)
         Text(IRBShortSurveyV2.introText(inst.triggerType), style = MaterialTheme.typography.bodyMedium)
 
         // User-friendly context: show reminder + noti previews.
         when {
             snapshotJson == null -> {
                 Text(
-                    text = "Loading reminder & notifications…",
+                    text = stringResource(R.string.esm_loading_context),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                // In case load didn't happen for some reason
                 LaunchedEffect(inst.snapshotId) { vm.refreshActiveSnapshot() }
             }
 
             surveyCtx == null -> {
                 Text(
-                    text = "Can't show reminder/notifications for this questionnaire.",
+                    text = stringResource(R.string.esm_cannot_show_context),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
             else -> {
-                Text("Reminder", style = MaterialTheme.typography.titleSmall)
+                Text(stringResource(R.string.esm_reminder), style = MaterialTheme.typography.titleSmall)
                 EsmReminderPreview(surveyCtx.reminder)
 
-                // Collapsible related notifications
                 var notisExpanded by remember(inst.instanceId) { mutableStateOf(false) }
                 Row(
                     modifier = Modifier
@@ -187,19 +195,19 @@ fun EsmScreen(esmViewModel: EsmViewModel? = null) {
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        text = "Related notifications (${surveyCtx.notis.size})",
+                        text = stringResource(R.string.esm_related_notifications, surveyCtx.notis.size),
                         style = MaterialTheme.typography.titleSmall
                     )
                     Icon(
                         imageVector = if (notisExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                        contentDescription = if (notisExpanded) "Collapse" else "Expand",
+                        contentDescription = if (notisExpanded) stringResource(R.string.a11y_collapse) else stringResource(R.string.a11y_expand),
                     )
                 }
 
                 if (notisExpanded) {
                     if (surveyCtx.notis.isEmpty()) {
                         Text(
-                            text = "No related notifications.",
+                            text = stringResource(R.string.esm_no_related_notifications),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -212,6 +220,7 @@ fun EsmScreen(esmViewModel: EsmViewModel? = null) {
             }
         }
 
+        // Question text + option labels intentionally NOT localized
         Text(q.text, style = MaterialTheme.typography.titleMedium)
 
         when (q.type) {
@@ -235,7 +244,7 @@ fun EsmScreen(esmViewModel: EsmViewModel? = null) {
                     OutlinedTextField(
                         value = otherText,
                         onValueChange = { otherText = it },
-                        label = { Text("Other") },
+                        label = { Text(stringResource(R.string.ui_action_other)) },
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -246,7 +255,7 @@ fun EsmScreen(esmViewModel: EsmViewModel? = null) {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     if (trail.size > 1) {
-                        TextButton(onClick = { vm.goBackQuestion() }) { Text("Back") }
+                        TextButton(onClick = { vm.goBackQuestion() }) { Text(stringResource(R.string.ui_action_back)) }
                     }
                     Button(
                         enabled = answerValue.isNotBlank(),
@@ -260,7 +269,7 @@ fun EsmScreen(esmViewModel: EsmViewModel? = null) {
                             }.toString()
                             vm.submitAnswer(json)
                         }
-                    ) { Text("Next") }
+                    ) { Text(stringResource(R.string.ui_action_next)) }
                 }
             }
 
@@ -307,7 +316,7 @@ fun EsmScreen(esmViewModel: EsmViewModel? = null) {
                     OutlinedTextField(
                         value = otherText,
                         onValueChange = { otherText = it },
-                        label = { Text("Other") },
+                        label = { Text(stringResource(R.string.ui_action_other)) },
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -318,7 +327,7 @@ fun EsmScreen(esmViewModel: EsmViewModel? = null) {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     if (trail.size > 1) {
-                        TextButton(onClick = { vm.goBackQuestion() }) { Text("Back") }
+                        TextButton(onClick = { vm.goBackQuestion() }) { Text(stringResource(R.string.ui_action_back)) }
                     }
                     Button(
                         enabled = selected.isNotEmpty(),
@@ -333,11 +342,11 @@ fun EsmScreen(esmViewModel: EsmViewModel? = null) {
                             }.toString()
                             vm.submitAnswer(json)
                         }
-                    ) { Text("Next") }
+                    ) { Text(stringResource(R.string.ui_action_next)) }
                 }
             }
         }
 
-        TextButton(onClick = { vm.closeInstance() }) { Text("Close") }
+        TextButton(onClick = { vm.closeInstance() }) { Text(stringResource(R.string.ui_action_close)) }
     }
 }

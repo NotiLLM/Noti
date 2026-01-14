@@ -11,6 +11,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import org.muilab.notigpt.domain.esm.EsmUserSnapshot
 import org.muilab.notigpt.util.time.getAbsoluteTimeStr
@@ -18,6 +19,7 @@ import org.muilab.notigpt.util.time.getRelativeTimeStr
 
 @Composable
 fun EsmReminderPreview(reminder: EsmUserSnapshot.ReminderPreview) {
+    val ctx = LocalContext.current
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.medium,
@@ -39,7 +41,7 @@ fun EsmReminderPreview(reminder: EsmUserSnapshot.ReminderPreview) {
             if (reminder.isTask) {
                 // Deadline + ECT row (like task cards)
                 val deadlineStr = if (reminder.deadlineTimestamp > 0L) {
-                    "Deadline: ${getAbsoluteTimeStr(reminder.deadlineTimestamp)} (${getRelativeTimeStr(reminder.deadlineTimestamp)})"
+                    "Deadline: ${getAbsoluteTimeStr(reminder.deadlineTimestamp)} (${getRelativeTimeStr(reminder.deadlineTimestamp, ctx)})"
                 } else {
                     "No deadline"
                 }

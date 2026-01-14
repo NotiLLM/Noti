@@ -51,8 +51,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
@@ -60,6 +60,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import org.muilab.notigpt.R
 import org.muilab.notigpt.domain.esm.EsmTriggerTypes
 import org.muilab.notigpt.model.features.ReminderUnit
 import org.muilab.notigpt.repository.EsmRepository
@@ -67,6 +68,7 @@ import org.muilab.notigpt.ui.viewmodel.ReminderViewModel
 import org.muilab.notigpt.util.getAbsoluteTimeStr
 import org.muilab.notigpt.util.getRelativeTimeStr
 import java.util.Calendar
+import org.muilab.notigpt.platform.AndroidClipboardController
 
 @Composable
 fun RemindersScreen(
@@ -104,9 +106,9 @@ fun RemindersScreen(
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                FilterChip("All", filter == ReminderViewModel.FilterTab.All) { vm.setFilter(ReminderViewModel.FilterTab.All) }
-                FilterChip("Tasks", filter == ReminderViewModel.FilterTab.Tasks) { vm.setFilter(ReminderViewModel.FilterTab.Tasks) }
-                FilterChip("Memos", filter == ReminderViewModel.FilterTab.Memos) { vm.setFilter(ReminderViewModel.FilterTab.Memos) }
+                FilterChip(stringResource(R.string.ui_reminders_filter_all), filter == ReminderViewModel.FilterTab.All) { vm.setFilter(ReminderViewModel.FilterTab.All) }
+                FilterChip(stringResource(R.string.ui_reminders_filter_tasks), filter == ReminderViewModel.FilterTab.Tasks) { vm.setFilter(ReminderViewModel.FilterTab.Tasks) }
+                FilterChip(stringResource(R.string.ui_reminders_filter_memos), filter == ReminderViewModel.FilterTab.Memos) { vm.setFilter(ReminderViewModel.FilterTab.Memos) }
             }
 
             LazyColumn(
@@ -135,27 +137,27 @@ fun RemindersScreen(
                 .padding(16.dp),
             onClick = { showAddDialog = true }
         ) {
-            Icon(Icons.Default.Add, contentDescription = "Add")
+            Icon(Icons.Default.Add, contentDescription = stringResource(R.string.a11y_add))
         }
 
         if (showAddDialog) {
             AlertDialog(
                 onDismissRequest = { showAddDialog = false },
-                title = { Text("Add") },
-                text = { Text("Create a Task or a Memo") },
+                title = { Text(stringResource(R.string.ui_reminders_add_dialog_title)) },
+                text = { Text(stringResource(R.string.ui_reminders_add_dialog_body)) },
                 confirmButton = {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         TextButton(onClick = {
                             vm.addNew(isTask = true)
                             showAddDialog = false
-                        }) { Text("Task") }
+                        }) { Text(stringResource(R.string.ui_reminders_add_dialog_task)) }
                         TextButton(onClick = {
                             vm.addNew(isTask = false)
                             showAddDialog = false
-                        }) { Text("Memo") }
+                        }) { Text(stringResource(R.string.ui_reminders_add_dialog_memo)) }
                     }
                 },
-                dismissButton = { TextButton(onClick = { showAddDialog = false }) { Text("Cancel") } }
+                dismissButton = { TextButton(onClick = { showAddDialog = false }) { Text(stringResource(R.string.ui_action_cancel)) } }
             )
         }
 
@@ -262,7 +264,8 @@ private fun ReminderCard(
     onToggleCompleted: (Boolean) -> Unit,
     onEdit: () -> Unit,
 ) {
-    val clipboard = LocalClipboardManager.current
+    val context = LocalContext.current
+    val clipboard = remember(context) { AndroidClipboardController(context) }
 
     Column(
         modifier = Modifier
@@ -272,7 +275,7 @@ private fun ReminderCard(
                 onClick = onEdit,
                 onLongClick = {
                     if (reminder.reminderContent.isNotBlank()) {
-                        clipboard.setText(AnnotatedString(reminder.reminderContent))
+                        CoroutineScope(Dispatchers.Main).launch { clipboard.copyPlainText("reminder", reminder.reminderContent) }
                     }
                 }
             )
@@ -293,13 +296,15 @@ private fun ReminderCard(
             }
 
             Text(
-                text = reminder.reminderTitle.ifBlank { if (reminder.isTask) "(Untitled task)" else "(Untitled memo)" },
+                text = reminder.reminderTitle.ifBlank {
+                    if (reminder.isTask) stringResource(R.string.ui_reminders_untitled_task) else stringResource(R.string.ui_reminders_untitled_memo)
+                },
                 style = titleStyle,
                 modifier = Modifier.weight(1f)
             )
 
             IconButton(onClick = onDelete) {
-                Icon(Icons.Default.Delete, contentDescription = "Delete")
+                Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.a11y_delete))
             }
         }
 
@@ -312,11 +317,11 @@ private fun ReminderCard(
             ) {
                 val deadline = reminder.deadlineTimestamp
                 val deadlineStr = if (deadline > 0L) {
-                    val abs = getAbsoluteTimeStr(deadline)
-                    val rel = getRelativeTimeStr(deadline)
+                    val abs = getAbsoluteTimeStr(deadline, context)
+                    val rel = getRelativeTimeStr(deadline, context)
                     "$abs ($rel)"
                 } else {
-                    "No deadline"
+                    stringResource(R.string.ui_reminders_no_deadline)
                 }
 
                 Text(
@@ -325,7 +330,10 @@ private fun ReminderCard(
                     color = if (deadline > 0L && deadline < System.currentTimeMillis()) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
-                val ectStr = if (reminder.estimatedCompletionTime > 0) "ECT: ${reminder.estimatedCompletionTime}m" else ""
+                val ectStr = if (reminder.estimatedCompletionTime > 0)
+                    stringResource(R.string.ui_reminders_ect_short, reminder.estimatedCompletionTime)
+                else
+                    ""
                 Text(text = ectStr, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
@@ -405,7 +413,7 @@ private fun ReminderDetailScreen(
                     decorationBox = { innerTextField ->
                         if (title.isBlank()) {
                             Text(
-                                text = "Untitled",
+                                text = stringResource(R.string.ui_reminders_editor_title_placeholder),
                                 style = MaterialTheme.typography.titleLarge,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -416,7 +424,7 @@ private fun ReminderDetailScreen(
             },
             navigationIcon = {
                 IconButton(onClick = { onBack(buildUpdated()) }) {
-                    Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                    Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.a11y_back))
                 }
             },
             actions = {
@@ -431,15 +439,15 @@ private fun ReminderDetailScreen(
                             }
                         }
                     }) {
-                        Icon(Icons.Default.Notifications, contentDescription = "Test ESM")
+                        Icon(Icons.Default.Notifications, contentDescription = stringResource(R.string.a11y_test_esm))
                     }
                 }
 
                 IconButton(onClick = { onDelete(initial.reminderId) }) {
-                    Icon(Icons.Default.Delete, contentDescription = "Delete")
+                    Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.a11y_delete))
                 }
                 TextButton(onClick = { onSave(buildUpdated()) }) {
-                    Text("Save")
+                    Text(stringResource(R.string.ui_action_save))
                 }
             }
         )
@@ -451,7 +459,7 @@ private fun ReminderDetailScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                Text("Task", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                Text(stringResource(R.string.ui_reminders_editor_task_label), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
                 Switch(checked = isTask, onCheckedChange = { isTask = it })
             }
 
@@ -459,17 +467,17 @@ private fun ReminderDetailScreen(
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                     Checkbox(checked = isCompleted, onCheckedChange = { isCompleted = it })
                     Spacer(Modifier.width(8.dp))
-                    Text("Completed", style = MaterialTheme.typography.bodyMedium)
+                    Text(stringResource(R.string.ui_reminders_editor_completed), style = MaterialTheme.typography.bodyMedium)
                 }
 
                 HorizontalDivider()
 
                 val deadlineStr = if (deadlineTimestamp > 0L) {
-                    val abs = getAbsoluteTimeStr(deadlineTimestamp)
-                    val rel = getRelativeTimeStr(deadlineTimestamp)
+                    val abs = getAbsoluteTimeStr(deadlineTimestamp, context)
+                    val rel = getRelativeTimeStr(deadlineTimestamp, context)
                     "$abs ($rel)"
                 } else {
-                    "No deadline"
+                    stringResource(R.string.ui_reminders_no_deadline)
                 }
 
                 TextButton(onClick = { showDatePicker = true }) {
@@ -485,12 +493,12 @@ private fun ReminderDetailScreen(
                 OutlinedTextField(
                     value = if (ectMinutes == 0L) "" else ectMinutes.toString(),
                     onValueChange = { ectMinutes = it.toLongOrNull() ?: 0L },
-                    label = { Text("Estimated completion time (minutes)") },
+                    label = { Text(stringResource(R.string.ui_reminders_editor_ect_label)) },
                     singleLine = true,
                 )
             }
 
-            Text("Note", style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.ui_reminders_editor_note), style = MaterialTheme.typography.titleMedium)
 
             // Note-like editor (no outlined box)
             Surface(
@@ -509,7 +517,7 @@ private fun ReminderDetailScreen(
                     decorationBox = { innerTextField ->
                         if (content.isBlank()) {
                             Text(
-                                text = "Write something…",
+                                text = stringResource(R.string.ui_reminders_editor_note_placeholder),
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -557,10 +565,10 @@ private fun ReminderDetailScreen(
                         }
                         showDatePicker = false
                     }
-                ) { Text("OK") }
+                ) { Text(stringResource(R.string.ui_action_ok)) }
             },
             dismissButton = {
-                TextButton(onClick = { showDatePicker = false }) { Text("Cancel") }
+                TextButton(onClick = { showDatePicker = false }) { Text(stringResource(R.string.ui_action_cancel)) }
             }
         ) {
             DatePicker(state = datePickerState)

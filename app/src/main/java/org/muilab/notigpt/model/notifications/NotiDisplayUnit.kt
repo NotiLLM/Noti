@@ -1,7 +1,5 @@
 package org.muilab.notigpt.model.notifications
 
-import org.muilab.notigpt.util.getRelativeTimeStr
-
 class NotiDisplayUnit (
     val notiUnit: NotiUnit,
     val notiRecords: List<NotiRecord>,
@@ -18,6 +16,5 @@ class NotiDisplayUnit (
     val lastUpdateTime: Long
         get() = notiRecords.lastOrNull()?.time ?: 0L
 
-    val latestUpdateRelTimeStr: String
-        get() = getRelativeTimeStr(lastUpdateTime)
+    // NOTE: UI should format this with Context to ensure correct localization.
 }

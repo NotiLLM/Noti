@@ -13,7 +13,9 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import org.muilab.notigpt.R
 import org.muilab.notigpt.ui.viewmodel.DrawerViewModel
 
 @RequiresApi(Build.VERSION_CODES.S)
@@ -25,16 +27,16 @@ fun UserControlPanel(drawerViewModel: DrawerViewModel) {
         TextButton(
             onClick = { (context as? ComponentActivity)?.finish() },
         ) {
-            Text("Close App")
+            Text(stringResource(R.string.ui_user_close_app))
         }
         Spacer(Modifier.weight(1f))
         TextButton(
             onClick = {
                 drawerViewModel.deleteAllNotis()
-                Toast.makeText(context, "All notifications deleted", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, context.getString(R.string.ui_user_all_notifications_deleted), Toast.LENGTH_SHORT).show()
             },
         ) {
-            Text("Clear All")
+            Text(stringResource(R.string.ui_user_clear_all))
         }
         Spacer(Modifier.size(5.dp))
     }

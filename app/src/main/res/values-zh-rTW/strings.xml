@@ -1,0 +1,116 @@
+<resources>
+    <!-- UI strings (Traditional Chinese - Taiwan). Notifications text and ESM questionnaires are intentionally NOT localized here. -->
+
+    <!-- Common / actions -->
+    <string name="ui_action_add">新增</string>
+    <string name="ui_action_back">返回</string>
+    <string name="ui_action_cancel">取消</string>
+    <string name="ui_action_delete">刪除</string>
+    <string name="ui_action_ok">確定</string>
+    <string name="ui_action_save">儲存</string>
+
+    <!-- Settings -->
+    <string name="ui_settings_delete_on_swipe">滑動刪除：</string>
+    <string name="ui_settings_left">向左</string>
+    <string name="ui_settings_right">向右</string>
+    <string name="ui_settings_expand_task_list">啟動時展開任務清單</string>
+
+    <!-- Reminders -->
+    <string name="ui_reminders_filter_all">全部</string>
+    <string name="ui_reminders_filter_tasks">任務</string>
+    <string name="ui_reminders_filter_memos">備忘</string>
+    <string name="ui_reminders_add_dialog_title">新增</string>
+    <string name="ui_reminders_add_dialog_body">建立任務或備忘</string>
+    <string name="ui_reminders_add_dialog_task">任務</string>
+    <string name="ui_reminders_add_dialog_memo">備忘</string>
+    <string name="ui_reminders_untitled_task">（未命名任務）</string>
+    <string name="ui_reminders_untitled_memo">（未命名備忘）</string>
+    <string name="ui_reminders_no_deadline">無截止時間</string>
+    <string name="ui_reminders_ect_short">預估：%1$d 分</string>
+    <string name="ui_reminders_editor_title_placeholder">未命名</string>
+    <string name="ui_reminders_editor_task_label">任務</string>
+    <string name="ui_reminders_editor_completed">已完成</string>
+    <string name="ui_reminders_editor_ect_label">預估完成時間（分鐘）</string>
+    <string name="ui_reminders_editor_note">內容</string>
+    <string name="ui_reminders_editor_note_placeholder">寫點什麼……</string>
+
+    <!-- Accessibility -->
+    <string name="a11y_add">新增</string>
+    <string name="a11y_back">返回</string>
+    <string name="a11y_delete">刪除</string>
+    <string name="a11y_test_esm">測試 ESM</string>
+
+    <!-- Relative / absolute time (used in reminders and elsewhere). -->
+    <string name="time_now">現在</string>
+    <string name="time_in_a_moment">馬上</string>
+    <string name="time_moments_ago">剛剛</string>
+    <string name="time_yesterday">昨天</string>
+    <string name="time_tomorrow">明天</string>
+    <string name="time_today">今天</string>
+    <string name="time_today_hhmm">今天 %1$s</string>
+    <string name="time_yesterday_hhmm">昨天 %1$s</string>
+    <string name="time_tomorrow_hhmm">明天 %1$s</string>
+    <string name="time_pattern_time">HH:mm</string>
+    <string name="time_pattern_month_day">M\'月\' d\'日\'</string>
+    <string name="time_pattern_month_day_time">M\'月\' d\'日\' HH:mm</string>
+
+    <!-- Home / Search -->
+    <string name="ui_home_no_results">找不到結果。</string>
+    <string name="ui_search_placeholder">搜尋…</string>
+    <string name="a11y_close_search">關閉搜尋</string>
+
+    <!-- User control panel -->
+    <string name="ui_user_close_app">關閉 App</string>
+    <string name="ui_user_clear_all">全部清除</string>
+    <string name="ui_user_all_notifications_deleted">已刪除所有通知</string>
+
+    <!-- Dev control panel (debug UI) -->
+    <string name="ui_dev_open_control_panel">開啟控制面板</string>
+    <string name="ui_dev_close_control_panel">關閉控制面板</string>
+    <string name="ui_dev_sync_noti_status">同步通知狀態</string>
+    <string name="ui_dev_update_user">更新使用者</string>
+    <string name="ui_dev_export_data">匯出資料</string>
+    <string name="ui_dev_copy_data_with_history">複製資料（含歷史）</string>
+    <string name="ui_dev_copy_data">複製資料</string>
+    <string name="ui_dev_sync_noti_status_toast">同步通知狀態（WIP）</string>
+    <string name="ui_dev_work_in_progress">尚在開發中</string>
+
+    <!-- SharedPrefsButton (debug UI) -->
+    <string name="ui_debug_enter_integer_for">請輸入 %1$s 的整數值</string>
+    <string name="ui_debug_enter_value">輸入數值</string>
+    <string name="ui_debug_invalid_integer">整數格式錯誤！</string>
+    <string name="ui_debug_invalid_ip">IP 格式錯誤！</string>
+
+    <!-- Notifications screen (UI chrome only; not notification content) -->
+    <string name="ui_notifications_new">新通知（%1$d）</string>
+    <string name="ui_notifications_all">所有通知</string>
+
+    <!-- Noti record context (history expand/collapse) -->
+    <string name="ui_noti_load_older">載入更早</string>
+    <string name="ui_noti_load_newer">載入更新</string>
+    <string name="a11y_show_more_context">顯示更多內容</string>
+    <string name="ui_action_open">開啟</string>
+
+    <!-- Bottom bar tabs -->
+    <string name="tab_notifications">通知</string>
+    <string name="tab_reminders">提醒</string>
+    <string name="tab_esm">短問卷</string>
+
+    <!-- ESM screen (UI chrome only; do not translate question/option content) -->
+    <string name="esm_short_survey">短問卷</string>
+    <string name="esm_short_surveys">短問卷</string>
+    <string name="esm_no_short_surveys">目前沒有短問卷。</string>
+    <string name="esm_available_count">可填寫（%1$d）</string>
+    <string name="esm_expires">截止：%1$s（%2$s）</string>
+    <string name="esm_loading_context">正在載入提醒與相關通知…</string>
+    <string name="esm_cannot_show_context">無法顯示此短問卷的提醒／通知內容。</string>
+    <string name="esm_reminder">提醒</string>
+    <string name="esm_related_notifications">相關通知（%1$d）</string>
+    <string name="esm_no_related_notifications">沒有相關通知。</string>
+    <string name="a11y_expand">展開</string>
+    <string name="a11y_collapse">收合</string>
+
+    <string name="ui_action_next">下一步</string>
+    <string name="ui_action_close">關閉</string>
+    <string name="ui_action_other">其他</string>
+</resources>

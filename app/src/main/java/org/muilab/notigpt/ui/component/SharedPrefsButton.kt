@@ -1,12 +1,21 @@
 package org.muilab.notigpt.ui.component
 
-import android.widget.Toast
-import androidx.compose.material3.*
-import androidx.compose.foundation.layout.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.material3.Button
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.window.Dialog
+import org.muilab.notigpt.R
 import org.muilab.notigpt.database.server.N8nAPIClient
 import org.muilab.notigpt.util.SharedPreferencesManager
 import org.muilab.notigpt.util.SharedPreferencesManager.KEY_HISTORY_NOTI_COUNT_THRESHOLD
@@ -22,6 +31,10 @@ fun SharedPrefsButton(
     var inputText by remember { mutableStateOf("") }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
+    // Pre-compute localized strings so we don't call stringResource() inside non-composable lambdas.
+    val invalidIntegerMsg = stringResource(R.string.ui_debug_invalid_integer)
+    val invalidIpMsg = stringResource(R.string.ui_debug_invalid_ip)
+
     Button(onClick = { showDialog = true }) {
         Text(buttonText)
     }
@@ -30,18 +43,18 @@ fun SharedPrefsButton(
         Dialog(onDismissRequest = { showDialog = false }) {
             Surface {
                 Column {
-                    Text("Enter an Integer for $prefKey")
+                    Text(stringResource(R.string.ui_debug_enter_integer_for, prefKey))
                     TextField(
                         value = inputText,
                         onValueChange = { inputText = it },
-                        placeholder = { Text("Enter value") }
+                        placeholder = { Text(stringResource(R.string.ui_debug_enter_value)) }
                     )
                     if (errorMessage != null) {
                         Text(errorMessage!!, color = MaterialTheme.colorScheme.error)
                     }
                     Row {
                         TextButton(onClick = { showDialog = false }) {
-                            Text("Cancel")
+                            Text(stringResource(R.string.ui_action_cancel))
                         }
                         Button(onClick = {
                             when (prefKey) {
@@ -51,7 +64,7 @@ fun SharedPrefsButton(
                                         SharedPreferencesManager.historyNotiCountThreshold = intValue
                                         showDialog = false
                                     } else {
-                                        errorMessage = "Invalid integer!"
+                                        errorMessage = invalidIntegerMsg
                                     }
                                 }
                                 KEY_HISTORY_NOTI_HOURS_THRESHOLD -> {
@@ -60,7 +73,7 @@ fun SharedPrefsButton(
                                         SharedPreferencesManager.historyNotiHoursThreshold = intValue
                                         showDialog = false
                                     } else {
-                                        errorMessage = "Invalid integer!"
+                                        errorMessage = invalidIntegerMsg
                                     }
                                 }
                                 KEY_SERVER_URL -> {
@@ -75,13 +88,13 @@ fun SharedPrefsButton(
                                         N8nAPIClient.updateBaseUrl(SharedPreferencesManager.serverIP)
                                         showDialog = false
                                     } else {
-                                        errorMessage = "Invalid IP!"
+                                        errorMessage = invalidIpMsg
                                     }
                                 }
                                 else -> {}
                             }
                         }) {
-                            Text("Save")
+                            Text(stringResource(R.string.ui_action_save))
                         }
                     }
                 }
@@ -89,4 +102,3 @@ fun SharedPrefsButton(
         }
     }
 }
-
