@@ -25,7 +25,7 @@
     <string name="ui_reminders_add_dialog_memo">備忘</string>
     <string name="ui_reminders_untitled_task">（未命名任務）</string>
     <string name="ui_reminders_untitled_memo">（未命名備忘）</string>
-    <string name="ui_reminders_no_deadline">無截止時間</string>
+    <string name="ui_reminders_no_deadline">無特定截止時間</string>
     <string name="ui_reminders_ect_short">預估：%1$d 分</string>
     <string name="ui_reminders_editor_title_placeholder">未命名</string>
     <string name="ui_reminders_editor_task_label">任務</string>
@@ -91,6 +91,12 @@
     <string name="a11y_show_more_context">顯示更多內容</string>
     <string name="ui_action_open">開啟</string>
 
+    <!-- Noti record context menu -->
+    <string name="ui_noti_menu_title">選項</string>
+    <string name="ui_action_extract_reminder">擷取提醒</string>
+    <string name="ui_noti_show_more_context">顯示更多內容</string>
+    <string name="ui_noti_hide_more_context">隱藏更多內容</string>
+
     <!-- Bottom bar tabs -->
     <string name="tab_notifications">通知</string>
     <string name="tab_reminders">提醒</string>
@@ -113,4 +119,12 @@
     <string name="ui_action_next">下一步</string>
     <string name="ui_action_close">關閉</string>
     <string name="ui_action_other">其他</string>
+
+    <!-- Notification card options/actions -->
+    <string name="ui_noti_options_title">選項</string>
+    <string name="ui_noti_action_hide_actions">收起操作</string>
+    <string name="ui_noti_action_remove_from_group">移出群組</string>
+    <string name="ui_noti_action_pin">釘選</string>
+    <string name="ui_noti_action_unpin">取消釘選</string>
+    <string name="ui_noti_action_dismiss">關閉</string>
 </resources>

@@ -24,6 +24,7 @@ import org.muilab.notigpt.ui.screen.SettingsScreen
 import org.muilab.notigpt.ui.screens.EsmScreen
 import org.muilab.notigpt.ui.screens.RemindersScreen
 import org.muilab.notigpt.ui.viewmodel.DrawerViewModel
+import org.muilab.notigpt.ui.viewmodel.EsmViewModel
 import org.muilab.notigpt.ui.viewmodel.ReminderViewModel
 
 @RequiresApi(Build.VERSION_CODES.S)
@@ -52,11 +53,16 @@ fun AppScaffold(
     }
 
     val reminderViewModel: ReminderViewModel = viewModel()
+    val esmViewModel: EsmViewModel = viewModel()
+
     val unreadNotiCount by drawerViewModel.unreadActiveCount.collectAsState()
     val reminderList by reminderViewModel.reminders.collectAsState()
     val pendingTaskCount = remember(reminderList) {
         reminderList.count { it.isTask && !it.isCompleted }
     }
+
+    val esmAvailable by esmViewModel.available.collectAsState()
+    val pendingEsmCount = remember(esmAvailable) { esmAvailable.size }
 
     Scaffold(
         topBar = {
@@ -80,6 +86,7 @@ fun AppScaffold(
                     selectedTab = selectedTab,
                     unreadNotificationCount = unreadNotiCount,
                     pendingTaskCount = pendingTaskCount,
+                    pendingEsmCount = pendingEsmCount,
                     onTabSelected = { tab ->
                         // Leaving Notifications: persist any pending read marks so border colors update.
                         if (selectedTab == org.muilab.notigpt.ui.component.appbar.Tab.Notifications && tab != selectedTab) {

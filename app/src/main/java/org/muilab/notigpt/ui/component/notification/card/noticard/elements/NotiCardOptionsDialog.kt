@@ -17,6 +17,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import org.muilab.notigpt.R
 import org.muilab.notigpt.ui.viewmodel.DrawerViewModel
@@ -39,7 +40,7 @@ fun NotiCardOptionsDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Options") },
+        title = { Text(stringResource(R.string.ui_noti_options_title)) },
         text = {
             Column {
                 if (state.isInGroup) {
@@ -57,11 +58,11 @@ fun NotiCardOptionsDialog(
                         ) {
                             Icon(
                                 painter = painterResource(R.drawable.leave_group),
-                                contentDescription = "Leave Group",
+                                contentDescription = stringResource(R.string.ui_noti_action_remove_from_group),
                                 modifier = Modifier.size(24.dp),
                             )
                             Spacer(Modifier.width(12.dp))
-                            Text("Remove from Group")
+                            Text(stringResource(R.string.ui_noti_action_remove_from_group))
                         }
                     }
                 }
@@ -83,57 +84,34 @@ fun NotiCardOptionsDialog(
                     ) {
                         Icon(
                             painter = painterResource(if (state.isPinned) R.drawable.pin_yes else R.drawable.pin_no),
-                            contentDescription = "Pin",
+                            contentDescription = stringResource(if (state.isPinned) R.string.ui_noti_action_unpin else R.string.ui_noti_action_pin),
                             modifier = Modifier.size(24.dp),
                         )
                         Spacer(Modifier.width(12.dp))
-                        Text(if (state.isPinned) "Unpin" else "Pin")
+                        Text(stringResource(if (state.isPinned) R.string.ui_noti_action_unpin else R.string.ui_noti_action_pin))
                     }
                 }
-
-                TextButton(
-                    onClick = {
-                        drawerViewModel.actOnNoti(notiKey, "to_top")
-                        onDismiss()
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Start,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Icon(
-                            painter = painterResource(R.drawable.totop),
-                            contentDescription = "To Top",
-                            modifier = Modifier.size(24.dp),
-                        )
-                        Spacer(Modifier.width(12.dp))
-                        Text("To Top")
-                    }
-                }
-
-                TextButton(
-                    onClick = {
-                        drawerViewModel.actOnNoti(notiKey, "dismiss")
-                        onDismiss()
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Start,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Icon(
-                            painter = painterResource(R.drawable.close),
-                            contentDescription = "Dismiss",
-                            modifier = Modifier.size(24.dp),
-                        )
-                        Spacer(Modifier.width(12.dp))
-                        Text("Dismiss")
-                    }
-                }
+//                TextButton(
+//                    onClick = {
+//                        drawerViewModel.actOnNoti(notiKey, "dismiss")
+//                        onDismiss()
+//                    },
+//                    modifier = Modifier.fillMaxWidth(),
+//                ) {
+//                    Row(
+//                        verticalAlignment = Alignment.CenterVertically,
+//                        horizontalArrangement = Arrangement.Start,
+//                        modifier = Modifier.fillMaxWidth(),
+//                    ) {
+//                        Icon(
+//                            painter = painterResource(R.drawable.close),
+//                            contentDescription = stringResource(R.string.ui_noti_action_dismiss),
+//                            modifier = Modifier.size(24.dp),
+//                        )
+//                        Spacer(Modifier.width(12.dp))
+//                        Text(stringResource(R.string.ui_noti_action_dismiss))
+//                    }
+//                }
 
                 TextButton(
                     onClick = {
@@ -149,17 +127,17 @@ fun NotiCardOptionsDialog(
                     ) {
                         Icon(
                             painter = painterResource(R.drawable.task_yes),
-                            contentDescription = "Extract Reminder",
+                            contentDescription = stringResource(R.string.ui_action_extract_reminder),
                             modifier = Modifier.size(24.dp),
                         )
                         Spacer(Modifier.width(12.dp))
-                        Text("Extract Reminder")
+                        Text(stringResource(R.string.ui_action_extract_reminder))
                     }
                 }
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Close") }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.ui_action_close)) }
         },
     )
 }

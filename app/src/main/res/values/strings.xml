@@ -40,7 +40,7 @@
     <string name="ui_reminders_add_dialog_memo">Memo</string>
     <string name="ui_reminders_untitled_task">(Untitled task)</string>
     <string name="ui_reminders_untitled_memo">(Untitled memo)</string>
-    <string name="ui_reminders_no_deadline">No deadline</string>
+    <string name="ui_reminders_no_deadline">No specific deadline</string>
     <string name="ui_reminders_ect_short">ECT: %1$dm</string>
     <string name="ui_reminders_editor_title_placeholder">Untitled</string>
     <string name="ui_reminders_editor_task_label">Task</string>
@@ -105,6 +105,13 @@
     <string name="ui_noti_load_newer">Load newer</string>
     <string name="a11y_show_more_context">Show more context</string>
     <string name="ui_action_open">Open</string>
+    <string name="ui_action_extract" translatable="false">Extract</string>
+
+    <!-- Noti record context menu -->
+    <string name="ui_noti_menu_title">Options</string>
+    <string name="ui_action_extract_reminder">Extract reminder</string>
+    <string name="ui_noti_show_more_context">Show more context</string>
+    <string name="ui_noti_hide_more_context">Hide more context</string>
 
     <!-- Bottom bar tabs -->
     <string name="tab_notifications">Notifications</string>
@@ -128,4 +135,12 @@
     <string name="ui_action_next">Next</string>
     <string name="ui_action_close">Close</string>
     <string name="ui_action_other">Other</string>
+
+    <!-- Notification card options/actions -->
+    <string name="ui_noti_options_title">Options</string>
+    <string name="ui_noti_action_hide_actions">Hide actions</string>
+    <string name="ui_noti_action_remove_from_group">Remove from group</string>
+    <string name="ui_noti_action_pin">Pin</string>
+    <string name="ui_noti_action_unpin">Unpin</string>
+    <string name="ui_noti_action_dismiss">Dismiss</string>
 </resources>

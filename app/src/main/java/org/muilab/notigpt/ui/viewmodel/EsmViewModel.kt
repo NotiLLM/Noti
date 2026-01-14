@@ -7,10 +7,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import org.json.JSONObject
 import org.muilab.notigpt.domain.esm.EsmStatuses
 import org.muilab.notigpt.domain.esm.IRBShortSurveyV2
-import org.muilab.notigpt.model.esm.EsmAnswerEvent
 import org.muilab.notigpt.repository.EsmRepository
 import org.muilab.notigpt.database.room.AppDatabase
 import org.muilab.notigpt.model.esm.EsmInstance
@@ -51,7 +49,10 @@ class EsmViewModel(app: Application) : AndroidViewModel(app) {
 
     fun refresh() {
         viewModelScope.launch {
-            _available.value = repo.getInstancesByStatuses(listOf(EsmStatuses.AVAILABLE)).sortedBy { it.availableAt }
+            val now = System.currentTimeMillis()
+            _available.value = repo.getInstancesByStatuses(listOf(EsmStatuses.AVAILABLE))
+                .filter { it.expiresAt > now }
+                .sortedBy { it.availableAt }
         }
     }
 
@@ -62,6 +63,16 @@ class EsmViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun openInstance(instance: EsmInstance) {
+        val now = System.currentTimeMillis()
+        if (now > instance.expiresAt) {
+            // Make sure it can't be answered and doesn't crowd the list.
+            viewModelScope.launch {
+                db.esmDao().setInstanceStatus(instance.instanceId, EsmStatuses.EXPIRED)
+                refresh()
+            }
+            return
+        }
+
         _activeInstance.value = instance
         _currentQuestionId.value = IRBShortSurveyV2.firstQuestionId()
         _currentAnswerJson.value = ""

@@ -14,12 +14,15 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -33,7 +36,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -69,6 +71,7 @@ fun NotiRecordContextCard(
     val clipboard = remember(context) { AndroidClipboardController(context) }
     val coroutineScope = rememberCoroutineScope()
     var showLoadButtons by remember { mutableStateOf(false) }
+    var showMenu by remember { mutableStateOf(false) }
 
     // In history mode, the caller typically passes only 1 record; we keep expanded context locally.
     var expandedRecords by remember(notiKey) { mutableStateOf(records) }
@@ -159,12 +162,72 @@ fun NotiRecordContextCard(
                     }
                 }
 
-                IconButton(onClick = { showLoadButtons = !showLoadButtons }) {
+                IconButton(onClick = { showMenu = true }) {
                     Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.a11y_show_more_context))
                 }
                 IconButton(onClick = { drawerViewModel.accessNotificationByKey(notiKey) }) {
                     Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = stringResource(R.string.ui_action_open))
                 }
+            }
+
+            if (showMenu) {
+                AlertDialog(
+                    onDismissRequest = { showMenu = false },
+                    title = { Text(stringResource(R.string.ui_noti_menu_title)) },
+                    text = {
+                        Column {
+                            TextButton(
+                                onClick = {
+                                    coroutineScope.launch {
+                                        drawerViewModel.actOnNoti(notiKey, "extract_reminder")
+                                    }
+                                    showMenu = false
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    Icon(
+                                        painter = androidx.compose.ui.res.painterResource(org.muilab.notigpt.R.drawable.task_yes),
+                                        contentDescription = stringResource(R.string.ui_action_extract_reminder),
+                                        modifier = Modifier.size(22.dp),
+                                    )
+                                    Spacer(Modifier.width(12.dp))
+                                    Text(stringResource(R.string.ui_action_extract_reminder))
+                                }
+                            }
+
+                            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+                            TextButton(
+                                onClick = {
+                                    showLoadButtons = !showLoadButtons
+                                    showMenu = false
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    Text(
+                                        text = if (showLoadButtons)
+                                            stringResource(R.string.ui_noti_hide_more_context)
+                                        else
+                                            stringResource(R.string.ui_noti_show_more_context)
+                                    )
+                                }
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = { showMenu = false }) {
+                            Text(stringResource(R.string.ui_action_close))
+                        }
+                    },
+                )
             }
 
             if (showLoadButtons) {

@@ -1,8 +1,11 @@
 package org.muilab.notigpt.ui.screens
 
 import android.app.TimePickerDialog
+import android.content.Intent
+import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -14,17 +17,23 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
@@ -52,8 +61,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -62,8 +71,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import org.muilab.notigpt.R
 import org.muilab.notigpt.domain.esm.EsmTriggerTypes
+import org.muilab.notigpt.domain.esm.EsmStatuses
+import org.muilab.notigpt.domain.esm.EsmUserSnapshot
 import org.muilab.notigpt.model.features.ReminderUnit
 import org.muilab.notigpt.repository.EsmRepository
+import org.muilab.notigpt.ui.screens.esm.EsmNotiCardLikePreview
 import org.muilab.notigpt.ui.viewmodel.ReminderViewModel
 import org.muilab.notigpt.util.getAbsoluteTimeStr
 import org.muilab.notigpt.util.getRelativeTimeStr
@@ -267,6 +279,28 @@ private fun ReminderCard(
     val context = LocalContext.current
     val clipboard = remember(context) { AndroidClipboardController(context) }
 
+    val urls = remember(reminder.reminderContent) {
+        // Robust URL detection (http/https) with trailing punctuation/bracket trimming.
+        val regex = Regex("https?://\\S+", RegexOption.IGNORE_CASE)
+        val trimChars = charArrayOf(
+            ')', ']', '}', '>',
+            ',', '.', ';', ':', '"', '\'',
+            '。', '，', '；', '：', '、',
+            '）', '］', '｝', '＞',
+            '「', '」', '『', '』',
+            '”', '’'
+        )
+
+        regex.findAll(reminder.reminderContent)
+            .map { match ->
+                // trimEnd takes a vararg of chars. This removes cases like ")." or "）。".
+                match.value.trim().trimEnd(*trimChars)
+            }
+            .filter { it.isNotBlank() }
+            .distinct()
+            .toList()
+    }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -346,6 +380,34 @@ private fun ReminderCard(
                 modifier = Modifier.padding(top = 6.dp)
             )
         }
+
+        if (urls.isNotEmpty()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                urls.forEachIndexed { idx, url ->
+                    val host = try { Uri.parse(url).host } catch (_: Exception) { null }
+                    val label = host?.takeIf { it.isNotBlank() } ?: "Link ${idx + 1}"
+                    Button(
+                        onClick = {
+                            try {
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                }
+                                context.startActivity(intent)
+                            } catch (_: Exception) {
+                                // no-op: malformed URL or no handler
+                            }
+                        }
+                    ) {
+                        Text(label)
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -424,7 +486,7 @@ private fun ReminderDetailScreen(
             },
             navigationIcon = {
                 IconButton(onClick = { onBack(buildUpdated()) }) {
-                    Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.a11y_back))
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.a11y_back))
                 }
             },
             actions = {
@@ -447,7 +509,7 @@ private fun ReminderDetailScreen(
                     Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.a11y_delete))
                 }
                 TextButton(onClick = { onSave(buildUpdated()) }) {
-                    Text(stringResource(R.string.ui_action_save))
+                    Icon(painter = painterResource(R.drawable.save), contentDescription = stringResource(R.string.ui_action_save))
                 }
             }
         )
@@ -525,6 +587,58 @@ private fun ReminderDetailScreen(
                         innerTextField()
                     }
                 )
+            }
+
+            // === Related notifications (from stored ESM snapshot) ===
+            var relatedExpanded by remember(initial.reminderId) { mutableStateOf(false) }
+            var relatedSnapshotJson by remember(initial.reminderId) { mutableStateOf<String?>(null) }
+
+            LaunchedEffect(initial.reminderId) {
+                // Try to find an existing ESM snapshot for this reminder so we can render NotiCard-like previews.
+                try {
+                    val repo = EsmRepository(context.applicationContext)
+                    val instances = repo.getInstancesByStatuses(listOf(EsmStatuses.AVAILABLE))
+                    val inst = instances.lastOrNull { it.reminderId == initial.reminderId }
+                    val snap = inst?.let { repo.getSnapshot(it.snapshotId) }
+                    relatedSnapshotJson = snap?.payloadJson
+                } catch (_: Exception) {
+                    relatedSnapshotJson = null
+                }
+            }
+
+            val relatedCtx = remember(relatedSnapshotJson) {
+                relatedSnapshotJson?.let { EsmUserSnapshot.parse(it) }
+            }
+
+            // === Related notifications section at bottom ===
+            val relatedNotis = relatedCtx?.notis.orEmpty()
+            if (relatedNotis.isNotEmpty()) {
+                HorizontalDivider(modifier = Modifier.padding(top = 8.dp))
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { relatedExpanded = !relatedExpanded }
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = stringResource(R.string.esm_related_notifications, relatedNotis.size),
+                        style = MaterialTheme.typography.titleSmall
+                    )
+                    Icon(
+                        imageVector = if (relatedExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                        contentDescription = if (relatedExpanded) stringResource(R.string.a11y_collapse) else stringResource(R.string.a11y_expand),
+                    )
+                }
+
+                if (relatedExpanded) {
+                    relatedNotis.forEach { np ->
+                        EsmNotiCardLikePreview(notiDisplayUnit = np.displayUnit)
+                        Spacer(Modifier.size(8.dp))
+                    }
+                }
             }
         }
     }

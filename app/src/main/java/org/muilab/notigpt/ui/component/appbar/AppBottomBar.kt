@@ -72,6 +72,7 @@ fun AppBottomBar(
     onTabSelected: (Tab) -> Unit,
     unreadNotificationCount: Int,
     pendingTaskCount: Int,
+    pendingEsmCount: Int,
 ) {
     NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer) {
         NavigationBarItem(
@@ -107,9 +108,9 @@ fun AppBottomBar(
             onClick = { onTabSelected(Tab.ESM) },
             icon = {
                 BadgeIcon(
-                    iconRes = R.drawable.settings,
+                    iconRes = R.drawable.esm,
                     contentDescription = stringResource(R.string.tab_esm),
-                    badgeCount = 0,
+                    badgeCount = pendingEsmCount,
                     badgeColor = MaterialTheme.colorScheme.tertiary,
                     badgeTextColor = MaterialTheme.colorScheme.onTertiary,
                 )

@@ -10,6 +10,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import org.muilab.notigpt.R
@@ -63,7 +64,7 @@ fun NotiCardBackgroundActions(
         ) {
             NotiActionIconButton(
                 R.drawable.close,
-                "Hide Actions",
+                stringResource(R.string.ui_noti_action_hide_actions),
                 {
                     if (canClickActions.value) onCollapseActions()
                 },
@@ -71,7 +72,7 @@ fun NotiCardBackgroundActions(
 
             NotiActionIconButton(
                 R.drawable.task_yes,
-                "Extract Reminder",
+                stringResource(R.string.ui_action_extract_reminder),
                 {
                     if (canClickActions.value) {
                         drawerViewModel.actOnNoti(notiUnit.notiKey, "extract_reminder")
@@ -83,21 +84,10 @@ fun NotiCardBackgroundActions(
             if (isInGroup) {
                 NotiActionIconButton(
                     R.drawable.leave_group,
-                    "Remove from Group",
+                    stringResource(R.string.ui_noti_action_remove_from_group),
                     {
                         if (canClickActions.value) {
                             drawerViewModel.removeFromGroup(notiUnit.notiKey)
-                            onCollapseActions()
-                        }
-                    },
-                )
-            } else {
-                NotiActionIconButton(
-                    R.drawable.totop,
-                    "To Top",
-                    {
-                        if (canClickActions.value) {
-                            drawerViewModel.actOnNoti(notiUnit.notiKey, "to_top")
                             onCollapseActions()
                         }
                     },

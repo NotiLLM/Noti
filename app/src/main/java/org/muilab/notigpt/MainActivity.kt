@@ -17,7 +17,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import androidx.core.app.NotificationManagerCompat
-import androidx.work.WorkManager
 import org.muilab.notigpt.repository.NotiRepositoryProvider
 import org.muilab.notigpt.service.NotiListenerService
 import org.muilab.notigpt.ui.theme.NotiLLMTheme
@@ -25,6 +24,7 @@ import org.muilab.notigpt.util.SharedPreferencesManager
 import org.muilab.notigpt.ui.component.AppScaffold
 import org.muilab.notigpt.ui.viewmodel.DrawerViewModel
 import org.muilab.notigpt.ui.viewmodel.DrawerViewModelFactory
+import org.muilab.notigpt.work.ReminderPeriodicWork
 
 class MainActivity : ComponentActivity() {
     @RequiresApi(Build.VERSION_CODES.S)
@@ -36,16 +36,9 @@ class MainActivity : ComponentActivity() {
 
         SharedPreferencesManager.init(this)
         SharedPreferencesManager.userId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
-//        if (SharedPreferencesManager.baselineEmbeddingEn.isEmpty()
-//            || SharedPreferencesManager.baselineEmbeddingZhTW.isEmpty()) {
-//            val inputData = Data.Builder()
-//                .putString("api_type", API_FETCH_BASELINE_EMBEDDING)
-//                .build()
-//            val apiWorkerRequest = OneTimeWorkRequestBuilder<ApiWorker>()
-//                .setInputData(inputData)
-//                .build()
-//            WorkManager.getInstance(applicationContext).enqueue(apiWorkerRequest)
-//        }
+
+        // Periodic safety-net for reminder scan/extraction.
+        ReminderPeriodicWork.enqueue(applicationContext)
 
         if (!NotificationManagerCompat.from(applicationContext).areNotificationsEnabled()) {
             val intent = Intent().apply {
