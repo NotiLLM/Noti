@@ -4,6 +4,7 @@ import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -15,6 +16,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import org.muilab.notigpt.ui.component.DevControlPanel
 import org.muilab.notigpt.ui.component.notification.card.notirecord.NotiRecordContextCard
 import org.muilab.notigpt.ui.screens.NotificationsScreen
 import org.muilab.notigpt.ui.utils.LifecycleObserver

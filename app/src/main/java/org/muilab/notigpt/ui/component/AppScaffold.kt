@@ -1,5 +1,6 @@
 package org.muilab.notigpt.ui.component
 
+import android.app.Activity
 import android.os.Build
 import android.util.Log
 import androidx.annotation.RequiresApi
@@ -8,16 +9,19 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import org.muilab.notigpt.ui.component.appbar.AppTopBar
 import org.muilab.notigpt.ui.screen.HomeScreen
 import org.muilab.notigpt.ui.screen.SettingsScreen
+import org.muilab.notigpt.ui.screens.EsmScreen
 import org.muilab.notigpt.ui.screens.RemindersScreen
 import org.muilab.notigpt.ui.viewmodel.DrawerViewModel
 import org.muilab.notigpt.ui.viewmodel.ReminderViewModel
@@ -33,7 +37,19 @@ fun AppScaffold(
     var isSearchExpanded by remember { mutableStateOf(false) }
     var isSettingsShown by remember { mutableStateOf(false) }
 
+    val context = LocalContext.current
+    val activity = context as? Activity
+
     var selectedTab by remember { mutableStateOf(org.muilab.notigpt.ui.component.appbar.Tab.Notifications) }
+
+    LaunchedEffect(activity?.intent) {
+        val openEsm = activity?.intent?.getBooleanExtra("open_esm", false) ?: false
+        if (openEsm) {
+            selectedTab = org.muilab.notigpt.ui.component.appbar.Tab.ESM
+            // consume
+            activity?.intent?.removeExtra("open_esm")
+        }
+    }
 
     val reminderViewModel: ReminderViewModel = viewModel()
     val unreadNotiCount by drawerViewModel.unreadActiveCount.collectAsState()
@@ -85,6 +101,7 @@ fun AppScaffold(
                 when (selectedTab) {
                     org.muilab.notigpt.ui.component.appbar.Tab.Notifications -> HomeScreen(drawerViewModel = drawerViewModel)
                     org.muilab.notigpt.ui.component.appbar.Tab.Reminders -> RemindersScreen()
+                    org.muilab.notigpt.ui.component.appbar.Tab.ESM -> EsmScreen()
                 }
             }
         }

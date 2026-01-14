@@ -23,6 +23,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DatePicker
@@ -56,7 +57,12 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import org.muilab.notigpt.domain.esm.EsmTriggerTypes
 import org.muilab.notigpt.model.features.ReminderUnit
+import org.muilab.notigpt.repository.EsmRepository
 import org.muilab.notigpt.ui.viewmodel.ReminderViewModel
 import org.muilab.notigpt.util.getAbsoluteTimeStr
 import org.muilab.notigpt.util.getRelativeTimeStr
@@ -345,6 +351,22 @@ private fun ReminderDetailScreen(
 ) {
     val context = LocalContext.current
 
+    // Trigger B: entered edit page for a generated reminder (has associated notifications).
+    LaunchedEffect(initial.reminderId) {
+        if (initial.associatedNotis.isNotEmpty()) {
+            try {
+                val repo = EsmRepository(context.applicationContext)
+                // v1: if there's an available ESM for this reminder, upgrade trigger to B.
+                val avail = repo.getInstancesByStatuses(listOf("AVAILABLE"))
+                    .firstOrNull { it.reminderId == initial.reminderId }
+                if (avail != null) {
+                    repo.setTriggerType(avail.instanceId, EsmTriggerTypes.B_ENTERED_EDIT_PAGE)
+                }
+            } catch (_: Exception) {
+            }
+        }
+    }
+
     var title by remember(initial.reminderId) { mutableStateOf(initial.reminderTitle) }
     var content by remember(initial.reminderId) { mutableStateOf(initial.reminderContent) }
     var isTask by remember(initial.reminderId) { mutableStateOf(initial.isTask) }
@@ -398,6 +420,21 @@ private fun ReminderDetailScreen(
                 }
             },
             actions = {
+                // Test ESM button: only show when reminder has associated notifications.
+                if (initial.associatedNotis.isNotEmpty()) {
+                    IconButton(onClick = {
+                        CoroutineScope(Dispatchers.IO).launch {
+                            try {
+                                val repo = EsmRepository(context.applicationContext)
+                                repo.createTestEsmForReminder(initial)
+                            } catch (_: Throwable) {
+                            }
+                        }
+                    }) {
+                        Icon(Icons.Default.Notifications, contentDescription = "Test ESM")
+                    }
+                }
+
                 IconButton(onClick = { onDelete(initial.reminderId) }) {
                     Icon(Icons.Default.Delete, contentDescription = "Delete")
                 }

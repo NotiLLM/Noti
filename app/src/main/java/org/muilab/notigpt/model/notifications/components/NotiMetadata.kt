@@ -157,24 +157,31 @@ data class NotiMetadata(
         return bitmap
     }
 
-    private fun base64ToBitmap(iconStr: String): Bitmap {
-        val options = BitmapFactory.Options().apply {
-            inPreferredConfig = Bitmap.Config.ARGB_8888
+    private fun base64ToBitmap(iconStr: String): Bitmap? {
+        return try {
+            val cleaned = iconStr.trim()
+            if (cleaned.isBlank() || cleaned == "null") return null
+
+            val options = BitmapFactory.Options().apply {
+                inPreferredConfig = Bitmap.Config.ARGB_8888
+            }
+            val byteArray = Base64.decode(cleaned, Base64.DEFAULT)
+            BitmapFactory.decodeByteArray(byteArray, 0, byteArray.size, options)
+        } catch (_: Throwable) {
+            null
         }
-        val byteArray = Base64.decode(iconStr, Base64.DEFAULT)
-        return BitmapFactory.decodeByteArray(byteArray, 0, byteArray.size, options)
     }
 
     fun getLargeBitmap(): Bitmap? {
-        return if (largeIcon != "null")
-            base64ToBitmap(largeIcon)
+        return if (largeIcon != "null" && largeIcon.isNotBlank())
+            base64ToBitmap(largeIcon) ?: getBitmap()
         else {
             getBitmap()
         }
     }
 
     fun getBitmap(): Bitmap? {
-        return if (icon != "null")
+        return if (icon != "null" && icon.isNotBlank())
             base64ToBitmap(icon)
         else
             null

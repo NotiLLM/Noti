@@ -102,10 +102,25 @@ fun AppBottomBar(
             },
             label = { Text("Reminders") }
         )
+        NavigationBarItem(
+            selected = selectedTab == Tab.ESM,
+            onClick = { onTabSelected(Tab.ESM) },
+            icon = {
+                BadgeIcon(
+                    iconRes = R.drawable.settings,
+                    contentDescription = "ESM",
+                    badgeCount = 0,
+                    badgeColor = MaterialTheme.colorScheme.tertiary,
+                    badgeTextColor = MaterialTheme.colorScheme.onTertiary,
+                )
+            },
+            label = { Text("ESM") }
+        )
     }
 }
 
 enum class Tab {
     Notifications,
     Reminders,
+    ESM,
 }

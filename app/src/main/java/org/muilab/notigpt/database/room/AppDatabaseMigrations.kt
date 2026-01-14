@@ -417,4 +417,59 @@ public object AppDatabaseMigrations {
             db.execSQL("ALTER TABLE noti_drawer ADD COLUMN hasMemo INTEGER NOT NULL DEFAULT 0")
         }
     }
+
+    val MIGRATION_23_24 = object : Migration(23, 24) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `esm_extraction_snapshot` (
+                    `snapshotId` TEXT NOT NULL,
+                    `status` TEXT NOT NULL,
+                    `reminderId` TEXT,
+                    `payloadJson` TEXT NOT NULL,
+                    `createdAt` INTEGER NOT NULL,
+                    PRIMARY KEY(`snapshotId`)
+                )
+                """.trimIndent()
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS `idx_esm_snap_status_time` ON `esm_extraction_snapshot` (`status`, `createdAt`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `idx_esm_snap_reminderId` ON `esm_extraction_snapshot` (`reminderId`)")
+
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `esm_instance` (
+                    `instanceId` TEXT NOT NULL,
+                    `questionnaireId` TEXT NOT NULL,
+                    `questionnaireVersion` INTEGER NOT NULL,
+                    `triggerType` TEXT NOT NULL,
+                    `reminderId` TEXT NOT NULL,
+                    `snapshotId` TEXT NOT NULL,
+                    `createdAt` INTEGER NOT NULL,
+                    `availableAt` INTEGER NOT NULL,
+                    `expiresAt` INTEGER NOT NULL,
+                    `status` TEXT NOT NULL,
+                    `answeredAt` INTEGER NOT NULL DEFAULT 0,
+                    `isLate` INTEGER NOT NULL DEFAULT 0,
+                    PRIMARY KEY(`instanceId`)
+                )
+                """.trimIndent()
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS `idx_esm_status_available` ON `esm_instance` (`status`, `availableAt`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `idx_esm_status_expires` ON `esm_instance` (`status`, `expiresAt`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `idx_esm_reminderId` ON `esm_instance` (`reminderId`)")
+
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `esm_answer_event` (
+                    `instanceId` TEXT NOT NULL,
+                    `questionId` TEXT NOT NULL,
+                    `answerJson` TEXT NOT NULL,
+                    `answeredAt` INTEGER NOT NULL,
+                    PRIMARY KEY(`instanceId`, `questionId`)
+                )
+                """.trimIndent()
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS `idx_esm_answer_instance` ON `esm_answer_event` (`instanceId`)")
+        }
+    }
 }

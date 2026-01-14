@@ -25,6 +25,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import org.muilab.notigpt.R
 import org.muilab.notigpt.ui.component.SearchBar
 import org.muilab.notigpt.ui.viewmodel.DrawerViewModel
@@ -84,6 +87,7 @@ fun AppTopBar(
             // Hide actions when search is expanded to make space
             if (!isSettingsShown) {
                 if (!isSearchExpanded) {
+
                     IconButton(
                         modifier = Modifier.minimumInteractiveComponentSize(),
                         onClick = { onSearchToggled(true) }
