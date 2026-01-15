@@ -20,6 +20,16 @@ class ReminderPeriodicWorker(
 ) : CoroutineWorker(appContext, workerParams) {
 
     override suspend fun doWork(): Result {
+        // Workers can run before any Activity is launched.
+        try {
+            org.muilab.notigpt.util.SharedPreferencesManager.init(applicationContext)
+        } catch (_: Exception) {
+            // Best-effort; still proceed.
+        }
+
+        org.muilab.notigpt.util.SharedPreferencesManager.lastReminderPeriodicRunTime = System.currentTimeMillis()
+        Log.i(TAG, "doWork start; runAttemptCount=$runAttemptCount")
+
         // Limited retries to avoid thrashing. WorkManager will reschedule next period anyway.
         if (runAttemptCount >= MAX_RETRIES) {
             Log.w(TAG, "Giving up for this period after runAttemptCount=$runAttemptCount")
@@ -62,6 +72,7 @@ class ReminderPeriodicWorker(
             enqueueTaskExtraction(applicationContext, extractKeys, userTriggered = false)
         }
 
+        Log.i(TAG, "doWork end; scannedKeys=${scanKeys.size} extractKeys=${extractKeys.size}")
         return Result.success()
     }
 
@@ -70,4 +81,3 @@ class ReminderPeriodicWorker(
         private const val MAX_RETRIES = 3
     }
 }
-

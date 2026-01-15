@@ -8,6 +8,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
@@ -111,6 +112,24 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         SharedPreferencesManager.lastAppResumeTime = System.currentTimeMillis()
         super.onResume()
+
+        // Opportunistic wake-up: if WorkManager got delayed in doze, kick once when user opens app.
+        // Rate limit to avoid spamming when user switches apps quickly.
+        try {
+            SharedPreferencesManager.init(this)
+            ReminderPeriodicWork.enqueue(applicationContext)
+
+            val now = System.currentTimeMillis()
+            val last = SharedPreferencesManager.lastReminderPeriodicRunTime
+            val shouldKick = (last == 0L) || (now - last) >= (5 * 60 * 1000L)
+
+            if (shouldKick) {
+                Log.i("MainActivity", "Kicking reminder periodic worker; lastRun=$last")
+                ReminderPeriodicWork.kickNow(applicationContext)
+            }
+        } catch (e: Exception) {
+            Log.w("MainActivity", "Failed to enqueue/kick periodic reminder work", e)
+        }
     }
     
 }

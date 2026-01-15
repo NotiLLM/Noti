@@ -3,9 +3,9 @@ package org.muilab.notigpt.ui.screens
 import android.app.TimePickerDialog
 import android.content.Intent
 import android.net.Uri
+import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -22,12 +22,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -69,11 +66,12 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
 import org.muilab.notigpt.R
 import org.muilab.notigpt.domain.esm.EsmTriggerTypes
-import org.muilab.notigpt.domain.esm.EsmStatuses
-import org.muilab.notigpt.domain.esm.EsmUserSnapshot
 import org.muilab.notigpt.model.features.ReminderUnit
+import org.muilab.notigpt.model.notifications.NotiRecord
 import org.muilab.notigpt.repository.EsmRepository
 import org.muilab.notigpt.ui.screens.esm.EsmNotiCardLikePreview
 import org.muilab.notigpt.ui.viewmodel.ReminderViewModel
@@ -81,6 +79,9 @@ import org.muilab.notigpt.util.getAbsoluteTimeStr
 import org.muilab.notigpt.util.getRelativeTimeStr
 import java.util.Calendar
 import org.muilab.notigpt.platform.AndroidClipboardController
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 
 @Composable
 fun RemindersScreen(
@@ -514,9 +515,12 @@ private fun ReminderDetailScreen(
             }
         )
 
+        // Make the content scrollable so related notifications are reachable.
+        val scrollState = rememberScrollState()
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .verticalScroll(scrollState)
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
@@ -589,30 +593,122 @@ private fun ReminderDetailScreen(
                 )
             }
 
-            // === Related notifications (from stored ESM snapshot) ===
+            // === Related notifications (from extraction snapshot) ===
             var relatedExpanded by remember(initial.reminderId) { mutableStateOf(false) }
-            var relatedSnapshotJson by remember(initial.reminderId) { mutableStateOf<String?>(null) }
+            var relatedRecordsByKey by remember(initial.reminderId) { mutableStateOf<Map<String, List<NotiRecord>>>(emptyMap()) }
+            var relatedUnitsByKey by remember(initial.reminderId) { mutableStateOf<Map<String, org.muilab.notigpt.model.notifications.NotiUnit>>(emptyMap()) }
+            var relatedLoading by remember(initial.reminderId) { mutableStateOf(false) }
 
-            LaunchedEffect(initial.reminderId) {
-                // Try to find an existing ESM snapshot for this reminder so we can render NotiCard-like previews.
+            LaunchedEffect(initial.reminderId, initial.extractionSnapshotId) {
+                val TAG = "ReminderRelatedNotis"
+                relatedLoading = true
+                relatedRecordsByKey = emptyMap()
+                relatedUnitsByKey = emptyMap()
+
+                val snapshotId = initial.extractionSnapshotId
+                if (snapshotId.isNullOrBlank() || initial.associatedNotis.isEmpty()) {
+                    Log.d(TAG, "Skip loading: snapshotId=$snapshotId, associatedNotis=${initial.associatedNotis.size}")
+                    relatedLoading = false
+                    return@LaunchedEffect
+                }
+
+                Log.d(TAG, "Load related: reminderId=${initial.reminderId}, snapshotId=$snapshotId, keys=${initial.associatedNotis}")
+
                 try {
-                    val repo = EsmRepository(context.applicationContext)
-                    val instances = repo.getInstancesByStatuses(listOf(EsmStatuses.AVAILABLE))
-                    val inst = instances.lastOrNull { it.reminderId == initial.reminderId }
-                    val snap = inst?.let { repo.getSnapshot(it.snapshotId) }
-                    relatedSnapshotJson = snap?.payloadJson
-                } catch (_: Exception) {
-                    relatedSnapshotJson = null
+                    val db = org.muilab.notigpt.database.room.AppDatabase.getInstance(context.applicationContext)
+
+                    // Run all Room I/O off the main thread.
+                    val (finalRecords, unitsMap) = withContext(Dispatchers.IO) {
+                        val snap = db.reminderSnapshotDao().getSnapshot(snapshotId) ?: return@withContext (emptyList<NotiRecord>() to emptyMap())
+
+                        Log.d(TAG, "Snapshot found. status=${snap.status}, reminderId=${snap.reminderId}, payloadLen=${snap.payloadJson.length}")
+
+                        val obj = JSONObject(snap.payloadJson)
+                        val v = obj.optInt("v", 1)
+                        Log.d(TAG, "Snapshot payload version v=$v")
+                        if (v != 2) return@withContext (emptyList<NotiRecord>() to emptyMap())
+
+                        val wantedKeys = initial.associatedNotis.toList()
+
+                        val mappingObj = obj.optJSONObject("notiKeyToRecordIds")
+                        val mappedIds = mutableListOf<String>()
+                        if (mappingObj != null) {
+                            wantedKeys.forEach { key ->
+                                val arr = mappingObj.optJSONArray(key)
+                                val cnt = arr?.length() ?: 0
+                                Log.d(TAG, "Mapping: key=$key -> $cnt ids")
+                                if (arr == null) return@forEach
+                                for (i in 0 until arr.length()) {
+                                    val rid = arr.optString(i)
+                                    if (!rid.isNullOrBlank()) mappedIds += rid
+                                }
+                            }
+                        } else {
+                            Log.w(TAG, "Snapshot payload missing notiKeyToRecordIds")
+                        }
+
+                        val recordIds: List<String> = when {
+                            mappedIds.isNotEmpty() -> mappedIds.distinct().also {
+                                Log.d(TAG, "Using mappedIds count=${it.size}")
+                            }
+                            else -> {
+                                val arr = obj.optJSONArray("recordIds")
+                                val ids = if (arr == null) {
+                                    Log.w(TAG, "Snapshot payload missing recordIds")
+                                    emptyList()
+                                } else buildList {
+                                    for (i in 0 until arr.length()) {
+                                        val rid = arr.optString(i)
+                                        if (!rid.isNullOrBlank()) add(rid)
+                                    }
+                                }.distinct()
+                                Log.d(TAG, "Using fallback recordIds count=${ids.size}")
+                                ids
+                            }
+                        }
+
+                        if (recordIds.isEmpty()) {
+                            Log.w(TAG, "No recordIds resolved from snapshot.")
+                            return@withContext (emptyList<NotiRecord>() to emptyMap())
+                        } else {
+                            Log.d(TAG, "First recordId=${recordIds.firstOrNull()}")
+                        }
+
+                        val allForKeys = db.recordDao().getRecordsByKeys(wantedKeys)
+                        Log.d(TAG, "Fetched records by keys: keys=${wantedKeys.size} -> records=${allForKeys.size}")
+
+                        val idSet = recordIds.toHashSet()
+                        val matched = allForKeys.filter { it.notiRecordId in idSet }
+                        Log.d(TAG, "Matched by ID filter: matched=${matched.size} (expected around ${recordIds.size})")
+
+                        val records = if (matched.isNotEmpty()) {
+                            matched
+                        } else {
+                            val byIds = db.recordDao().getRecordsByIds(recordIds)
+                            Log.w(TAG, "Fallback getRecordsByIds returned=${byIds.size}")
+                            byIds
+                        }
+
+                        val units = db.drawerDao().getByNotiKeys(wantedKeys).associateBy { it.notiKey }
+                        (records to units)
+                    }
+
+                    relatedRecordsByKey = finalRecords.groupBy { it.notiKey }
+                    relatedUnitsByKey = unitsMap
+                    Log.d(TAG, "Grouped relatedRecordsByKey keys=${relatedRecordsByKey.keys.size}, totalRecords=${finalRecords.size}, units=${unitsMap.size}")
+                } catch (t: Throwable) {
+                    Log.e(TAG, "Failed loading related notifications", t)
+                    relatedRecordsByKey = emptyMap()
+                    relatedUnitsByKey = emptyMap()
+                } finally {
+                    relatedLoading = false
                 }
             }
 
-            val relatedCtx = remember(relatedSnapshotJson) {
-                relatedSnapshotJson?.let { EsmUserSnapshot.parse(it) }
-            }
+            // Show the section as long as this reminder claims it has associated notifications.
+            if (initial.associatedNotis.isNotEmpty()) {
+                val relatedKeys = initial.associatedNotis.toList()
 
-            // === Related notifications section at bottom ===
-            val relatedNotis = relatedCtx?.notis.orEmpty()
-            if (relatedNotis.isNotEmpty()) {
                 HorizontalDivider(modifier = Modifier.padding(top = 8.dp))
 
                 Row(
@@ -624,7 +720,7 @@ private fun ReminderDetailScreen(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        text = stringResource(R.string.esm_related_notifications, relatedNotis.size),
+                        text = stringResource(R.string.esm_related_notifications, relatedKeys.size),
                         style = MaterialTheme.typography.titleSmall
                     )
                     Icon(
@@ -634,9 +730,63 @@ private fun ReminderDetailScreen(
                 }
 
                 if (relatedExpanded) {
-                    relatedNotis.forEach { np ->
-                        EsmNotiCardLikePreview(notiDisplayUnit = np.displayUnit)
-                        Spacer(Modifier.size(8.dp))
+                    when {
+                        relatedLoading -> {
+                            Text(
+                                text = stringResource(R.string.esm_loading_context),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
+                        relatedRecordsByKey.isEmpty() -> {
+                            Text(
+                                text = stringResource(R.string.esm_no_related_notifications),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
+                        else -> {
+                            relatedKeys.forEach { key ->
+                                val recs = relatedRecordsByKey[key]?.sortedBy { it.time } ?: return@forEach
+
+                                val unit = relatedUnitsByKey[key]
+
+                                if (unit != null) {
+                                    // IMPORTANT: show ALL records that were deemed related by the snapshot.
+                                    val displayUnit = org.muilab.notigpt.model.notifications.NotiDisplayUnit(unit, recs)
+                                    EsmNotiCardLikePreview(notiDisplayUnit = displayUnit)
+                                } else {
+                                    // Fallback: drawer entry missing; show text-only context.
+                                    Surface(
+                                        tonalElevation = 1.dp,
+                                        shape = MaterialTheme.shapes.medium,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Column(modifier = Modifier.padding(12.dp)) {
+                                            Text(
+                                                text = key,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                            Spacer(Modifier.size(6.dp))
+                                            val preview = recs.joinToString("\n") { r ->
+                                                val t = r.getDisplayedTitle(false)
+                                                val c = r.content
+                                                listOf(t, c).filter { it.isNotBlank() }.joinToString(": ")
+                                            }
+                                            Text(
+                                                text = preview,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                            )
+                                        }
+                                    }
+                                }
+
+                                Spacer(Modifier.size(8.dp))
+                            }
+                        }
                     }
                 }
             }

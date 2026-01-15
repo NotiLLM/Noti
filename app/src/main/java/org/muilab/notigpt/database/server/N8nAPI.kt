@@ -125,6 +125,40 @@ fun enqueueTaskScan(context: Context, notiKey: String) {
      WorkManager.getInstance(context).enqueue(workerRequest)
  }
 
+ fun enqueueTaskExtraction(
+    context: Context,
+    notiKeys: List<String>,
+    userTriggered: Boolean = false,
+    visibleRecordIds: List<String> = emptyList(),
+) {
+    Log.d("N8nAPI", "enqueueTaskExtraction: keys=${notiKeys.size} ${notiKeys.take(5)} userTriggered=$userTriggered visibleRecordIds=${visibleRecordIds.size}")
+    val inputDataBuilder = Data.Builder()
+        .putString("api_type", N8N_TASK_EXTRACTION)
+        .putString("webhook_path", BuildConfig.N8N_TASK_EXTRACTION_PATH)
+        .putBoolean("user_triggered", userTriggered)
+
+    val gson = com.google.gson.Gson()
+    inputDataBuilder.putString("noti_keys_json", gson.toJson(notiKeys))
+
+    if (visibleRecordIds.isNotEmpty()) {
+        inputDataBuilder.putString("visible_record_ids_json", gson.toJson(visibleRecordIds))
+    }
+
+    val inputData = inputDataBuilder.build()
+
+    val constraints = Constraints.Builder()
+        .setRequiredNetworkType(NetworkType.CONNECTED)
+        .build()
+
+    val workerRequest = OneTimeWorkRequestBuilder<N8nAPIWorker>()
+        .setBackoffCriteria(BackoffPolicy.LINEAR, 1, TimeUnit.MINUTES)
+        .setConstraints(constraints)
+        .setInputData(inputData)
+        .build()
+
+    WorkManager.getInstance(context).enqueue(workerRequest)
+ }
+
  /**
   * Enqueue a unique delayed extraction work. Each call will replace the previous one so
   * the timer restarts when another trigger comes in. This makes the debounce robust even

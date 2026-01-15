@@ -134,6 +134,12 @@ object SharedPreferencesManager {
         get() = get(KEY_LOCAL_PREFS, KEY_LAST_APP_RESUME_TIME, 0L)
         set(value) = put(KEY_LOCAL_PREFS, KEY_LAST_APP_RESUME_TIME, value)
 
+    // --- Periodic reminder worker diagnostics ---
+    const val KEY_LAST_REMINDER_PERIODIC_RUN_TIME = "lastReminderPeriodicRunTime"
+    var lastReminderPeriodicRunTime: Long
+        get() = get(KEY_LOCAL_PREFS, KEY_LAST_REMINDER_PERIODIC_RUN_TIME, 0L)
+        set(value) = put(KEY_LOCAL_PREFS, KEY_LAST_REMINDER_PERIODIC_RUN_TIME, value)
+
     const val KEY_MAX_PAST_CONTEXT = "maxPastContext"
     var maxPastContext: Int
         get() = get(KEY_LOCAL_PREFS, KEY_MAX_PAST_CONTEXT, 0)

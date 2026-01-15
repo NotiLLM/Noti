@@ -8,7 +8,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  *
  * NOTE: These migrations are referenced from AppDatabase.buildDatabase().
  */
-public object AppDatabaseMigrations {
+object AppDatabaseMigrations {
 
     val MIGRATION_1_2 = object : Migration(1, 2) {
         override fun migrate(db: SupportSQLiteDatabase) {
@@ -470,6 +470,51 @@ public object AppDatabaseMigrations {
                 """.trimIndent()
             )
             db.execSQL("CREATE INDEX IF NOT EXISTS `idx_esm_answer_instance` ON `esm_answer_event` (`instanceId`)")
+        }
+    }
+
+    val MIGRATION_24_25 = object : Migration(24, 25) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            // Link extracted reminders to the snapshot captured at extraction time.
+            db.execSQL("ALTER TABLE reminder_list ADD COLUMN extractionSnapshotId TEXT")
+        }
+    }
+
+    val MIGRATION_25_26 = object : Migration(25, 26) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            // Rename/remove ESM-named extraction snapshot table to reminder-owned naming.
+
+            // 1) Create new table.
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `reminder_extraction_snapshot` (
+                    `snapshotId` TEXT NOT NULL,
+                    `status` TEXT NOT NULL,
+                    `reminderId` TEXT,
+                    `payloadJson` TEXT NOT NULL,
+                    `createdAt` INTEGER NOT NULL,
+                    PRIMARY KEY(`snapshotId`)
+                )
+                """.trimIndent()
+            )
+
+            // 2) Copy data (if old table exists).
+            // SQLite doesn't have IF EXISTS for INSERT FROM, so we rely on the table existing in v25.
+            db.execSQL(
+                """
+                INSERT OR REPLACE INTO `reminder_extraction_snapshot` (`snapshotId`,`status`,`reminderId`,`payloadJson`,`createdAt`)
+                SELECT `snapshotId`,`status`,`reminderId`,`payloadJson`,`createdAt` FROM `esm_extraction_snapshot`
+                """.trimIndent()
+            )
+
+            // 3) Drop old indexes/table.
+            db.execSQL("DROP INDEX IF EXISTS `idx_esm_snap_status_time`")
+            db.execSQL("DROP INDEX IF EXISTS `idx_esm_snap_reminderId`")
+            db.execSQL("DROP TABLE IF EXISTS `esm_extraction_snapshot`")
+
+            // 4) Create new indexes.
+            db.execSQL("CREATE INDEX IF NOT EXISTS `idx_reminder_snap_status_time` ON `reminder_extraction_snapshot` (`status`, `createdAt`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `idx_reminder_snap_reminderId` ON `reminder_extraction_snapshot` (`reminderId`)")
         }
     }
 }

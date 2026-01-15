@@ -8,7 +8,7 @@ import org.muilab.notigpt.domain.esm.EsmSnapshotStatuses
 import org.muilab.notigpt.domain.esm.EsmStatuses
 import org.muilab.notigpt.domain.esm.EsmTriggerTypes
 import org.muilab.notigpt.domain.esm.IRBShortSurveyV2
-import org.muilab.notigpt.model.esm.EsmExtractionSnapshot
+import org.muilab.notigpt.model.features.ReminderExtractionSnapshot
 import org.muilab.notigpt.model.esm.EsmInstance
 import org.muilab.notigpt.model.features.ReminderUnit
 import org.muilab.notigpt.util.postEsmIndicatorNotification
@@ -19,6 +19,7 @@ class EsmRepository(
     private val db: AppDatabase = AppDatabase.getInstance(appContext),
 ) {
     private val esmDao = db.esmDao()
+    private val snapshotDao = db.reminderSnapshotDao()
 
     suspend fun getNewestAvailable(): EsmInstance? = withContext(Dispatchers.IO) {
         esmDao.getNewestAvailable()
@@ -32,8 +33,8 @@ class EsmRepository(
         esmDao.getInstancesByStatuses(statuses)
     }
 
-    suspend fun getSnapshot(snapshotId: String): EsmExtractionSnapshot? = withContext(Dispatchers.IO) {
-        esmDao.getSnapshot(snapshotId)
+    suspend fun getSnapshot(snapshotId: String): ReminderExtractionSnapshot? = withContext(Dispatchers.IO) {
+        snapshotDao.getSnapshot(snapshotId)
     }
 
     suspend fun setTriggerType(instanceId: String, triggerType: String) = withContext(Dispatchers.IO) {
@@ -143,8 +144,8 @@ class EsmRepository(
             put("notis", arr)
         }.toString()
 
-        esmDao.upsertSnapshot(
-            EsmExtractionSnapshot(
+        snapshotDao.upsertSnapshot(
+            ReminderExtractionSnapshot(
                 snapshotId = snapshotId,
                 status = EsmSnapshotStatuses.KEPT,
                 reminderId = reminder.reminderId,
@@ -183,8 +184,8 @@ class EsmRepository(
             put("notes", "DEBUG snapshot")
             put("notis", org.json.JSONArray())
         }.toString()
-        esmDao.upsertSnapshot(
-            EsmExtractionSnapshot(
+        snapshotDao.upsertSnapshot(
+            ReminderExtractionSnapshot(
                 snapshotId = snapshotId,
                 status = EsmSnapshotStatuses.KEPT,
                 reminderId = "debug_reminder",

@@ -23,6 +23,8 @@ import androidx.compose.ui.unit.dp
 import org.muilab.notigpt.R
 import org.muilab.notigpt.ui.component.notification.AutoControlBar
 import org.muilab.notigpt.ui.viewmodel.DrawerViewModel
+import org.muilab.notigpt.util.SharedPreferencesManager
+import org.muilab.notigpt.work.ReminderPeriodicWork
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -80,6 +82,22 @@ fun DevControlPanel(context: Context, drawerViewModel: DrawerViewModel) {
                     drawerViewModel.exportPostContent(false, false)
                 }) {
                     Text(stringResource(R.string.ui_dev_copy_data))
+                }
+                Button(onClick = {
+                    try {
+                        SharedPreferencesManager.init(context.applicationContext)
+                        ReminderPeriodicWork.logStatus(context.applicationContext)
+                        val t = SharedPreferencesManager.lastReminderPeriodicRunTime
+                        Toast.makeText(
+                            context,
+                            if (t == 0L) "Periodic worker hasn't run yet (or prefs cleared)" else "Last periodic run: $t",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    } catch (e: Exception) {
+                        Toast.makeText(context, "Failed to query periodic work: ${e.message}", Toast.LENGTH_LONG).show()
+                    }
+                }) {
+                    Text("Debug: periodic work status")
                 }
             }
         }

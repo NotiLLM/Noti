@@ -1,31 +1,33 @@
 package org.muilab.notigpt.ui.screens.esm
 
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.*
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import org.muilab.notigpt.model.notifications.NotiDisplayUnit
-import org.muilab.notigpt.ui.component.notification.card.noticard.elements.NotiCardHeaderContent
 
 /**
  * Read-only NotiCard-like preview.
  *
- * Uses the same header composable as the real NotiCard (icons, spacing, typography),
- * but strips all interactions (swipe, click, expansion to load more, etc.).
+ * Uses a lightweight header similar to NotiRecordContextCard, and renders all snapshotted records.
  */
 @Composable
 fun EsmNotiCardLikePreview(
     notiDisplayUnit: NotiDisplayUnit,
 ) {
     val notiUnit = notiDisplayUnit.notiUnit
-    val notiRecords = notiDisplayUnit.notiRecords
+    // Ensure stable order for context display.
+    val notiRecords = notiDisplayUnit.notiRecords.sortedBy { it.time }
 
     val lastRecord = notiRecords.lastOrNull()
     val notiOverallTitle = when {
@@ -42,12 +44,6 @@ fun EsmNotiCardLikePreview(
     }
     val hasSecondTitle = notiSecondOverallTitle.isNotBlank() && notiSecondOverallTitle != notiOverallTitle
 
-    val requiresExpansion = remember(notiUnit.notiKey) { mutableStateOf(false) }
-
-    // If snapshot doesn't have icon blobs, avoid header icon rendering path.
-    val hasAnyIconData = (notiUnit.metadata.icon.isNotBlank() && notiUnit.metadata.icon != "null") ||
-        (notiUnit.metadata.largeIcon.isNotBlank() && notiUnit.metadata.largeIcon != "null")
-
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.medium,
@@ -55,28 +51,68 @@ fun EsmNotiCardLikePreview(
         color = MaterialTheme.colorScheme.surface
     ) {
         Column {
-            // Matches real NotiCard header look.
-            NotiCardHeaderContent(
-                notiDisplayUnit = notiDisplayUnit,
-                notiOverallTitle = notiOverallTitle,
-                notiSecondOverallTitle = notiSecondOverallTitle,
-                hasSecondTitle = hasSecondTitle,
-                showSummary = (!hasAnyIconData) || notiUnit.summary.isNotBlank(),
-                requiresExpansionSetter = { requiresExpansion.value = it },
-                collapseThreshold = 0f,
-                isExpandedOffset = 0f,
-            )
+            // === Header (NotiRecordContextCard-like) ===
+            val displayTitle = notiOverallTitle.ifBlank { notiUnit.appName }
 
-            // Full content preview (no interactive expansion)
-            val content = notiRecords.lastOrNull()?.content.orEmpty()
-            if (content.isNotBlank() && content != "null") {
-                androidx.compose.material3.Text(
-                    text = content,
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 10.dp),
-                )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                val bitmap = notiUnit.bitmap
+                if (bitmap != null) {
+                    Image(
+                        bitmap = bitmap.asImageBitmap(),
+                        contentDescription = "App icon",
+                        modifier = Modifier.size(28.dp),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                }
+
+                Column(modifier = Modifier.weight(1f)) {
+                    androidx.compose.material3.Text(
+                        text = displayTitle,
+                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.ExtraBold),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        fontSize = 14.sp,
+                    )
+                    if (hasSecondTitle) {
+                        androidx.compose.material3.Text(
+                            text = notiSecondOverallTitle,
+                            style = MaterialTheme.typography.labelSmall.copy(fontStyle = FontStyle.Italic),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+            }
+
+            // Full content preview (no interactive expansion): show all snapshotted records.
+            // Guardrail: avoid huge vertical blow-ups by showing at most the last 30 records.
+            val recordsToShow = if (notiRecords.size > 30) notiRecords.takeLast(30) else notiRecords
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+            ) {
+                recordsToShow.forEachIndexed { idx, r ->
+                    val content = r.content
+                    if (content.isBlank() || content == "null") return@forEachIndexed
+
+                    // A light separator between messages.
+                    if (idx != 0) {
+                        Spacer(Modifier.height(8.dp))
+                    }
+
+                    androidx.compose.material3.Text(
+                        text = content,
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
             }
         }
     }

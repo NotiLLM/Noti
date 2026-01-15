@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -179,7 +178,8 @@ fun NotiRecordContextCard(
                             TextButton(
                                 onClick = {
                                     coroutineScope.launch {
-                                        drawerViewModel.actOnNoti(notiKey, "extract_reminder")
+                                        val idsJson = com.google.gson.Gson().toJson(safeRecords.map { it.notiRecordId }.distinct())
+                                        drawerViewModel.actOnNoti(notiKey, "extract_reminder_with_records::$idsJson")
                                     }
                                     showMenu = false
                                 },
@@ -190,7 +190,7 @@ fun NotiRecordContextCard(
                                     modifier = Modifier.fillMaxWidth(),
                                 ) {
                                     Icon(
-                                        painter = androidx.compose.ui.res.painterResource(org.muilab.notigpt.R.drawable.task_yes),
+                                        painter = androidx.compose.ui.res.painterResource(R.drawable.task_yes),
                                         contentDescription = stringResource(R.string.ui_action_extract_reminder),
                                         modifier = Modifier.size(22.dp),
                                     )

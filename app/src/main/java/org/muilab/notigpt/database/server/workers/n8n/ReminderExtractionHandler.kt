@@ -8,12 +8,16 @@ import kotlinx.coroutines.flow.first
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
+import org.json.JSONObject
+import org.muilab.notigpt.domain.esm.EsmSnapshotStatuses
+import org.muilab.notigpt.model.features.ReminderExtractionSnapshot
 import org.muilab.notigpt.model.features.ReminderUnit
 import org.muilab.notigpt.model.notifications.NotiRecord
 import org.muilab.notigpt.util.SharedPreferencesManager
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.UUID
 
 internal object ReminderExtractionHandler {
 
@@ -27,6 +31,17 @@ internal object ReminderExtractionHandler {
 
         val userTriggered = inputData.getBoolean("user_triggered", false)
 
+        val visibleIdsJson = inputData.getString("visible_record_ids_json")
+        val visibleRecordIds: List<String> = if (!visibleIdsJson.isNullOrBlank()) {
+            try {
+                gson.fromJson(visibleIdsJson, Array<String>::class.java).toList()
+            } catch (_: Exception) {
+                emptyList()
+            }
+        } else {
+            emptyList()
+        }
+
         val keysJson = inputData.getString("noti_keys_json") ?: "[]"
         val notiKeys: List<String> = try {
             gson.fromJson(keysJson, Array<String>::class.java).toList()
@@ -36,6 +51,7 @@ internal object ReminderExtractionHandler {
 
         val db = ctx.database
         val reminderRepository = ctx.reminderRepository
+        val snapshotDao = db.reminderSnapshotDao()
 
         val drawerDao = db.drawerDao()
 
@@ -52,9 +68,18 @@ internal object ReminderExtractionHandler {
             val unit = ctx.getNotiUnit(notiKey) ?: return ctx.success()
             val recordDao = db.recordDao()
 
-            val visible = recordDao.getActiveRecordsByKey(notiKey).sortedBy { it.time }
+            // IMPORTANT: when user triggers extraction from a context card, use EXACTLY the records
+            // that were visible in the UI (searched/loaded/expanded), even if the notification is dismissed.
+            val visible: List<NotiRecord> = if (visibleRecordIds.isNotEmpty()) {
+                recordDao.getRecordsByIds(visibleRecordIds).sortedBy { it.time }
+            } else {
+                // Backward compatible fallback: previous behavior
+                recordDao.getActiveRecordsByKey(notiKey).sortedBy { it.time }
+            }
+
             val pastCnt = SharedPreferencesManager.maxPastContext
-            val older = if (pastCnt > 0) {
+            // "older" is only for the fallback path; in the explicit recordIds mode, UI already decided context.
+            val older = if (visibleRecordIds.isEmpty() && pastCnt > 0) {
                 recordDao.getRecordsByKey(notiKey).sortedByDescending { it.time }.take(pastCnt)
             } else {
                 emptyList()
@@ -69,6 +94,45 @@ internal object ReminderExtractionHandler {
                 return ctx.success()
             }
 
+            // Create extraction snapshot for this request (v2: recordIds + notiKey mapping)
+            val snapshotId = "snap_${UUID.randomUUID()}"
+            val snapNow = System.currentTimeMillis()
+
+            // Include past extracted context too, so the snapshot reflects the FULL LLM input context.
+            val pastRecords = if (pastCnt > 0) {
+                recordDao.getLastExtractedRecordsByKey(notiKey, pastCnt).sortedBy { it.time }
+            } else {
+                emptyList()
+            }
+
+            val allSnapshotRecords = (combined + pastRecords)
+                .distinctBy { it.notiRecordId }
+                .sortedBy { it.time }
+
+            val byKey = allSnapshotRecords.groupBy { it.notiKey }
+            val snapshotPayload = JSONObject().apply {
+                put("v", 2)
+                put("recordIds", JSONArray(allSnapshotRecords.map { it.notiRecordId }.distinct()))
+                put("notiKeyToRecordIds", JSONObject().apply {
+                    byKey.forEach { (k, recs) ->
+                        put(k, JSONArray(recs.map { it.notiRecordId }.distinct()))
+                    }
+                })
+                // v2.1: keep an explicit list of the currently-visible recordIds for debugging.
+                put("visibleRecordIds", JSONArray(combined.map { it.notiRecordId }.distinct()))
+            }.toString()
+
+            snapshotDao.upsertSnapshot(
+                ReminderExtractionSnapshot(
+                    snapshotId = snapshotId,
+                    status = EsmSnapshotStatuses.STAGED,
+                    reminderId = null,
+                    payloadJson = snapshotPayload,
+                    createdAt = snapNow,
+                )
+            )
+
+            // In explicit mode, only send what the user saw.
             val contents = combined.map { r -> N8nRecordFormatter.format(r, unit.isPeople) }
 
             // Keep schema compatible with periodic payload.
@@ -98,7 +162,7 @@ internal object ReminderExtractionHandler {
                     "overallTitle" to overallTitle,
                     "secondOverallTitle" to secondOverallTitle,
                     "notiContent" to contents,
-                    // Don't rely on previously-extracted context; we already included older records in notiContent.
+                    // IMPORTANT: do not include inferred pastContext here; the UI already chose visible records.
                     "pastContext" to emptyList<Any>(),
                     "hasTask" to unit.hasTask,
                     "hasMemo" to unit.hasMemo
@@ -161,43 +225,56 @@ internal object ReminderExtractionHandler {
 
             try {
                 val arr = JSONArray(bodyStr)
-                for (i in 0 until arr.length()) {
-                    val it = arr.getJSONObject(i)
-                    val reminderId = it.optString("reminderId", it.optString("taskId"))
-                    val reminderTitle = it.optString("reminderTitle", "")
-                    val reminderContent = it.optString("reminderContent", it.optString("taskDescription"))
-                    val deadlineMs = if (it.has("deadlineTimestamp") && !it.isNull("deadlineTimestamp")) it.optLong("deadlineTimestamp", -1L) else -1L
-                    val estimate = it.optLong("estimatedCompletionTime", it.optLong("estimatedCompletionMinutes", 0L))
-                    val assocKeys = mutableSetOf<String>()
-                    val assoc = it.optJSONArray("associatedNotis")
-                    if (assoc != null) {
-                        for (j in 0 until assoc.length()) {
-                            assocKeys.add(assoc.optString(j))
+
+                if (arr.length() == 0) {
+                    // No reminders extracted -> discard snapshot
+                    snapshotDao.deleteSnapshot(snapshotId)
+                } else {
+                    for (i in 0 until arr.length()) {
+                        val it = arr.getJSONObject(i)
+                        val reminderId = it.optString("reminderId", it.optString("taskId"))
+                        val reminderTitle = it.optString("reminderTitle", "")
+                        val reminderContent = it.optString("reminderContent", it.optString("taskDescription"))
+                        val deadlineMs = if (it.has("deadlineTimestamp") && !it.isNull("deadlineTimestamp")) it.optLong("deadlineTimestamp", -1L) else -1L
+                        val estimate = it.optLong("estimatedCompletionTime", it.optLong("estimatedCompletionMinutes", 0L))
+                        val assocKeys = mutableSetOf<String>()
+                        val assoc = it.optJSONArray("associatedNotis")
+                        if (assoc != null) {
+                            for (j in 0 until assoc.length()) {
+                                assocKeys.add(assoc.optString(j))
+                            }
                         }
+                        val isCompleted = it.optBoolean("isCompleted", false)
+
+                        val newUnit = ReminderUnit(
+                            reminderId = reminderId,
+                            reminderTitle = reminderTitle,
+                            reminderContent = reminderContent,
+                            isTask = true,
+                            isCompleted = isCompleted,
+                            lastUpdateTimestamp = System.currentTimeMillis(),
+                            deadlineTimestamp = deadlineMs,
+                            estimatedCompletionTime = estimate,
+                            associatedNotis = assocKeys.toSet(),
+                            extractionSnapshotId = snapshotId,
+                            userEdited = false,
+                        )
+
+                        reminderRepository.upsert(newUnit)
                     }
-                    val isCompleted = it.optBoolean("isCompleted", false)
 
-                    val newUnit = ReminderUnit(
-                        reminderId = reminderId,
-                        reminderTitle = reminderTitle,
-                        reminderContent = reminderContent,
-                        isTask = true,
-                        isCompleted = isCompleted,
-                        lastUpdateTimestamp = System.currentTimeMillis(),
-                        deadlineTimestamp = deadlineMs,
-                        estimatedCompletionTime = estimate,
-                        associatedNotis = assocKeys.toSet(),
-                        userEdited = false,
-                    )
-
-                    reminderRepository.upsert(newUnit)
+                    // Mark snapshot kept and link to (first) reminderId.
+                    val firstObj = arr.optJSONObject(0)
+                    val firstReminderId = firstObj?.optString("reminderId").takeIf { !it.isNullOrBlank() }
+                        ?: firstObj?.optString("taskId")
+                    snapshotDao.updateSnapshotStatusAndReminderId(snapshotId, EsmSnapshotStatuses.KEPT, firstReminderId)
                 }
 
-                // Don't touch taskExtracted/taskExtractionClaimed flags for user-triggered.
-                // Clear the per-notification extraction request flag so periodic flow doesn't keep picking it up.
                 drawerDao.setShouldExtractReminderByKeys(listOf(notiKey), false)
             } catch (e: Exception) {
                 Log.e("N8nWebhook", "Error parsing extract response (user-triggered)", e)
+                // Parsing failed -> don't keep snapshot
+                snapshotDao.deleteSnapshot(snapshotId)
                 return ctx.failure()
             }
 
@@ -248,6 +325,51 @@ internal object ReminderExtractionHandler {
         }
 
         val claimedByKey: Map<String, List<NotiRecord>> = claimedRecords.groupBy { it.notiKey }
+
+        // Create extraction snapshot for this request (v2)
+        val snapshotId = "snap_${UUID.randomUUID()}"
+        val snapNow = System.currentTimeMillis()
+
+        // Include past extracted context for each key, since it is part of LLM input.
+        val pastCnt = SharedPreferencesManager.maxPastContext
+        val pastByKey: Map<String, List<NotiRecord>> = if (pastCnt > 0) {
+            claimedByKey.keys.associateWith { key ->
+                db.recordDao().getLastExtractedRecordsByKey(key, pastCnt).sortedBy { it.time }
+            }
+        } else {
+            emptyMap()
+        }
+
+        val allSnapshotRecords = buildList {
+            addAll(claimedRecords)
+            pastByKey.values.forEach { addAll(it) }
+        }.distinctBy { it.notiRecordId }.sortedBy { it.time }
+
+        val snapshotMapping = JSONObject().apply {
+            // Include only keys in this extraction request.
+            claimedByKey.keys.forEach { key ->
+                val current = claimedByKey[key].orEmpty()
+                val past = pastByKey[key].orEmpty()
+                val ids = (current + past).map { it.notiRecordId }.distinct()
+                put(key, JSONArray(ids))
+            }
+        }
+
+        val snapshotPayload = JSONObject().apply {
+            put("v", 2)
+            put("recordIds", JSONArray(allSnapshotRecords.map { it.notiRecordId }.distinct()))
+            put("notiKeyToRecordIds", snapshotMapping)
+        }.toString()
+
+        snapshotDao.upsertSnapshot(
+            ReminderExtractionSnapshot(
+                snapshotId = snapshotId,
+                status = EsmSnapshotStatuses.STAGED,
+                reminderId = null,
+                payloadJson = snapshotPayload,
+                createdAt = snapNow,
+            )
+        )
 
         val submittedRecordIds = mutableListOf<String>()
         val submittedKeys = mutableListOf<String>()
@@ -359,36 +481,47 @@ internal object ReminderExtractionHandler {
 
         try {
             val arr = JSONArray(bodyStr)
-            for (i in 0 until arr.length()) {
-                val it = arr.getJSONObject(i)
-                val reminderId = it.optString("reminderId", it.optString("taskId"))
-                val reminderTitle = it.optString("reminderTitle", "")
-                val reminderContent = it.optString("reminderContent", it.optString("taskDescription"))
-                val deadlineMs = if (it.has("deadlineTimestamp") && !it.isNull("deadlineTimestamp")) it.optLong("deadlineTimestamp", -1L) else -1L
-                val estimate = it.optLong("estimatedCompletionTime", it.optLong("estimatedCompletionMinutes", 0L))
-                val assocKeys = mutableSetOf<String>()
-                val assoc = it.optJSONArray("associatedNotis")
-                if (assoc != null) {
-                    for (j in 0 until assoc.length()) {
-                        assocKeys.add(assoc.optString(j))
+
+            if (arr.length() == 0) {
+                snapshotDao.deleteSnapshot(snapshotId)
+            } else {
+                for (i in 0 until arr.length()) {
+                    val it = arr.getJSONObject(i)
+                    val reminderId = it.optString("reminderId", it.optString("taskId"))
+                    val reminderTitle = it.optString("reminderTitle", "")
+                    val reminderContent = it.optString("reminderContent", it.optString("taskDescription"))
+                    val deadlineMs = if (it.has("deadlineTimestamp") && !it.isNull("deadlineTimestamp")) it.optLong("deadlineTimestamp", -1L) else -1L
+                    val estimate = it.optLong("estimatedCompletionTime", it.optLong("estimatedCompletionMinutes", 0L))
+                    val assocKeys = mutableSetOf<String>()
+                    val assoc = it.optJSONArray("associatedNotis")
+                    if (assoc != null) {
+                        for (j in 0 until assoc.length()) {
+                            assocKeys.add(assoc.optString(j))
+                        }
                     }
+                    val isCompleted = it.optBoolean("isCompleted", false)
+
+                    val unit = ReminderUnit(
+                        reminderId = reminderId,
+                        reminderTitle = reminderTitle,
+                        reminderContent = reminderContent,
+                        isTask = true,
+                        isCompleted = isCompleted,
+                        lastUpdateTimestamp = System.currentTimeMillis(),
+                        deadlineTimestamp = deadlineMs,
+                        estimatedCompletionTime = estimate,
+                        associatedNotis = assocKeys.toSet(),
+                        extractionSnapshotId = snapshotId,
+                        userEdited = false,
+                    )
+
+                    reminderRepository.upsert(unit)
                 }
-                val isCompleted = it.optBoolean("isCompleted", false)
 
-                val unit = ReminderUnit(
-                    reminderId = reminderId,
-                    reminderTitle = reminderTitle,
-                    reminderContent = reminderContent,
-                    isTask = true,
-                    isCompleted = isCompleted,
-                    lastUpdateTimestamp = System.currentTimeMillis(),
-                    deadlineTimestamp = deadlineMs,
-                    estimatedCompletionTime = estimate,
-                    associatedNotis = assocKeys.toSet(),
-                    userEdited = false,
-                )
-
-                reminderRepository.upsert(unit)
+                val firstObj = arr.optJSONObject(0)
+                val firstReminderId = firstObj?.optString("reminderId").takeIf { !it.isNullOrBlank() }
+                    ?: firstObj?.optString("taskId")
+                snapshotDao.updateSnapshotStatusAndReminderId(snapshotId, EsmSnapshotStatuses.KEPT, firstReminderId)
             }
 
             if (submittedRecordIds.isNotEmpty()) {
@@ -401,6 +534,7 @@ internal object ReminderExtractionHandler {
 
         } catch (e: Exception) {
             Log.e("N8nWebhook", "Error parsing extract response", e)
+            snapshotDao.deleteSnapshot(snapshotId)
             db.recordDao().clearClaimedRecords(candidateRecordIds)
         }
 

@@ -6,7 +6,6 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
 import org.muilab.notigpt.model.esm.EsmAnswerEvent
-import org.muilab.notigpt.model.esm.EsmExtractionSnapshot
 import org.muilab.notigpt.model.esm.EsmInstance
 
 @Dao
@@ -56,14 +55,7 @@ interface EsmDao {
 
     // --- Snapshots ---
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun upsertSnapshot(snapshot: EsmExtractionSnapshot)
-
-    @Query("SELECT * FROM esm_extraction_snapshot WHERE snapshotId = :snapshotId LIMIT 1")
-    suspend fun getSnapshot(snapshotId: String): EsmExtractionSnapshot?
-
-    @Query("DELETE FROM esm_extraction_snapshot WHERE status = 'DISCARDED' AND createdAt < :beforeMs")
-    suspend fun deleteDiscardedSnapshotsBefore(beforeMs: Long)
+    // (Moved to ReminderSnapshotDao)
 
     // --- Convenience / atomic ops ---
 
@@ -84,4 +76,3 @@ interface EsmDao {
         )
     }
 }
-

@@ -39,7 +39,7 @@ fun NotiCardHeaderContent(
     showSummary: Boolean,
     requiresExpansionSetter: (Boolean) -> Unit,
     collapseThreshold: Float,
-    isExpandedOffset: Float,
+    isExpandedOffset: Float
 ) {
     val notiUnit = notiDisplayUnit.notiUnit
     val notiRecords = notiDisplayUnit.notiRecords

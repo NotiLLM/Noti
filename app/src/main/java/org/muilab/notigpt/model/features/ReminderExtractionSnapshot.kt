@@ -1,4 +1,4 @@
-package org.muilab.notigpt.model.esm
+package org.muilab.notigpt.model.features
 
 import androidx.room.Entity
 import androidx.room.Index
@@ -6,17 +6,17 @@ import androidx.room.Index
 /**
  * Frozen extraction snapshot captured at the moment we send NotiCard context to the LLM.
  *
- * This snapshot is intentionally JSON-first so we can evolve/extend content without schema churn.
+ * This snapshot is JSON-first so we can evolve/extend content without schema churn.
  */
 @Entity(
-    tableName = "esm_extraction_snapshot",
+    tableName = "reminder_extraction_snapshot",
     primaryKeys = ["snapshotId"],
     indices = [
-        Index(value = ["status", "createdAt"], name = "idx_esm_snap_status_time"),
-        Index(value = ["reminderId"], name = "idx_esm_snap_reminderId"),
+        Index(value = ["status", "createdAt"], name = "idx_reminder_snap_status_time"),
+        Index(value = ["reminderId"], name = "idx_reminder_snap_reminderId"),
     ]
 )
-data class EsmExtractionSnapshot(
+data class ReminderExtractionSnapshot(
     val snapshotId: String,
 
     /** STAGED, KEPT, DISCARDED */
@@ -25,7 +25,7 @@ data class EsmExtractionSnapshot(
     /** Optional once linked. */
     val reminderId: String? = null,
 
-    /** JSON object holding list of per-notiKey payloads, matching what we sent to LLM. */
+    /** JSON payload of the full LLM input context and mapping. */
     val payloadJson: String,
 
     /** ms since epoch */

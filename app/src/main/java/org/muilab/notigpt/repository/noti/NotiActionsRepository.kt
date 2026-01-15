@@ -135,6 +135,30 @@ class NotiActionsRepository(
     }
 
     suspend fun actOnNotiLegacy(notiKey: String, action: String) {
+        // Special-case actions that carry payload after ::
+        if (action.startsWith("extract_reminder_with_records")) {
+            val existing = notiDrawerDao.getByNotiKey(notiKey) ?: return
+            if (!existing.shouldExtractReminder) {
+                notiDrawerDao.setShouldExtractReminderByKey(notiKey, true)
+            }
+
+            val parts = action.split("::", limit = 2)
+            val json = parts.getOrNull(1).orEmpty()
+            val ids: List<String> = try {
+                com.google.gson.Gson().fromJson(json, Array<String>::class.java).toList()
+            } catch (_: Exception) {
+                emptyList()
+            }
+
+            enqueueTaskExtraction(
+                appContext,
+                listOf(notiKey),
+                userTriggered = true,
+                visibleRecordIds = ids,
+            )
+            return
+        }
+
         when (action) {
             "dismiss_swipe" -> {
                 val noti = notiDrawerDao.getByNotiKey(notiKey)
@@ -160,14 +184,13 @@ class NotiActionsRepository(
             "pin" -> setPinnedState(notiKey)
             "mark_read" -> markNotiRead(notiKey)
             "extract_reminder" -> {
-                // User-triggered extraction should only apply to this one notification.
+                // Legacy path: still allows triggering extraction, but without explicit record IDs we
+                // fall back to previous behavior.
                 val existing = notiDrawerDao.getByNotiKey(notiKey) ?: return
                 if (!existing.shouldExtractReminder) {
                     notiDrawerDao.setShouldExtractReminderByKey(notiKey, true)
                 }
 
-                // Immediately enqueue extraction for this key only.
-                // IMPORTANT: do not touch other keys or the periodic batching counters.
                 enqueueTaskExtraction(appContext, listOf(notiKey), userTriggered = true)
             }
         }

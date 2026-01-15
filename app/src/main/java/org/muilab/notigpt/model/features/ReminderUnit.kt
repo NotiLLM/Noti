@@ -29,7 +29,13 @@ data class ReminderUnit(
     // Associated notification keys
     val associatedNotis: Set<String> = emptySet(),
 
+    /**
+     * Snapshot ID captured at the moment this reminder was extracted.
+     *
+     * This lets the reminder UI render "associated notifications" even if no ESM exists.
+     */
+    val extractionSnapshotId: String? = null,
+
     // Whether user has edited this reminder
     val userEdited: Boolean = false
 )
-

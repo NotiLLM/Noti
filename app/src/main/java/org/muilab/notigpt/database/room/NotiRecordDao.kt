@@ -224,4 +224,7 @@ interface NotiRecordDao {
         LIMIT :limit
     """)
     suspend fun getRecordsAfter(pivotTime: Long, limit: Int): List<NotiRecord>
+
+    @Query("SELECT * FROM noti_record WHERE notiRecordId IN (:ids)")
+    fun getRecordsByIds(ids: List<String>): List<NotiRecord>
 }

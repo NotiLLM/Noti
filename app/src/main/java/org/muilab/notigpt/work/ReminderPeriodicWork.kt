@@ -1,30 +1,83 @@
 package org.muilab.notigpt.work
 
 import android.content.Context
-import androidx.work.BackoffPolicy
-import androidx.work.Constraints
+import android.util.Log
 import androidx.work.ExistingPeriodicWorkPolicy
-import androidx.work.NetworkType
+import androidx.work.ExistingWorkPolicy
 import androidx.work.PeriodicWorkRequest
+import androidx.work.OneTimeWorkRequest
+import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import java.util.concurrent.TimeUnit
 
 object ReminderPeriodicWork {
 
+    private const val TAG = "ReminderPeriodicWork"
     private const val UNIQUE_NAME = "reminder_periodic_scan_extract"
+    private const val UNIQUE_KICK_NAME = "reminder_periodic_scan_extract_kick"
 
+    /** For diagnostics / UI. */
+    fun uniqueName(): String = UNIQUE_NAME
+
+    /**
+     * Schedules a periodic "safety-net" run.
+     *
+     * Important: periodic WorkManager is inexact and can be delayed by Doze/App Standby.
+     * We keep constraints minimal so it stays eligible as often as possible.
+     */
     fun enqueue(context: Context) {
-        val constraints = Constraints.Builder()
-            .setRequiredNetworkType(NetworkType.CONNECTED)
-            .build()
-
-        val req = PeriodicWorkRequest.Builder(ReminderPeriodicWorker::class.java, 15, TimeUnit.MINUTES)
-            .setConstraints(constraints)
-            // WorkManager will back off retries. We also cap retries inside the Worker.
-            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
+        val req = PeriodicWorkRequest.Builder(
+            ReminderPeriodicWorker::class.java,
+            15,
+            TimeUnit.MINUTES,
+        )
+            // Intentionally no network constraint: this worker mostly checks local DB and enqueues
+            // downstream work that can apply its own network constraints/retries.
+            //
+            // Also no explicit backoff: periodic work will run again next period; retry/backoff can
+            // easily push executions out by hours.
             .build()
 
         WorkManager.getInstance(context)
             .enqueueUniquePeriodicWork(UNIQUE_NAME, ExistingPeriodicWorkPolicy.KEEP, req)
+
+        Log.i(TAG, "Enqueued unique periodic work name=$UNIQUE_NAME id=${req.id}")
+    }
+
+    /**
+     * Trigger an immediate one-time run (kept unique + replace) to "wake" the pipeline when the
+     * user opens the app.
+     */
+    fun kickNow(context: Context) {
+        val req = OneTimeWorkRequest.Builder(ReminderPeriodicWorker::class.java)
+            .build()
+
+        WorkManager.getInstance(context)
+            .enqueueUniqueWork(UNIQUE_KICK_NAME, ExistingWorkPolicy.REPLACE, req)
+
+        Log.i(TAG, "Enqueued one-time kick work name=$UNIQUE_KICK_NAME id=${req.id}")
+    }
+
+    /** Logs current state of the unique periodic work (useful when debugging 'not running'). */
+    fun logStatus(context: Context) {
+        try {
+            val infos = WorkManager.getInstance(context)
+                .getWorkInfosForUniqueWork(UNIQUE_NAME)
+                .get()
+
+            if (infos.isEmpty()) {
+                Log.w(TAG, "No WorkInfos found for $UNIQUE_NAME (not scheduled?)")
+                return
+            }
+
+            infos.forEach { info: WorkInfo ->
+                Log.i(
+                    TAG,
+                    "Status for $UNIQUE_NAME: id=${info.id} state=${info.state} runAttemptCount=${info.runAttemptCount}",
+                )
+            }
+        } catch (t: Throwable) {
+            Log.w(TAG, "Failed to query WorkManager status for $UNIQUE_NAME", t)
+        }
     }
 }
