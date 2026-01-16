@@ -77,7 +77,8 @@ fun AppScaffold(
                         drawerViewModel.persistReadStatus()
                     }
                     isSettingsShown = it
-                }
+                },
+                showNotificationActions = selectedTab == org.muilab.notigpt.ui.component.appbar.Tab.Notifications
             )
         },
         bottomBar = {

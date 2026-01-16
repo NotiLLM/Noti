@@ -67,7 +67,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import org.muilab.notigpt.R
-import org.muilab.notigpt.domain.esm.EsmTriggerTypes
 import org.muilab.notigpt.model.features.ReminderUnit
 import org.muilab.notigpt.model.notifications.NotiRecord
 import org.muilab.notigpt.repository.EsmRepository
@@ -144,8 +143,10 @@ fun RemindersScreen(
                             if (reminder.associatedNotis.isEmpty()) return@forEach
 
                             // Trigger B: schedule delivery at least 10 minutes after being viewed.
-                            val inst = repo.getInstanceByReminderId(rid) ?: return@forEach
-                            repo.maybeEnqueueWithPolicy(inst.instanceId, org.muilab.notigpt.domain.esm.EsmConfig.TRIGGER_B_AVAILABLE_DELAY_MS)
+                            repo.promoteToTriggerBAndReschedule(
+                                reminderId = rid,
+                                requestedDelayMs = org.muilab.notigpt.domain.esm.EsmConfig.TRIGGER_B_AVAILABLE_DELAY_MS,
+                            )
                         }
                     } catch (_: Exception) {
                     }
@@ -205,6 +206,9 @@ fun RemindersScreen(
                     estimatedCompletionTime = 0L,
                     associatedNotis = emptySet(),
                     extractionSnapshotId = null,
+                    origin = "manual",
+                    humanEditCount = 0,
+                    deletedAtMs = null,
                     userEdited = true,
                 )
                 editing = empty
@@ -234,6 +238,11 @@ fun RemindersScreen(
                         val base = editingInitialSnapshot
                         val isNew = base != null && base.reminderTitle.isBlank() && base.reminderContent.isBlank() && base.userEdited
 
+                        val contentChanged = base != null && updatedOrNull != null && (
+                            base.reminderTitle != updatedOrNull.reminderTitle ||
+                                base.reminderContent != updatedOrNull.reminderContent
+                        )
+
                         val changed = base != null && updatedOrNull != null && (
                             base.reminderTitle != updatedOrNull.reminderTitle ||
                                 base.reminderContent != updatedOrNull.reminderContent ||
@@ -253,7 +262,9 @@ fun RemindersScreen(
                                 changed -> {
                                     vm.upsert(
                                         updatedOrNull.copy(
+                                            origin = "manual",
                                             userEdited = true,
+                                            humanEditCount = if (contentChanged) (base?.humanEditCount ?: updatedOrNull.humanEditCount) + 1 else (base?.humanEditCount ?: updatedOrNull.humanEditCount),
                                             lastUpdateTimestamp = System.currentTimeMillis(),
                                         )
                                     )
@@ -262,6 +273,7 @@ fun RemindersScreen(
                                 isNew -> {
                                     vm.upsert(
                                         updatedOrNull.copy(
+                                            origin = "manual",
                                             userEdited = true,
                                             lastUpdateTimestamp = System.currentTimeMillis(),
                                         )
@@ -287,6 +299,11 @@ fun RemindersScreen(
                         val base = editingInitialSnapshot
                         val isNew = base != null && base.reminderTitle.isBlank() && base.reminderContent.isBlank() && base.userEdited
 
+                        val contentChanged = base != null && (
+                            base.reminderTitle != updated.reminderTitle ||
+                                base.reminderContent != updated.reminderContent
+                        )
+
                         val changed = base != null && (
                             base.reminderTitle != updated.reminderTitle ||
                                 base.reminderContent != updated.reminderContent ||
@@ -304,6 +321,8 @@ fun RemindersScreen(
                             changed || isNew -> {
                                 vm.upsert(
                                     updated.copy(
+                                        origin = "manual",
+                                        humanEditCount = if (contentChanged) (base?.humanEditCount ?: updated.humanEditCount) + 1 else (base?.humanEditCount ?: updated.humanEditCount),
                                         userEdited = true,
                                         lastUpdateTimestamp = System.currentTimeMillis(),
                                     )
@@ -436,7 +455,7 @@ private fun ReminderCard(
             }
         }
 
-        val contentPreview = reminder.reminderContent.lineSequence().take(3).joinToString("\n")
+        val contentPreview = reminder.reminderContent.lineSequence().take(2).joinToString("\n")
         if (contentPreview.isNotBlank()) {
             Text(
                 text = contentPreview,

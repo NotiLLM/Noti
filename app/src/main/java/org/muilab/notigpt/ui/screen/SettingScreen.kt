@@ -80,22 +80,6 @@ fun SettingsScreen() {
             }
         }
 
-        var isTaskExpandedDefault by remember { mutableStateOf(SharedPreferencesManager.taskListDefaultExpanded) }
-
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(stringResource(R.string.ui_settings_expand_task_list), modifier = Modifier.weight(1f))
-            Switch(
-                checked = isTaskExpandedDefault,
-                onCheckedChange = {
-                    isTaskExpandedDefault = it
-                    SharedPreferencesManager.taskListDefaultExpanded = it
-                }
-            )
-        }
-
         Spacer(modifier = Modifier.size(12.dp))
 
         // --- ESM receptive window ---

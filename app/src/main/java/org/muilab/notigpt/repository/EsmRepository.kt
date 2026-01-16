@@ -313,4 +313,66 @@ class EsmRepository(
     suspend fun getInstanceByReminderId(reminderId: String): EsmInstance? = withContext(Dispatchers.IO) {
         esmDao.getInstanceByReminderId(reminderId)
     }
+
+    /**
+     * Trigger B should override a previously auto-generated Trigger C for the same reminder.
+     *
+     * If an instance exists and is still actionable (PENDING/AVAILABLE), we upgrade it to trigger B
+     * and reschedule its availableAt according to policy.
+     */
+    suspend fun promoteToTriggerBAndReschedule(
+        reminderId: String,
+        requestedDelayMs: Long,
+    ): Long? = withContext(Dispatchers.IO) {
+        val inst = esmDao.getInstanceByReminderId(reminderId) ?: return@withContext null
+
+        // If already answered/expired/discarded, don't touch.
+        if (inst.status in listOf(EsmStatuses.ANSWERED, EsmStatuses.EXPIRED, EsmStatuses.DISCARDED_SUPERSEDED)) {
+            return@withContext null
+        }
+
+        // If it's already trigger B, just enqueue with policy.
+        if (inst.triggerType == EsmTriggerTypes.B_ENTERED_EDIT_PAGE) {
+            return@withContext maybeEnqueueWithPolicy(inst.instanceId, requestedDelayMs)
+        }
+
+        // Only promote C -> B (leave A alone).
+        if (inst.triggerType != EsmTriggerTypes.C_AUTO_GENERATED) {
+            return@withContext maybeEnqueueWithPolicy(inst.instanceId, requestedDelayMs)
+        }
+
+        // Update trigger type immediately.
+        esmDao.setTriggerType(inst.instanceId, EsmTriggerTypes.B_ENTERED_EDIT_PAGE)
+
+        // Compute an effective delay under policy and reschedule availableAt/expiresAt.
+        val now = System.currentTimeMillis()
+
+        // reuse the same policy logic as maybeEnqueueWithPolicy
+        val window = EsmTimePolicy.anchoredDayWindowMs(now, EsmConfig.ANCHORED_DAY_START_HOUR, EsmConfig.ANCHORED_DAY_START_MINUTE)
+        val deliveredToday = esmDao.countDeliveredBetween(window.startMs, window.endMs)
+        if (deliveredToday >= EsmConfig.MAX_PER_ANCHORED_DAY) {
+            return@withContext null
+        }
+
+        val lastAnsweredAt = esmDao.getLastAnsweredAt() ?: 0L
+        val lastAvailableAt = esmDao.getLastAvailableAt() ?: 0L
+        val cooldownMs = when {
+            lastAnsweredAt > 0L && (now - lastAnsweredAt) < EsmConfig.ANSWERED_COOLDOWN_MS ->
+                EsmConfig.ANSWERED_COOLDOWN_MS - (now - lastAnsweredAt)
+            lastAvailableAt > 0L && (now - lastAvailableAt) < EsmConfig.UNANSWERED_COOLDOWN_MS ->
+                EsmConfig.UNANSWERED_COOLDOWN_MS - (now - lastAvailableAt)
+            else -> 0L
+        }
+
+        val effectiveDelay = maxOf(0L, requestedDelayMs, cooldownMs)
+        val newAvailAt = now + effectiveDelay
+        val newExpiresAt = newAvailAt + EsmConfig.QUESTIONNAIRE_EXPIRES_AFTER_MS
+
+        // If it was already AVAILABLE, move it back to PENDING so the delivery worker can re-open it.
+        esmDao.rescheduleInstance(inst.instanceId, newAvailAt, newExpiresAt, EsmStatuses.PENDING)
+
+        // Enqueue delivery.
+        org.muilab.notigpt.database.server.esm.enqueueEsmDelivery(appContext.applicationContext, inst.instanceId, effectiveDelay)
+        effectiveDelay
+    }
 }

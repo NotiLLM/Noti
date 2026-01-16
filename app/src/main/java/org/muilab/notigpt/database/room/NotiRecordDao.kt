@@ -227,4 +227,7 @@ interface NotiRecordDao {
 
     @Query("SELECT * FROM noti_record WHERE notiRecordId IN (:ids)")
     fun getRecordsByIds(ids: List<String>): List<NotiRecord>
+
+    @Query("SELECT * FROM noti_record WHERE notiRecordId = :id LIMIT 1")
+    fun getRecordById(id: String): NotiRecord?
 }

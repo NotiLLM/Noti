@@ -39,7 +39,7 @@ fun NotiFeedbackDropdown(context: Context, notiUnit: NotiUnit, isDropdownMenuExp
             Row {
                 Button(onClick = {
                     Toast.makeText(context, "Start Updating Notification", Toast.LENGTH_SHORT).show()
-                    enqueueUpdateNotification(context, notiUnit.notiKey)
+//                    enqueueUpdateNotification(context, notiUnit.notiKey)
                     isDropdownMenuExpanded.value = false
                 }) {
                     Text("Update Notification")

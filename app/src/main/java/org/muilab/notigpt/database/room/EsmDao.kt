@@ -5,6 +5,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
+import kotlinx.coroutines.flow.Flow
 import org.muilab.notigpt.model.esm.EsmAnswerEvent
 import org.muilab.notigpt.model.esm.EsmInstance
 
@@ -32,6 +33,9 @@ interface EsmDao {
      */
     @Query("SELECT * FROM esm_instance WHERE status = 'AVAILABLE' AND expiresAt > :nowMs ORDER BY availableAt ASC")
     suspend fun getUnexpiredAvailable(nowMs: Long): List<EsmInstance>
+
+    @Query("SELECT * FROM esm_instance WHERE status = 'AVAILABLE' AND expiresAt > (strftime('%s','now') * 1000) ORDER BY availableAt ASC")
+    fun getUnexpiredAvailableFlow(): Flow<List<EsmInstance>>
 
     @Query("UPDATE esm_instance SET status = :status WHERE instanceId = :instanceId")
     suspend fun setInstanceStatus(instanceId: String, status: String)
@@ -67,6 +71,9 @@ interface EsmDao {
 
     @Query("SELECT COUNT(*) FROM esm_instance WHERE reminderId = :reminderId")
     suspend fun countInstancesByReminderId(reminderId: String): Int
+
+    @Query("UPDATE esm_instance SET availableAt = :availableAt, expiresAt = :expiresAt, status = :status WHERE instanceId = :instanceId")
+    suspend fun rescheduleInstance(instanceId: String, availableAt: Long, expiresAt: Long, status: String)
 
     // --- Answer events ---
 

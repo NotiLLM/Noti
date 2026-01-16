@@ -25,9 +25,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import org.muilab.notigpt.R
 import org.muilab.notigpt.ui.component.SearchBar
 import org.muilab.notigpt.ui.viewmodel.DrawerViewModel
@@ -40,7 +37,8 @@ fun AppTopBar(
     isSearchExpanded: Boolean,
     onSearchToggled: (Boolean) -> Unit,
     isSettingsShown: Boolean,
-    onSettingsShown: (Boolean) -> Unit
+    onSettingsShown: (Boolean) -> Unit,
+    showNotificationActions: Boolean = true,
 ) {
 
     val isSortingMode = drawerViewModel.isSortingMode.collectAsState()
@@ -88,50 +86,38 @@ fun AppTopBar(
             if (!isSettingsShown) {
                 if (!isSearchExpanded) {
 
-                    IconButton(
-                        modifier = Modifier.minimumInteractiveComponentSize(),
-                        onClick = { onSearchToggled(true) }
-                    ) {
-                        Icon(Icons.Default.Search, contentDescription = "Search")
-                    }
-                    IconButton(
-                        modifier = Modifier.minimumInteractiveComponentSize(),
-                        onClick = { drawerViewModel.deleteAllNotis() }
-                    ) {
-                        Icon(
-                            painter = painterResource(id = R.drawable.sweep),
-                            contentDescription = "Sweep"
-                        )
-                    }
+                    if (showNotificationActions) {
+                        IconButton(
+                            modifier = Modifier.minimumInteractiveComponentSize(),
+                            onClick = { onSearchToggled(true) }
+                        ) {
+                            Icon(Icons.Default.Search, contentDescription = "Search")
+                        }
+                        IconButton(
+                            modifier = Modifier.minimumInteractiveComponentSize(),
+                            onClick = { drawerViewModel.deleteAllNotis() }
+                        ) {
+                            Icon(
+                                painter = painterResource(id = R.drawable.sweep),
+                                contentDescription = "Sweep"
+                            )
+                        }
 
-                    // Reorder / Sorting mode toggle
-                    IconButton(
-                        modifier = Modifier.minimumInteractiveComponentSize(),
-                        colors = IconButtonDefaults.iconButtonColors(
-                            containerColor = if (isSortingMode.value) MaterialTheme.colorScheme.primary else Color.Transparent,
-                            contentColor = if (isSortingMode.value) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
-                        ),
-                        onClick = { drawerViewModel.toggleSortingMode() }
-                    ) {
-                        Icon(
-                            painter = painterResource(id = R.drawable.reorder),
-                            contentDescription = "Reorder"
-                        )
+                        // Reorder / Sorting mode toggle
+                        IconButton(
+                            modifier = Modifier.minimumInteractiveComponentSize(),
+                            colors = IconButtonDefaults.iconButtonColors(
+                                containerColor = if (isSortingMode.value) MaterialTheme.colorScheme.primary else Color.Transparent,
+                                contentColor = if (isSortingMode.value) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+                            ),
+                            onClick = { drawerViewModel.toggleSortingMode() }
+                        ) {
+                            Icon(
+                                painter = painterResource(id = R.drawable.reorder),
+                                contentDescription = "Reorder"
+                            )
+                        }
                     }
-
-                    // Merge/Group button is intentionally hidden for now.
-                    // IconButton(
-                    //     modifier = Modifier.minimumInteractiveComponentSize(),
-                    //     colors = IconButtonDefaults.iconButtonColors(
-                    //         containerColor = if (isSortingMode.value) MaterialTheme.colorScheme.primary else Color.Transparent
-                    //     ),
-                    //     onClick = { drawerViewModel.toggleSortingMode() }
-                    // ) {
-                    //     Icon(
-                    //         painter = painterResource(id = R.drawable.group),
-                    //         contentDescription = "Group"
-                    //     )
-                    // }
 
                     IconButton(
                         modifier = Modifier.minimumInteractiveComponentSize(),

@@ -22,7 +22,7 @@ internal class N8nWorkerContext(
     }
 
     val reminderRepository: ReminderRepository by lazy {
-        ReminderRepository(database.reminderListDao())
+        ReminderRepository(database.reminderListDao(), appContext)
     }
 
     @Suppress("unused")

@@ -5,8 +5,10 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.muilab.notigpt.domain.esm.EsmStatuses
@@ -15,13 +17,19 @@ import org.muilab.notigpt.repository.EsmRepository
 import org.muilab.notigpt.database.room.AppDatabase
 import org.muilab.notigpt.model.esm.EsmInstance
 import org.muilab.notigpt.model.notifications.NotiDisplayUnit
+import org.muilab.notigpt.repository.firestore.FirestoreSyncRepository
 
 class EsmViewModel(app: Application) : AndroidViewModel(app) {
 
     private val repo = EsmRepository(app.applicationContext)
     private val db = AppDatabase.getInstance(app.applicationContext)
 
-    private val _available = MutableStateFlow<List<EsmInstance>>(emptyList())
+    // Replace manual refresh-based state with a Room Flow-backed StateFlow.
+    private val _available: StateFlow<List<EsmInstance>> =
+        db.esmDao()
+            .getUnexpiredAvailableFlow()
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     val available: StateFlow<List<EsmInstance>> = _available
 
     private val _activeInstance = MutableStateFlow<EsmInstance?>(null)
@@ -57,10 +65,8 @@ class EsmViewModel(app: Application) : AndroidViewModel(app) {
     val activeNotiPreviews: StateFlow<List<NotiDisplayUnit>> = _activeNotiPreviews
 
     fun refresh() {
-        viewModelScope.launch {
-            _available.value = repo.getUnexpiredAvailable()
-                .sortedBy { it.availableAt }
-        }
+        // No-op: available is Flow-backed now, so UI updates automatically.
+        // Kept for compatibility with existing call sites.
     }
 
     private fun loadActiveSnapshot(instance: EsmInstance) {
@@ -188,6 +194,13 @@ class EsmViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             db.esmDao().saveAnswerAndMaybeMarkAnswered(inst.instanceId, qid, answerJson, now)
             _answers.update { it + (qid to answerJson) }
+
+            // Firestore analytics upload (Option A: upload on every answer)
+            try {
+                FirestoreSyncRepository(getApplication<Application>().applicationContext).syncEsmAnswerEvent(inst.instanceId, qid)
+            } catch (_: Throwable) {
+                // best-effort
+            }
 
             val next = IRBShortSurveyV2.nextQuestionId(qid, answerJson)
             if (next == null) {

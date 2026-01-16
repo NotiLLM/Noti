@@ -35,7 +35,7 @@ class NotiRecordDaoInstrumentedTest {
     }
 
     @Test
-    fun hasRecordsInGap_respectsIncludeHistoryFlag() = runBlocking {
+    fun hasRecordsInGap_countsBothVisibleAndHiddenRecords() = runBlocking {
         val key = "k"
         val recVisible = fakeRecord(id = "r1", key = key, whenTime = 100, visible = true)
         val recHidden = fakeRecord(id = "r2", key = key, whenTime = 200, visible = false)
@@ -45,11 +45,9 @@ class NotiRecordDaoInstrumentedTest {
         val min = 50L
         val max = 250L
 
-        val countNoHistory = dao.hasRecordsInGap(key, min, max, includeHistory = false)
-        assertEquals(1, countNoHistory)
-
-        val countHistory = dao.hasRecordsInGap(key, min, max, includeHistory = true)
-        assertEquals(2, countHistory)
+        // Current DAO counts all records in the table for the window.
+        val count = dao.hasRecordsInGap(key, min, max)
+        assertEquals(2, count)
     }
 
     @Test
@@ -91,11 +89,11 @@ class NotiRecordDaoInstrumentedTest {
             )
         )
 
-        val older = dao.getContextOlder(notiKey = key, pivotTime = 250, limit = 10, includeHistory = false)
+        val older = dao.getContextOlder(notiKey = key, pivotTime = 250, limit = 10)
         // DAO contract: DESC ordering
         assertEquals(listOf("r2", "r1"), older.map { it.notiRecordId })
 
-        val newer = dao.getContextNewer(notiKey = key, pivotTime = 250, limit = 10, includeHistory = false)
+        val newer = dao.getContextNewer(notiKey = key, pivotTime = 250, limit = 10)
         // DAO contract: ASC ordering
         assertEquals(listOf("r3"), newer.map { it.notiRecordId })
 
@@ -122,7 +120,7 @@ class NotiRecordDaoInstrumentedTest {
             extraSummaryText = "",
             extraInfoText = "",
             extraSubText = "",
-            isVisible = visible,
+            isDismissed = !visible,
             taskScanned = false,
             taskExtracted = false,
             taskExtractionClaimed = false,

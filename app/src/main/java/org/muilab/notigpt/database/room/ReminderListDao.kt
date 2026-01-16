@@ -24,6 +24,9 @@ interface ReminderListDao {
     @Query("SELECT * FROM reminder_list WHERE reminderId = :reminderId")
     suspend fun getById(reminderId: String): ReminderUnit?
 
+    @Query("UPDATE reminder_list SET deletedAtMs = :ts WHERE reminderId = :reminderId")
+    suspend fun setDeletedAt(reminderId: String, ts: Long)
+
     @Query("UPDATE reminder_list SET isVisible = 0, lastUpdateTimestamp = :ts WHERE reminderId = :reminderId")
     suspend fun softDeleteById(reminderId: String, ts: Long)
 

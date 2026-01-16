@@ -271,6 +271,9 @@ internal object ReminderExtractionHandler {
                             estimatedCompletionTime = estimate,
                             associatedNotis = assocKeys.toSet(),
                             extractionSnapshotId = snapshotId,
+                            origin = "llm_manual_extraction",
+                            humanEditCount = 0,
+                            deletedAtMs = null,
                             userEdited = false,
                         )
 
@@ -553,6 +556,9 @@ internal object ReminderExtractionHandler {
                         estimatedCompletionTime = estimate,
                         associatedNotis = assocKeys.toSet(),
                         extractionSnapshotId = snapshotId,
+                        origin = "llm_auto_extraction",
+                        humanEditCount = 0,
+                        deletedAtMs = null,
                         userEdited = false,
                     )
 

@@ -79,12 +79,12 @@ object SharedPreferencesManager {
 
     const val KEY_WAIT_SECONDS_BEFORE_NOTI_UNIT_SYNC = "waitSecondsBeforeNotiUnitSync"
     var waitSecondsBeforeNotiUnitSync: Int
-        get() = get(KEY_LOCAL_PREFS, KEY_WAIT_SECONDS_BEFORE_NOTI_UNIT_SYNC, 5 * 60)
+        get() = get(KEY_LOCAL_PREFS, KEY_WAIT_SECONDS_BEFORE_NOTI_UNIT_SYNC, 3 * 60)
         set(value) = put(KEY_LOCAL_PREFS, KEY_WAIT_SECONDS_BEFORE_NOTI_UNIT_SYNC, value)
 
     const val KEY_MAX_RECORDS_BEFORE_NOTI_SYNC = "maxRecordsBeforeNotiSync"
     var maxRecordsBeforeNotiSync: Int
-        get() = get(KEY_LOCAL_PREFS, KEY_MAX_RECORDS_BEFORE_NOTI_SYNC, 10)
+        get() = get(KEY_LOCAL_PREFS, KEY_MAX_RECORDS_BEFORE_NOTI_SYNC, 5)
         set(value) = put(KEY_LOCAL_PREFS, KEY_MAX_RECORDS_BEFORE_NOTI_SYNC, value)
 
     const val KEY_WAIT_SECONDS_BEFORE_DRAWER_SYNC = "waitSecondsBeforeDrawerSync"
@@ -94,7 +94,7 @@ object SharedPreferencesManager {
 
     const val KEY_MAX_RECORDS_BEFORE_DRAWER_SYNC = "maxRecordsBeforeDrawerSync"
     var maxRecordsBeforeDrawerSync: Int
-        get() = get(KEY_LOCAL_PREFS, KEY_MAX_RECORDS_BEFORE_DRAWER_SYNC, 1)
+        get() = get(KEY_LOCAL_PREFS, KEY_MAX_RECORDS_BEFORE_DRAWER_SYNC, 5)
         set(value) = put(KEY_LOCAL_PREFS, KEY_MAX_RECORDS_BEFORE_DRAWER_SYNC, value)
 
     // --- Swipe Delete Direction ---
@@ -158,6 +158,23 @@ object SharedPreferencesManager {
     var esmBedtimeMinutes: Int
         get() = get(KEY_LOCAL_PREFS, KEY_ESM_BEDTIME_MINUTES, 23 * 60)
         set(value) = put(KEY_LOCAL_PREFS, KEY_ESM_BEDTIME_MINUTES, value)
+
+    private const val KEY_INSTALL_TIMESTAMP_MS = "installTimestampMs"
+
+    /**
+     * Installation time (first-run) in millis since epoch, persisted locally.
+     *
+     * This is used for analytics baselining in Firestore.
+     */
+    var installTimestampMs: Long
+        get() {
+            val existing = get(KEY_LOCAL_PREFS, KEY_INSTALL_TIMESTAMP_MS, 0L)
+            if (existing != 0L) return existing
+            val now = System.currentTimeMillis()
+            put(KEY_LOCAL_PREFS, KEY_INSTALL_TIMESTAMP_MS, now)
+            return now
+        }
+        set(value) = put(KEY_LOCAL_PREFS, KEY_INSTALL_TIMESTAMP_MS, value)
 
     fun clearAll() {
         localSharedPrefs.edit { clear() }

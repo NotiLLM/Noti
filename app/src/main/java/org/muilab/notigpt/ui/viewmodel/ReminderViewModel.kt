@@ -22,7 +22,7 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
 
     init {
         val db = AppDatabase.getInstance(application.applicationContext)
-        repo = ReminderRepository(db.reminderListDao())
+        repo = ReminderRepository(db.reminderListDao(), application.applicationContext)
     }
 
     private val _filter = MutableStateFlow(FilterTab.All)
@@ -75,6 +75,10 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
             deadlineTimestamp = 0L,
             estimatedCompletionTime = 0L,
             associatedNotis = emptySet(),
+            extractionSnapshotId = null,
+            origin = "manual",
+            humanEditCount = 0,
+            deletedAtMs = null,
             userEdited = false,
         )
         upsert(reminder)

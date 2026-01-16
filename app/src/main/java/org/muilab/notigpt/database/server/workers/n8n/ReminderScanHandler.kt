@@ -25,14 +25,17 @@ internal object ReminderScanHandler {
         val notiUnit = ctx.getNotiUnit(notiKey) ?: return ctx.failure()
 
         // ensure noti_contents are ordered by time ascending (oldest -> newest)
-        val notiRecords = ctx.database.recordDao().getUnscannedRecordsByKey(notiKey).sortedBy { it.time }
+        val notiRecords =
+            ctx.database.recordDao().getUnscannedRecordsByKey(notiKey).sortedBy { it.time }
 
         if (notiRecords.isEmpty()) return ctx.success()
 
         // Build payload for scan
-        val notiContentList = notiRecords.map { rec -> N8nRecordFormatter.format(rec, notiUnit.isPeople) }
+        val notiContentList =
+            notiRecords.map { rec -> N8nRecordFormatter.format(rec, notiUnit.isPeople) }
         val pastCount = SharedPreferencesManager.maxPastContext
-        val pastRecords = if (pastCount > 0) ctx.database.recordDao().getLastScannedRecordsByKey(notiKey, pastCount).sortedBy { it.time } else emptyList()
+        val pastRecords = if (pastCount > 0) ctx.database.recordDao()
+            .getLastScannedRecordsByKey(notiKey, pastCount).sortedBy { it.time } else emptyList()
         val pastContextList = pastRecords.map { N8nRecordFormatter.format(it, notiUnit.isPeople) }
 
         val lastRecord = notiRecords.lastOrNull()
@@ -85,17 +88,40 @@ internal object ReminderScanHandler {
         }
 
         val bodyStr = response.body()?.string() ?: return ctx.success()
+
         try {
             val root = JSONObject(bodyStr)
-            val hasMemo = root.optBoolean("hasMemo", false)
-            val hasTask = root.optBoolean("hasTask", false)
+
+            // Most common for your n8n setup: JSON is inside "text"
+            val text = root.optString("text", "")
+            val innerJson = extractJsonFromTextField(text) ?: run {
+                Log.e("N8nWebhook", "Scan response missing parsable JSON. body=$bodyStr")
+                return ctx.success()
+            }
+
+            val inner = JSONObject(innerJson)
+
+            // hasTask/hasMemo are 1/0 in your response
+            val hasTask = inner.optInt("hasTask", 0) == 1 || inner.optBoolean("hasTask", false)
+            val hasMemo = inner.optInt("hasMemo", 0) == 1 || inner.optBoolean("hasMemo", false)
 
             ctx.notiRepository.setScanStates(notiKey, hasTask, hasMemo)
             ctx.database.recordDao().setRecordsTaskScannedByIds(notiRecords.map { it.notiRecordId })
+
         } catch (e: Exception) {
-            Log.e("N8nWebhook", "Error parsing scan response", e)
+            Log.e("N8nWebhook", "Error parsing scan response. body=$bodyStr", e)
         }
 
         return ctx.success()
+    }
+    private fun extractJsonFromTextField(text: String): String? {
+        val trimmed = text.trim()
+
+        // Case A: already JSON object string: {"hasTask":1,...}
+        if (trimmed.startsWith("{") && trimmed.endsWith("}")) return trimmed
+
+        // Case B: markdown fenced JSON
+        val r = Regex("```(?:json)?\\s*(\\{[\\s\\S]*?\\})\\s*```", RegexOption.IGNORE_CASE)
+        return r.find(trimmed)?.groupValues?.getOrNull(1)
     }
 }

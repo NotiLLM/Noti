@@ -1,5 +1,6 @@
 package org.muilab.notigpt.util
 
+import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -32,6 +33,17 @@ fun createNotificationChannel(context: Context) {
     channel.setShowBadge(true)
     channel.setSound(null, null)
     channel.enableVibration(false)
+
+    // Prevent user from "deleting" this channel's notifications (best-effort; OEM may still vary).
+    // This does not replace a foreground service, but it helps.
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        channel.setAllowBubbles(false)
+        channel.lockscreenVisibility = Notification.VISIBILITY_PRIVATE
+        channel.setBypassDnd(false)
+        channel.enableLights(false)
+        channel.setShowBadge(true)
+    }
+
     val notificationManager: NotificationManager =
         context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
     notificationManager.createNotificationChannel(channel)
@@ -106,12 +118,19 @@ fun postOngoingNotification(context: Context) {
             setSilent(true)
             setContentIntent(pendingIntent)
             setOngoing(true)  // This makes the notification ongoing
+            setAutoCancel(false)
         }
         val notificationId = 44
 
         val notificationManager = ContextCompat.getSystemService(
             context, NotificationManager::class.java
         ) as NotificationManager
-        notificationManager.notify(notificationId, notificationBuilder.build())
+
+        val built = notificationBuilder.build().apply {
+            // Stronger than setOngoing on many devices: cannot be cleared via "Clear all".
+            flags = flags or Notification.FLAG_NO_CLEAR
+        }
+
+        notificationManager.notify(notificationId, built)
     }
 }

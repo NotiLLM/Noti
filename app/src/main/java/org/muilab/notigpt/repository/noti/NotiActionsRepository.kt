@@ -18,6 +18,7 @@ import org.muilab.notigpt.database.room.NotiRecordDao
 import org.muilab.notigpt.domain.action.NotiActionType
 import org.muilab.notigpt.model.notifications.NotiRecord
 import org.muilab.notigpt.model.notifications.NotiUnit
+import org.muilab.notigpt.repository.firestore.FirestoreSyncRepository
 import org.muilab.notigpt.util.Constants.Companion.MAX_EXPIRED_RECORDS_PER_KEY
 import org.muilab.notigpt.util.Constants.Companion.NOTI_RECORD_EXPIRE_TIME_MS
 import org.muilab.notigpt.util.SharedPreferencesManager
@@ -66,20 +67,25 @@ class NotiActionsRepository(
     @RequiresApi(Build.VERSION_CODES.S)
     suspend fun insertNotiRecord(sbn: StatusBarNotification) {
         val notiRecord = NotiRecord(sbn)
-        notiRecordDao.upsert(notiRecord)
-        registerNewRecordForNotiUnit(notiRecord.notiKey)
 
-        try {
-            val existing = notiDrawerDao.getByNotiKey(notiRecord.notiKey)
-            if (existing != null && existing.isPinned) {
-                if (!existing.shouldExtractReminder) {
-                    notiDrawerDao.setShouldExtractReminderByKey(notiRecord.notiKey, true)
-                    registerShouldExtractForNotiUnit(notiRecord.notiKey)
-                }
-            }
-        } catch (e: Exception) {
-            Log.e("NotiRepo", "Error checking pinned state for key=${notiRecord.notiKey}", e)
+        // Only count truly new records.
+        val existed = try {
+            notiRecordDao.getRecordById(notiRecord.notiRecordId) != null
+        } catch (_: Throwable) {
+            false
         }
+
+        notiRecordDao.upsert(notiRecord)
+
+        // Firestore analytics: count received records since installation
+        if (!existed) {
+            try {
+                FirestoreSyncRepository(appContext).incrementNotiRecordCount()
+            } catch (_: Throwable) {
+            }
+        }
+
+        registerNewRecordForNotiUnit(notiRecord.notiKey)
     }
 
     private fun registerNewRecordForNotiUnit(notiKey: String) {
@@ -202,10 +208,11 @@ class NotiActionsRepository(
 
     suspend fun setHasTask(notiKey: String, hasTask: Boolean) {
         val existing = notiDrawerDao.getByNotiKey(notiKey) ?: return
-        val prevHasTask = existing.hasTask
-        val prevShouldExtract = existing.shouldExtractReminder
         notiDrawerDao.setHasTaskByKey(notiKey, hasTask)
-        if (hasTask && (!prevHasTask || !prevShouldExtract)) {
+
+        // Never demote the flag once it's true.
+        if (!existing.shouldExtractReminder && hasTask) {
+            Log.d("NotiActionsRepository", "Setting shouldExtractReminder to true for $notiKey")
             notiDrawerDao.setShouldExtractReminderByKey(notiKey, true)
             registerShouldExtractForNotiUnit(notiKey)
         }
@@ -213,11 +220,11 @@ class NotiActionsRepository(
 
     suspend fun setHasMemo(notiKey: String, hasMemo: Boolean) {
         val existing = notiDrawerDao.getByNotiKey(notiKey) ?: return
-        val prevHasMemo = existing.hasMemo
-        val prevShouldExtract = existing.shouldExtractReminder
         notiDrawerDao.setHasMemoByKey(notiKey, hasMemo)
 
-        if (hasMemo && (!prevHasMemo || !prevShouldExtract)) {
+        // Never demote the flag once it's true.
+        if (!existing.shouldExtractReminder && hasMemo) {
+            Log.d("NotiActionsRepository", "Setting shouldExtractReminder to true for $notiKey")
             notiDrawerDao.setShouldExtractReminderByKey(notiKey, true)
             registerShouldExtractForNotiUnit(notiKey)
         }

@@ -37,6 +37,26 @@ data class ReminderUnit(
      */
     val extractionSnapshotId: String? = null,
 
+    /**
+     * Analytics provenance label.
+     *
+     * - "manual": user created from empty template in the reminders screen
+     * - "llm_manual_extraction": user explicitly requested extraction from a notification
+     * - "llm_auto_extraction": system auto-triggered extraction
+     */
+    val origin: String = "manual",
+
+    /**
+     * Number of human "save events" where title/content changed.
+     * (Edits are defined by user save when content changed.)
+     */
+    val humanEditCount: Int = 0,
+
+    /**
+     * Soft-delete timestamp (ms since epoch). Null means not deleted.
+     */
+    val deletedAtMs: Long? = null,
+
     // Whether user has edited this reminder
     val userEdited: Boolean = false,
 
