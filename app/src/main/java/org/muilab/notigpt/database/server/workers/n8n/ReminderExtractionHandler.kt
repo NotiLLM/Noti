@@ -9,14 +9,21 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
+import org.muilab.notigpt.database.server.esm.enqueueEsmDelivery
+import org.muilab.notigpt.domain.esm.EsmConfig
+import org.muilab.notigpt.domain.esm.EsmScheduling
+import org.muilab.notigpt.domain.esm.EsmTriggerPolicy
+import org.muilab.notigpt.domain.esm.EsmTriggerTypes
 import org.muilab.notigpt.domain.esm.EsmSnapshotStatuses
 import org.muilab.notigpt.model.features.ReminderExtractionSnapshot
 import org.muilab.notigpt.model.features.ReminderUnit
 import org.muilab.notigpt.model.notifications.NotiRecord
+import org.muilab.notigpt.repository.EsmRepository
 import org.muilab.notigpt.util.SharedPreferencesManager
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.TimeZone
 import java.util.UUID
 
 internal object ReminderExtractionHandler {
@@ -194,6 +201,7 @@ internal object ReminderExtractionHandler {
             val payload = mapOf(
                 "userId" to SharedPreferencesManager.userId,
                 "language" to Locale.getDefault().toLanguageTag(),
+                "timezone" to TimeZone.getDefault().displayName,
                 "currentTime" to SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.getDefault()).format(Date()),
                 "userTriggered" to true,
                 "notis" to notisPayload,
@@ -230,9 +238,15 @@ internal object ReminderExtractionHandler {
                     // No reminders extracted -> discard snapshot
                     snapshotDao.deleteSnapshot(snapshotId)
                 } else {
+                    // Track the first reminderId we actually upsert (used for snapshot link + ESM binding).
+                    var firstCreatedReminderId: String? = null
+
                     for (i in 0 until arr.length()) {
                         val it = arr.getJSONObject(i)
                         val reminderId = it.optString("reminderId", it.optString("taskId"))
+                        if (firstCreatedReminderId == null && reminderId.isNotBlank()) {
+                            firstCreatedReminderId = reminderId
+                        }
                         val reminderTitle = it.optString("reminderTitle", "")
                         val reminderContent = it.optString("reminderContent", it.optString("taskDescription"))
                         val deadlineMs = if (it.has("deadlineTimestamp") && !it.isNull("deadlineTimestamp")) it.optLong("deadlineTimestamp", -1L) else -1L
@@ -268,6 +282,28 @@ internal object ReminderExtractionHandler {
                     val firstReminderId = firstObj?.optString("reminderId").takeIf { !it.isNullOrBlank() }
                         ?: firstObj?.optString("taskId")
                     snapshotDao.updateSnapshotStatusAndReminderId(snapshotId, EsmSnapshotStatuses.KEPT, firstReminderId)
+
+                    // === Trigger A: create an ESM after a user-triggered extraction actually created a reminder ===
+                    val bindReminderId = firstCreatedReminderId ?: firstReminderId
+                    if (!bindReminderId.isNullOrBlank()) {
+                        try {
+                            val esmRepo = EsmRepository(ctx.appContext)
+                            if (!esmRepo.hasAnyInstanceForReminder(bindReminderId)) {
+                                val inst = esmRepo.createEsmForSnapshot(
+                                    reminderId = bindReminderId,
+                                    snapshotId = snapshotId,
+                                    triggerType = EsmTriggerTypes.A_USER_TRIGGERED_EXTRACTION,
+                                    // Intro text says: after user-triggered extraction; we keep a small delay.
+                                    availableDelayMs = EsmConfig.TRIGGER_A_AVAILABLE_DELAY_MS,
+                                )
+                                enqueueEsmDelivery(ctx.appContext, inst.instanceId, EsmConfig.TRIGGER_A_AVAILABLE_DELAY_MS)
+                            }
+                        } catch (_: IllegalStateException) {
+                            // ESM already exists for this reminder; no-op.
+                        } catch (e: Exception) {
+                            Log.w("N8nWebhook", "Failed to create/enqueue Trigger A ESM", e)
+                        }
+                    }
                 }
 
                 drawerDao.setShouldExtractReminderByKeys(listOf(notiKey), false)
@@ -485,9 +521,14 @@ internal object ReminderExtractionHandler {
             if (arr.length() == 0) {
                 snapshotDao.deleteSnapshot(snapshotId)
             } else {
+                var firstCreatedReminderId: String? = null
+
                 for (i in 0 until arr.length()) {
                     val it = arr.getJSONObject(i)
                     val reminderId = it.optString("reminderId", it.optString("taskId"))
+                    if (firstCreatedReminderId == null && reminderId.isNotBlank()) {
+                        firstCreatedReminderId = reminderId
+                    }
                     val reminderTitle = it.optString("reminderTitle", "")
                     val reminderContent = it.optString("reminderContent", it.optString("taskDescription"))
                     val deadlineMs = if (it.has("deadlineTimestamp") && !it.isNull("deadlineTimestamp")) it.optLong("deadlineTimestamp", -1L) else -1L
@@ -522,14 +563,35 @@ internal object ReminderExtractionHandler {
                 val firstReminderId = firstObj?.optString("reminderId").takeIf { !it.isNullOrBlank() }
                     ?: firstObj?.optString("taskId")
                 snapshotDao.updateSnapshotStatusAndReminderId(snapshotId, EsmSnapshotStatuses.KEPT, firstReminderId)
-            }
 
-            if (submittedRecordIds.isNotEmpty()) {
-                db.recordDao().setClaimedRecordsExtracted(submittedRecordIds.distinct())
-            }
+                // === Trigger C: auto-generated ===
+                val bindReminderId = firstCreatedReminderId ?: firstReminderId
+                if (!bindReminderId.isNullOrBlank()) {
+                    try {
+                        val esmRepo = EsmRepository(ctx.appContext)
+                        if (!esmRepo.hasAnyInstanceForReminder(bindReminderId)) {
+                            val inst = esmRepo.createEsmForSnapshot(
+                                reminderId = bindReminderId,
+                                snapshotId = snapshotId,
+                                triggerType = EsmTriggerTypes.C_AUTO_GENERATED,
+                                // Auto-generated: make it available immediately when delivery runs.
+                                availableDelayMs = EsmConfig.TRIGGER_C_AVAILABLE_DELAY_MS,
+                            )
 
-            if (submittedKeys.isNotEmpty()) {
-                drawerDao.setShouldExtractReminderByKeys(submittedKeys.distinct(), false)
+                            // If app is already open/foreground: enqueue immediately.
+                            // Else defer enqueue until next app open.
+                            if (EsmTriggerPolicy.isAppInForeground(ctx.appContext)) {
+                                enqueueEsmDelivery(ctx.appContext, inst.instanceId, EsmConfig.TRIGGER_C_AVAILABLE_DELAY_MS)
+                            } else {
+                                EsmScheduling.addPendingEnqueue(ctx.appContext, inst.instanceId)
+                            }
+                        }
+                    } catch (_: IllegalStateException) {
+                        // ESM already exists for this reminder; no-op.
+                    } catch (e: Exception) {
+                        Log.w("N8nWebhook", "Failed to create/enqueue Trigger C ESM", e)
+                    }
+                }
             }
 
         } catch (e: Exception) {

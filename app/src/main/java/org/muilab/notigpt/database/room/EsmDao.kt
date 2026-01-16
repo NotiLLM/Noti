@@ -25,6 +25,14 @@ interface EsmDao {
     @Query("SELECT * FROM esm_instance WHERE status IN (:statuses) ORDER BY availableAt ASC")
     suspend fun getInstancesByStatuses(statuses: List<String>): List<EsmInstance>
 
+    /**
+     * AVAILABLE instances whose questionnaire window has not expired.
+     *
+     * NOTE: This enforces the 'must answer within N minutes of being shown/available' rule.
+     */
+    @Query("SELECT * FROM esm_instance WHERE status = 'AVAILABLE' AND expiresAt > :nowMs ORDER BY availableAt ASC")
+    suspend fun getUnexpiredAvailable(nowMs: Long): List<EsmInstance>
+
     @Query("UPDATE esm_instance SET status = :status WHERE instanceId = :instanceId")
     suspend fun setInstanceStatus(instanceId: String, status: String)
 
@@ -36,14 +44,29 @@ interface EsmDao {
     )
     suspend fun markAnswered(instanceId: String, status: String, answeredAt: Long, isLate: Boolean)
 
+    @Query("SELECT * FROM esm_instance WHERE reminderId = :reminderId LIMIT 1")
+    suspend fun getInstanceByReminderId(reminderId: String): EsmInstance?
+
+    @Query("SELECT MAX(availableAt) FROM esm_instance WHERE status = 'AVAILABLE'")
+    suspend fun getLastAvailableAt(): Long?
+
     @Query("SELECT MAX(answeredAt) FROM esm_instance WHERE status = 'ANSWERED'")
     suspend fun getLastAnsweredAt(): Long?
+
+    @Query("SELECT COUNT(*) FROM esm_instance WHERE createdAt BETWEEN :startMs AND :endMs")
+    suspend fun countCreatedBetween(startMs: Long, endMs: Long): Int
+
+    @Query("SELECT COUNT(*) FROM esm_instance WHERE availableAt BETWEEN :startMs AND :endMs")
+    suspend fun countDeliveredBetween(startMs: Long, endMs: Long): Int
 
     @Query("SELECT COUNT(*) FROM esm_instance WHERE status IN ('PENDING','AVAILABLE')")
     suspend fun getActiveCount(): Int
 
     @Query("SELECT * FROM esm_instance WHERE status = 'AVAILABLE' ORDER BY availableAt DESC LIMIT 1")
     suspend fun getNewestAvailable(): EsmInstance?
+
+    @Query("SELECT COUNT(*) FROM esm_instance WHERE reminderId = :reminderId")
+    suspend fun countInstancesByReminderId(reminderId: String): Int
 
     // --- Answer events ---
 

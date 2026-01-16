@@ -517,4 +517,10 @@ object AppDatabaseMigrations {
             db.execSQL("CREATE INDEX IF NOT EXISTS `idx_reminder_snap_reminderId` ON `reminder_extraction_snapshot` (`reminderId`)")
         }
     }
+
+    val MIGRATION_26_27 = object : Migration(26, 27) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE reminder_list ADD COLUMN isVisible INTEGER NOT NULL DEFAULT 1")
+        }
+    }
 }

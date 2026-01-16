@@ -3,15 +3,18 @@ package org.muilab.notigpt.ui.viewmodel
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.muilab.notigpt.domain.esm.EsmStatuses
 import org.muilab.notigpt.domain.esm.IRBShortSurveyV2
 import org.muilab.notigpt.repository.EsmRepository
 import org.muilab.notigpt.database.room.AppDatabase
 import org.muilab.notigpt.model.esm.EsmInstance
+import org.muilab.notigpt.model.notifications.NotiDisplayUnit
 
 class EsmViewModel(app: Application) : AndroidViewModel(app) {
 
@@ -47,18 +50,73 @@ class EsmViewModel(app: Application) : AndroidViewModel(app) {
     private val _activeSnapshotJson = MutableStateFlow<String?>(null)
     val activeSnapshotJson: StateFlow<String?> = _activeSnapshotJson
 
+    private val _activeReminder = MutableStateFlow<org.muilab.notigpt.model.features.ReminderUnit?>(null)
+    val activeReminder: StateFlow<org.muilab.notigpt.model.features.ReminderUnit?> = _activeReminder
+
+    private val _activeNotiPreviews = MutableStateFlow<List<NotiDisplayUnit>>(emptyList())
+    val activeNotiPreviews: StateFlow<List<NotiDisplayUnit>> = _activeNotiPreviews
+
     fun refresh() {
         viewModelScope.launch {
-            val now = System.currentTimeMillis()
-            _available.value = repo.getInstancesByStatuses(listOf(EsmStatuses.AVAILABLE))
-                .filter { it.expiresAt > now }
+            _available.value = repo.getUnexpiredAvailable()
                 .sortedBy { it.availableAt }
         }
     }
 
     private fun loadActiveSnapshot(instance: EsmInstance) {
         viewModelScope.launch {
-            _activeSnapshotJson.value = repo.getSnapshot(instance.snapshotId)?.payloadJson
+            val snap = repo.getSnapshot(instance.snapshotId)?.payloadJson
+            val rem = repo.getReminder(instance.reminderId)
+            _activeSnapshotJson.value = snap
+            _activeReminder.value = rem
+
+            // Reconstruct related notification previews for v2 snapshots.
+            _activeNotiPreviews.value = emptyList()
+            if (snap.isNullOrBlank()) return@launch
+
+            val grouping = org.muilab.notigpt.domain.esm.EsmUserSnapshot.parseRecordIdGrouping(snap)
+            if (grouping == null) return@launch
+
+            val notiKeyToRecordIds = grouping.notiKeyToRecordIds
+
+            val notiKeys: List<String> = when {
+                notiKeyToRecordIds.isNotEmpty() -> notiKeyToRecordIds.keys.toList()
+                rem != null && rem.associatedNotis.isNotEmpty() -> rem.associatedNotis.toList()
+                else -> emptyList()
+            }
+
+            if (notiKeys.isEmpty()) return@launch
+
+            val recordIdsToLoad: List<String> = when {
+                notiKeyToRecordIds.isNotEmpty() -> notiKeyToRecordIds.values.flatten().distinct()
+                else -> grouping.recordIds
+            }
+
+            if (recordIdsToLoad.isEmpty()) return@launch
+
+            // Load rows from DB off main thread.
+            val previews = withContext(Dispatchers.IO) {
+                val records = db.recordDao().getRecordsByIds(recordIdsToLoad)
+                val recordsByKey = records.groupBy { it.notiKey }
+                val units = db.drawerDao().getByNotiKeys(notiKeys).associateBy { it.notiKey }
+
+                val result = mutableListOf<NotiDisplayUnit>()
+                for (key in notiKeys) {
+                    val unit = units[key] ?: continue
+                    val wantedIds = notiKeyToRecordIds[key]?.toHashSet()
+                    val recs = recordsByKey[key].orEmpty()
+                        .let { rs ->
+                            if (wantedIds == null) rs else rs.filter { it.notiRecordId in wantedIds }
+                        }
+                        .sortedBy { it.whenTime }
+
+                    if (recs.isEmpty()) continue
+                    result.add(NotiDisplayUnit(unit, recs))
+                }
+                result
+            }
+
+            _activeNotiPreviews.value = previews
         }
     }
 
@@ -117,6 +175,8 @@ class EsmViewModel(app: Application) : AndroidViewModel(app) {
         _currentAnswerJson.value = ""
         _questionTrail.value = emptyList()
         _activeSnapshotJson.value = null
+        _activeReminder.value = null
+        _activeNotiPreviews.value = emptyList()
         refresh()
     }
 
@@ -152,5 +212,9 @@ class EsmViewModel(app: Application) : AndroidViewModel(app) {
             repo.createDebugEsmNow()
             refresh()
         }
+    }
+
+    suspend fun loadReminderTitle(reminderId: String): String? {
+        return repo.getReminder(reminderId)?.reminderTitle
     }
 }

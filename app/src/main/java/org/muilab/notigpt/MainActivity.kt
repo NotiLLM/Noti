@@ -18,6 +18,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import androidx.core.app.NotificationManagerCompat
+import org.muilab.notigpt.domain.esm.EsmScheduling
 import org.muilab.notigpt.repository.NotiRepositoryProvider
 import org.muilab.notigpt.service.NotiListenerService
 import org.muilab.notigpt.ui.theme.NotiLLMTheme
@@ -112,6 +113,13 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         SharedPreferencesManager.lastAppResumeTime = System.currentTimeMillis()
         super.onResume()
+
+        // Enqueue any deferred auto-generated (Trigger C) ESM deliveries now that the user is in the app.
+        try {
+            EsmScheduling.flushPendingEnqueue(applicationContext, delayMs = 0L)
+        } catch (e: Exception) {
+            Log.w("MainActivity", "Failed to flush pending ESM deliveries", e)
+        }
 
         // Opportunistic wake-up: if WorkManager got delayed in doze, kick once when user opens app.
         // Rate limit to avoid spamming when user switches apps quickly.

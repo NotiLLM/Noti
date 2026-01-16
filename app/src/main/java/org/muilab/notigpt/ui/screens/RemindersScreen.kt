@@ -29,7 +29,6 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DatePicker
@@ -40,7 +39,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -82,6 +80,9 @@ import org.muilab.notigpt.platform.AndroidClipboardController
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 
 @Composable
 fun RemindersScreen(
@@ -91,7 +92,6 @@ fun RemindersScreen(
     val reminders by vm.reminders.collectAsState()
     val filter by vm.filter.collectAsState()
 
-    var showAddDialog by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<ReminderUnit?>(null) }
     var editingId by remember { mutableStateOf<String?>(null) }
     var editingInitialSnapshot by remember { mutableStateOf<ReminderUnit?>(null) }
@@ -107,6 +107,50 @@ fun RemindersScreen(
             listState.animateScrollToItem(0)
         }
         pendingScrollToTopId = null
+    }
+
+    // Trigger B (v2): when a reminder card is fully visible in the list viewport, consider it "viewed".
+    // We only apply this to generated reminders (has associated notifications), and only once per reminderId.
+    val context = LocalContext.current
+    var viewedReminderIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+
+    LaunchedEffect(listState, reminders) {
+        snapshotFlow {
+            val layout = listState.layoutInfo
+            val viewportStart = layout.viewportStartOffset
+            val viewportEnd = layout.viewportEndOffset
+
+            layout.visibleItemsInfo
+                .filter { info ->
+                    info.offset >= viewportStart && (info.offset + info.size) <= viewportEnd
+                }
+                .mapNotNull { info ->
+                    val idx = info.index
+                    reminders.getOrNull(idx)?.reminderId
+                }
+        }
+            .distinctUntilChanged()
+            .collect { fullyVisibleIds ->
+                val newlyViewed = fullyVisibleIds.filterNot { it in viewedReminderIds }
+                if (newlyViewed.isEmpty()) return@collect
+
+                viewedReminderIds = viewedReminderIds + newlyViewed
+
+                CoroutineScope(Dispatchers.IO).launch {
+                    try {
+                        val repo = EsmRepository(context.applicationContext)
+                        newlyViewed.forEach { rid ->
+                            val reminder = reminders.firstOrNull { it.reminderId == rid } ?: return@forEach
+                            if (reminder.associatedNotis.isEmpty()) return@forEach
+
+                            // Trigger B: schedule delivery at least 10 minutes after being viewed.
+                            val inst = repo.getInstanceByReminderId(rid) ?: return@forEach
+                            repo.maybeEnqueueWithPolicy(inst.instanceId, org.muilab.notigpt.domain.esm.EsmConfig.TRIGGER_B_AVAILABLE_DELAY_MS)
+                        }
+                    } catch (_: Exception) {
+                    }
+                }
+            }
     }
 
     Box(Modifier.fillMaxSize()) {
@@ -148,30 +192,27 @@ fun RemindersScreen(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(16.dp),
-            onClick = { showAddDialog = true }
+            onClick = {
+                val empty = ReminderUnit(
+                    reminderId = "manual_${java.util.UUID.randomUUID()}",
+                    reminderTitle = "",
+                    reminderContent = "",
+                    // Let users decide task vs memo in the editor.
+                    isTask = false,
+                    isCompleted = false,
+                    lastUpdateTimestamp = System.currentTimeMillis(),
+                    deadlineTimestamp = 0L,
+                    estimatedCompletionTime = 0L,
+                    associatedNotis = emptySet(),
+                    extractionSnapshotId = null,
+                    userEdited = true,
+                )
+                editing = empty
+                editingId = empty.reminderId
+                editingInitialSnapshot = empty
+            }
         ) {
             Icon(Icons.Default.Add, contentDescription = stringResource(R.string.a11y_add))
-        }
-
-        if (showAddDialog) {
-            AlertDialog(
-                onDismissRequest = { showAddDialog = false },
-                title = { Text(stringResource(R.string.ui_reminders_add_dialog_title)) },
-                text = { Text(stringResource(R.string.ui_reminders_add_dialog_body)) },
-                confirmButton = {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        TextButton(onClick = {
-                            vm.addNew(isTask = true)
-                            showAddDialog = false
-                        }) { Text(stringResource(R.string.ui_reminders_add_dialog_task)) }
-                        TextButton(onClick = {
-                            vm.addNew(isTask = false)
-                            showAddDialog = false
-                        }) { Text(stringResource(R.string.ui_reminders_add_dialog_memo)) }
-                    }
-                },
-                dismissButton = { TextButton(onClick = { showAddDialog = false }) { Text(stringResource(R.string.ui_action_cancel)) } }
-            )
         }
 
         // EDITOR OVERLAY
@@ -191,25 +232,41 @@ fun RemindersScreen(
                     initial = current,
                     onBack = { updatedOrNull: ReminderUnit? ->
                         val base = editingInitialSnapshot
+                        val isNew = base != null && base.reminderTitle.isBlank() && base.reminderContent.isBlank() && base.userEdited
+
                         val changed = base != null && updatedOrNull != null && (
-                                base.reminderTitle != updatedOrNull.reminderTitle ||
-                                        base.reminderContent != updatedOrNull.reminderContent ||
-                                        base.isTask != updatedOrNull.isTask ||
-                                        base.isCompleted != updatedOrNull.isCompleted ||
-                                        base.deadlineTimestamp != updatedOrNull.deadlineTimestamp ||
-                                        base.estimatedCompletionTime != updatedOrNull.estimatedCompletionTime
-                                )
+                            base.reminderTitle != updatedOrNull.reminderTitle ||
+                                base.reminderContent != updatedOrNull.reminderContent ||
+                                base.isTask != updatedOrNull.isTask ||
+                                base.isCompleted != updatedOrNull.isCompleted ||
+                                base.deadlineTimestamp != updatedOrNull.deadlineTimestamp ||
+                                base.estimatedCompletionTime != updatedOrNull.estimatedCompletionTime
+                        )
 
                         if (updatedOrNull != null) {
-                            if (updatedOrNull.reminderTitle.isBlank() && updatedOrNull.reminderContent.isBlank()) {
-                                vm.delete(updatedOrNull.reminderId)
-                            } else if (changed) {
-                                vm.upsert(
-                                    updatedOrNull.copy(
-                                        userEdited = true,
-                                        lastUpdateTimestamp = System.currentTimeMillis(),
+                            val emptyNow = updatedOrNull.reminderTitle.isBlank() && updatedOrNull.reminderContent.isBlank()
+                            when {
+                                emptyNow -> {
+                                    // For brand-new manual reminders, just discard. For existing reminders, delete.
+                                    if (!isNew) vm.delete(updatedOrNull.reminderId)
+                                }
+                                changed -> {
+                                    vm.upsert(
+                                        updatedOrNull.copy(
+                                            userEdited = true,
+                                            lastUpdateTimestamp = System.currentTimeMillis(),
+                                        )
                                     )
-                                )
+                                }
+                                // If not changed but non-empty and new: still create it.
+                                isNew -> {
+                                    vm.upsert(
+                                        updatedOrNull.copy(
+                                            userEdited = true,
+                                            lastUpdateTimestamp = System.currentTimeMillis(),
+                                        )
+                                    )
+                                }
                             }
                         }
 
@@ -228,24 +285,30 @@ fun RemindersScreen(
                     },
                     onSave = { updated: ReminderUnit ->
                         val base = editingInitialSnapshot
-                        val changed = base != null && (
-                                base.reminderTitle != updated.reminderTitle ||
-                                        base.reminderContent != updated.reminderContent ||
-                                        base.isTask != updated.isTask ||
-                                        base.isCompleted != updated.isCompleted ||
-                                        base.deadlineTimestamp != updated.deadlineTimestamp ||
-                                        base.estimatedCompletionTime != updated.estimatedCompletionTime
-                                )
+                        val isNew = base != null && base.reminderTitle.isBlank() && base.reminderContent.isBlank() && base.userEdited
 
-                        if (updated.reminderTitle.isBlank() && updated.reminderContent.isBlank()) {
-                            vm.delete(updated.reminderId)
-                        } else if (changed) {
-                            vm.upsert(
-                                updated.copy(
-                                    userEdited = true,
-                                    lastUpdateTimestamp = System.currentTimeMillis(),
+                        val changed = base != null && (
+                            base.reminderTitle != updated.reminderTitle ||
+                                base.reminderContent != updated.reminderContent ||
+                                base.isTask != updated.isTask ||
+                                base.isCompleted != updated.isCompleted ||
+                                base.deadlineTimestamp != updated.deadlineTimestamp ||
+                                base.estimatedCompletionTime != updated.estimatedCompletionTime
+                        )
+
+                        val emptyNow = updated.reminderTitle.isBlank() && updated.reminderContent.isBlank()
+                        when {
+                            emptyNow -> {
+                                if (!isNew) vm.delete(updated.reminderId)
+                            }
+                            changed || isNew -> {
+                                vm.upsert(
+                                    updated.copy(
+                                        userEdited = true,
+                                        lastUpdateTimestamp = System.currentTimeMillis(),
+                                    )
                                 )
-                            )
+                            }
                         }
 
                         val id = if (changed) editingId else null
@@ -422,21 +485,7 @@ private fun ReminderDetailScreen(
 ) {
     val context = LocalContext.current
 
-    // Trigger B: entered edit page for a generated reminder (has associated notifications).
-    LaunchedEffect(initial.reminderId) {
-        if (initial.associatedNotis.isNotEmpty()) {
-            try {
-                val repo = EsmRepository(context.applicationContext)
-                // v1: if there's an available ESM for this reminder, upgrade trigger to B.
-                val avail = repo.getInstancesByStatuses(listOf("AVAILABLE"))
-                    .firstOrNull { it.reminderId == initial.reminderId }
-                if (avail != null) {
-                    repo.setTriggerType(avail.instanceId, EsmTriggerTypes.B_ENTERED_EDIT_PAGE)
-                }
-            } catch (_: Exception) {
-            }
-        }
-    }
+    // Trigger B is now handled in RemindersScreen based on 'fully visible' reminder cards.
 
     var title by remember(initial.reminderId) { mutableStateOf(initial.reminderTitle) }
     var content by remember(initial.reminderId) { mutableStateOf(initial.reminderContent) }

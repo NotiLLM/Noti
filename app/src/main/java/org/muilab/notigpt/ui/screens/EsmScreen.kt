@@ -74,9 +74,9 @@ fun EsmScreen(esmViewModel: EsmViewModel? = null) {
             } else {
                 Text(stringResource(R.string.esm_available_count, available.size))
                 available.forEach { inst ->
-                    var surveyCtx by remember(inst.snapshotId) { mutableStateOf<EsmUserSnapshot.SurveyContext?>(null) }
-                    LaunchedEffect(inst.snapshotId) {
-                        surveyCtx = vm.loadSnapshotJson(inst.snapshotId)?.let { EsmUserSnapshot.parse(it) }
+                    var reminderTitle by remember(inst.reminderId) { mutableStateOf<String?>(null) }
+                    LaunchedEffect(inst.reminderId) {
+                        reminderTitle = vm.loadReminderTitle(inst.reminderId)
                     }
 
                     Row(
@@ -87,7 +87,7 @@ fun EsmScreen(esmViewModel: EsmViewModel? = null) {
                         Column(Modifier.weight(1f)) {
                             Text(
                                 // Only UI chrome: fallback title
-                                text = surveyCtx?.reminder?.title ?: stringResource(R.string.esm_short_survey),
+                                text = reminderTitle?.takeIf { it.isNotBlank() } ?: stringResource(R.string.esm_short_survey),
                                 style = MaterialTheme.typography.titleMedium
                             )
                             Text(
@@ -115,7 +115,11 @@ fun EsmScreen(esmViewModel: EsmViewModel? = null) {
     val q = IRBShortSurveyV2.questionById(qid) ?: return
 
     val snapshotJson by vm.activeSnapshotJson.collectAsState()
-    val surveyCtx = remember(snapshotJson) { snapshotJson?.let { EsmUserSnapshot.parse(it) } }
+    val activeReminder by vm.activeReminder.collectAsState()
+    val activeNotiPreviews by vm.activeNotiPreviews.collectAsState()
+    val surveyCtx = remember(snapshotJson, activeReminder) {
+        snapshotJson?.let { EsmUserSnapshot.parse(it, activeReminder) }
+    }
 
     var answerValue by remember(qid, inst.instanceId, answers[qid]) {
         mutableStateOf(
@@ -195,7 +199,7 @@ fun EsmScreen(esmViewModel: EsmViewModel? = null) {
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        text = stringResource(R.string.esm_related_notifications, surveyCtx.notis.size),
+                        text = stringResource(R.string.esm_related_notifications, activeNotiPreviews.size),
                         style = MaterialTheme.typography.titleSmall
                     )
                     Icon(
@@ -205,15 +209,15 @@ fun EsmScreen(esmViewModel: EsmViewModel? = null) {
                 }
 
                 if (notisExpanded) {
-                    if (surveyCtx.notis.isEmpty()) {
+                    if (activeNotiPreviews.isEmpty()) {
                         Text(
                             text = stringResource(R.string.esm_no_related_notifications),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     } else {
-                        surveyCtx.notis.forEach { np ->
-                            EsmNotiCardLikePreview(notiDisplayUnit = np.displayUnit)
+                        activeNotiPreviews.forEach { du ->
+                            EsmNotiCardLikePreview(notiDisplayUnit = du)
                         }
                     }
                 }

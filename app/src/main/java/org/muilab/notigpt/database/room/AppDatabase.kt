@@ -5,6 +5,8 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import org.muilab.notigpt.model.features.ReminderUnit
 import org.muilab.notigpt.model.notifications.NotiAction
 import org.muilab.notigpt.model.notifications.NotiGroup
@@ -27,7 +29,7 @@ import org.muilab.notigpt.model.features.ReminderExtractionSnapshot
         ReminderExtractionSnapshot::class,
     ],
     views = [VisibleNotiRecord::class],
-    version = 26,
+    version = 27,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -50,6 +52,12 @@ abstract class AppDatabase : RoomDatabase() {
             INSTANCE ?: synchronized(this) {
                 INSTANCE ?: buildDatabase(context).also { INSTANCE = it }
             }
+
+        private val MIGRATION_26_27 = object : Migration(26, 27) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE reminder_list ADD COLUMN isVisible INTEGER NOT NULL DEFAULT 1")
+            }
+        }
 
         private fun buildDatabase(context: Context): AppDatabase {
             return Room.databaseBuilder(context, AppDatabase::class.java, DATABASE_NAME)
@@ -78,6 +86,7 @@ abstract class AppDatabase : RoomDatabase() {
                 .addMigrations(AppDatabaseMigrations.MIGRATION_23_24)
                 .addMigrations(AppDatabaseMigrations.MIGRATION_24_25)
                 .addMigrations(AppDatabaseMigrations.MIGRATION_25_26)
+                .addMigrations(MIGRATION_26_27)
                 .setJournalMode(JournalMode.TRUNCATE)
                 .build()
         }

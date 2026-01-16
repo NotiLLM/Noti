@@ -79,5 +79,34 @@ object EsmTimePolicy {
         val d = anchored.get(Calendar.DAY_OF_MONTH)
         return String.format("%04d%02d%02d", y, m, d)
     }
-}
 
+    data class AnchoredDayWindowMs(val startMs: Long, val endMs: Long)
+
+    /**
+     * Returns the [startMs, endMs] window of the anchored day containing [nowMs].
+     * The window starts at [startHour:startMinute] and spans 24 hours.
+     */
+    fun anchoredDayWindowMs(nowMs: Long, startHour: Int, startMinute: Int): AnchoredDayWindowMs {
+        val cal = Calendar.getInstance().apply { timeInMillis = nowMs }
+        val boundary = Calendar.getInstance().apply {
+            timeInMillis = nowMs
+            set(Calendar.HOUR_OF_DAY, startHour)
+            set(Calendar.MINUTE, startMinute)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        val start = if (cal.before(boundary)) {
+            Calendar.getInstance().apply {
+                timeInMillis = boundary.timeInMillis
+                add(Calendar.DAY_OF_YEAR, -1)
+            }
+        } else boundary
+
+        val end = Calendar.getInstance().apply {
+            timeInMillis = start.timeInMillis
+            add(Calendar.DAY_OF_YEAR, 1)
+        }
+
+        return AnchoredDayWindowMs(startMs = start.timeInMillis, endMs = end.timeInMillis)
+    }
+}

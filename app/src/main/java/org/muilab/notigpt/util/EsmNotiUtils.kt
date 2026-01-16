@@ -43,7 +43,8 @@ fun postEsmIndicatorNotification(context: Context) {
         createEsmNotificationChannel(context)
         val db = AppDatabase.getInstance(context)
         val esmDao = db.esmDao()
-        val availableCount = esmDao.getInstancesByStatus("AVAILABLE").size
+        val currentTime = System.currentTimeMillis()
+        val availableCount = esmDao.getUnexpiredAvailable(currentTime).size
 
         val nm = ContextCompat.getSystemService(context, NotificationManager::class.java) as NotificationManager
 

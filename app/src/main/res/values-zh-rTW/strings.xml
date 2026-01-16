@@ -14,6 +14,8 @@
     <string name="ui_settings_left">向左</string>
     <string name="ui_settings_right">向右</string>
     <string name="ui_settings_expand_task_list">啟動時展開任務清單</string>
+    <string name="ui_settings_esm_wakeup">短問卷起床時間</string>
+    <string name="ui_settings_esm_bedtime">短問卷就寢時間</string>
 
     <!-- Reminders -->
     <string name="ui_reminders_filter_all">全部</string>
@@ -33,6 +35,7 @@
     <string name="ui_reminders_editor_ect_label">預估完成時間（分鐘）</string>
     <string name="ui_reminders_editor_note">內容</string>
     <string name="ui_reminders_editor_note_placeholder">寫點什麼……</string>
+    <string name="ui_reminders_create_button">建立</string>
 
     <!-- Accessibility -->
     <string name="a11y_add">新增</string>

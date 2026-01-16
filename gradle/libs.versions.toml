@@ -44,6 +44,9 @@ work-runtime = "2.10.5"
 
 kotlin-toon = "1.0.0"
 
+googleServices = "4.4.4"
+firebaseBom = "34.8.0"
+
 [libraries]
 # AndroidX
 core-ktx = { module = "androidx.core:core-ktx", version.ref = "core-ktx" }
@@ -100,9 +103,13 @@ kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-t
 
 kotlin-toon = { group = "br.com.vexpera", name = "kotlin-toon", version.ref = "kotlin-toon" }
 
+firebase-bom = { module = "com.google.firebase:firebase-bom", version.ref = "firebaseBom" }
+firebase-firestore = { module = "com.google.firebase:firebase-firestore" }
+
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "android-gradle" }
 kotlin = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin"}
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 secretsGradlePlugin = { id = "com.google.android.libraries.mapsplatform.secrets-gradle-plugin", version.ref = "secrets-gradle-plugin" }
+google-services = { id = "com.google.gms.google-services", version.ref = "googleServices" }

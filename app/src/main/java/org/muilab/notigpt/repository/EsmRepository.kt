@@ -4,6 +4,7 @@ import android.content.Context
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.muilab.notigpt.database.room.AppDatabase
+import org.muilab.notigpt.domain.esm.EsmConfig
 import org.muilab.notigpt.domain.esm.EsmSnapshotStatuses
 import org.muilab.notigpt.domain.esm.EsmStatuses
 import org.muilab.notigpt.domain.esm.EsmTriggerTypes
@@ -13,6 +14,7 @@ import org.muilab.notigpt.model.esm.EsmInstance
 import org.muilab.notigpt.model.features.ReminderUnit
 import org.muilab.notigpt.util.postEsmIndicatorNotification
 import java.util.UUID
+import org.muilab.notigpt.domain.esm.EsmTimePolicy
 
 class EsmRepository(
     private val appContext: Context,
@@ -181,8 +183,15 @@ class EsmRepository(
         val snapshotId = "snap_${UUID.randomUUID()}"
         val now = System.currentTimeMillis()
         val payload = org.json.JSONObject().apply {
-            put("notes", "DEBUG snapshot")
+            put("reminder", org.json.JSONObject().apply {
+                put("title", "(Debug reminder)")
+                put("content", "")
+                put("isTask", true)
+                put("deadlineTimestamp", 0L)
+                put("estimatedCompletionMinutes", 0L)
+            })
             put("notis", org.json.JSONArray())
+            put("notes", "DEBUG snapshot")
         }.toString()
         snapshotDao.upsertSnapshot(
             ReminderExtractionSnapshot(
@@ -208,5 +217,100 @@ class EsmRepository(
         )
         esmDao.insertInstance(inst)
         inst
+    }
+
+    /**
+     * Create an ESM instance bound to an existing reminder extraction snapshot.
+     *
+     * Contract:
+     * - [reminderId] must exist (reminder was created).
+     * - [snapshotId] must exist (snapshot was staged/kept during extraction).
+     * - Status is PENDING by default so a worker can flip it to AVAILABLE after a delay.
+     */
+    suspend fun createEsmForSnapshot(
+        reminderId: String,
+        snapshotId: String,
+        triggerType: String,
+        availableDelayMs: Long,
+        // ESM completion window: 1 hour after it becomes AVAILABLE.
+        expiresAfterMs: Long = EsmConfig.QUESTIONNAIRE_EXPIRES_AFTER_MS,
+    ): EsmInstance = withContext(Dispatchers.IO) {
+        // Prevent multiple ESMs for the same reminder.
+        if (esmDao.countInstancesByReminderId(reminderId) > 0) {
+            throw IllegalStateException("ESM already exists for reminderId=$reminderId")
+        }
+
+        val now = System.currentTimeMillis()
+        val availAt = now + availableDelayMs.coerceAtLeast(0L)
+
+        val inst = EsmInstance(
+            instanceId = "esm_${UUID.randomUUID()}",
+            questionnaireId = IRBShortSurveyV2.questionnaireId,
+            questionnaireVersion = IRBShortSurveyV2.questionnaireVersion,
+            triggerType = triggerType,
+            reminderId = reminderId,
+            snapshotId = snapshotId,
+            createdAt = now,
+            availableAt = availAt,
+            // Important: expires relative to availableAt, not createdAt.
+            expiresAt = availAt + expiresAfterMs.coerceAtLeast(0L),
+            status = EsmStatuses.PENDING,
+        )
+        esmDao.insertInstance(inst)
+        inst
+    }
+
+    suspend fun hasAnyInstanceForReminder(reminderId: String): Boolean = withContext(Dispatchers.IO) {
+        esmDao.countInstancesByReminderId(reminderId) > 0
+    }
+
+    suspend fun getReminder(reminderId: String): ReminderUnit? = withContext(Dispatchers.IO) {
+        db.reminderListDao().getById(reminderId)
+    }
+
+    suspend fun getUnexpiredAvailable(nowMs: Long = System.currentTimeMillis()): List<EsmInstance> = withContext(Dispatchers.IO) {
+        esmDao.getUnexpiredAvailable(nowMs)
+    }
+
+    /**
+     * Attempts to schedule delivery for an existing instance, enforcing:
+     * - max per anchored day
+     * - cooldown (answered/unanswered)
+     *
+     * Returns the effective delay ms if scheduled, or null if blocked by caps.
+     */
+    suspend fun maybeEnqueueWithPolicy(
+        instanceId: String,
+        requestedDelayMs: Long,
+    ): Long? = withContext(Dispatchers.IO) {
+        val now = System.currentTimeMillis()
+
+        // Per-day cap (anchored day) - count deliveries (AVAILABLE timestamps).
+        val window = EsmTimePolicy.anchoredDayWindowMs(now, EsmConfig.ANCHORED_DAY_START_HOUR, EsmConfig.ANCHORED_DAY_START_MINUTE)
+        val deliveredToday = esmDao.countDeliveredBetween(window.startMs, window.endMs)
+        if (deliveredToday >= EsmConfig.MAX_PER_ANCHORED_DAY) {
+            return@withContext null
+        }
+
+        // Cooldown: if last answered is recent -> answered cooldown.
+        // Else if any available was recent -> unanswered cooldown.
+        val lastAnsweredAt = esmDao.getLastAnsweredAt() ?: 0L
+        val lastAvailableAt = esmDao.getLastAvailableAt() ?: 0L
+
+        val cooldownMs = when {
+            lastAnsweredAt > 0L && (now - lastAnsweredAt) < EsmConfig.ANSWERED_COOLDOWN_MS ->
+                EsmConfig.ANSWERED_COOLDOWN_MS - (now - lastAnsweredAt)
+            lastAvailableAt > 0L && (now - lastAvailableAt) < EsmConfig.UNANSWERED_COOLDOWN_MS ->
+                EsmConfig.UNANSWERED_COOLDOWN_MS - (now - lastAvailableAt)
+            else -> 0L
+        }
+
+        val effectiveDelay = maxOf(0L, requestedDelayMs, cooldownMs)
+        org.muilab.notigpt.database.server.esm.enqueueEsmDelivery(appContext.applicationContext, instanceId, effectiveDelay)
+        effectiveDelay
+    }
+
+    suspend fun getInstanceByReminderId(reminderId: String): EsmInstance? = withContext(Dispatchers.IO) {
+        esmDao.getInstanceByReminderId(reminderId)
     }
 }

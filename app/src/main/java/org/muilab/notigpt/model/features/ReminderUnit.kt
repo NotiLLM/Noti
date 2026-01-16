@@ -5,7 +5,8 @@ import androidx.room.Entity
 /**
  * A Reminder is the superset concept; Tasks are reminders where [isTask] is true.
  *
- * Note: Reminders are hard-deleted on user delete.
+ * Delete behavior:
+ * - reminders are soft-deleted (kept in DB, hidden from list queries; see [isVisible]).
  */
 @Entity(tableName = "reminder_list", primaryKeys = ["reminderId"])
 data class ReminderUnit(
@@ -37,5 +38,11 @@ data class ReminderUnit(
     val extractionSnapshotId: String? = null,
 
     // Whether user has edited this reminder
-    val userEdited: Boolean = false
+    val userEdited: Boolean = false,
+
+    /**
+     * Soft-delete flag.
+     * If false, the reminder remains in DB but is hidden from list queries.
+     */
+    val isVisible: Boolean = true,
 )

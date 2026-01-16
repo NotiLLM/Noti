@@ -145,6 +145,20 @@ object SharedPreferencesManager {
         get() = get(KEY_LOCAL_PREFS, KEY_MAX_PAST_CONTEXT, 0)
         set(value) = put(KEY_LOCAL_PREFS, KEY_MAX_PAST_CONTEXT, value)
 
+    // --- ESM receptive window ---
+    const val KEY_ESM_WAKEUP_MINUTES = "esmWakeupMinutes"
+    const val KEY_ESM_BEDTIME_MINUTES = "esmBedtimeMinutes"
+
+    /** Minutes since midnight. Default: 08:00 */
+    var esmWakeupMinutes: Int
+        get() = get(KEY_LOCAL_PREFS, KEY_ESM_WAKEUP_MINUTES, 8 * 60)
+        set(value) = put(KEY_LOCAL_PREFS, KEY_ESM_WAKEUP_MINUTES, value)
+
+    /** Minutes since midnight. Default: 23:00 */
+    var esmBedtimeMinutes: Int
+        get() = get(KEY_LOCAL_PREFS, KEY_ESM_BEDTIME_MINUTES, 23 * 60)
+        set(value) = put(KEY_LOCAL_PREFS, KEY_ESM_BEDTIME_MINUTES, value)
+
     fun clearAll() {
         localSharedPrefs.edit { clear() }
         serverSharedPrefs.edit { clear() }

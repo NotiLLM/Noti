@@ -29,6 +29,8 @@
     <string name="ui_settings_left">Left</string>
     <string name="ui_settings_right">Right</string>
     <string name="ui_settings_expand_task_list">Expand Task List on startup</string>
+    <string name="ui_settings_esm_wakeup">ESM wake-up time</string>
+    <string name="ui_settings_esm_bedtime">ESM bedtime</string>
 
     <!-- Reminders -->
     <string name="ui_reminders_filter_all">All</string>
@@ -48,6 +50,7 @@
     <string name="ui_reminders_editor_ect_label">Estimated completion time (minutes)</string>
     <string name="ui_reminders_editor_note">Note</string>
     <string name="ui_reminders_editor_note_placeholder">Write something…</string>
+    <string name="ui_reminders_create_button">Create reminder</string>
 
     <!-- Accessibility -->
     <string name="a11y_add">Add</string>

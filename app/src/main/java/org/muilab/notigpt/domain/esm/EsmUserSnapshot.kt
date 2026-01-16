@@ -33,17 +33,38 @@ object EsmUserSnapshot {
         val notis: List<NotiPreview>,
     )
 
+    data class RecordIdGrouping(
+        val recordIds: List<String>,
+        val notiKeyToRecordIds: Map<String, List<String>>,
+    )
+
     fun parse(payloadJson: String): SurveyContext? {
         return try {
             val root = JSONObject(payloadJson)
-            val reminderObj = root.getJSONObject("reminder")
-            val reminder = ReminderPreview(
-                title = reminderObj.optString("title", "(Untitled)"),
-                content = reminderObj.optString("content", ""),
-                isTask = reminderObj.optBoolean("isTask", true),
-                deadlineTimestamp = reminderObj.optLong("deadlineTimestamp", 0L),
-                estimatedCompletionMinutes = reminderObj.optLong("estimatedCompletionMinutes", 0L),
-            )
+
+            val reminderObj = root.optJSONObject("reminder")
+            val reminder = if (reminderObj != null) {
+                ReminderPreview(
+                    title = reminderObj.optString("title", "(Untitled)"),
+                    content = reminderObj.optString("content", ""),
+                    isTask = reminderObj.optBoolean("isTask", true),
+                    deadlineTimestamp = reminderObj.optLong("deadlineTimestamp", 0L),
+                    estimatedCompletionMinutes = reminderObj.optLong("estimatedCompletionMinutes", 0L),
+                )
+            } else {
+                // Some snapshots (e.g. extraction v2/v2.1) intentionally store only recordIds mappings.
+                // In that case there's no reminder title/content in the payload.
+                // Try best-effort legacy keys; otherwise show a safe placeholder.
+                val legacyTitle = root.optString("reminderTitle", "")
+                val legacyContent = root.optString("reminderContent", "")
+                ReminderPreview(
+                    title = legacyTitle.ifBlank { "(Untitled)" },
+                    content = legacyContent,
+                    isTask = root.optBoolean("isTask", true),
+                    deadlineTimestamp = root.optLong("deadlineTimestamp", 0L),
+                    estimatedCompletionMinutes = root.optLong("estimatedCompletionMinutes", 0L),
+                )
+            }
 
             val notis = mutableListOf<NotiPreview>()
             val arr: JSONArray = root.optJSONArray("notis") ?: JSONArray()
@@ -131,6 +152,71 @@ object EsmUserSnapshot {
             }
 
             SurveyContext(reminder = reminder, notis = notis)
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    /**
+     * Parse snapshot JSON and override reminder information from the current reminder row.
+     *
+     * Use this when payloadJson comes from an extraction snapshot that may not embed reminder text.
+     */
+    fun parse(payloadJson: String, reminder: org.muilab.notigpt.model.features.ReminderUnit?): SurveyContext? {
+        val base = parse(payloadJson) ?: return null
+        if (reminder == null) return base
+
+        val mergedReminder = ReminderPreview(
+            title = reminder.reminderTitle.ifBlank { "(Untitled)" },
+            content = reminder.reminderContent,
+            isTask = reminder.isTask,
+            deadlineTimestamp = reminder.deadlineTimestamp,
+            estimatedCompletionMinutes = reminder.estimatedCompletionTime,
+        )
+
+        return base.copy(reminder = mergedReminder)
+    }
+
+    /**
+     * Parses v2 extraction snapshot payloads that contain recordIds/notiKeyToRecordIds.
+     * Returns null if the payload isn't in that format.
+     */
+    fun parseRecordIdGrouping(payloadJson: String): RecordIdGrouping? {
+        return try {
+            val root = JSONObject(payloadJson)
+            val v = root.optInt("v", 1)
+            if (v != 2) return null
+
+            val recordIds = root.optJSONArray("recordIds")?.let { arr ->
+                buildList {
+                    for (i in 0 until arr.length()) {
+                        val id = arr.optString(i)
+                        if (id.isNotBlank()) add(id)
+                    }
+                }
+            } ?: emptyList()
+
+            val mapObj = root.optJSONObject("notiKeyToRecordIds")
+            val mapping: Map<String, List<String>> = if (mapObj != null) {
+                val keys = mapObj.keys()
+                buildMap {
+                    while (keys.hasNext()) {
+                        val k = keys.next()
+                        val idsArr = mapObj.optJSONArray(k)
+                        val ids = if (idsArr != null) {
+                            buildList {
+                                for (i in 0 until idsArr.length()) {
+                                    val id = idsArr.optString(i)
+                                    if (id.isNotBlank()) add(id)
+                                }
+                            }
+                        } else emptyList()
+                        put(k, ids)
+                    }
+                }
+            } else emptyMap()
+
+            RecordIdGrouping(recordIds = recordIds, notiKeyToRecordIds = mapping)
         } catch (_: Exception) {
             null
         }

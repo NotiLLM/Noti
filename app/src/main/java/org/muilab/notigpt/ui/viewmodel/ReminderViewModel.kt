@@ -52,7 +52,7 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
 
     fun delete(reminderId: String) {
         viewModelScope.launch {
-            repo.deleteById(reminderId)
+            repo.deleteById(reminderId, System.currentTimeMillis())
         }
     }
 

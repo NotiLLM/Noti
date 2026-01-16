@@ -12,10 +12,11 @@ class ReminderRepository(
     fun observeMemos(): Flow<List<ReminderUnit>> = reminderListDao.observeMemos()
 
     suspend fun upsert(reminder: ReminderUnit) = reminderListDao.upsert(reminder)
-    suspend fun deleteById(reminderId: String) = reminderListDao.deleteById(reminderId)
+
+    suspend fun deleteById(reminderId: String, ts: Long) = reminderListDao.softDeleteById(reminderId, ts)
+
     suspend fun setCompleted(reminderId: String, completed: Boolean, ts: Long) =
         reminderListDao.setCompleted(reminderId, completed, ts)
 
     suspend fun getById(reminderId: String): ReminderUnit? = reminderListDao.getById(reminderId)
 }
-
