@@ -3,17 +3,20 @@ package org.muilab.notigpt.ui.screens.esm
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import org.muilab.notigpt.R
 import org.muilab.notigpt.model.notifications.NotiDisplayUnit
 
 /**
@@ -24,6 +27,8 @@ import org.muilab.notigpt.model.notifications.NotiDisplayUnit
 @Composable
 fun EsmNotiCardLikePreview(
     notiDisplayUnit: NotiDisplayUnit,
+    showOpenButton: Boolean = false,
+    onOpen: (() -> Unit)? = null,
 ) {
     val notiUnit = notiDisplayUnit.notiUnit
     // Ensure stable order for context display.
@@ -84,6 +89,15 @@ fun EsmNotiCardLikePreview(
                             style = MaterialTheme.typography.labelSmall.copy(fontStyle = FontStyle.Italic),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+
+                if (showOpenButton && onOpen != null) {
+                    IconButton(onClick = onOpen) {
+                        Icon(
+                            painterResource(R.drawable.external_access),
+                            contentDescription = "Open",
                         )
                     }
                 }

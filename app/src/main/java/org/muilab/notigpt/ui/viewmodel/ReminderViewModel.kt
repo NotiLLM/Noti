@@ -16,7 +16,7 @@ import java.util.UUID
 
 class ReminderViewModel(application: Application) : AndroidViewModel(application) {
 
-    enum class FilterTab { All, Tasks, Memos }
+    enum class FilterTab { All, Tasks, Memos, Completed }
 
     private val repo: ReminderRepository
 
@@ -35,12 +35,14 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
     private val allFlow = repo.observeAll()
     private val tasksFlow = repo.observeTasks()
     private val memosFlow = repo.observeMemos()
+    private val completedFlow = repo.observeCompletedTasks()
 
-    val reminders: StateFlow<List<ReminderUnit>> = combine(_filter, allFlow, tasksFlow, memosFlow) { f, all, tasks, memos ->
+    val reminders: StateFlow<List<ReminderUnit>> = combine(_filter, allFlow, tasksFlow, memosFlow, completedFlow) { f, all, tasks, memos, completed ->
         when (f) {
             FilterTab.All -> all
             FilterTab.Tasks -> tasks
             FilterTab.Memos -> memos
+            FilterTab.Completed -> completed
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 

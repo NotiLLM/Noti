@@ -31,6 +31,9 @@ interface NotiDrawerDao {
     @Query("SELECT notiKey FROM noti_drawer WHERE isDismissed = 0")
     fun getAllActiveKeys(): List<String>
 
+    @Query("SELECT notiKey FROM noti_drawer WHERE isDismissed = 0 AND shouldExtractReminder = 1")
+    fun getAllActiveShouldExtractKeys(): List<String>
+
     @Query("SELECT * FROM noti_drawer WHERE notiKey = :notiKey")
     fun getByNotiKey(notiKey: String): NotiUnit?
 

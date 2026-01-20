@@ -21,6 +21,7 @@
     <string name="ui_reminders_filter_all">全部</string>
     <string name="ui_reminders_filter_tasks">任務</string>
     <string name="ui_reminders_filter_memos">備忘</string>
+    <string name="ui_reminders_filter_completed">已完成</string>
     <string name="ui_reminders_add_dialog_title">新增</string>
     <string name="ui_reminders_add_dialog_body">建立任務或備忘</string>
     <string name="ui_reminders_add_dialog_task">任務</string>

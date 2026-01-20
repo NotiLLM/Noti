@@ -26,6 +26,7 @@ import org.muilab.notigpt.util.SharedPreferencesManager
 import org.muilab.notigpt.ui.component.AppScaffold
 import org.muilab.notigpt.ui.viewmodel.DrawerViewModel
 import org.muilab.notigpt.ui.viewmodel.DrawerViewModelFactory
+import org.muilab.notigpt.work.EsmTriggerCWork
 import org.muilab.notigpt.work.ReminderPeriodicWork
 
 class MainActivity : ComponentActivity() {
@@ -126,6 +127,7 @@ class MainActivity : ComponentActivity() {
         try {
             SharedPreferencesManager.init(this)
             ReminderPeriodicWork.enqueue(applicationContext)
+            EsmTriggerCWork.enqueue(applicationContext)
 
             val now = System.currentTimeMillis()
             val last = SharedPreferencesManager.lastReminderPeriodicRunTime
@@ -134,6 +136,7 @@ class MainActivity : ComponentActivity() {
             if (shouldKick) {
                 Log.i("MainActivity", "Kicking reminder periodic worker; lastRun=$last")
                 ReminderPeriodicWork.kickNow(applicationContext)
+                EsmTriggerCWork.kickNow(applicationContext)
             }
         } catch (e: Exception) {
             Log.w("MainActivity", "Failed to enqueue/kick periodic reminder work", e)

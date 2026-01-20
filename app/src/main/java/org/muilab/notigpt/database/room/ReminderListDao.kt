@@ -12,14 +12,17 @@ interface ReminderListDao {
     @Upsert
     suspend fun upsert(reminder: ReminderUnit)
 
-    @Query("SELECT * FROM reminder_list WHERE isVisible = 1 ORDER BY lastUpdateTimestamp DESC")
+    @Query("SELECT * FROM reminder_list WHERE isVisible = 1 AND (isTask = 0 OR isCompleted = 0) ORDER BY lastUpdateTimestamp DESC")
     fun observeAll(): Flow<List<ReminderUnit>>
 
-    @Query("SELECT * FROM reminder_list WHERE isVisible = 1 AND isTask = 1 ORDER BY lastUpdateTimestamp DESC")
+    @Query("SELECT * FROM reminder_list WHERE isVisible = 1 AND isTask = 1 AND isCompleted = 0 ORDER BY lastUpdateTimestamp DESC")
     fun observeTasks(): Flow<List<ReminderUnit>>
 
     @Query("SELECT * FROM reminder_list WHERE isVisible = 1 AND isTask = 0 ORDER BY lastUpdateTimestamp DESC")
     fun observeMemos(): Flow<List<ReminderUnit>>
+
+    @Query("SELECT * FROM reminder_list WHERE isVisible = 1 AND isTask = 1 AND isCompleted = 1 ORDER BY lastUpdateTimestamp DESC")
+    fun observeCompletedTasks(): Flow<List<ReminderUnit>>
 
     @Query("SELECT * FROM reminder_list WHERE reminderId = :reminderId")
     suspend fun getById(reminderId: String): ReminderUnit?

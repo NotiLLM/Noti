@@ -4,6 +4,8 @@ import android.app.TimePickerDialog
 import android.content.Intent
 import android.net.Uri
 import android.util.Log
+import android.os.Build
+import androidx.annotation.RequiresApi
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -12,6 +14,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -70,7 +73,10 @@ import org.muilab.notigpt.R
 import org.muilab.notigpt.model.features.ReminderUnit
 import org.muilab.notigpt.model.notifications.NotiRecord
 import org.muilab.notigpt.repository.EsmRepository
+import org.muilab.notigpt.repository.NotiRepositoryProvider
 import org.muilab.notigpt.ui.screens.esm.EsmNotiCardLikePreview
+import org.muilab.notigpt.ui.viewmodel.DrawerViewModel
+import org.muilab.notigpt.ui.viewmodel.DrawerViewModelFactory
 import org.muilab.notigpt.ui.viewmodel.ReminderViewModel
 import org.muilab.notigpt.util.getAbsoluteTimeStr
 import org.muilab.notigpt.util.getRelativeTimeStr
@@ -81,13 +87,19 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.snapshotFlow
+import androidx.constraintlayout.helper.widget.Grid
 import kotlinx.coroutines.flow.distinctUntilChanged
 
 @Composable
 fun RemindersScreen(
+    drawerViewModel: DrawerViewModel,
     reminderViewModel: ReminderViewModel? = null,
 ) {
     val vm: ReminderViewModel = reminderViewModel ?: viewModel()
+
+    // Drawer VM is needed to reuse the same notification/app launching logic as NotiRecordContextCard.
+    val context = LocalContext.current
+
     val reminders by vm.reminders.collectAsState()
     val filter by vm.filter.collectAsState()
 
@@ -110,7 +122,7 @@ fun RemindersScreen(
 
     // Trigger B (v2): when a reminder card is fully visible in the list viewport, consider it "viewed".
     // We only apply this to generated reminders (has associated notifications), and only once per reminderId.
-    val context = LocalContext.current
+    // Reuse the same Context we already grabbed above.
     var viewedReminderIds by remember { mutableStateOf<Set<String>>(emptySet()) }
 
     LaunchedEffect(listState, reminders) {
@@ -142,10 +154,13 @@ fun RemindersScreen(
                             val reminder = reminders.firstOrNull { it.reminderId == rid } ?: return@forEach
                             if (reminder.associatedNotis.isEmpty()) return@forEach
 
-                            // Trigger B: schedule delivery at least 10 minutes after being viewed.
+                            // Trigger B: schedule delivery using the A/B timing rule.
+                            val requestedDelay = repo.computeTriggerAbRequestedDelayMs(
+                                org.muilab.notigpt.domain.esm.EsmConfig.TRIGGER_B_AVAILABLE_DELAY_MS,
+                            )
                             repo.promoteToTriggerBAndReschedule(
                                 reminderId = rid,
-                                requestedDelayMs = org.muilab.notigpt.domain.esm.EsmConfig.TRIGGER_B_AVAILABLE_DELAY_MS,
+                                requestedDelayMs = requestedDelay,
                             )
                         }
                     } catch (_: Exception) {
@@ -167,6 +182,7 @@ fun RemindersScreen(
                 FilterChip(stringResource(R.string.ui_reminders_filter_all), filter == ReminderViewModel.FilterTab.All) { vm.setFilter(ReminderViewModel.FilterTab.All) }
                 FilterChip(stringResource(R.string.ui_reminders_filter_tasks), filter == ReminderViewModel.FilterTab.Tasks) { vm.setFilter(ReminderViewModel.FilterTab.Tasks) }
                 FilterChip(stringResource(R.string.ui_reminders_filter_memos), filter == ReminderViewModel.FilterTab.Memos) { vm.setFilter(ReminderViewModel.FilterTab.Memos) }
+                FilterChip(stringResource(R.string.ui_reminders_filter_completed), filter == ReminderViewModel.FilterTab.Completed) { vm.setFilter(ReminderViewModel.FilterTab.Completed) }
             }
 
             LazyColumn(
@@ -234,6 +250,7 @@ fun RemindersScreen(
             ) {
                 ReminderDetailScreen(
                     initial = current,
+                    drawerViewModel = drawerViewModel,
                     onBack = { updatedOrNull: ReminderUnit? ->
                         val base = editingInitialSnapshot
                         val isNew = base != null && base.reminderTitle.isBlank() && base.reminderContent.isBlank() && base.userEdited
@@ -465,7 +482,7 @@ private fun ReminderCard(
         }
 
         if (urls.isNotEmpty()) {
-            Row(
+            FlowRow(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 8.dp),
@@ -498,6 +515,7 @@ private fun ReminderCard(
 @Composable
 private fun ReminderDetailScreen(
     initial: ReminderUnit,
+    drawerViewModel: DrawerViewModel,
     onBack: (ReminderUnit?) -> Unit,
     onDelete: (String) -> Unit,
     onSave: (ReminderUnit) -> Unit,
@@ -824,7 +842,15 @@ private fun ReminderDetailScreen(
                                 if (unit != null) {
                                     // IMPORTANT: show ALL records that were deemed related by the snapshot.
                                     val displayUnit = org.muilab.notigpt.model.notifications.NotiDisplayUnit(unit, recs)
-                                    EsmNotiCardLikePreview(notiDisplayUnit = displayUnit)
+                                    EsmNotiCardLikePreview(
+                                        notiDisplayUnit = displayUnit,
+                                        showOpenButton = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S,
+                                        onOpen = {
+                                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                                                drawerViewModel.accessNotificationByKey(key)
+                                            }
+                                        },
+                                    )
                                 } else {
                                     // Fallback: drawer entry missing; show text-only context.
                                     Surface(

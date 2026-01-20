@@ -34,6 +34,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -165,7 +166,7 @@ fun NotiRecordContextCard(
                     Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.a11y_show_more_context))
                 }
                 IconButton(onClick = { drawerViewModel.accessNotificationByKey(notiKey) }) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = stringResource(R.string.ui_action_open))
+                    Icon(painterResource(R.drawable.external_access), contentDescription = stringResource(R.string.ui_action_open))
                 }
             }
 

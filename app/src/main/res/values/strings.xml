@@ -36,6 +36,7 @@
     <string name="ui_reminders_filter_all">All</string>
     <string name="ui_reminders_filter_tasks">Tasks</string>
     <string name="ui_reminders_filter_memos">Memos</string>
+    <string name="ui_reminders_filter_completed">Completed</string>
     <string name="ui_reminders_add_dialog_title">Add</string>
     <string name="ui_reminders_add_dialog_body">Create a Task or a Memo</string>
     <string name="ui_reminders_add_dialog_task">Task</string>

@@ -21,10 +21,15 @@ import org.muilab.notigpt.model.notifications.NotiRecord
 import org.muilab.notigpt.repository.EsmRepository
 import org.muilab.notigpt.util.SharedPreferencesManager
 import java.text.SimpleDateFormat
+import java.time.OffsetDateTime
+import java.time.ZoneId
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 import java.util.UUID
+import kotlin.time.Instant
 
 internal object ReminderExtractionHandler {
 
@@ -190,7 +195,7 @@ internal object ReminderExtractionHandler {
                     "reminderTitle" to r.reminderTitle,
                     "reminderContent" to r.reminderContent,
                     "isTask" to r.isTask,
-                    "deadlineTimestamp" to deadlineIso,
+                    "deadlineTimeString" to deadlineIso,
                     "estimatedCompletionMinutes" to r.estimatedCompletionTime,
                     "associatedNotis" to r.associatedNotis.toList(),
                     "userEdited" to r.userEdited,
@@ -249,7 +254,8 @@ internal object ReminderExtractionHandler {
                         }
                         val reminderTitle = it.optString("reminderTitle", "")
                         val reminderContent = it.optString("reminderContent", it.optString("taskDescription"))
-                        val deadlineMs = if (it.has("deadlineTimestamp") && !it.isNull("deadlineTimestamp")) it.optLong("deadlineTimestamp", -1L) else -1L
+                        val isTask = it.optBoolean("isTask", true)
+                        val deadlineMs = isoToUnixMillis(it.optString("deadlineTimeString", "-1"))
                         val estimate = it.optLong("estimatedCompletionTime", it.optLong("estimatedCompletionMinutes", 0L))
                         val assocKeys = mutableSetOf<String>()
                         val assoc = it.optJSONArray("associatedNotis")
@@ -264,7 +270,7 @@ internal object ReminderExtractionHandler {
                             reminderId = reminderId,
                             reminderTitle = reminderTitle,
                             reminderContent = reminderContent,
-                            isTask = true,
+                            isTask = isTask,
                             isCompleted = isCompleted,
                             lastUpdateTimestamp = System.currentTimeMillis(),
                             deadlineTimestamp = deadlineMs,
@@ -292,14 +298,21 @@ internal object ReminderExtractionHandler {
                         try {
                             val esmRepo = EsmRepository(ctx.appContext)
                             if (!esmRepo.hasAnyInstanceForReminder(bindReminderId)) {
-                                val inst = esmRepo.createEsmForSnapshot(
-                                    reminderId = bindReminderId,
-                                    snapshotId = snapshotId,
-                                    triggerType = EsmTriggerTypes.A_USER_TRIGGERED_EXTRACTION,
-                                    // Intro text says: after user-triggered extraction; we keep a small delay.
-                                    availableDelayMs = EsmConfig.TRIGGER_A_AVAILABLE_DELAY_MS,
-                                )
-                                enqueueEsmDelivery(ctx.appContext, inst.instanceId, EsmConfig.TRIGGER_A_AVAILABLE_DELAY_MS)
+                                val requestedDelay = esmRepo.computeTriggerAbRequestedDelayMs(EsmConfig.TRIGGER_A_AVAILABLE_DELAY_MS)
+                                if (requestedDelay <= EsmConfig.TRIGGER_AB_RECENT_WINDOW_MS) {
+                                    val inst = esmRepo.createEsmForSnapshot(
+                                        reminderId = bindReminderId,
+                                        snapshotId = snapshotId,
+                                        triggerType = EsmTriggerTypes.A_USER_TRIGGERED_EXTRACTION,
+                                        // If it's been >= 1h since last ESM, deliver immediately.
+                                        availableDelayMs = requestedDelay,
+                                    )
+                                    enqueueEsmDelivery(
+                                        ctx.appContext,
+                                        inst.instanceId,
+                                        requestedDelay
+                                    )
+                                }
                             }
                         } catch (_: IllegalStateException) {
                             // ESM already exists for this reminder; no-op.
@@ -322,11 +335,8 @@ internal object ReminderExtractionHandler {
 
         // === Periodic flow below remains unchanged ===
 
-        val keysToProcess: List<String> = if (notiKeys.isEmpty()) {
-            val active = drawerDao.getAllActive()
-            active.filter { it.shouldExtractReminder }.map { it.notiKey }
-        } else {
-            notiKeys
+        val keysToProcess: List<String> = notiKeys.ifEmpty {
+            drawerDao.getAllActiveShouldExtractKeys()
         }
 
         val nowTs = System.currentTimeMillis()
@@ -477,7 +487,7 @@ internal object ReminderExtractionHandler {
                 "reminderTitle" to r.reminderTitle,
                 "reminderContent" to r.reminderContent,
                 "isTask" to r.isTask,
-                "deadlineTimestamp" to deadlineIso,
+                "deadlineTimeString" to deadlineIso,
                 "estimatedCompletionMinutes" to r.estimatedCompletionTime,
                 "associatedNotis" to r.associatedNotis.toList(),
                 "userEdited" to r.userEdited,
@@ -534,7 +544,8 @@ internal object ReminderExtractionHandler {
                     }
                     val reminderTitle = it.optString("reminderTitle", "")
                     val reminderContent = it.optString("reminderContent", it.optString("taskDescription"))
-                    val deadlineMs = if (it.has("deadlineTimestamp") && !it.isNull("deadlineTimestamp")) it.optLong("deadlineTimestamp", -1L) else -1L
+                    val isTask = it.optBoolean("isTask", true)
+                    val deadlineMs = isoToUnixMillis(it.optString("deadlineTimeString", "-1"))
                     val estimate = it.optLong("estimatedCompletionTime", it.optLong("estimatedCompletionMinutes", 0L))
                     val assocKeys = mutableSetOf<String>()
                     val assoc = it.optJSONArray("associatedNotis")
@@ -549,7 +560,7 @@ internal object ReminderExtractionHandler {
                         reminderId = reminderId,
                         reminderTitle = reminderTitle,
                         reminderContent = reminderContent,
-                        isTask = true,
+                        isTask = isTask,
                         isCompleted = isCompleted,
                         lastUpdateTimestamp = System.currentTimeMillis(),
                         deadlineTimestamp = deadlineMs,
@@ -565,39 +576,16 @@ internal object ReminderExtractionHandler {
                     reminderRepository.upsert(unit)
                 }
 
+                drawerDao.setShouldExtractReminderByKeys(keysToProcess, false)
+
                 val firstObj = arr.optJSONObject(0)
                 val firstReminderId = firstObj?.optString("reminderId").takeIf { !it.isNullOrBlank() }
                     ?: firstObj?.optString("taskId")
                 snapshotDao.updateSnapshotStatusAndReminderId(snapshotId, EsmSnapshotStatuses.KEPT, firstReminderId)
 
-                // === Trigger C: auto-generated ===
-                val bindReminderId = firstCreatedReminderId ?: firstReminderId
-                if (!bindReminderId.isNullOrBlank()) {
-                    try {
-                        val esmRepo = EsmRepository(ctx.appContext)
-                        if (!esmRepo.hasAnyInstanceForReminder(bindReminderId)) {
-                            val inst = esmRepo.createEsmForSnapshot(
-                                reminderId = bindReminderId,
-                                snapshotId = snapshotId,
-                                triggerType = EsmTriggerTypes.C_AUTO_GENERATED,
-                                // Auto-generated: make it available immediately when delivery runs.
-                                availableDelayMs = EsmConfig.TRIGGER_C_AVAILABLE_DELAY_MS,
-                            )
-
-                            // If app is already open/foreground: enqueue immediately.
-                            // Else defer enqueue until next app open.
-                            if (EsmTriggerPolicy.isAppInForeground(ctx.appContext)) {
-                                enqueueEsmDelivery(ctx.appContext, inst.instanceId, EsmConfig.TRIGGER_C_AVAILABLE_DELAY_MS)
-                            } else {
-                                EsmScheduling.addPendingEnqueue(ctx.appContext, inst.instanceId)
-                            }
-                        }
-                    } catch (_: IllegalStateException) {
-                        // ESM already exists for this reminder; no-op.
-                    } catch (e: Exception) {
-                        Log.w("N8nWebhook", "Failed to create/enqueue Trigger C ESM", e)
-                    }
-                }
+                // NOTE: Trigger C (auto-generated ESM) is scheduled by a separate periodic/timed check.
+                // We intentionally do NOT create Trigger C here, because it should fire once two hours
+                // have passed since the last ESM was answered or shown, independent of extraction.
             }
 
         } catch (e: Exception) {
@@ -607,5 +595,24 @@ internal object ReminderExtractionHandler {
         }
 
         return ctx.success()
+    }
+
+    fun isoToUnixMillis(iso: String): Long {
+        if (iso == "-1") return -1L  // your "no deadline" sentinel
+
+        // Most common: has an offset like +08:00 or ends with Z
+        return try {
+            OffsetDateTime.parse(iso).toInstant().toEpochMilli()
+        } catch (e: Exception) {
+            // Fallback: sometimes it's a full zone format or slightly different ISO variant
+            ZonedDateTime.parse(iso).toInstant().toEpochMilli()
+        }
+    }
+
+    fun unixMillisToIsoLocalCompat(ms: Long): String {
+        if (ms < 0) return "-1"
+        val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.getDefault())
+        sdf.timeZone = TimeZone.getDefault()
+        return sdf.format(Date(ms))
     }
 }

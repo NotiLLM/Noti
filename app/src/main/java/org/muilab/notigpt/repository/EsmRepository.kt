@@ -375,4 +375,23 @@ class EsmRepository(
         org.muilab.notigpt.database.server.esm.enqueueEsmDelivery(appContext.applicationContext, inst.instanceId, effectiveDelay)
         effectiveDelay
     }
+
+    /**
+     * Computes the requested delay for Trigger A/B under the rule:
+     * - If it's been >= [EsmConfig.TRIGGER_AB_LAST_ESM_STALE_MS] since the last ESM (answered or shown),
+     *   deliver immediately (delay=0).
+     * - Otherwise, keep the caller-provided delay.
+     */
+    suspend fun computeTriggerAbRequestedDelayMs(defaultDelayMs: Long): Long = withContext(Dispatchers.IO) {
+        val now = System.currentTimeMillis()
+        val lastAnsweredAt = esmDao.getLastAnsweredAt() ?: 0L
+        val lastAvailableAt = esmDao.getLastAvailableAt() ?: 0L
+        val lastActivityAt = maxOf(lastAnsweredAt, lastAvailableAt)
+
+        if (lastActivityAt <= 0L) {
+            return@withContext 0L
+        }
+
+        return@withContext if ((now - lastActivityAt) >= EsmConfig.TRIGGER_AB_LAST_ESM_STALE_MS) 0L else defaultDelayMs
+    }
 }

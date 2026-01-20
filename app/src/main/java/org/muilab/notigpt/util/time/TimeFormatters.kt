@@ -77,7 +77,7 @@ fun getRelativeTimeStr(unixTime: Long, context: Context?, locale: Locale = Local
 
     return when {
         diffAbsMillis < TimeUnit.MINUTES.toMillis(1) -> {
-            val soon = context?.getString(R.string.time_in_a_moment)
+            val soon = context?.getString(R.string.time_now)
                 ?: formatter.format(1.0, RelativeDateTimeFormatter.Direction.NEXT, RelativeDateTimeFormatter.RelativeUnit.MINUTES).toString()
             val nowStr = context?.getString(R.string.time_now) ?: "now"
             if (isFuture) soon else nowStr

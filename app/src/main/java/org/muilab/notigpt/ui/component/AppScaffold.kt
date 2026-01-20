@@ -108,7 +108,7 @@ fun AppScaffold(
             } else {
                 when (selectedTab) {
                     org.muilab.notigpt.ui.component.appbar.Tab.Notifications -> HomeScreen(drawerViewModel = drawerViewModel)
-                    org.muilab.notigpt.ui.component.appbar.Tab.Reminders -> RemindersScreen()
+                    org.muilab.notigpt.ui.component.appbar.Tab.Reminders -> RemindersScreen(drawerViewModel = drawerViewModel)
                     org.muilab.notigpt.ui.component.appbar.Tab.ESM -> EsmScreen()
                 }
             }

@@ -17,6 +17,7 @@ class ReminderRepository(
     fun observeAll(): Flow<List<ReminderUnit>> = reminderListDao.observeAll()
     fun observeTasks(): Flow<List<ReminderUnit>> = reminderListDao.observeTasks()
     fun observeMemos(): Flow<List<ReminderUnit>> = reminderListDao.observeMemos()
+    fun observeCompletedTasks(): Flow<List<ReminderUnit>> = reminderListDao.observeCompletedTasks()
 
     suspend fun upsert(reminder: ReminderUnit) {
         reminderListDao.upsert(reminder)

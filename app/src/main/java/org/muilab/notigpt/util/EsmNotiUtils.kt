@@ -18,6 +18,8 @@ private const val ESM_CHANNEL_ID = "notigpt_esm"
 private const val ESM_NOTIFICATION_ID = 45
 private const val ESM_GROUP_KEY = "notigpt_esm_group"
 
+private const val ESM_NOTIFICATION_TTL_MS: Long = 60 * 60 * 1000L
+
 fun createEsmNotificationChannel(context: Context) {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
     val channel = NotificationChannel(
@@ -37,6 +39,10 @@ fun createEsmNotificationChannel(context: Context) {
 /**
  * Posts a separate indicator notification if any ESM is AVAILABLE.
  * Clears it when none are available.
+ *
+ * Extra behavior:
+ * - The posted notification expires after 1 hour.
+ * - Reposting with the same ID updates the content when the count changes.
  */
 fun postEsmIndicatorNotification(context: Context) {
     CoroutineScope(Dispatchers.IO).launch {
@@ -78,6 +84,7 @@ fun postEsmIndicatorNotification(context: Context) {
             .setGroupSummary(false)
             .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_SUMMARY)
             .setContentIntent(pendingIntent)
+            .setTimeoutAfter(ESM_NOTIFICATION_TTL_MS)
             .build()
 
         nm.notify(ESM_NOTIFICATION_ID, notification)
