@@ -15,6 +15,7 @@ import org.muilab.notigpt.model.features.ReminderUnit
 import org.muilab.notigpt.util.postEsmIndicatorNotification
 import java.util.UUID
 import org.muilab.notigpt.domain.esm.EsmTimePolicy
+import org.muilab.notigpt.domain.esm.EsmScheduling
 
 class EsmRepository(
     private val appContext: Context,
@@ -306,7 +307,7 @@ class EsmRepository(
         }
 
         val effectiveDelay = maxOf(0L, requestedDelayMs, cooldownMs)
-        org.muilab.notigpt.database.server.esm.enqueueEsmDelivery(appContext.applicationContext, instanceId, effectiveDelay)
+        maybeEnqueueIfNoOtherActive(instanceId, effectiveDelay)
         effectiveDelay
     }
 
@@ -371,8 +372,8 @@ class EsmRepository(
         // If it was already AVAILABLE, move it back to PENDING so the delivery worker can re-open it.
         esmDao.rescheduleInstance(inst.instanceId, newAvailAt, newExpiresAt, EsmStatuses.PENDING)
 
-        // Enqueue delivery.
-        org.muilab.notigpt.database.server.esm.enqueueEsmDelivery(appContext.applicationContext, inst.instanceId, effectiveDelay)
+        // Enqueue delivery (subject to single-active gate).
+        maybeEnqueueIfNoOtherActive(inst.instanceId, effectiveDelay)
         effectiveDelay
     }
 
@@ -393,5 +394,27 @@ class EsmRepository(
         }
 
         return@withContext if ((now - lastActivityAt) >= EsmConfig.TRIGGER_AB_LAST_ESM_STALE_MS) 0L else defaultDelayMs
+    }
+
+    /**
+     * Enforce "only one active ESM at a time".
+     *
+     * If there's already another actionable instance (PENDING/AVAILABLE) besides [instanceId],
+     * we do NOT enqueue delivery now. Instead we stash it into [EsmScheduling]'s pending list
+     * so it can be delivered later (e.g., Trigger C / next app-open flush).
+     */
+    private suspend fun maybeEnqueueIfNoOtherActive(
+        instanceId: String,
+        effectiveDelayMs: Long,
+    ) = withContext(Dispatchers.IO) {
+        val activeCount = esmDao.getActiveCount()
+        // After creation/reschedule, [instanceId] itself is normally active. We only block if there's another one.
+        val hasOtherActive = activeCount > 1
+
+        if (hasOtherActive) {
+            EsmScheduling.addPendingEnqueue(appContext.applicationContext, instanceId)
+        } else {
+            org.muilab.notigpt.database.server.esm.enqueueEsmDelivery(appContext.applicationContext, instanceId, effectiveDelayMs)
+        }
     }
 }

@@ -578,19 +578,19 @@ private fun ReminderDetailScreen(
             },
             actions = {
                 // Test ESM button: only show when reminder has associated notifications.
-                if (initial.associatedNotis.isNotEmpty()) {
-                    IconButton(onClick = {
-                        CoroutineScope(Dispatchers.IO).launch {
-                            try {
-                                val repo = EsmRepository(context.applicationContext)
-                                repo.createTestEsmForReminder(initial)
-                            } catch (_: Throwable) {
-                            }
-                        }
-                    }) {
-                        Icon(Icons.Default.Notifications, contentDescription = stringResource(R.string.a11y_test_esm))
-                    }
-                }
+//                if (initial.associatedNotis.isNotEmpty()) {
+//                    IconButton(onClick = {
+//                        CoroutineScope(Dispatchers.IO).launch {
+//                            try {
+//                                val repo = EsmRepository(context.applicationContext)
+//                                repo.createTestEsmForReminder(initial)
+//                            } catch (_: Throwable) {
+//                            }
+//                        }
+//                    }) {
+//                        Icon(Icons.Default.Notifications, contentDescription = stringResource(R.string.a11y_test_esm))
+//                    }
+//                }
 
                 IconButton(onClick = { onDelete(initial.reminderId) }) {
                     Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.a11y_delete))

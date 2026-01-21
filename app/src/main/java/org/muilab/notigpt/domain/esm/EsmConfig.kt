@@ -20,7 +20,7 @@ object EsmConfig {
      * If A/B trigger happened within this window (since it occurred) and it's been long enough since
      * the last ESM, we deliver immediately.
      */
-    const val TRIGGER_AB_RECENT_WINDOW_MS: Long = 30 * 60 * 1000L
+    const val TRIGGER_AB_RECENT_WINDOW_MS: Long = 60 * 60 * 1000L
 
     /** If the last ESM (answered or shown) is older than this, allow immediate A/B delivery. */
     const val TRIGGER_AB_LAST_ESM_STALE_MS: Long = 60 * 60 * 1000L

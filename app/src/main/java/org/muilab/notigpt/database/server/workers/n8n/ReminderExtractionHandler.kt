@@ -9,12 +9,9 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
-import org.muilab.notigpt.database.server.esm.enqueueEsmDelivery
 import org.muilab.notigpt.domain.esm.EsmConfig
-import org.muilab.notigpt.domain.esm.EsmScheduling
-import org.muilab.notigpt.domain.esm.EsmTriggerPolicy
-import org.muilab.notigpt.domain.esm.EsmTriggerTypes
 import org.muilab.notigpt.domain.esm.EsmSnapshotStatuses
+import org.muilab.notigpt.domain.esm.EsmTriggerTypes
 import org.muilab.notigpt.model.features.ReminderExtractionSnapshot
 import org.muilab.notigpt.model.features.ReminderUnit
 import org.muilab.notigpt.model.notifications.NotiRecord
@@ -22,14 +19,11 @@ import org.muilab.notigpt.repository.EsmRepository
 import org.muilab.notigpt.util.SharedPreferencesManager
 import java.text.SimpleDateFormat
 import java.time.OffsetDateTime
-import java.time.ZoneId
 import java.time.ZonedDateTime
-import java.time.format.DateTimeFormatter
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 import java.util.UUID
-import kotlin.time.Instant
 
 internal object ReminderExtractionHandler {
 
@@ -266,6 +260,33 @@ internal object ReminderExtractionHandler {
                         }
                         val isCompleted = it.optBoolean("isCompleted", false)
 
+                        // If we're overwriting an existing reminder, merge relevant records from its old snapshot
+                        // into this extraction snapshot (so downstream sync/UI have the full context).
+                        try {
+                            val existing = if (reminderId.isNotBlank()) reminderRepository.getById(reminderId) else null
+                            val oldSnapshotId = existing?.extractionSnapshotId
+                            if (!oldSnapshotId.isNullOrBlank() && assocKeys.isNotEmpty()) {
+                                val oldSnap = snapshotDao.getSnapshot(oldSnapshotId)
+                                    ?: snapshotDao.getLatestKeptSnapshotForReminder(reminderId)
+                                if (oldSnap != null) {
+                                    val merged = mergedSnapshotPayloadJson(snapshotPayload, oldSnap, assocKeys.toSet())
+                                    if (merged != snapshotPayload) {
+                                        snapshotDao.upsertSnapshot(
+                                            ReminderExtractionSnapshot(
+                                                snapshotId = snapshotId,
+                                                status = EsmSnapshotStatuses.STAGED,
+                                                reminderId = null,
+                                                payloadJson = merged,
+                                                createdAt = snapNow,
+                                            )
+                                        )
+                                    }
+                                }
+                            }
+                        } catch (e: Exception) {
+                            Log.w("N8nWebhook", "Snapshot merge skipped for reminderId=$reminderId", e)
+                        }
+
                         val newUnit = ReminderUnit(
                             reminderId = reminderId,
                             reminderTitle = reminderTitle,
@@ -307,11 +328,8 @@ internal object ReminderExtractionHandler {
                                         // If it's been >= 1h since last ESM, deliver immediately.
                                         availableDelayMs = requestedDelay,
                                     )
-                                    enqueueEsmDelivery(
-                                        ctx.appContext,
-                                        inst.instanceId,
-                                        requestedDelay
-                                    )
+                                    // Enqueue with caps/cooldowns + "single-active" gating.
+                                    esmRepo.maybeEnqueueWithPolicy(inst.instanceId, requestedDelay)
                                 }
                             }
                         } catch (_: IllegalStateException) {
@@ -498,7 +516,9 @@ internal object ReminderExtractionHandler {
         val payload = mapOf(
             "userId" to SharedPreferencesManager.userId,
             "language" to Locale.getDefault().toLanguageTag(),
+            "timezone" to TimeZone.getDefault().displayName,
             "currentTime" to SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.getDefault()).format(Date()),
+            "userTriggered" to false,
             "notis" to notisPayload,
             "currentReminders" to remindersForPayload
         )
@@ -556,6 +576,32 @@ internal object ReminderExtractionHandler {
                     }
                     val isCompleted = it.optBoolean("isCompleted", false)
 
+                    // Merge old snapshot context if this reminderId already exists.
+                    try {
+                        val existing = if (reminderId.isNotBlank()) reminderRepository.getById(reminderId) else null
+                        val oldSnapshotId = existing?.extractionSnapshotId
+                        if (!oldSnapshotId.isNullOrBlank() && assocKeys.isNotEmpty()) {
+                            val oldSnap = snapshotDao.getSnapshot(oldSnapshotId)
+                                ?: snapshotDao.getLatestKeptSnapshotForReminder(reminderId)
+                            if (oldSnap != null) {
+                                val merged = mergedSnapshotPayloadJson(snapshotPayload, oldSnap, assocKeys.toSet())
+                                if (merged != snapshotPayload) {
+                                    snapshotDao.upsertSnapshot(
+                                        ReminderExtractionSnapshot(
+                                            snapshotId = snapshotId,
+                                            status = EsmSnapshotStatuses.STAGED,
+                                            reminderId = null,
+                                            payloadJson = merged,
+                                            createdAt = snapNow,
+                                        )
+                                    )
+                                }
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Log.w("N8nWebhook", "Snapshot merge skipped for reminderId=$reminderId", e)
+                    }
+
                     val unit = ReminderUnit(
                         reminderId = reminderId,
                         reminderTitle = reminderTitle,
@@ -603,16 +649,118 @@ internal object ReminderExtractionHandler {
         // Most common: has an offset like +08:00 or ends with Z
         return try {
             OffsetDateTime.parse(iso).toInstant().toEpochMilli()
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             // Fallback: sometimes it's a full zone format or slightly different ISO variant
             ZonedDateTime.parse(iso).toInstant().toEpochMilli()
         }
     }
 
-    fun unixMillisToIsoLocalCompat(ms: Long): String {
-        if (ms < 0) return "-1"
-        val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.getDefault())
-        sdf.timeZone = TimeZone.getDefault()
-        return sdf.format(Date(ms))
+    private fun parseRecordIdsFromSnapshotPayload(payloadJson: String): Pair<Set<String>, Map<String, Set<String>>?> {
+        return try {
+            val obj = JSONObject(payloadJson)
+            val v = obj.optInt("v", 1)
+            if (v != 2) return emptySet<String>() to null
+
+            val recordIds = mutableSetOf<String>()
+            val arr = obj.optJSONArray("recordIds")
+            if (arr != null) {
+                for (i in 0 until arr.length()) {
+                    val id = arr.optString(i)
+                    if (!id.isNullOrBlank()) recordIds += id
+                }
+            }
+
+            val mappingObj = obj.optJSONObject("notiKeyToRecordIds")
+            val mapping = if (mappingObj != null) {
+                val out = mutableMapOf<String, Set<String>>()
+                val keys = mappingObj.keys()
+                while (keys.hasNext()) {
+                    val key = keys.next()
+                    val idsArr = mappingObj.optJSONArray(key)
+                    if (idsArr != null) {
+                        val ids = mutableSetOf<String>()
+                        for (j in 0 until idsArr.length()) {
+                            val id = idsArr.optString(j)
+                            if (!id.isNullOrBlank()) ids += id
+                        }
+                        out[key] = ids
+                    }
+                }
+                out
+            } else null
+
+            recordIds to mapping
+        } catch (_: Exception) {
+            emptySet<String>() to null
+        }
+    }
+
+    /**
+     * Merge *relevant* recordIds from [oldSnap] into [newPayloadJson].
+     *
+     * Rule: only bring over records whose notiKey is in [associatedNotiKeys].
+     * We merge both `recordIds` and `notiKeyToRecordIds` (v2/v2.1 compatible).
+     */
+    private fun mergedSnapshotPayloadJson(
+        newPayloadJson: String,
+        oldSnap: ReminderExtractionSnapshot,
+        associatedNotiKeys: Set<String>,
+    ): String {
+        if (associatedNotiKeys.isEmpty()) return newPayloadJson
+
+        val (_, oldMapping) = parseRecordIdsFromSnapshotPayload(oldSnap.payloadJson)
+        val oldRecordIdsToMerge: Set<String> = if (oldMapping != null) {
+            associatedNotiKeys.flatMap { k -> oldMapping[k].orEmpty() }.toSet()
+        } else {
+            // Can't safely filter without mapping; be conservative and skip.
+            emptySet()
+        }
+
+        if (oldRecordIdsToMerge.isEmpty()) return newPayloadJson
+
+        return try {
+            val newObj = JSONObject(newPayloadJson)
+            val v = newObj.optInt("v", 1)
+            if (v != 2) return newPayloadJson
+
+            // Merge recordIds
+            val newRecordIds = mutableSetOf<String>()
+            val newArr = newObj.optJSONArray("recordIds")
+            if (newArr != null) {
+                for (i in 0 until newArr.length()) {
+                    val id = newArr.optString(i)
+                    if (!id.isNullOrBlank()) newRecordIds += id
+                }
+            }
+            newRecordIds += oldRecordIdsToMerge
+            newObj.put("recordIds", JSONArray(newRecordIds.toList()))
+
+            // Merge notiKeyToRecordIds mapping
+            val mappingObj = newObj.optJSONObject("notiKeyToRecordIds") ?: JSONObject().also {
+                newObj.put("notiKeyToRecordIds", it)
+            }
+
+            for (k in associatedNotiKeys) {
+                val existingIds = mutableSetOf<String>()
+                val existArr = mappingObj.optJSONArray(k)
+                if (existArr != null) {
+                    for (i in 0 until existArr.length()) {
+                        val id = existArr.optString(i)
+                        if (!id.isNullOrBlank()) existingIds += id
+                    }
+                }
+
+                val oldIdsForKey = oldMapping?.get(k).orEmpty()
+                if (oldIdsForKey.isNotEmpty()) {
+                    existingIds += oldIdsForKey
+                    mappingObj.put(k, JSONArray(existingIds.toList()))
+                }
+            }
+
+            // Keep v2.1 visibleRecordIds untouched.
+            newObj.toString()
+        } catch (_: Exception) {
+            newPayloadJson
+        }
     }
 }
