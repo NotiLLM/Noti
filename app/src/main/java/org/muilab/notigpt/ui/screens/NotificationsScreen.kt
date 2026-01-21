@@ -33,6 +33,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.muilab.notigpt.R
+import org.muilab.notigpt.debug.DummyData
+import org.muilab.notigpt.debug.ScreenshotMode
 import org.muilab.notigpt.model.notifications.NotiDrawerItem
 import org.muilab.notigpt.model.notifications.NotiGroupItem
 import org.muilab.notigpt.model.notifications.NotiItem
@@ -54,6 +56,51 @@ fun NotificationsScreen(
     drawerViewModel: DrawerViewModel,
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
+
+    val screenshotModeEnabled by ScreenshotMode.enabled.collectAsState()
+    if (screenshotModeEnabled) {
+        val dummyItems = remember(screenshotModeEnabled) { DummyData.Notifications.buildDrawerItems(context) }
+        val activeCount = remember(dummyItems) { dummyItems.count { !it.displayUnit.notiUnit.isDismissed } }
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(androidx.compose.ui.graphics.Color.Transparent)
+        ) {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(bottom = 80.dp)
+            ) {
+                item {
+                    Text(
+                        text = stringResource(R.string.ui_notifications_new, activeCount),
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
+                }
+
+                items(dummyItems, key = { it.id }) { item ->
+                    NotiCard(
+                        context = context,
+                        notiDisplayUnit = item.displayUnit,
+                        isDragging = false,
+                        drawerViewModel = drawerViewModel,
+                        isCardVisible = true,
+                        parentViewport = null,
+                        isMergeTarget = false,
+                        isInGroup = false,
+                        swipeEnabled = true,
+                        reorderEnabled = false,
+                        reorderScope = null,
+                        revealActions = item.id == dummyItems.firstOrNull()?.id,
+                    )
+                }
+            }
+        }
+        return
+    }
+
+    // --- real data path ---
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
 

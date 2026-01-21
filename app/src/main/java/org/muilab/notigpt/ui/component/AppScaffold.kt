@@ -18,6 +18,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
+import org.muilab.notigpt.debug.DummyData
+import org.muilab.notigpt.debug.ScreenshotMode
 import org.muilab.notigpt.ui.component.appbar.AppTopBar
 import org.muilab.notigpt.ui.screen.HomeScreen
 import org.muilab.notigpt.ui.screen.SettingsScreen
@@ -52,17 +54,35 @@ fun AppScaffold(
         }
     }
 
+    val screenshotModeEnabled by ScreenshotMode.enabled.collectAsState()
+
     val reminderViewModel: ReminderViewModel = viewModel()
     val esmViewModel: EsmViewModel = viewModel()
 
     val unreadNotiCount by drawerViewModel.unreadActiveCount.collectAsState()
+
     val reminderList by reminderViewModel.reminders.collectAsState()
-    val pendingTaskCount = remember(reminderList) {
+    val pendingTaskCountReal = remember(reminderList) {
         reminderList.count { it.isTask && !it.isCompleted }
     }
 
+    val dummyNotiItems = remember(screenshotModeEnabled, context) {
+        if (screenshotModeEnabled) DummyData.Notifications.buildDrawerItems(context) else emptyList()
+    }
+    val dummyUnreadCount = remember(dummyNotiItems) {
+        dummyNotiItems.count { !it.displayUnit.notiUnit.isDismissed && !it.displayUnit.notiUnit.isRead }
+    }
+
+    val dummyTasks by DummyData.Tasks.tasks.collectAsState()
+    val pendingTaskCountDummy = remember(dummyTasks) {
+        dummyTasks.count { it.isTask && !it.isCompleted }
+    }
+
     val esmAvailable by esmViewModel.available.collectAsState()
-    val pendingEsmCount = remember(esmAvailable) { esmAvailable.size }
+    val effectivePendingEsmCount = remember(esmAvailable) { esmAvailable.size }
+
+    val effectiveUnreadNotiCount = if (screenshotModeEnabled) dummyUnreadCount else unreadNotiCount
+    val effectivePendingTaskCount = if (screenshotModeEnabled) pendingTaskCountDummy else pendingTaskCountReal
 
     Scaffold(
         topBar = {
@@ -85,9 +105,9 @@ fun AppScaffold(
             if (!isSettingsShown) {
                 org.muilab.notigpt.ui.component.appbar.AppBottomBar(
                     selectedTab = selectedTab,
-                    unreadNotificationCount = unreadNotiCount,
-                    pendingTaskCount = pendingTaskCount,
-                    pendingEsmCount = pendingEsmCount,
+                    unreadNotificationCount = effectiveUnreadNotiCount,
+                    pendingTaskCount = effectivePendingTaskCount,
+                    pendingEsmCount = effectivePendingEsmCount,
                     onTabSelected = { tab ->
                         // Leaving Notifications: persist any pending read marks so border colors update.
                         if (selectedTab == org.muilab.notigpt.ui.component.appbar.Tab.Notifications && tab != selectedTab) {

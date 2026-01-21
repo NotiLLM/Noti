@@ -2,7 +2,6 @@ package org.muilab.notigpt.ui.component.notification.card.noticard
 
 import android.content.Context
 import android.os.Build
-import android.util.Log
 import androidx.annotation.RequiresApi
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateDpAsState
@@ -57,7 +56,6 @@ import org.muilab.notigpt.ui.component.notification.card.noticard.elements.NotiC
 import org.muilab.notigpt.ui.component.notification.card.noticard.elements.NotiCardHeaderContent
 import org.muilab.notigpt.ui.component.notification.card.noticard.elements.NotiCardOptionsDialog
 import org.muilab.notigpt.ui.component.notification.card.noticard.elements.NotiCardOptionsState
-import org.muilab.notigpt.ui.component.notification.card.noticard.elements.NotiCardOverlayButtons
 import org.muilab.notigpt.ui.component.notification.card.noticard.elements.notiCardExpansionFlingBehavior
 import org.muilab.notigpt.ui.component.notification.card.noticard.elements.notiCardSwipeHandler
 import org.muilab.notigpt.ui.component.notification.card.noticard.elements.rememberNotiCardExpansionState
@@ -87,6 +85,11 @@ fun NotiCard(
     onStartReorderDrag: (Offset) -> Unit = {},
     onReorderDrag: (Offset) -> Unit = {},
     onStopReorderDrag: () -> Unit = {},
+    /**
+     * If true, the card will render with its swipe action buttons revealed.
+     * Intended for screenshot/demo mode.
+     */
+    revealActions: Boolean = false,
 ) {
     // These are part of the shared NotiCard API even if not used in this implementation yet.
     @Suppress("UNUSED_VARIABLE")
@@ -182,6 +185,18 @@ fun NotiCard(
     val horizontalOffsetX = remember { Animatable(0f) }
     var endActionsWidth by remember { mutableFloatStateOf(0f) }
     var cardWidth by remember { mutableFloatStateOf(0f) }
+
+    // If requested, snap-open the action buttons once we know their measured width.
+    LaunchedEffect(revealActions, endActionsWidth, swipeDeleteLeft, swipeEnabled) {
+        if (!revealActions) return@LaunchedEffect
+        if (!swipeEnabled) return@LaunchedEffect
+        if (endActionsWidth <= 1f) return@LaunchedEffect
+
+        val target = if (swipeDeleteLeft) endActionsWidth else -endActionsWidth
+        if (horizontalOffsetX.value != target) {
+            horizontalOffsetX.snapTo(target)
+        }
+    }
 
     val viewTouchSlop = LocalViewConfiguration.current.touchSlop
     var surfaceBoundsInWindow by remember { mutableStateOf<Rect?>(null) }
@@ -314,51 +329,6 @@ fun NotiCard(
                                 isExpandedOffset = anchored.offset,
                             )
                             Spacer(modifier = Modifier.width(10.dp))
-                        }
-
-                        // Overlay buttons on top-right of the header.
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.TopEnd)
-                                .fillMaxHeight()
-                                .zIndex(2f),
-                        ) {
-                            org.muilab.notigpt.ui.component.notification.card.noticard.elements.NotiCardOverlayButtons(
-                                translationX = 0f,
-                                requiresExpansion = requiresExpansion,
-                                progress = (
-                                    anchored.offset.coerceIn(0f, maxContentHeightPxState.floatValue) /
-                                        max(1f, maxContentHeightPxState.floatValue)
-                                    ),
-                                isSortingMode = isSortingMode,
-                                isPinned = isPinned,
-                                anchored = anchored,
-                                anchoredFlingBehavior = anchoredFlingBehavior,
-                                onUpdateMeasuredAnchors = {
-                                    // update anchors based on measured
-                                    // handled inside NotiCardExpandedRecords effect; keep no-op
-                                },
-                                notiKey = notiKey,
-                                drawerViewModel = drawerViewModel,
-                                onOverlayBoundsChange = { overlayWindow ->
-                                    if (isSwipeActive) return@NotiCardOverlayButtons
-
-                                    val surfaceWindow = surfaceBoundsInWindow
-                                    if (overlayWindow != null && surfaceWindow != null) {
-                                        overlayBoundsRelativeToSurface = Rect(
-                                            overlayWindow.left - surfaceWindow.left,
-                                            overlayWindow.top - surfaceWindow.top,
-                                            overlayWindow.right - surfaceWindow.left,
-                                            overlayWindow.bottom - surfaceWindow.top,
-                                        )
-                                    }
-                                },
-                                reorderEnabled = reorderEnabled,
-                                reorderScope = reorderScope,
-                                onStartReorderDrag = onStartReorderDrag,
-                                onReorderDrag = onReorderDrag,
-                                onStopReorderDrag = onStopReorderDrag,
-                            )
                         }
                     }
 

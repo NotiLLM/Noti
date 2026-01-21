@@ -9,10 +9,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.contentColorFor
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -24,7 +22,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.graphics.scale
 import org.muilab.notigpt.model.notifications.NotiDisplayUnit
 import org.muilab.notigpt.util.time.getRelativeTimeStr
 import org.muilab.notigpt.util.unescapeUserText
@@ -54,21 +51,6 @@ fun NotiCardHeaderContent(
             else bitmap?.asImageBitmap()
         }
 
-        val hasTransparency = remember(bitmap) {
-            if (bitmap == null) false else {
-                val w = minOf(bitmap.width, 16)
-                val h = minOf(bitmap.height, 16)
-                val scaled = if (bitmap.width > w || bitmap.height > h) bitmap.scale(w, h) else bitmap
-                val pixels = IntArray(w * h)
-                scaled.getPixels(pixels, 0, w, 0, 0, w, h)
-                if (bitmap.hasAlpha()) {
-                    pixels.count { ((it ushr 24) and 0xFF) < 250 } / pixels.size.toFloat() > 0.1f
-                } else {
-                    pixels.map { it and 0xFFFFFF }.toSet().size < 12
-                }
-            }
-        }
-
         if (showSummary) Spacer(Modifier.size(3.dp))
 
         if (imageToDisplay != null) {
@@ -76,16 +58,9 @@ fun NotiCardHeaderContent(
             if (isExpandedOffset > collapseThreshold && largeBitmap != null) {
                 Image(bitmap = imageToDisplay, contentDescription = "Notification Icon", modifier = iconModifier)
             } else {
-                if (hasTransparency) {
-                    Icon(
-                        bitmap = imageToDisplay,
-                        contentDescription = "Notification Icon",
-                        modifier = iconModifier,
-                        tint = contentColorFor(MaterialTheme.colorScheme.surface),
-                    )
-                } else {
-                    Image(bitmap = imageToDisplay, contentDescription = "Notification Icon", modifier = iconModifier)
-                }
+                // Always render the bitmap as-is. Tinting makes many real app icons (with transparency)
+                // look like a solid filled circle/blob and hides which app it is.
+                Image(bitmap = imageToDisplay, contentDescription = "Notification Icon", modifier = iconModifier)
             }
         }
 

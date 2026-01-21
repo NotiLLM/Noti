@@ -89,6 +89,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.snapshotFlow
 import androidx.constraintlayout.helper.widget.Grid
 import kotlinx.coroutines.flow.distinctUntilChanged
+import org.muilab.notigpt.debug.DummyData
+import org.muilab.notigpt.debug.ScreenshotMode
 
 @Composable
 fun RemindersScreen(
@@ -100,8 +102,24 @@ fun RemindersScreen(
     // Drawer VM is needed to reuse the same notification/app launching logic as NotiRecordContextCard.
     val context = LocalContext.current
 
-    val reminders by vm.reminders.collectAsState()
-    val filter by vm.filter.collectAsState()
+    val screenshotModeEnabled by ScreenshotMode.enabled.collectAsState()
+
+    val remindersReal by vm.reminders.collectAsState()
+    val filterReal by vm.filter.collectAsState()
+
+    val dummyTasks by DummyData.Tasks.tasks.collectAsState()
+
+    val activeFilter = remember(screenshotModeEnabled, filterReal) {
+        if (screenshotModeEnabled) ReminderViewModel.FilterTab.Tasks else filterReal
+    }
+
+    val reminders = when {
+        screenshotModeEnabled && activeFilter == ReminderViewModel.FilterTab.Completed -> dummyTasks.filter { it.isCompleted }
+        screenshotModeEnabled -> dummyTasks.filter { !it.isCompleted }
+        else -> remindersReal
+    }
+
+    val filter = activeFilter
 
     var editing by remember { mutableStateOf<ReminderUnit?>(null) }
     var editingId by remember { mutableStateOf<String?>(null) }
@@ -121,11 +139,11 @@ fun RemindersScreen(
     }
 
     // Trigger B (v2): when a reminder card is fully visible in the list viewport, consider it "viewed".
-    // We only apply this to generated reminders (has associated notifications), and only once per reminderId.
-    // Reuse the same Context we already grabbed above.
+    // In screenshot mode we skip this entirely (dummy tasks have no associated notifications).
     var viewedReminderIds by remember { mutableStateOf<Set<String>>(emptySet()) }
 
-    LaunchedEffect(listState, reminders) {
+    LaunchedEffect(listState, reminders, screenshotModeEnabled) {
+        if (screenshotModeEnabled) return@LaunchedEffect
         snapshotFlow {
             val layout = listState.layoutInfo
             val viewportStart = layout.viewportStartOffset
@@ -154,7 +172,6 @@ fun RemindersScreen(
                             val reminder = reminders.firstOrNull { it.reminderId == rid } ?: return@forEach
                             if (reminder.associatedNotis.isEmpty()) return@forEach
 
-                            // Trigger B: schedule delivery using the A/B timing rule.
                             val requestedDelay = repo.computeTriggerAbRequestedDelayMs(
                                 org.muilab.notigpt.domain.esm.EsmConfig.TRIGGER_B_AVAILABLE_DELAY_MS,
                             )
@@ -179,10 +196,18 @@ fun RemindersScreen(
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                FilterChip(stringResource(R.string.ui_reminders_filter_all), filter == ReminderViewModel.FilterTab.All) { vm.setFilter(ReminderViewModel.FilterTab.All) }
-                FilterChip(stringResource(R.string.ui_reminders_filter_tasks), filter == ReminderViewModel.FilterTab.Tasks) { vm.setFilter(ReminderViewModel.FilterTab.Tasks) }
-                FilterChip(stringResource(R.string.ui_reminders_filter_memos), filter == ReminderViewModel.FilterTab.Memos) { vm.setFilter(ReminderViewModel.FilterTab.Memos) }
-                FilterChip(stringResource(R.string.ui_reminders_filter_completed), filter == ReminderViewModel.FilterTab.Completed) { vm.setFilter(ReminderViewModel.FilterTab.Completed) }
+                if (!screenshotModeEnabled) {
+                    FilterChip(stringResource(R.string.ui_reminders_filter_all), filter == ReminderViewModel.FilterTab.All) { vm.setFilter(ReminderViewModel.FilterTab.All) }
+                }
+                FilterChip(stringResource(R.string.ui_reminders_filter_tasks), filter == ReminderViewModel.FilterTab.Tasks) {
+                    if (!screenshotModeEnabled) vm.setFilter(ReminderViewModel.FilterTab.Tasks)
+                }
+                if (!screenshotModeEnabled) {
+                    FilterChip(stringResource(R.string.ui_reminders_filter_memos), filter == ReminderViewModel.FilterTab.Memos) { vm.setFilter(ReminderViewModel.FilterTab.Memos) }
+                }
+                FilterChip(stringResource(R.string.ui_reminders_filter_completed), filter == ReminderViewModel.FilterTab.Completed) {
+                    if (!screenshotModeEnabled) vm.setFilter(ReminderViewModel.FilterTab.Completed)
+                }
             }
 
             LazyColumn(
@@ -193,8 +218,12 @@ fun RemindersScreen(
                 items(reminders, key = { it.reminderId }) { reminder ->
                     ReminderCard(
                         reminder = reminder,
-                        onDelete = { vm.delete(reminder.reminderId) },
-                        onToggleCompleted = { completed: Boolean -> vm.toggleCompleted(reminder, completed) },
+                        onDelete = {
+                            if (screenshotModeEnabled) DummyData.Tasks.delete(reminder.reminderId) else vm.delete(reminder.reminderId)
+                        },
+                        onToggleCompleted = { completed: Boolean ->
+                            if (screenshotModeEnabled) DummyData.Tasks.setCompleted(reminder.reminderId, completed) else vm.toggleCompleted(reminder, completed)
+                        },
                         onEdit = {
                             editing = reminder
                             editingId = reminder.reminderId
@@ -214,15 +243,15 @@ fun RemindersScreen(
                     reminderId = "manual_${java.util.UUID.randomUUID()}",
                     reminderTitle = "",
                     reminderContent = "",
-                    // Let users decide task vs memo in the editor.
-                    isTask = false,
+                    // Task-only in screenshot mode.
+                    isTask = true,
                     isCompleted = false,
                     lastUpdateTimestamp = System.currentTimeMillis(),
                     deadlineTimestamp = 0L,
                     estimatedCompletionTime = 0L,
                     associatedNotis = emptySet(),
                     extractionSnapshotId = null,
-                    origin = "manual",
+                    origin = if (screenshotModeEnabled) "dummy" else "manual",
                     humanEditCount = 0,
                     deletedAtMs = null,
                     userEdited = true,
@@ -274,27 +303,28 @@ fun RemindersScreen(
                             when {
                                 emptyNow -> {
                                     // For brand-new manual reminders, just discard. For existing reminders, delete.
-                                    if (!isNew) vm.delete(updatedOrNull.reminderId)
+                                    if (!isNew) {
+                                        if (screenshotModeEnabled) DummyData.Tasks.delete(updatedOrNull.reminderId) else vm.delete(updatedOrNull.reminderId)
+                                    }
                                 }
                                 changed -> {
-                                    vm.upsert(
-                                        updatedOrNull.copy(
-                                            origin = "manual",
-                                            userEdited = true,
-                                            humanEditCount = if (contentChanged) (base?.humanEditCount ?: updatedOrNull.humanEditCount) + 1 else (base?.humanEditCount ?: updatedOrNull.humanEditCount),
-                                            lastUpdateTimestamp = System.currentTimeMillis(),
-                                        )
+                                    val updated = updatedOrNull.copy(
+                                        origin = if (screenshotModeEnabled) "dummy" else "manual",
+                                        userEdited = true,
+                                        humanEditCount = if (contentChanged) (base?.humanEditCount ?: updatedOrNull.humanEditCount) + 1 else (base?.humanEditCount ?: updatedOrNull.humanEditCount),
+                                        lastUpdateTimestamp = System.currentTimeMillis(),
+                                        isTask = true,
                                     )
+                                    if (screenshotModeEnabled) DummyData.Tasks.upsert(updated) else vm.upsert(updated)
                                 }
-                                // If not changed but non-empty and new: still create it.
                                 isNew -> {
-                                    vm.upsert(
-                                        updatedOrNull.copy(
-                                            origin = "manual",
-                                            userEdited = true,
-                                            lastUpdateTimestamp = System.currentTimeMillis(),
-                                        )
+                                    val updated = updatedOrNull.copy(
+                                        origin = if (screenshotModeEnabled) "dummy" else "manual",
+                                        userEdited = true,
+                                        lastUpdateTimestamp = System.currentTimeMillis(),
+                                        isTask = true,
                                     )
+                                    if (screenshotModeEnabled) DummyData.Tasks.upsert(updated) else vm.upsert(updated)
                                 }
                             }
                         }
@@ -306,7 +336,7 @@ fun RemindersScreen(
                         if (id != null) pendingScrollToTopId = id
                     },
                     onDelete = { id: String ->
-                        vm.delete(id)
+                        if (screenshotModeEnabled) DummyData.Tasks.delete(id) else vm.delete(id)
                         editing = null
                         editingId = null
                         editingInitialSnapshot = null
@@ -333,17 +363,19 @@ fun RemindersScreen(
                         val emptyNow = updated.reminderTitle.isBlank() && updated.reminderContent.isBlank()
                         when {
                             emptyNow -> {
-                                if (!isNew) vm.delete(updated.reminderId)
+                                if (!isNew) {
+                                    if (screenshotModeEnabled) DummyData.Tasks.delete(updated.reminderId) else vm.delete(updated.reminderId)
+                                }
                             }
                             changed || isNew -> {
-                                vm.upsert(
-                                    updated.copy(
-                                        origin = "manual",
-                                        humanEditCount = if (contentChanged) (base?.humanEditCount ?: updated.humanEditCount) + 1 else (base?.humanEditCount ?: updated.humanEditCount),
-                                        userEdited = true,
-                                        lastUpdateTimestamp = System.currentTimeMillis(),
-                                    )
+                                val toUpsert = updated.copy(
+                                    origin = if (screenshotModeEnabled) "dummy" else "manual",
+                                    humanEditCount = if (contentChanged) (base?.humanEditCount ?: updated.humanEditCount) + 1 else (base?.humanEditCount ?: updated.humanEditCount),
+                                    userEdited = true,
+                                    lastUpdateTimestamp = System.currentTimeMillis(),
+                                    isTask = true,
                                 )
+                                if (screenshotModeEnabled) DummyData.Tasks.upsert(toUpsert) else vm.upsert(toUpsert)
                             }
                         }
 

@@ -18,6 +18,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import androidx.core.app.NotificationManagerCompat
+import org.muilab.notigpt.debug.ScreenshotMode
 import org.muilab.notigpt.domain.esm.EsmScheduling
 import org.muilab.notigpt.repository.NotiRepositoryProvider
 import org.muilab.notigpt.service.NotiListenerService
@@ -34,11 +35,10 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // NOTE: This used to cancel all WorkManager jobs, which breaks scheduled ESM delivery.
-        // WorkManager.getInstance(applicationContext).cancelAllWork()
-
         SharedPreferencesManager.init(this)
         SharedPreferencesManager.userId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
+
+        ScreenshotMode.init()
 
         // Periodic safety-net for reminder scan/extraction.
         ReminderPeriodicWork.enqueue(applicationContext)

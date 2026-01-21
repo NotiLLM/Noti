@@ -1,6 +1,7 @@
 package org.muilab.notigpt.ui.component.appbar
 
 import android.os.Build
+import android.widget.Toast
 import androidx.annotation.RequiresApi
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.ExperimentalAnimationApi
@@ -8,6 +9,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -23,11 +25,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import org.muilab.notigpt.R
 import org.muilab.notigpt.ui.component.SearchBar
 import org.muilab.notigpt.ui.viewmodel.DrawerViewModel
+import org.muilab.notigpt.debug.ScreenshotMode
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalAnimationApi::class)
 @RequiresApi(Build.VERSION_CODES.S)
@@ -42,6 +46,7 @@ fun AppTopBar(
 ) {
 
     val isSortingMode = drawerViewModel.isSortingMode.collectAsState()
+    val context = LocalContext.current
 
     TopAppBar(
         colors = TopAppBarDefaults.topAppBarColors(
@@ -75,7 +80,16 @@ fun AppTopBar(
                         // The standard title text
                         Text(
                             text = stringResource(R.string.app_name),
-                            style = MaterialTheme.typography.titleLarge
+                            style = MaterialTheme.typography.titleLarge,
+                            modifier = Modifier.clickable {
+                                ScreenshotMode.toggle()
+                                val enabled = ScreenshotMode.enabled.value
+                                Toast.makeText(
+                                    context,
+                                    if (enabled) "Dummy/Screenshot mode: ON" else "Dummy/Screenshot mode: OFF",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
                         )
                     }
                 }
