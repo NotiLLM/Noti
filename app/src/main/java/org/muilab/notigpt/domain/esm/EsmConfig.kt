@@ -26,7 +26,7 @@ object EsmConfig {
     const val TRIGGER_AB_LAST_ESM_STALE_MS: Long = 60 * 60 * 1000L
 
     /** If no triggering criteria has been met for at least this long, fire Trigger C. */
-    const val TRIGGER_C_NO_TRIGGER_WINDOW_MS: Long = 2 * 60 * 60 * 1000L
+    const val TRIGGER_C_NO_TRIGGER_WINDOW_MS: Long = 60 * 60 * 1000L
 
     /** Questionnaire answer window after it becomes AVAILABLE. */
     const val QUESTIONNAIRE_EXPIRES_AFTER_MS: Long = 60 * 60 * 1000L

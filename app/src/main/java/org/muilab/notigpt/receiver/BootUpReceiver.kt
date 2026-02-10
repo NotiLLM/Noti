@@ -4,6 +4,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.util.Log
+import org.muilab.notigpt.work.EsmTriggerCWork
 import org.muilab.notigpt.work.ReminderPeriodicWork
 
 class BootUpReceiver : BroadcastReceiver() {
@@ -17,6 +18,9 @@ class BootUpReceiver : BroadcastReceiver() {
 
             // Ensure periodic scan/extract restarts after reboot.
             ReminderPeriodicWork.enqueue(context.applicationContext)
+
+            // Ensure periodic Trigger C check restarts after reboot.
+            EsmTriggerCWork.enqueue(context.applicationContext)
         }
     }
 }

@@ -72,6 +72,14 @@ interface EsmDao {
     @Query("SELECT COUNT(*) FROM esm_instance WHERE reminderId = :reminderId")
     suspend fun countInstancesByReminderId(reminderId: String): Int
 
+    /**
+     * Trigger C reuse policy helper:
+     * - Block reuse if there's an ANSWERED or currently AVAILABLE instance for this reminder.
+     * - EXPIRED/PENDING/DISCARDED_SUPERSEDED do NOT block reuse.
+     */
+    @Query("SELECT COUNT(*) FROM esm_instance WHERE reminderId = :reminderId AND status IN ('ANSWERED','AVAILABLE', 'PENDING')")
+    suspend fun countAnsweredOrAvailableInstancesByReminderId(reminderId: String): Int
+
     @Query("UPDATE esm_instance SET availableAt = :availableAt, expiresAt = :expiresAt, status = :status WHERE instanceId = :instanceId")
     suspend fun rescheduleInstance(instanceId: String, availableAt: Long, expiresAt: Long, status: String)
 

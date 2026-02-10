@@ -41,6 +41,9 @@ class EsmTriggerCWorker(
 
         val okToTrigger = lastActivityAt <= 0L || (nowMs - lastActivityAt) >= EsmConfig.TRIGGER_C_NO_TRIGGER_WINDOW_MS
         if (!okToTrigger) {
+            val deltaMin = ((nowMs - lastActivityAt) / 60_000L)
+            val windowMin = (EsmConfig.TRIGGER_C_NO_TRIGGER_WINDOW_MS / 60_000L)
+            Log.d(TAG, "Skip Trigger C (within no-trigger window): sinceLastActivity=${deltaMin}min < ${windowMin}min lastAnsweredAt=$lastAnsweredAt lastAvailableAt=$lastAvailableAt")
             return Result.success()
         }
 
@@ -49,17 +52,24 @@ class EsmTriggerCWorker(
         val tasksVisible = try { reminderDao.observeTasks().first() } catch (_: Exception) { emptyList() }
         val autoExtracted = tasksVisible.filter { it.associatedNotis.isNotEmpty() }
 
+        if (autoExtracted.isEmpty()) {
+            Log.d(TAG, "Skip Trigger C: no auto-extracted tasks visible (tasksVisible=${tasksVisible.size})")
+            return Result.success()
+        }
+
         val pickedId = autoExtracted.firstOrNull { !it.isCompleted }?.reminderId
             ?: autoExtracted.firstOrNull { it.isCompleted }?.reminderId
             ?: autoExtracted.firstOrNull()?.reminderId
 
         if (pickedId.isNullOrBlank()) {
+            Log.d(TAG, "Skip Trigger C: failed to pick reminderId")
             return Result.success()
         }
 
         val esmRepo = EsmRepository(applicationContext)
-        if (esmRepo.hasAnyInstanceForReminder(pickedId)) {
-            // One reminder can only be used once.
+        if (esmRepo.hasAnsweredOrAvailableInstanceForReminder(pickedId)) {
+            // Trigger C reuse policy: block if user already answered for this reminder OR one is currently available.
+            Log.d(TAG, "Skip Trigger C: reminderId=$pickedId already has an ANSWERED/AVAILABLE ESM instance")
             return Result.success()
         }
 
@@ -68,6 +78,7 @@ class EsmTriggerCWorker(
         val snapshotId = reminder?.extractionSnapshotId
         if (snapshotId.isNullOrBlank()) {
             // No snapshot to display context; skip Trigger C.
+            Log.d(TAG, "Skip Trigger C: reminderId=$pickedId has no extractionSnapshotId")
             return Result.success()
         }
 
@@ -80,8 +91,10 @@ class EsmTriggerCWorker(
             )
 
             if (EsmTriggerPolicy.isAppInForeground(applicationContext)) {
+                Log.i(TAG, "Trigger C created instanceId=${inst.instanceId}; appInForeground=true -> enqueue delivery now")
                 enqueueEsmDelivery(applicationContext, inst.instanceId, 0L)
             } else {
+                Log.i(TAG, "Trigger C created instanceId=${inst.instanceId}; appInForeground=false -> addPendingEnqueue")
                 EsmScheduling.addPendingEnqueue(applicationContext, inst.instanceId)
             }
 
@@ -99,4 +112,3 @@ class EsmTriggerCWorker(
         private const val TAG = "EsmTriggerCWorker"
     }
 }
-

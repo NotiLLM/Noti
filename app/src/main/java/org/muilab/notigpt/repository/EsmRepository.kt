@@ -237,7 +237,7 @@ class EsmRepository(
         expiresAfterMs: Long = EsmConfig.QUESTIONNAIRE_EXPIRES_AFTER_MS,
     ): EsmInstance = withContext(Dispatchers.IO) {
         // Prevent multiple ESMs for the same reminder.
-        if (esmDao.countInstancesByReminderId(reminderId) > 0) {
+        if (esmDao.countAnsweredOrAvailableInstancesByReminderId(reminderId) > 0) {
             throw IllegalStateException("ESM already exists for reminderId=$reminderId")
         }
 
@@ -263,6 +263,16 @@ class EsmRepository(
 
     suspend fun hasAnyInstanceForReminder(reminderId: String): Boolean = withContext(Dispatchers.IO) {
         esmDao.countInstancesByReminderId(reminderId) > 0
+    }
+
+    /**
+     * Trigger C reuse policy:
+     * - Block reuse if the user has already ANSWERED an ESM for this reminder
+     *   OR there's currently an AVAILABLE one.
+     * - EXPIRED/PENDING/DISCARDED_SUPERSEDED instances do not block reuse.
+     */
+    suspend fun hasAnsweredOrAvailableInstanceForReminder(reminderId: String): Boolean = withContext(Dispatchers.IO) {
+        esmDao.countAnsweredOrAvailableInstancesByReminderId(reminderId) > 0
     }
 
     suspend fun getReminder(reminderId: String): ReminderUnit? = withContext(Dispatchers.IO) {

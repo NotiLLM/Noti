@@ -318,7 +318,7 @@ internal object ReminderExtractionHandler {
                     if (!bindReminderId.isNullOrBlank()) {
                         try {
                             val esmRepo = EsmRepository(ctx.appContext)
-                            if (!esmRepo.hasAnyInstanceForReminder(bindReminderId)) {
+                            if (!esmRepo.hasAnsweredOrAvailableInstanceForReminder(bindReminderId)) {
                                 val requestedDelay = esmRepo.computeTriggerAbRequestedDelayMs(EsmConfig.TRIGGER_A_AVAILABLE_DELAY_MS)
                                 if (requestedDelay <= EsmConfig.TRIGGER_AB_RECENT_WINDOW_MS) {
                                     val inst = esmRepo.createEsmForSnapshot(
