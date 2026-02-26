@@ -8,7 +8,8 @@ import org.muilab.notigpt.database.server.esm.enqueueEsmDelivery
 import org.muilab.notigpt.domain.esm.EsmReceptiveWindow
 import org.muilab.notigpt.domain.esm.EsmStatuses
 import org.muilab.notigpt.util.SharedPreferencesManager
-import org.muilab.notigpt.util.postEsmIndicatorNotification
+// TODO: ESM notifications disabled
+// import org.muilab.notigpt.util.postEsmIndicatorNotification
 
 class EsmDeliveryWorker(
     appContext: Context,
@@ -34,7 +35,8 @@ class EsmDeliveryWorker(
         // Expire if too late.
         if (now > inst.expiresAt) {
             esmDao.setInstanceStatus(instanceId, EsmStatuses.EXPIRED)
-            postEsmIndicatorNotification(applicationContext)
+            // TODO: ESM notifications disabled
+            // postEsmIndicatorNotification(applicationContext)
             return Result.success()
         }
 
@@ -51,7 +53,8 @@ class EsmDeliveryWorker(
             esmDao.setInstanceStatus(instanceId, EsmStatuses.AVAILABLE)
         }
 
-        postEsmIndicatorNotification(applicationContext)
+        // TODO: ESM notifications disabled
+        // postEsmIndicatorNotification(applicationContext)
         return Result.success()
     }
 

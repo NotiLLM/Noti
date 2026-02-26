@@ -341,4 +341,18 @@ class NotiRepository(
         // Persist only these keys. (Do NOT reset others here; we are tracking explicit manual keys.)
         notiDrawerDao.updateSortPositionsBulk(updates)
     }
+
+    /**
+     * Get all notification records (across all notifications).
+     */
+    fun getAllRecords(): List<NotiRecord> {
+        return notiRecordDao.getAllRecords()
+    }
+
+    /**
+     * Get all notification actions (user interactions).
+     */
+    fun getAllActions(): List<NotiAction> {
+        return notiActionDao.getAllActions()
+    }
 }

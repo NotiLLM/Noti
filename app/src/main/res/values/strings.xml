@@ -31,6 +31,10 @@
     <string name="ui_settings_expand_task_list">Expand Task List on startup</string>
     <string name="ui_settings_esm_wakeup">ESM wake-up time</string>
     <string name="ui_settings_esm_bedtime">ESM bedtime</string>
+    <string name="ui_settings_export_data">Export Data</string>
+    <string name="ui_settings_export_description">Export all notifications and user actions</string>
+    <string name="ui_settings_export_include_dismissed">Include dismissed notifications</string>
+    <string name="ui_settings_export_include_context">Include full context</string>
 
     <!-- Reminders -->
     <string name="ui_reminders_filter_all">All</string>

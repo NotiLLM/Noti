@@ -17,8 +17,9 @@ import org.muilab.notigpt.repository.EsmRepository
 import org.muilab.notigpt.database.room.AppDatabase
 import org.muilab.notigpt.model.esm.EsmInstance
 import org.muilab.notigpt.model.notifications.NotiDisplayUnit
-import org.muilab.notigpt.repository.firestore.FirestoreSyncRepository
-import org.muilab.notigpt.util.postEsmIndicatorNotification
+// TODO: ESM notifications and Firestore sync disabled
+// import org.muilab.notigpt.repository.firestore.FirestoreSyncRepository
+// import org.muilab.notigpt.util.postEsmIndicatorNotification
 
 class EsmViewModel(app: Application) : AndroidViewModel(app) {
 
@@ -187,7 +188,8 @@ class EsmViewModel(app: Application) : AndroidViewModel(app) {
         refresh()
 
         // Best-effort: refresh the system indicator in case something expired/changed in the meantime.
-        try { postEsmIndicatorNotification(getApplication<Application>().applicationContext) } catch (_: Exception) {}
+        // TODO: ESM notifications disabled
+        // try { postEsmIndicatorNotification(getApplication<Application>().applicationContext) } catch (_: Exception) {}
     }
 
     fun submitAnswer(answerJson: String) {
@@ -200,14 +202,16 @@ class EsmViewModel(app: Application) : AndroidViewModel(app) {
             _answers.update { it + (qid to answerJson) }
 
             // Update/cancel drawer notification immediately after answer events change availability.
-            try { postEsmIndicatorNotification(getApplication<Application>().applicationContext) } catch (_: Exception) {}
+            // TODO: ESM notifications disabled
+            // try { postEsmIndicatorNotification(getApplication<Application>().applicationContext) } catch (_: Exception) {}
 
             // Firestore analytics upload (Option A: upload on every answer)
-            try {
-                FirestoreSyncRepository(getApplication<Application>().applicationContext).syncEsmAnswerEvent(inst.instanceId, qid)
-            } catch (_: Throwable) {
-                // best-effort
-            }
+            // TODO: Firestore ESM sync disabled
+            // try {
+            //     FirestoreSyncRepository(getApplication<Application>().applicationContext).syncEsmAnswerEvent(inst.instanceId, qid)
+            // } catch (_: Throwable) {
+            //     // best-effort
+            // }
 
             val next = IRBShortSurveyV2.nextQuestionId(qid, answerJson)
             if (next == null) {

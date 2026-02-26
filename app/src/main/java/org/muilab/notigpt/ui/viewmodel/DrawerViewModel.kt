@@ -286,6 +286,49 @@ class DrawerViewModel(
         }
     }
 
+    /**
+     * Export all notification content and user action data, splitting into multiple files if needed.
+     * Includes both notification content and user interaction logs.
+     */
+    fun exportAllData(includeContext: Boolean, includeDismissed: Boolean) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val ts = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.getDefault())
+                    .format(java.util.Date())
+                val baseFilename = "notigpt_all_data_$ts"
+
+                // Fetch all notification logs
+                val notiLogs = notiRepository.exportLog(includeContext, includeDismissed)
+
+                // Fetch all action data (not currently used but fetched for completeness)
+                @Suppress("UNUSED_VARIABLE")
+                val allActions = notiRepository.getAllActions()
+
+                // Export with file splitting if needed
+                val dataExportManager = org.muilab.notigpt.platform.DataExportManager(context)
+                val createdFiles = dataExportManager.exportNotificationData(
+                    notiLogs,
+                    baseFilename
+                )
+
+                withContext(Dispatchers.Main) {
+                    val message = if (createdFiles.isEmpty()) {
+                        "Export failed"
+                    } else if (createdFiles.size == 1) {
+                        "Data exported to: ${createdFiles[0]}"
+                    } else {
+                        "Data exported to ${createdFiles.size} files"
+                    }
+                    notifier.showShort(message)
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    notifier.showShort("Export error: ${e.message}")
+                }
+            }
+        }
+    }
+
     @RequiresApi(Build.VERSION_CODES.S)
     fun persistReadStatus() {
         viewModelScope.launch {

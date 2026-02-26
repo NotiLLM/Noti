@@ -4,18 +4,20 @@ import android.content.Context
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.muilab.notigpt.database.room.AppDatabase
+import org.muilab.notigpt.database.room.NotiDrawerDao
 import org.muilab.notigpt.domain.esm.EsmConfig
 import org.muilab.notigpt.domain.esm.EsmSnapshotStatuses
 import org.muilab.notigpt.domain.esm.EsmStatuses
 import org.muilab.notigpt.domain.esm.EsmTriggerTypes
 import org.muilab.notigpt.domain.esm.IRBShortSurveyV2
-import org.muilab.notigpt.model.features.ReminderExtractionSnapshot
 import org.muilab.notigpt.model.esm.EsmInstance
 import org.muilab.notigpt.model.features.ReminderUnit
-import org.muilab.notigpt.util.postEsmIndicatorNotification
+// TODO: ESM notifications disabled
+// import org.muilab.notigpt.util.postEsmIndicatorNotification
 import java.util.UUID
 import org.muilab.notigpt.domain.esm.EsmTimePolicy
 import org.muilab.notigpt.domain.esm.EsmScheduling
+import org.muilab.notigpt.model.features.ReminderExtractionSnapshot
 
 class EsmRepository(
     private val appContext: Context,
@@ -172,7 +174,8 @@ class EsmRepository(
         esmDao.insertInstance(inst)
 
         // Post indicator.
-        postEsmIndicatorNotification(appContext)
+        // TODO: ESM notifications disabled
+        // postEsmIndicatorNotification(appContext)
 
         inst
     }
