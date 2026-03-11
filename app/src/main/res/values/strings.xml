@@ -151,4 +151,13 @@
     <string name="ui_noti_action_pin">Pin</string>
     <string name="ui_noti_action_unpin">Unpin</string>
     <string name="ui_noti_action_dismiss">Dismiss</string>
+
+    <!-- Google Tasks -->
+    <string name="google_tasks_export">Export to Google Tasks</string>
+    <string name="google_tasks_sign_in">Sign in to Google</string>
+    <string name="google_tasks_success">Task created in Google Tasks</string>
+    <string name="google_tasks_error">Failed to create task: %1$s</string>
+    <string name="google_tasks_not_signed_in">Please sign in to Google first</string>
+    <string name="google_tasks_exporting">Exporting to Google Tasks…</string>
+    <string name="a11y_export_google_tasks">Export to Google Tasks</string>
 </resources>

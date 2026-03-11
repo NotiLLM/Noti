@@ -131,4 +131,13 @@
     <string name="ui_noti_action_pin">釘選</string>
     <string name="ui_noti_action_unpin">取消釘選</string>
     <string name="ui_noti_action_dismiss">關閉</string>
+
+    <!-- Google Tasks -->
+    <string name="google_tasks_export">匯出到 Google Tasks</string>
+    <string name="google_tasks_sign_in">登入 Google</string>
+    <string name="google_tasks_success">已在 Google Tasks 建立任務</string>
+    <string name="google_tasks_error">建立任務失敗：%1$s</string>
+    <string name="google_tasks_not_signed_in">請先登入 Google</string>
+    <string name="google_tasks_exporting">正在匯出到 Google Tasks…</string>
+    <string name="a11y_export_google_tasks">匯出到 Google Tasks</string>
 </resources>

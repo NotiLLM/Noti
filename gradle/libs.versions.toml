@@ -1,7 +1,7 @@
 [versions]
 # Plugin versions
 android-gradle = "8.13.2"
-kotlin = "2.2.20"
+kotlin = "2.3.10"
 ksp = "2.2.20-2.0.4"
 secrets-gradle-plugin = "2.0.1"
 
@@ -27,7 +27,7 @@ espresso-core = "3.7.0"
 room = "2.8.2"
 
 # Paging versions
-paging = "3.3.6"
+paging = "3.4.1"
 
 # OpenAI / Networking
 ktor = "3.3.3"
@@ -45,7 +45,11 @@ work-runtime = "2.10.5"
 kotlin-toon = "1.0.0"
 
 googleServices = "4.4.4"
-firebaseBom = "34.8.0"
+firebaseBom = "34.10.0"
+playServicesAuth = "21.5.1"
+googleApiClient = "2.9.0"
+googleApiServicesTasks = "v1-rev20251102-2.0.0"
+grpc = "1.79.0"
 
 [libraries]
 # AndroidX
@@ -105,6 +109,15 @@ kotlin-toon = { group = "br.com.vexpera", name = "kotlin-toon", version.ref = "k
 
 firebase-bom = { module = "com.google.firebase:firebase-bom", version.ref = "firebaseBom" }
 firebase-firestore = { module = "com.google.firebase:firebase-firestore" }
+
+# Google Play Services & Tasks API
+play-services-auth = { module = "com.google.android.gms:play-services-auth", version.ref = "playServicesAuth" }
+google-api-client-android = { module = "com.google.api-client:google-api-client-android", version.ref = "googleApiClient" }
+google-api-services-tasks = { module = "com.google.apis:google-api-services-tasks", version.ref = "googleApiServicesTasks" }
+
+grpc-android = { group = "io.grpc", name = "grpc-android", version.ref = "grpc" }
+grpc-protobuf-lite = { group = "io.grpc", name = "grpc-protobuf-lite", version.ref = "grpc" }
+grpc-okhttp = { group = "io.grpc", name = "grpc-okhttp", version.ref = "grpc" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "android-gradle" }

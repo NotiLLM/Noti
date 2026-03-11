@@ -1,0 +1,151 @@
+package org.muilab.notigpt.repository
+
+import android.content.Context
+import android.util.Log
+import com.google.android.gms.auth.api.signin.GoogleSignInAccount
+import com.google.api.client.googleapis.extensions.android.gms.auth.GoogleAccountCredential
+import com.google.api.client.http.javanet.NetHttpTransport
+import com.google.api.client.json.gson.GsonFactory
+import com.google.api.services.tasks.Tasks
+import com.google.api.services.tasks.TasksScopes
+import com.google.api.services.tasks.model.Task
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import org.muilab.notigpt.model.features.ReminderUnit
+import org.muilab.notigpt.platform.GoogleTasksAuthManager
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
+
+/**
+ * Repository for interacting with Google Tasks API.
+ *
+ * This creates tasks in the user's default task list.
+ */
+class GoogleTasksRepository(
+    private val appContext: Context,
+) {
+    companion object {
+        private const val TAG = "GoogleTasksRepo"
+        private const val APP_NAME = "NotiGPT"
+    }
+
+    /**
+     * Result wrapper for task creation operations.
+     */
+    sealed class TaskResult {
+        data class Success(val taskId: String, val taskTitle: String) : TaskResult()
+        data class Error(val message: String, val exception: Throwable? = null) : TaskResult()
+        object NotSignedIn : TaskResult()
+    }
+
+    /**
+     * Build the Google Tasks API service using the signed-in account.
+     */
+    private fun buildTasksService(account: GoogleSignInAccount): Tasks {
+        val credential = GoogleAccountCredential.usingOAuth2(
+            appContext,
+            listOf(TasksScopes.TASKS)
+        ).apply {
+            selectedAccount = account.account
+        }
+
+        return Tasks.Builder(
+            NetHttpTransport(),
+            GsonFactory.getDefaultInstance(),
+            credential
+        )
+            .setApplicationName(APP_NAME)
+            .build()
+    }
+
+    /**
+     * Create a task in the user's default task list from a ReminderUnit.
+     *
+     * Maps:
+     * - reminderTitle → task title
+     * - reminderContent → task notes
+     * - isCompleted → task status (completed/needsAction)
+     * - deadlineTimestamp → task due date (RFC 3339)
+     */
+    suspend fun createTaskFromReminder(reminder: ReminderUnit): TaskResult = withContext(Dispatchers.IO) {
+        val account = GoogleTasksAuthManager.getAccount(appContext)
+        if (account == null) {
+            Log.w(TAG, "User not signed in to Google")
+            return@withContext TaskResult.NotSignedIn
+        }
+
+        try {
+            val service = buildTasksService(account)
+
+            // Build the task object
+            val task = Task().apply {
+                title = reminder.reminderTitle.ifBlank { "(Untitled reminder)" }
+
+                if (reminder.reminderContent.isNotBlank()) {
+                    notes = reminder.reminderContent
+                }
+
+                // Set completion status
+                status = if (reminder.isCompleted) "completed" else "needsAction"
+                if (reminder.isCompleted) {
+                    completed = formatRfc3339(System.currentTimeMillis())
+                }
+
+                // Set due date if deadline is set
+                if (reminder.deadlineTimestamp > 0L) {
+                    due = formatRfc3339(reminder.deadlineTimestamp)
+                }
+            }
+
+            // Insert into default task list ("@default")
+            val createdTask = service.tasks()
+                .insert("@default", task)
+                .execute()
+
+            Log.d(TAG, "Task created: id=${createdTask.id}, title=${createdTask.title}")
+            TaskResult.Success(
+                taskId = createdTask.id ?: "",
+                taskTitle = createdTask.title ?: ""
+            )
+
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to create task", e)
+            TaskResult.Error(
+                message = e.message ?: "Unknown error",
+                exception = e
+            )
+        }
+    }
+
+    /**
+     * Get the user's task lists (for future use if we want list selection).
+     */
+    suspend fun getTaskLists(): List<Pair<String, String>> = withContext(Dispatchers.IO) {
+        val account = GoogleTasksAuthManager.getAccount(appContext) ?: return@withContext emptyList()
+
+        try {
+            val service = buildTasksService(account)
+            val response = service.tasklists().list().execute()
+
+            response.items?.map { taskList ->
+                (taskList.id ?: "") to (taskList.title ?: "")
+            } ?: emptyList()
+
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to fetch task lists", e)
+            emptyList()
+        }
+    }
+
+    /**
+     * Format timestamp as RFC 3339 date-time string for Google Tasks API.
+     */
+    private fun formatRfc3339(timestampMs: Long): String {
+        val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US)
+        sdf.timeZone = TimeZone.getTimeZone("UTC")
+        return sdf.format(Date(timestampMs))
+    }
+}
+

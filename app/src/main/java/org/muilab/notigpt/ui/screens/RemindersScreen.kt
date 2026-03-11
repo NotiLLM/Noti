@@ -89,6 +89,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.snapshotFlow
 import androidx.constraintlayout.helper.widget.Grid
 import kotlinx.coroutines.flow.distinctUntilChanged
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.compose.material3.CircularProgressIndicator
 
 @Composable
 fun RemindersScreen(
@@ -106,6 +108,62 @@ fun RemindersScreen(
     var editing by remember { mutableStateOf<ReminderUnit?>(null) }
     var editingId by remember { mutableStateOf<String?>(null) }
     var editingInitialSnapshot by remember { mutableStateOf<ReminderUnit?>(null) }
+
+    // ===== Google Tasks integration =====
+    val googleTasksExportResult by vm.googleTasksExportResult.collectAsState()
+
+    // Reminder pending export after sign-in completes.
+    var pendingGoogleTasksReminder by remember { mutableStateOf<ReminderUnit?>(null) }
+
+    val googleSignInLauncher = rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        CoroutineScope(Dispatchers.IO).launch {
+            val account = org.muilab.notigpt.platform.GoogleTasksAuthManager.handleSignInResult(result.data)
+            withContext(Dispatchers.Main) {
+                if (account != null) {
+                    // Sign-in succeeded – export the pending reminder if any
+                    pendingGoogleTasksReminder?.let { reminder ->
+                        vm.exportToGoogleTasks(reminder)
+                    }
+                } else {
+                    android.widget.Toast.makeText(
+                        context,
+                        context.getString(R.string.google_tasks_not_signed_in),
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
+                }
+                pendingGoogleTasksReminder = null
+            }
+        }
+    }
+
+    // Show Toast when Google Tasks export result changes.
+    LaunchedEffect(googleTasksExportResult) {
+        when (val r = googleTasksExportResult) {
+            is ReminderViewModel.GoogleTasksExportResult.Success -> {
+                android.widget.Toast.makeText(
+                    context,
+                    context.getString(R.string.google_tasks_success),
+                    android.widget.Toast.LENGTH_SHORT
+                ).show()
+                vm.clearGoogleTasksExportResult()
+            }
+            is ReminderViewModel.GoogleTasksExportResult.Error -> {
+                android.widget.Toast.makeText(
+                    context,
+                    context.getString(R.string.google_tasks_error, r.message),
+                    android.widget.Toast.LENGTH_LONG
+                ).show()
+                vm.clearGoogleTasksExportResult()
+            }
+            is ReminderViewModel.GoogleTasksExportResult.NotSignedIn -> {
+                // Launch sign-in flow
+                vm.clearGoogleTasksExportResult()
+            }
+            else -> { /* Idle or Loading – no-op */ }
+        }
+    }
 
     // Keep list state while editor is shown.
     val listState = rememberLazyListState()
@@ -353,6 +411,16 @@ fun RemindersScreen(
                         editingInitialSnapshot = null
                         if (id != null) pendingScrollToTopId = id
                     },
+                    onExportToGoogleTasks = { reminder ->
+                        if (vm.isGoogleSignedIn()) {
+                            vm.exportToGoogleTasks(reminder)
+                        } else {
+                            pendingGoogleTasksReminder = reminder
+                            val signInIntent = org.muilab.notigpt.platform.GoogleTasksAuthManager.getSignInIntent(context)
+                            googleSignInLauncher.launch(signInIntent)
+                        }
+                    },
+                    isGoogleTasksExporting = googleTasksExportResult is ReminderViewModel.GoogleTasksExportResult.Loading,
                 )
             }
         }
@@ -519,6 +587,8 @@ private fun ReminderDetailScreen(
     onBack: (ReminderUnit?) -> Unit,
     onDelete: (String) -> Unit,
     onSave: (ReminderUnit) -> Unit,
+    onExportToGoogleTasks: (ReminderUnit) -> Unit = {},
+    isGoogleTasksExporting: Boolean = false,
 ) {
     val context = LocalContext.current
 
@@ -677,6 +747,27 @@ private fun ReminderDetailScreen(
                         innerTextField()
                     }
                 )
+            }
+
+            // === Export to Google Tasks ===
+            HorizontalDivider(modifier = Modifier.padding(top = 8.dp))
+
+            Button(
+                onClick = { onExportToGoogleTasks(buildUpdated()) },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !isGoogleTasksExporting,
+            ) {
+                if (isGoogleTasksExporting) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.onPrimary,
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(R.string.google_tasks_exporting))
+                } else {
+                    Text(stringResource(R.string.google_tasks_export))
+                }
             }
 
             // === Related notifications (from extraction snapshot) ===

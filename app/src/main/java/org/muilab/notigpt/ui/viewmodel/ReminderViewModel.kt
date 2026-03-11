@@ -11,18 +11,33 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import org.muilab.notigpt.database.room.AppDatabase
 import org.muilab.notigpt.model.features.ReminderUnit
+import org.muilab.notigpt.repository.GoogleTasksRepository
 import org.muilab.notigpt.repository.ReminderRepository
+import org.muilab.notigpt.platform.GoogleTasksAuthManager
 import java.util.UUID
 
 class ReminderViewModel(application: Application) : AndroidViewModel(application) {
 
     enum class FilterTab { All, Tasks, Memos, Completed }
 
+    /**
+     * Result of Google Tasks export operation.
+     */
+    sealed class GoogleTasksExportResult {
+        object Idle : GoogleTasksExportResult()
+        object Loading : GoogleTasksExportResult()
+        data class Success(val taskTitle: String) : GoogleTasksExportResult()
+        data class Error(val message: String) : GoogleTasksExportResult()
+        object NotSignedIn : GoogleTasksExportResult()
+    }
+
     private val repo: ReminderRepository
+    private val googleTasksRepo: GoogleTasksRepository
 
     init {
         val db = AppDatabase.getInstance(application.applicationContext)
         repo = ReminderRepository(db.reminderListDao(), application.applicationContext)
+        googleTasksRepo = GoogleTasksRepository(application.applicationContext)
     }
 
     private val _filter = MutableStateFlow(FilterTab.All)
@@ -84,5 +99,47 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
             userEdited = false,
         )
         upsert(reminder)
+    }
+
+    // ========== Google Tasks Integration ==========
+
+    private val _googleTasksExportResult = MutableStateFlow<GoogleTasksExportResult>(GoogleTasksExportResult.Idle)
+    val googleTasksExportResult: StateFlow<GoogleTasksExportResult> = _googleTasksExportResult
+
+    /**
+     * Check if user is signed in to Google with Tasks permission.
+     */
+    fun isGoogleSignedIn(): Boolean {
+        return GoogleTasksAuthManager.isSignedIn(getApplication())
+    }
+
+    /**
+     * Export a reminder to Google Tasks.
+     */
+    fun exportToGoogleTasks(reminder: ReminderUnit) {
+        viewModelScope.launch {
+            _googleTasksExportResult.value = GoogleTasksExportResult.Loading
+
+            val result = googleTasksRepo.createTaskFromReminder(reminder)
+
+            _googleTasksExportResult.value = when (result) {
+                is GoogleTasksRepository.TaskResult.Success -> {
+                    GoogleTasksExportResult.Success(result.taskTitle)
+                }
+                is GoogleTasksRepository.TaskResult.Error -> {
+                    GoogleTasksExportResult.Error(result.message)
+                }
+                is GoogleTasksRepository.TaskResult.NotSignedIn -> {
+                    GoogleTasksExportResult.NotSignedIn
+                }
+            }
+        }
+    }
+
+    /**
+     * Clear the export result (reset to Idle).
+     */
+    fun clearGoogleTasksExportResult() {
+        _googleTasksExportResult.value = GoogleTasksExportResult.Idle
     }
 }
