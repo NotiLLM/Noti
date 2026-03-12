@@ -1,6 +1,8 @@
 package org.muilab.notigpt.model.features
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
+import androidx.room.Ignore
 
 /**
  * A Reminder is the superset concept; Tasks are reminders where [isTask] is true.
@@ -20,15 +22,31 @@ data class ReminderUnit(
     val isTask: Boolean,
     val isCompleted: Boolean = false,
 
+    // Whether this reminder represents a calendar event
+    @ColumnInfo(defaultValue = "0")
+    val isEvent: Boolean = false,
+
     // Timestamps
     val lastUpdateTimestamp: Long,
     val deadlineTimestamp: Long,
 
+    // Event start/end times (unix ms, 0 = not set)
+    @ColumnInfo(defaultValue = "0")
+    val startTime: Long = 0L,
+    @ColumnInfo(defaultValue = "0")
+    val endTime: Long = 0L,
+
     // Estimated completion time in minutes
     val estimatedCompletionTime: Long,
 
-    // Associated notification keys
-    val associatedNotis: Set<String> = emptySet(),
+    /**
+     * Associated notification record IDs (notiRecordId format: "notiKey_postTime").
+     * More granular than notiKeys — identifies specific messages, not entire conversations.
+     *
+     * DB column keeps the legacy name "associatedNotis" to avoid a destructive migration.
+     */
+    @ColumnInfo(name = "associatedNotis")
+    val associatedNotiRecords: Set<String> = emptySet(),
 
     /**
      * Snapshot ID captured at the moment this reminder was extracted.
@@ -65,4 +83,12 @@ data class ReminderUnit(
      * If false, the reminder remains in DB but is hidden from list queries.
      */
     val isVisible: Boolean = true,
-)
+) {
+    /**
+     * Derive the set of notification keys from the record IDs.
+     * notiRecordId format: "notiKey_postTime" — we strip the last "_postTime" segment.
+     */
+    @get:Ignore
+    val associatedNotiKeys: Set<String>
+        get() = associatedNotiRecords.mapTo(mutableSetOf()) { it.substringBeforeLast("_") }
+}

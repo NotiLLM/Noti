@@ -112,6 +112,12 @@ interface NotiDrawerDao {
     @Query("UPDATE noti_drawer SET hasMemo = :value WHERE notiKey IN (:notiKeys)")
     fun setHasMemoByKeys(notiKeys: List<String>, value: Boolean)
 
+    @Query("UPDATE noti_drawer SET hasEvent = :value WHERE notiKey = :notiKey")
+    fun setHasEventByKey(notiKey: String, value: Boolean)
+
+    @Query("UPDATE noti_drawer SET hasEvent = :value WHERE notiKey IN (:notiKeys)")
+    fun setHasEventByKeys(notiKeys: List<String>, value: Boolean)
+
     // Manual ordering
     @Query("UPDATE noti_drawer SET sortPosition = :newPosition WHERE notiKey = :notiKey")
     suspend fun updateSortPosition(notiKey: String, newPosition: Int)

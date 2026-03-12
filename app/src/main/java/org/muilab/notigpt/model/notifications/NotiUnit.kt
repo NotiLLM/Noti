@@ -94,6 +94,10 @@ data class NotiUnit(
         get() = reminderAttr.hasMemo
         set(value) { reminderAttr.hasMemo = value }
 
+    var hasEvent: Boolean
+        get() = reminderAttr.hasEvent
+        set(value) { reminderAttr.hasEvent = value }
+
     var isSetToTop: Boolean
         get() = displayState.isSetToTop
         set(value) { displayState.isSetToTop = value }

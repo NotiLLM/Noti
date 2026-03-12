@@ -125,6 +125,7 @@
     <string name="tab_notifications">Notifications</string>
     <string name="tab_reminders">Reminders</string>
     <string name="tab_esm">Short survey</string>
+    <string name="tab_preferences">Preferences</string>
 
     <!-- ESM screen (UI chrome only; do not translate question/option content) -->
     <string name="esm_short_survey">Short survey</string>
@@ -160,4 +161,149 @@
     <string name="google_tasks_not_signed_in">Please sign in to Google first</string>
     <string name="google_tasks_exporting">Exporting to Google Tasks…</string>
     <string name="a11y_export_google_tasks">Export to Google Tasks</string>
+
+    <!-- Google Calendar -->
+    <string name="google_calendar_export">Export to Google Calendar</string>
+    <string name="google_calendar_no_app">No calendar app found</string>
+    <string name="a11y_export_google_calendar">Export to Google Calendar</string>
+
+    <!-- Export confirmation dialog -->
+    <string name="export_dialog_title_tasks">Export to Google Tasks</string>
+    <string name="export_dialog_title_calendar">Export to Google Calendar</string>
+    <string name="export_dialog_field_title">Title</string>
+    <string name="export_dialog_field_description">Description</string>
+    <string name="export_dialog_field_deadline">Deadline</string>
+    <string name="export_dialog_field_start_time">Start time</string>
+    <string name="export_dialog_field_end_time">End time</string>
+    <string name="export_dialog_no_deadline">No deadline set</string>
+    <string name="export_dialog_no_time">Not set (tap to set)</string>
+    <string name="export_dialog_confirm">Export</string>
+    <string name="export_dialog_clear_deadline">Clear deadline</string>
+    <string name="export_dialog_full_day">Full day event</string>
+    <string name="export_dialog_pick_date">Select date</string>
+    <string name="export_dialog_pick_time">Select time</string>
+    <string name="export_dialog_field_date">Date</string>
+    <string name="a11y_quick_export_tasks">Quick export to Google Tasks</string>
+    <string name="a11y_quick_export_calendar">Quick export to Google Calendar</string>
+
+    <!-- Preference learning – Snackbar -->
+    <string name="pref_snackbar_deleted">Deleted. Want to fine-tune extraction?</string>
+    <string name="pref_snackbar_extracted">Extracted. Want to fine-tune extraction?</string>
+    <string name="pref_snackbar_action">Tune</string>
+
+    <!-- Preference learning – BottomSheet scope -->
+    <string name="pref_scope_title_edit">What should I learn from this edit?</string>
+    <string name="pref_scope_title_delete">What should I learn from this deletion?</string>
+    <string name="pref_scope_title_extract">What should I learn from this?</string>
+    <string name="pref_scope_just_this_one">Just this one</string>
+    <string name="pref_scope_remember">Remember this for similar notifications</string>
+    <string name="pref_scope_make_rule">Help me make a rule</string>
+    <string name="pref_scope_not_now">Not now</string>
+
+    <!-- Preference learning – BottomSheet reason (EDIT) -->
+    <string name="pref_reason_edit_title">What was wrong with the original extraction?</string>
+    <string name="pref_reason_edit_missing">Missing important details</string>
+    <string name="pref_reason_edit_wording">Wrong wording</string>
+    <string name="pref_reason_edit_deadline">Wrong deadline/time</string>
+    <string name="pref_reason_edit_person">Wrong person/responsibility</string>
+    <string name="pref_reason_edit_should_update">Should have updated an existing task instead of creating a new one</string>
+    <string name="pref_reason_edit_too_much">Included too much unnecessary detail</string>
+    <string name="pref_reason_other">Other (Let me explain)</string>
+
+    <!-- Preference learning – BottomSheet reason (DELETE) -->
+    <string name="pref_reason_delete_title">Why wasn\'t this worth keeping as a task?</string>
+    <string name="pref_reason_delete_handled">I already handled it</string>
+    <string name="pref_reason_delete_not_mine">It was not my responsibility</string>
+    <string name="pref_reason_delete_informational">It was only informational</string>
+    <string name="pref_reason_delete_incorrect">It was extracted incorrectly</string>
+    <string name="pref_reason_delete_not_interested">I did not care about it / Not interested</string>
+
+    <!-- Preference learning – BottomSheet reason (MANUAL_EXTRACT) -->
+    <string name="pref_reason_extract_title">Why should notifications like this become tasks/memos?</string>
+    <string name="pref_reason_extract_later">I needed to do something later</string>
+    <string name="pref_reason_extract_followup">It needed follow-up or a reply</string>
+    <string name="pref_reason_extract_urgent">It was important or urgent</string>
+    <string name="pref_reason_extract_tracking">It updates something I was already tracking</string>
+    <string name="pref_reason_extract_keep">I wanted to keep it for later</string>
+
+    <!-- Preference learning – BottomSheet sub-reason -->
+    <string name="pref_subreason_title">Can you be more specific?</string>
+    <string name="pref_sub_no_task_next_time">Don\'t create a task next time</string>
+    <string name="pref_sub_only_if_not_handled">Only create if I haven\'t handled it soon</string>
+    <string name="pref_sub_save_as_memo">Save as memo instead</string>
+    <string name="pref_sub_ask_when_unsure">Ask me when unsure</string>
+    <string name="pref_sub_only_directly_addressed">Only extract when I am directly addressed</string>
+    <string name="pref_sub_only_clearly_for_me">Only extract when it is clearly for me</string>
+    <string name="pref_sub_ask_ambiguous_group">Ask me when group messages are ambiguous</string>
+    <string name="pref_sub_do_not_extract">Do not extract these</string>
+    <string name="pref_sub_only_action_request">Only extract when there is a direct action request</string>
+    <string name="pref_sub_wrong_wording">Wrong wording</string>
+    <string name="pref_sub_wrong_person">Wrong person/responsibility</string>
+    <string name="pref_sub_missing_context">Missing context</string>
+    <string name="pref_sub_should_update">Should update an existing task</string>
+    <string name="pref_sub_same_sender">Same sender</string>
+    <string name="pref_sub_same_topic">Same topic</string>
+    <string name="pref_sub_similar_wording">Similar wording</string>
+    <string name="pref_sub_same_thread">Same thread/update type</string>
+    <string name="pref_sub_similar_timing">Similar timing/deadline</string>
+    <string name="pref_sub_similar_update_type">Similar type of update</string>
+    <string name="pref_sub_let_me_explain">Let me explain</string>
+
+    <!-- Preference learning – syncing -->
+    <string name="pref_syncing">Saving your preference…</string>
+    <string name="pref_sync_failed">Failed to sync preference. Please try again.</string>
+    <string name="pref_sync_error">Error syncing preference.</string>
+
+    <!-- Preference Chat screen -->
+    <string name="pref_chat_title">Preference Rules Chat</string>
+    <string name="pref_chat_clear_desc">Clear chat</string>
+    <string name="pref_chat_empty_prompt">Tell me how you\'d like me to handle your notifications.</string>
+    <string name="pref_chat_empty_example">For example: \"Only extract tasks from Slack if they mention me\"</string>
+    <string name="pref_chat_active_rules_count">You have %1$d active rule(s).</string>
+    <string name="pref_chat_input_placeholder">Describe a preference…</string>
+    <string name="pref_chat_send_desc">Send</string>
+    <string name="pref_chat_thinking">Thinking…</string>
+    <string name="pref_chat_clear_dialog_title">Clear chat history?</string>
+    <string name="pref_chat_clear_dialog_body">This will clear all messages in this conversation. Your saved preference rules will not be affected.</string>
+    <string name="pref_chat_clear_confirm">Clear</string>
+    <string name="pref_chat_no_network_title">No network connection</string>
+    <string name="pref_chat_no_network_body">Please turn on Wi-Fi or cellular data before chatting. The preference assistant requires a network connection.</string>
+    <string name="pref_chat_active_rules_header">Your active rules:</string>
+    <string name="pref_chat_active_rules_more">… and %1$d more</string>
+
+    <!-- Preference Chat – proposed actions -->
+    <string name="pref_action_add">Add Rule</string>
+    <string name="pref_action_modify">Modify Rule</string>
+    <string name="pref_action_delete">Delete Rule</string>
+    <string name="pref_action_remove_label">Remove: %1$s</string>
+    <string name="pref_action_type_label">Type: %1$s</string>
+    <string name="pref_action_confirm">Confirm</string>
+    <string name="pref_action_dismiss">Dismiss</string>
+    <string name="pref_action_confirmed">✓ Confirmed</string>
+    <string name="pref_action_dismissed">Dismissed</string>
+
+    <!-- Preference conflicts -->
+    <string name="pref_conflict_count_one">⚠ 1 unresolved conflict</string>
+    <string name="pref_conflict_count_many">⚠ %1$d unresolved conflicts</string>
+    <string name="pref_conflict_dismiss">Dismiss</string>
+    <string name="pref_conflict_resolve">Resolve</string>
+
+    <!-- Chat context card (shown when chat is entered from a flow redirect) -->
+    <string name="pref_chat_context_edit">Refining extraction for an edited reminder:</string>
+    <string name="pref_chat_context_delete">Refining extraction for a deleted reminder:</string>
+    <string name="pref_chat_context_extract">Refining extraction for a manually extracted notification:</string>
+    <string name="pref_chat_context_before">Before:</string>
+    <string name="pref_chat_context_after">After:</string>
+
+    <!-- Active preferences panel -->
+    <string name="pref_active_rules_title">Active Preferences</string>
+    <string name="pref_active_rules_empty">No preferences set yet.</string>
+    <string name="pref_active_rules_count">%1$d rule(s)</string>
+    <string name="pref_active_rule_delete_confirm_title">Delete this rule?</string>
+    <string name="pref_active_rule_delete_confirm_body">Are you sure you want to remove this preference rule?</string>
+
+    <!-- Generic -->
+    <string name="ok">OK</string>
+    <string name="cancel">Cancel</string>
 </resources>
+

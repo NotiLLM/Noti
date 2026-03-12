@@ -14,7 +14,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -59,6 +61,13 @@ class DrawerViewModel(
 ) : AndroidViewModel(application) {
 
     private val filters = DrawerFiltersState()
+
+    /**
+     * Emits notiKey whenever the user triggers a manual extract_reminder action.
+     * Observed in AppScaffold to trigger preference learning (Flow 3).
+     */
+    private val _manualExtractEvent = MutableSharedFlow<String>(extraBufferCapacity = 1)
+    val manualExtractEvent: SharedFlow<String> = _manualExtractEvent
 
     val isTargetLoading: StateFlow<Boolean> = filters.isTargetLoading
     val isSortingMode: StateFlow<Boolean> = filters.isSortingMode
@@ -235,6 +244,10 @@ class DrawerViewModel(
             viewModelScope.launch {
                 actionsController.actOnNotiLegacy(notiKey, action)
                 if (action.contains("dismiss")) postOngoingNotification(context)
+                // Emit event for preference learning (Flow 3: Manual Extract)
+                if (action == "extract_reminder" || action.startsWith("extract_reminder_with_records")) {
+                    _manualExtractEvent.tryEmit(notiKey)
+                }
             }
         }
     }
@@ -244,6 +257,10 @@ class DrawerViewModel(
         viewModelScope.launch {
             actionsController.actOnNoti(notiKey, action)
             if (action.wireValue.contains("dismiss")) postOngoingNotification(context)
+            // Emit event for preference learning (Flow 3: Manual Extract)
+            if (action is NotiActionType.ExtractReminder) {
+                _manualExtractEvent.tryEmit(notiKey)
+            }
         }
     }
 

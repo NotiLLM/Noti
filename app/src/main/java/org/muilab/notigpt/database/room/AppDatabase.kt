@@ -7,6 +7,8 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import org.muilab.notigpt.model.features.ExtractionPreference
+import org.muilab.notigpt.model.features.PreferenceConflict
 import org.muilab.notigpt.model.features.ReminderUnit
 import org.muilab.notigpt.model.notifications.NotiAction
 import org.muilab.notigpt.model.notifications.NotiGroup
@@ -27,9 +29,11 @@ import org.muilab.notigpt.model.features.ReminderExtractionSnapshot
         EsmInstance::class,
         EsmAnswerEvent::class,
         ReminderExtractionSnapshot::class,
+        ExtractionPreference::class,
+        PreferenceConflict::class,
     ],
     views = [VisibleNotiRecord::class],
-    version = 28,
+    version = 31,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -42,6 +46,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun groupDao(): NotiGroupDao
     abstract fun esmDao(): EsmDao
     abstract fun reminderSnapshotDao(): ReminderSnapshotDao
+    abstract fun extractionPreferenceDao(): ExtractionPreferenceDao
+    abstract fun preferenceConflictDao(): PreferenceConflictDao
 
     companion object {
         @Volatile
@@ -64,6 +70,43 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE reminder_list ADD COLUMN origin TEXT NOT NULL DEFAULT 'manual'")
                 db.execSQL("ALTER TABLE reminder_list ADD COLUMN humanEditCount INTEGER NOT NULL DEFAULT 0")
                 db.execSQL("ALTER TABLE reminder_list ADD COLUMN deletedAtMs INTEGER")
+            }
+        }
+
+        private val MIGRATION_28_29 = object : Migration(28, 29) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """CREATE TABLE IF NOT EXISTS extraction_preferences (
+                        id TEXT NOT NULL PRIMARY KEY,
+                        statement TEXT NOT NULL,
+                        preferenceType TEXT NOT NULL,
+                        createdAt INTEGER NOT NULL,
+                        updatedAt INTEGER NOT NULL
+                    )"""
+                )
+            }
+        }
+
+        private val MIGRATION_29_30 = object : Migration(29, 30) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """CREATE TABLE IF NOT EXISTS preference_conflicts (
+                        conflictId TEXT NOT NULL PRIMARY KEY,
+                        description TEXT NOT NULL,
+                        involvedPreferenceIds TEXT NOT NULL,
+                        source TEXT NOT NULL,
+                        createdAt INTEGER NOT NULL
+                    )"""
+                )
+            }
+        }
+
+        private val MIGRATION_30_31 = object : Migration(30, 31) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE reminder_list ADD COLUMN isEvent INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE reminder_list ADD COLUMN startTime INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE reminder_list ADD COLUMN endTime INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE noti_drawer ADD COLUMN hasEvent INTEGER NOT NULL DEFAULT 0")
             }
         }
 
@@ -96,6 +139,9 @@ abstract class AppDatabase : RoomDatabase() {
                 .addMigrations(AppDatabaseMigrations.MIGRATION_25_26)
                 .addMigrations(MIGRATION_26_27)
                 .addMigrations(MIGRATION_27_28)
+                .addMigrations(MIGRATION_28_29)
+                .addMigrations(MIGRATION_29_30)
+                .addMigrations(MIGRATION_30_31)
                 .setJournalMode(JournalMode.TRUNCATE)
                 .build()
         }

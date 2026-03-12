@@ -89,7 +89,7 @@ class EsmViewModel(app: Application) : AndroidViewModel(app) {
 
             val notiKeys: List<String> = when {
                 notiKeyToRecordIds.isNotEmpty() -> notiKeyToRecordIds.keys.toList()
-                rem != null && rem.associatedNotis.isNotEmpty() -> rem.associatedNotis.toList()
+                rem != null && rem.associatedNotiRecords.isNotEmpty() -> rem.associatedNotiKeys.toList()
                 else -> emptyList()
             }
 

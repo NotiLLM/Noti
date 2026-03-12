@@ -48,6 +48,7 @@ fun AppBottomBar(
     unreadNotificationCount: Int,
     pendingTaskCount: Int,
     pendingEsmCount: Int,
+    unresolvedConflictCount: Int = 0,
 ) {
     NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer) {
         NavigationBarItem(
@@ -93,6 +94,21 @@ fun AppBottomBar(
         //     },
         //     label = { Text(stringResource(R.string.tab_esm)) }
         // )
+
+        NavigationBarItem(
+            selected = selectedTab == Tab.Preferences,
+            onClick = { onTabSelected(Tab.Preferences) },
+            icon = {
+                BadgeIcon(
+                    iconRes = R.drawable.task_no,
+                    contentDescription = stringResource(R.string.tab_preferences),
+                    badgeCount = unresolvedConflictCount,
+                    badgeColor = MaterialTheme.colorScheme.error,
+                    badgeTextColor = MaterialTheme.colorScheme.onError,
+                )
+            },
+            label = { Text(stringResource(R.string.tab_preferences)) }
+        )
     }
 }
 
@@ -100,4 +116,5 @@ enum class Tab {
     Notifications,
     Reminders,
     ESM,
+    Preferences,
 }

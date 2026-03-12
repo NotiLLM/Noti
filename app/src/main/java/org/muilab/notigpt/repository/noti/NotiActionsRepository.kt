@@ -229,4 +229,16 @@ class NotiActionsRepository(
             registerShouldExtractForNotiUnit(notiKey)
         }
     }
+
+    suspend fun setHasEvent(notiKey: String, hasEvent: Boolean) {
+        val existing = notiDrawerDao.getByNotiKey(notiKey) ?: return
+        notiDrawerDao.setHasEventByKey(notiKey, hasEvent)
+
+        // Never demote the flag once it's true.
+        if (!existing.shouldExtractReminder && hasEvent) {
+            Log.d("NotiActionsRepository", "Setting shouldExtractReminder to true for $notiKey")
+            notiDrawerDao.setShouldExtractReminderByKey(notiKey, true)
+            registerShouldExtractForNotiUnit(notiKey)
+        }
+    }
 }

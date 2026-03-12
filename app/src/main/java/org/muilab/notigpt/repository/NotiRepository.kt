@@ -118,9 +118,10 @@ class NotiRepository(
         actionsRepo.markNotiRead(notiKey)
     }
 
-    suspend fun setScanStates(notiKey: String, hasTask: Boolean, hasMemo: Boolean) {
+    suspend fun setScanStates(notiKey: String, hasTask: Boolean, hasMemo: Boolean, hasEvent: Boolean) {
         actionsRepo.setHasTask(notiKey, hasTask)
         actionsRepo.setHasMemo(notiKey, hasMemo)
+        actionsRepo.setHasEvent(notiKey, hasEvent)
     }
 
     suspend fun setPinnedState(notiKey: String, pinned: Boolean) {

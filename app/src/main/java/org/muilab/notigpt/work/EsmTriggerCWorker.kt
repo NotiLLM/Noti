@@ -48,9 +48,9 @@ class EsmTriggerCWorker(
         }
 
         // Pick candidate reminder for Trigger C.
-        // Only auto-extracted tasks (associatedNotis not empty).
+        // Only auto-extracted tasks (associatedNotiRecords not empty).
         val tasksVisible = try { reminderDao.observeTasks().first() } catch (_: Exception) { emptyList() }
-        val autoExtracted = tasksVisible.filter { it.associatedNotis.isNotEmpty() }
+        val autoExtracted = tasksVisible.filter { it.associatedNotiRecords.isNotEmpty() }
 
         if (autoExtracted.isEmpty()) {
             Log.d(TAG, "Skip Trigger C: no auto-extracted tasks visible (tasksVisible=${tasksVisible.size})")

@@ -56,12 +56,12 @@ class EsmRepository(
      *   - If dismissed: include its NotiUnit + last record (latest record regardless of dismissal).
      */
     suspend fun createTestEsmForReminder(reminder: ReminderUnit): EsmInstance = withContext(Dispatchers.IO) {
-        require(reminder.associatedNotis.isNotEmpty()) { "Reminder has no associated notifications" }
+        require(reminder.associatedNotiRecords.isNotEmpty()) { "Reminder has no associated notifications" }
 
         val now = System.currentTimeMillis()
         val snapshotId = "snap_${UUID.randomUUID()}"
 
-        val notiKeys = reminder.associatedNotis.toList()
+        val notiKeys = reminder.associatedNotiKeys.toList()
 
         val drawerDao = db.drawerDao()
         val recordDao = db.recordDao()

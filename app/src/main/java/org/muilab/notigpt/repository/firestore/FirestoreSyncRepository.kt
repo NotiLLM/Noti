@@ -110,11 +110,14 @@ class FirestoreSyncRepository(
             "humanEditCount" to reminder.humanEditCount,
             "userEdited" to reminder.userEdited,
             "isTask" to reminder.isTask,
+            "isEvent" to reminder.isEvent,
             "isCompleted" to reminder.isCompleted,
             "deadlineTimestamp" to (if (reminder.deadlineTimestamp > 0L) TimeFormatters.toLocalIso(reminder.deadlineTimestamp, zoneId) else ""),
+            "startTime" to (if (reminder.startTime > 0L) TimeFormatters.toLocalIso(reminder.startTime, zoneId) else ""),
+            "endTime" to (if (reminder.endTime > 0L) TimeFormatters.toLocalIso(reminder.endTime, zoneId) else ""),
             "estimatedCompletionTime" to reminder.estimatedCompletionTime,
-            "associatedNotis" to reminder.associatedNotis.toList(),
-            "associatedNotisCount" to reminder.associatedNotis.size,
+            "associatedNotiRecords" to reminder.associatedNotiRecords.toList(),
+            "associatedNotiRecordsCount" to reminder.associatedNotiRecords.size,
             "extractionSnapshotId" to reminder.extractionSnapshotId,
             "isVisible" to reminder.isVisible,
             "deletedAt" to (reminder.deletedAtMs?.let { TimeFormatters.toLocalIso(it, zoneId) } ?: ""),
@@ -132,7 +135,7 @@ class FirestoreSyncRepository(
 
         // === Notis subcollection: ONLY upload records referenced by the reminder snapshot ===
         val snapshotId = reminder.extractionSnapshotId
-        if (snapshotId.isNullOrBlank() || reminder.associatedNotis.isEmpty()) return@withContext
+        if (snapshotId.isNullOrBlank() || reminder.associatedNotiRecords.isEmpty()) return@withContext
 
         try {
             val snap = db.reminderSnapshotDao().getSnapshot(snapshotId) ?: return@withContext
@@ -141,7 +144,7 @@ class FirestoreSyncRepository(
             val mapping = grouping.notiKeyToRecordIds
             if (mapping.isEmpty()) return@withContext
 
-            val wantedKeys = reminder.associatedNotis.toList().filter { it in mapping.keys }
+            val wantedKeys = reminder.associatedNotiKeys.toList().filter { it in mapping.keys }
             if (wantedKeys.isEmpty()) return@withContext
 
             val wantedRecordIds: Set<String> = wantedKeys.flatMap { mapping[it].orEmpty() }.toSet()

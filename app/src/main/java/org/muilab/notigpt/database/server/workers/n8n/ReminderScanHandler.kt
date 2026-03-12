@@ -70,7 +70,8 @@ internal object ReminderScanHandler {
             "overallTitle" to notiOverallTitle,
             "secondOverallTitle" to notiSecondOverallTitle,
             "notiContent" to notiContentList,
-            "pastContext" to pastContextList
+            "pastContext" to pastContextList,
+            "extractionPreferences" to ctx.getExtractionPreferencesPayload()
         )
         val json = gson.toJson(payload)
         val requestBody = json.toRequestBody("application/json; charset=utf-8".toMediaType())
@@ -101,11 +102,12 @@ internal object ReminderScanHandler {
 
             val inner = JSONObject(innerJson)
 
-            // hasTask/hasMemo are 1/0 in your response
+            // hasTask/hasMemo/hasEvent are 1/0 in your response
             val hasTask = inner.optInt("hasTask", 0) == 1 || inner.optBoolean("hasTask", false)
             val hasMemo = inner.optInt("hasMemo", 0) == 1 || inner.optBoolean("hasMemo", false)
+            val hasEvent = inner.optInt("hasEvent", 0) == 1 || inner.optBoolean("hasEvent", false)
 
-            ctx.notiRepository.setScanStates(notiKey, hasTask, hasMemo)
+            ctx.notiRepository.setScanStates(notiKey, hasTask, hasMemo, hasEvent)
             ctx.database.recordDao().setRecordsTaskScannedByIds(notiRecords.map { it.notiRecordId })
 
         } catch (e: Exception) {

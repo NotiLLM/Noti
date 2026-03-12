@@ -76,5 +76,9 @@ class Constants {
         // n8n task API types
         const val N8N_TASK_SCAN = "task_scan"
         const val N8N_TASK_EXTRACTION = "task_extraction"
+
+        // n8n preference API types
+        const val N8N_PREFERENCE_QUICK_SYNC = "preference_quick_sync"
+        const val N8N_PREFERENCE_CHAT_INTERACT = "preference_chat_interact"
     }
 }

@@ -10,6 +10,7 @@ internal object N8nRecordFormatter {
         val content = record.content
         val rel = N8nTimeUtils.relativeTime(record.time)
         return mapOf(
+            "record_id" to record.notiRecordId,
             "abs_time" to absTime,
             "title" to title,
             "content" to content,

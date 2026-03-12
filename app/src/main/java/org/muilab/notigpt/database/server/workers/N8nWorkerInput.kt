@@ -5,6 +5,7 @@ import org.muilab.notigpt.util.Constants.Companion.DIFY_POST_NOTIFICATION_ACTION
 import org.muilab.notigpt.util.Constants.Companion.DIFY_UPDATE_NOTIFICATION
 import org.muilab.notigpt.util.Constants.Companion.N8N_TASK_EXTRACTION
 import org.muilab.notigpt.util.Constants.Companion.N8N_TASK_SCAN
+import org.muilab.notigpt.util.Constants.Companion.N8N_PREFERENCE_QUICK_SYNC
 
 /**
  * Typed view of WorkManager input data for [N8nAPIWorker].
@@ -36,6 +37,12 @@ sealed interface N8nWorkerInput {
         val actionTime: Long,
     ) : N8nWorkerInput
 
+    /** Fires a quick-sync of preference selections to the backend. */
+    data class PreferenceQuickSync(
+        override val webhookPath: String,
+        val payloadJson: String,
+    ) : N8nWorkerInput
+
     companion object {
         /** Parses the legacy wire format used throughout the app. */
         fun from(input: Data): N8nWorkerInput? {
@@ -63,6 +70,11 @@ sealed interface N8nWorkerInput {
                     notiKey = input.getString("noti_key") ?: return null,
                     actionType = input.getString("action_type") ?: return null,
                     actionTime = input.getLong("action_time", -1L),
+                )
+
+                N8N_PREFERENCE_QUICK_SYNC -> PreferenceQuickSync(
+                    webhookPath = webhookPath,
+                    payloadJson = input.getString("payload_json") ?: return null,
                 )
 
                 else -> null

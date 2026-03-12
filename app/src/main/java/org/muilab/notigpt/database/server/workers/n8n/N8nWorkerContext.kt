@@ -25,6 +25,24 @@ internal class N8nWorkerContext(
         ReminderRepository(database.reminderListDao(), appContext)
     }
 
+    /**
+     * Returns the current active extraction-preference statements formatted
+     * for inclusion in n8n webhook payloads.
+     */
+    suspend fun getExtractionPreferencesPayload(): List<Map<String, String>> {
+        return try {
+            database.extractionPreferenceDao().getAllPreferences().map { p ->
+                mapOf(
+                    "id" to p.id,
+                    "statement" to p.statement,
+                    "type" to p.preferenceType,
+                )
+            }
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
     @Suppress("unused")
     fun getNotiUnit(notiKey: String) = notiRepository.getNotiUnit(notiKey)
 

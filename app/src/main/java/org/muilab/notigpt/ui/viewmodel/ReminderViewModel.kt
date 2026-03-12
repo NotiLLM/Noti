@@ -91,7 +91,7 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
             lastUpdateTimestamp = now,
             deadlineTimestamp = 0L,
             estimatedCompletionTime = 0L,
-            associatedNotis = emptySet(),
+            associatedNotiRecords = emptySet(),
             extractionSnapshotId = null,
             origin = "manual",
             humanEditCount = 0,

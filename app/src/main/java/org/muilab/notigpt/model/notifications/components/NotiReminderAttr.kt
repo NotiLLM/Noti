@@ -6,5 +6,6 @@ package org.muilab.notigpt.model.notifications.components
 data class NotiReminderAttr(
     var shouldExtractReminder: Boolean = false,
     var hasTask: Boolean = false,
-    var hasMemo: Boolean = false
+    var hasMemo: Boolean = false,
+    var hasEvent: Boolean = false
 )
