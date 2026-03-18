@@ -199,7 +199,11 @@ internal object ReminderExtractionHandler {
                     "estimatedCompletionMinutes" to r.estimatedCompletionTime,
                     "associatedNotiRecords" to r.associatedNotiRecords.toList(),
                     "userEdited" to r.userEdited,
-                    "isCompleted" to r.isCompleted
+                    "isCompleted" to r.isCompleted,
+                    "buttons" to r.buttons,
+                    "sortScore" to r.sortScore,
+                    "isPinned" to r.isPinned,
+                    "reRankHistory" to r.reRankHistory,
                 )
             }
 
@@ -271,6 +275,26 @@ internal object ReminderExtractionHandler {
                         }
                         val isCompleted = it.optBoolean("isCompleted", false)
 
+                        // Parse buttons
+                        val buttonsArr = it.optJSONArray("buttons")
+                        val buttons = buttonsArr?.toString() ?: "[]"
+
+                        // Parse sortScore and reRankRecord
+                        val sortScore = it.optDouble("sortScore", 50.0).toFloat()
+                        val reRankRecord = it.optJSONObject("reRankRecord")
+                        val reRankHistory = JSONArray().apply {
+                            if (reRankRecord != null) {
+                                put(reRankRecord)
+                            } else {
+                                put(JSONObject().apply {
+                                    put("rankedAt", System.currentTimeMillis())
+                                    put("trigger", "INITIAL_CREATE")
+                                    put("newScore", sortScore)
+                                    put("scoreExplanation", "Initial creation from user-triggered extraction")
+                                })
+                            }
+                        }.toString()
+
                         // If we're overwriting an existing reminder, merge relevant records from its old snapshot
                         // into this extraction snapshot (so downstream sync/UI have the full context).
                         try {
@@ -316,6 +340,11 @@ internal object ReminderExtractionHandler {
                             humanEditCount = 0,
                             deletedAtMs = null,
                             userEdited = false,
+                            buttons = buttons,
+                            isViewed = false,
+                            isPinned = false,
+                            sortScore = sortScore,
+                            reRankHistory = reRankHistory,
                         )
 
                         reminderRepository.upsert(newUnit)
@@ -529,7 +558,11 @@ internal object ReminderExtractionHandler {
                 "estimatedCompletionMinutes" to r.estimatedCompletionTime,
                 "associatedNotiRecords" to r.associatedNotiRecords.toList(),
                 "userEdited" to r.userEdited,
-                "isCompleted" to r.isCompleted
+                "isCompleted" to r.isCompleted,
+                "buttons" to r.buttons,
+                "sortScore" to r.sortScore,
+                "isPinned" to r.isPinned,
+                "reRankHistory" to r.reRankHistory,
             )
         }
 
@@ -601,6 +634,26 @@ internal object ReminderExtractionHandler {
                     }
                     val isCompleted = it.optBoolean("isCompleted", false)
 
+                    // Parse buttons
+                    val buttonsArr = it.optJSONArray("buttons")
+                    val buttons = buttonsArr?.toString() ?: "[]"
+
+                    // Parse sortScore and reRankRecord
+                    val sortScore = it.optDouble("sortScore", 50.0).toFloat()
+                    val reRankRecord = it.optJSONObject("reRankRecord")
+                    val reRankHistory = JSONArray().apply {
+                        if (reRankRecord != null) {
+                            put(reRankRecord)
+                        } else {
+                            put(JSONObject().apply {
+                                put("rankedAt", System.currentTimeMillis())
+                                put("trigger", "INITIAL_CREATE")
+                                put("newScore", sortScore)
+                                put("scoreExplanation", "Initial creation from auto extraction")
+                            })
+                        }
+                    }.toString()
+
                     // Merge old snapshot context if this reminderId already exists.
                     try {
                         val existing = if (reminderId.isNotBlank()) reminderRepository.getById(reminderId) else null
@@ -645,6 +698,11 @@ internal object ReminderExtractionHandler {
                         humanEditCount = 0,
                         deletedAtMs = null,
                         userEdited = false,
+                        buttons = buttons,
+                        isViewed = false,
+                        isPinned = false,
+                        sortScore = sortScore,
+                        reRankHistory = reRankHistory,
                     )
 
                     reminderRepository.upsert(unit)

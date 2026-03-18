@@ -18,6 +18,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.receiveAsFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.platform.LocalContext
@@ -85,21 +87,33 @@ fun AppScaffold(
     val snackExtractMsg = stringResource(R.string.pref_snackbar_extracted)
     val snackAction = stringResource(R.string.pref_snackbar_action)
 
+    // Use a Channel so rapid successive events are queued rather than dropped.
+    // LaunchedEffect(snackbarEvent) would cancel the in-flight showSnackbar coroutine
+    // each time a new event arrives, causing snackbars to silently disappear.
+    val snackbarChannel = remember { Channel<PreferenceViewModel.SnackbarEvent>(Channel.UNLIMITED) }
+
     LaunchedEffect(snackbarEvent) {
         val event = snackbarEvent ?: return@LaunchedEffect
-        val message = when (event.entryPoint) {
-            PreferenceEntryPoint.DELETE -> snackDeleteMsg
-            PreferenceEntryPoint.MANUAL_EXTRACT -> snackExtractMsg
-            PreferenceEntryPoint.EDIT -> return@LaunchedEffect // edits use BottomSheet directly
-        }
-        val result = snackbarHostState.showSnackbar(
-            message = message,
-            actionLabel = snackAction,
-            duration = SnackbarDuration.Short,
-        )
-        when (result) {
-            SnackbarResult.ActionPerformed -> preferenceViewModel.promoteSnackbarToFlow()
-            SnackbarResult.Dismissed -> preferenceViewModel.dismissSnackbar()
+        snackbarChannel.trySend(event)
+        preferenceViewModel.dismissSnackbar() // clear the StateFlow so next event can arrive
+    }
+
+    LaunchedEffect(snackbarChannel) {
+        snackbarChannel.receiveAsFlow().collect { event ->
+            val message = when (event.entryPoint) {
+                PreferenceEntryPoint.DELETE -> snackDeleteMsg
+                PreferenceEntryPoint.MANUAL_EXTRACT -> snackExtractMsg
+                PreferenceEntryPoint.EDIT -> return@collect // edits use BottomSheet directly
+            }
+            val result = snackbarHostState.showSnackbar(
+                message = message,
+                actionLabel = snackAction,
+                duration = SnackbarDuration.Short,
+            )
+            when (result) {
+                SnackbarResult.ActionPerformed -> preferenceViewModel.promoteSnackbarToFlow(event)
+                SnackbarResult.Dismissed -> { /* already cleared */ }
+            }
         }
     }
 

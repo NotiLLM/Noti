@@ -8,6 +8,7 @@ import android.util.Log
 import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.border
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -56,11 +57,14 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -75,6 +79,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
 import org.json.JSONObject
 import org.muilab.notigpt.R
 import org.muilab.notigpt.model.features.PreferenceEntryPoint
@@ -100,6 +105,10 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.constraintlayout.helper.widget.Grid
 import kotlinx.coroutines.flow.distinctUntilChanged
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.material3.AssistChip
+import sh.calvin.reorderable.ReorderableItem
+import sh.calvin.reorderable.rememberReorderableLazyListState
 
 @Composable
 fun RemindersScreen(
@@ -112,13 +121,31 @@ fun RemindersScreen(
 
     // Drawer VM is needed to reuse the same notification/app launching logic as NotiRecordContextCard.
     val context = LocalContext.current
+    val strGoogleTasksNotSignedIn = stringResource(R.string.google_tasks_not_signed_in)
+    val strGoogleTasksSuccess = stringResource(R.string.google_tasks_success)
+    val strGoogleTasksErrorFmt = stringResource(R.string.google_tasks_error, "%s")
+    val strGoogleCalendarNoApp = stringResource(R.string.google_calendar_no_app)
 
     val reminders by vm.reminders.collectAsState()
     val filter by vm.filter.collectAsState()
 
+    // Local mutable copy for live drag reordering visual feedback
+    val localReminders = remember { androidx.compose.runtime.mutableStateListOf<ReminderUnit>() }
+    LaunchedEffect(reminders) {
+        // Only sync when not mid-drag (list size or content changed from DB)
+        localReminders.clear()
+        localReminders.addAll(reminders)
+    }
+
     var editing by remember { mutableStateOf<ReminderUnit?>(null) }
     var editingId by remember { mutableStateOf<String?>(null) }
     var editingInitialSnapshot by remember { mutableStateOf<ReminderUnit?>(null) }
+
+    // Long-press feedback dialog
+    var feedbackDialogReminder by remember { mutableStateOf<ReminderUnit?>(null) }
+
+    // Regenerate-all confirmation dialog
+    var showRegenerateAllDialog by remember { mutableStateOf(false) }
 
     // ===== Google Tasks integration =====
     val googleTasksExportResult by vm.googleTasksExportResult.collectAsState()
@@ -140,7 +167,7 @@ fun RemindersScreen(
                 } else {
                     android.widget.Toast.makeText(
                         context,
-                        context.getString(R.string.google_tasks_not_signed_in),
+                        strGoogleTasksNotSignedIn,
                         android.widget.Toast.LENGTH_SHORT
                     ).show()
                 }
@@ -155,7 +182,7 @@ fun RemindersScreen(
             is ReminderViewModel.GoogleTasksExportResult.Success -> {
                 android.widget.Toast.makeText(
                     context,
-                    context.getString(R.string.google_tasks_success),
+                    strGoogleTasksSuccess,
                     android.widget.Toast.LENGTH_SHORT
                 ).show()
                 vm.clearGoogleTasksExportResult()
@@ -163,7 +190,7 @@ fun RemindersScreen(
             is ReminderViewModel.GoogleTasksExportResult.Error -> {
                 android.widget.Toast.makeText(
                     context,
-                    context.getString(R.string.google_tasks_error, r.message),
+                    strGoogleTasksErrorFmt.replace("%s", r.message ?: ""),
                     android.widget.Toast.LENGTH_LONG
                 ).show()
                 vm.clearGoogleTasksExportResult()
@@ -209,8 +236,35 @@ fun RemindersScreen(
 
     // Trigger B (v2): when a reminder card is fully visible in the list viewport, consider it "viewed".
     // We only apply this to generated reminders (has associated notifications), and only once per reminderId.
-    // Reuse the same Context we already grabbed above.
+    // isViewed is NOT written to DB immediately — it is deferred until the user leaves this screen
+    // (tab switch / composable disposal) or the app goes to background (ON_PAUSE), to avoid
+    // re-sorting glitches while the user is still looking at the list.
     var viewedReminderIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+
+    // Keep a ref to the latest set so DisposableEffect / lifecycle callbacks can read it.
+    val latestViewedIds by rememberUpdatedState(viewedReminderIds)
+
+    // Flush pending viewed IDs to DB.
+    val flushViewed: () -> Unit = remember(vm) {
+        { vm.markViewedBatch(latestViewedIds) }
+    }
+
+    // Flush when the composable leaves composition (tab switch, settings opened, etc.)
+    DisposableEffect(Unit) {
+        onDispose { flushViewed() }
+    }
+
+    // Flush when the app goes to background
+    val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_PAUSE) {
+                flushViewed()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     LaunchedEffect(listState, reminders) {
         snapshotFlow {
@@ -224,7 +278,7 @@ fun RemindersScreen(
                 }
                 .mapNotNull { info ->
                     val idx = info.index
-                    reminders.getOrNull(idx)?.reminderId
+                    localReminders.getOrNull(idx)?.reminderId
                 }
         }
             .distinctUntilChanged()
@@ -238,7 +292,7 @@ fun RemindersScreen(
                     try {
                         val repo = EsmRepository(context.applicationContext)
                         newlyViewed.forEach { rid ->
-                            val reminder = reminders.firstOrNull { it.reminderId == rid } ?: return@forEach
+                            val reminder = localReminders.firstOrNull { it.reminderId == rid } ?: return@forEach
                             if (reminder.associatedNotiRecords.isEmpty()) return@forEach
 
                             // Trigger B: schedule delivery using the A/B timing rule.
@@ -264,12 +318,41 @@ fun RemindersScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 FilterChip(stringResource(R.string.ui_reminders_filter_all), filter == ReminderViewModel.FilterTab.All) { vm.setFilter(ReminderViewModel.FilterTab.All) }
                 FilterChip(stringResource(R.string.ui_reminders_filter_tasks), filter == ReminderViewModel.FilterTab.Tasks) { vm.setFilter(ReminderViewModel.FilterTab.Tasks) }
                 FilterChip(stringResource(R.string.ui_reminders_filter_memos), filter == ReminderViewModel.FilterTab.Memos) { vm.setFilter(ReminderViewModel.FilterTab.Memos) }
                 FilterChip(stringResource(R.string.ui_reminders_filter_completed), filter == ReminderViewModel.FilterTab.Completed) { vm.setFilter(ReminderViewModel.FilterTab.Completed) }
+
+                Spacer(Modifier.weight(1f))
+
+                IconButton(onClick = { showRegenerateAllDialog = true }) {
+                    Icon(
+                        painter = painterResource(R.drawable.refresh),
+                        contentDescription = stringResource(R.string.a11y_refresh_all),
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+            }
+
+            val reorderableState = rememberReorderableLazyListState(lazyListState = listState) { from, to ->
+                val fromReminder = localReminders.getOrNull(from.index)
+                val toReminder = localReminders.getOrNull(to.index)
+                // Only allow drag within scored section (isViewed && !isPinned)
+                if (fromReminder != null && toReminder != null &&
+                    fromReminder.isViewed && !fromReminder.isPinned &&
+                    toReminder.isViewed && !toReminder.isPinned
+                ) {
+                    // Move for live visual feedback
+                    localReminders.add(to.index, localReminders.removeAt(from.index))
+                    // Compute new score from neighbours after move
+                    val toIdx = localReminders.indexOfFirst { it.reminderId == fromReminder.reminderId }
+                    val scoreAbove = localReminders.getOrNull(toIdx - 1)?.sortScore
+                    val scoreBelow = localReminders.getOrNull(toIdx + 1)?.sortScore
+                    vm.onDragDrop(fromReminder.reminderId, scoreAbove, scoreBelow)
+                }
             }
 
             LazyColumn(
@@ -277,32 +360,38 @@ fun RemindersScreen(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 96.dp)
             ) {
-                items(reminders, key = { it.reminderId }) { reminder ->
-                    ReminderCard(
-                        reminder = reminder,
-                        onDelete = {
-                            vm.delete(reminder.reminderId)
-                            // Trigger preference learning for LLM-generated reminders
-                            if (reminder.origin.contains("llm")) {
-                                prefVm.startFlow(
-                                    entryPoint = PreferenceEntryPoint.DELETE,
-                                    reminder = reminder,
-                                )
-                            }
-                        },
-                        onToggleCompleted = { completed: Boolean -> vm.toggleCompleted(reminder, completed) },
-                        onEdit = {
-                            editing = reminder
-                            editingId = reminder.reminderId
-                            editingInitialSnapshot = reminder
-                        },
-                        onQuickExportTasks = if (reminder.isTask) {
-                            { openExportDialog(reminder, ExportType.GOOGLE_TASKS) }
-                        } else null,
-                        onQuickExportCalendar = if (reminder.isEvent) {
-                            { openExportDialog(reminder, ExportType.GOOGLE_CALENDAR) }
-                        } else null,
-                    )
+                items(localReminders, key = { it.reminderId }) { reminder ->
+                    val isDraggable = reminder.isViewed && !reminder.isPinned
+                    ReorderableItem(reorderableState, key = reminder.reminderId) {
+                        ReminderCard(
+                            reminder = reminder,
+                            onDelete = {
+                                vm.delete(reminder.reminderId)
+                                if (reminder.origin.contains("llm")) {
+                                    prefVm.startFlow(
+                                        entryPoint = PreferenceEntryPoint.DELETE,
+                                        reminder = reminder,
+                                    )
+                                }
+                            },
+                            onToggleCompleted = { completed: Boolean -> vm.toggleCompleted(reminder, completed) },
+                            onEdit = {
+                                editing = reminder
+                                editingId = reminder.reminderId
+                                editingInitialSnapshot = reminder
+                            },
+                            onLongPress = { feedbackDialogReminder = reminder },
+                            onTogglePinned = { vm.togglePinned(reminder.reminderId) },
+                            onQuickExportTasks = if (reminder.isTask) {
+                                { openExportDialog(reminder, ExportType.GOOGLE_TASKS) }
+                            } else null,
+                            onQuickExportCalendar = if (reminder.isEvent) {
+                                { openExportDialog(reminder, ExportType.GOOGLE_CALENDAR) }
+                            } else null,
+                            showDragHandle = isDraggable,
+                            dragHandleModifier = if (isDraggable) Modifier.draggableHandle() else Modifier,
+                        )
+                    }
                 }
             }
         }
@@ -483,6 +572,7 @@ fun RemindersScreen(
                     },
                     isGoogleTasksExporting = googleTasksExportResult is ReminderViewModel.GoogleTasksExportResult.Loading,
                     onOpenExportDialog = openExportDialog,
+                    onRegenerate = { vm.regenerateOne(current.reminderId) },
                 )
             }
         }
@@ -503,7 +593,7 @@ fun RemindersScreen(
                 exportDialogState = null
                 handleGoogleTasksExport(exportReminder)
             },
-            onConfirmGoogleCalendar = { title, description, startMs, endMs, allDay ->
+            onConfirmGoogleCalendar = { title, description, startMs, endMs, allDay, reminderMinutes ->
                 exportDialogState = null
                 val calIntent = Intent(Intent.ACTION_INSERT).apply {
                     data = CalendarContract.Events.CONTENT_URI
@@ -512,14 +602,17 @@ fun RemindersScreen(
                     putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, startMs)
                     putExtra(CalendarContract.EXTRA_EVENT_END_TIME, endMs)
                     putExtra(CalendarContract.EXTRA_EVENT_ALL_DAY, allDay)
-                    putExtra(CalendarContract.Events.HAS_ALARM, true)
+                    if (reminderMinutes >= 0) {
+                        putExtra(CalendarContract.Events.HAS_ALARM, true)
+                        putExtra("reminderMinutes", reminderMinutes)
+                    }
                 }
                 try {
                     context.startActivity(calIntent)
                 } catch (_: Exception) {
                     android.widget.Toast.makeText(
                         context,
-                        context.getString(R.string.google_calendar_no_app),
+                        strGoogleCalendarNoApp,
                         android.widget.Toast.LENGTH_SHORT
                     ).show()
                 }
@@ -529,6 +622,74 @@ fun RemindersScreen(
 
     // Preference learning BottomSheet (Flows 1-3)
     PreferenceLearningBottomSheet(preferenceViewModel = prefVm)
+
+    // Regenerate-all confirmation dialog
+    if (showRegenerateAllDialog) {
+        AlertDialog(
+            onDismissRequest = { showRegenerateAllDialog = false },
+            title = { Text(stringResource(R.string.dialog_regenerate_all_title)) },
+            text  = { Text(stringResource(R.string.dialog_regenerate_all_message)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    showRegenerateAllDialog = false
+                    vm.regenerateAll()
+                }) { Text(stringResource(R.string.dialog_regenerate_all_confirm)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRegenerateAllDialog = false }) {
+                    Text(stringResource(R.string.ui_action_cancel))
+                }
+            },
+        )
+    }
+
+    // Long-press feedback dialog
+    feedbackDialogReminder?.let { reminder ->
+        AlertDialog(
+            onDismissRequest = { feedbackDialogReminder = null },
+            title = { Text(stringResource(R.string.reminder_feedback_title)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = {
+                            vm.submitFeedback(reminder.reminderId, "USER_FEEDBACK_IMPORTANT")
+                            feedbackDialogReminder = null
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(stringResource(R.string.reminder_feedback_important))
+                    }
+                    OutlinedButton(
+                        onClick = {
+                            vm.submitFeedback(reminder.reminderId, "USER_FEEDBACK_HANDLE_LATER")
+                            feedbackDialogReminder = null
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(stringResource(R.string.reminder_feedback_handle_later))
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { feedbackDialogReminder = null }) {
+                    Text(stringResource(R.string.ui_action_cancel))
+                }
+            },
+        )
+    }
+}
+
+@Composable
+private fun SectionHeader(title: String) {
+    Text(
+        text = title,
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+    )
 }
 
 @Composable
@@ -541,6 +702,7 @@ private fun FilterChip(text: String, selected: Boolean, onClick: () -> Unit) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ReminderCard(
     reminder: ReminderUnit,
@@ -549,59 +711,68 @@ private fun ReminderCard(
     onEdit: () -> Unit,
     onQuickExportTasks: (() -> Unit)? = null,
     onQuickExportCalendar: (() -> Unit)? = null,
+    onLongPress: () -> Unit = {},
+    onTogglePinned: () -> Unit = {},
+    showDragHandle: Boolean = false,
+    dragHandleModifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     val clipboard = remember(context) { AndroidClipboardController(context) }
 
-    val urls = remember(reminder.reminderContent) {
-        // Robust URL detection (http/https) with trailing punctuation/bracket trimming.
-        val regex = Regex("https?://\\S+", RegexOption.IGNORE_CASE)
-        val trimChars = charArrayOf(
-            ')', ']', '}', '>',
-            ',', '.', ';', ':', '"', '\'',
-            '。', '，', '；', '：', '、',
-            '）', '］', '｝', '＞',
-            '「', '」', '『', '』',
-            '”', '’'
-        )
-
-        regex.findAll(reminder.reminderContent)
-            .map { match ->
-                // trimEnd takes a vararg of chars. This removes cases like ")." or "）。".
-                match.value.trim().trimEnd(*trimChars)
+    // Parse LLM-generated buttons
+    val buttons = remember(reminder.buttons) {
+        try {
+            val arr = JSONArray(reminder.buttons)
+            buildList {
+                for (i in 0 until arr.length()) {
+                    val obj = arr.getJSONObject(i)
+                    add(Triple(
+                        obj.optString("buttonText", ""),
+                        obj.optString("intent", ""),
+                        obj.optString("type", "link"),
+                    ))
+                }
             }
-            .filter { it.isNotBlank() }
-            .distinct()
-            .toList()
+        } catch (_: Exception) { emptyList() }
     }
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp)
-            .combinedClickable(
-                onClick = onEdit,
-                onLongClick = {
-                    if (reminder.reminderContent.isNotBlank()) {
-                        CoroutineScope(Dispatchers.Main).launch { clipboard.copyPlainText("reminder", reminder.reminderContent) }
-                    }
-                }
+            .then(
+                if (!reminder.isViewed)
+                    Modifier.border(
+                        width = 1.5.dp,
+                        color = MaterialTheme.colorScheme.error,
+                        shape = MaterialTheme.shapes.small,
+                    )
+                else Modifier
             )
+            .then(if (!reminder.isViewed) Modifier.padding(2.dp) else Modifier)
+            .combinedClickable(onClick = onEdit, onLongClick = onLongPress)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            if (reminder.isTask) {
-                Checkbox(
-                    checked = reminder.isCompleted,
-                    onCheckedChange = { onToggleCompleted(it) }
+            if (showDragHandle) {
+                Icon(
+                    painter = painterResource(R.drawable.drag_indicator),
+                    contentDescription = stringResource(R.string.a11y_drag_handle),
+                    modifier = Modifier
+                        .size(32.dp)
+                        .then(dragHandleModifier)
+                        .padding(6.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
+
+            if (reminder.isTask) {
+                Checkbox(checked = reminder.isCompleted, onCheckedChange = { onToggleCompleted(it) })
                 Spacer(Modifier.width(8.dp))
             }
 
             val titleStyle = if (reminder.isTask && reminder.isCompleted) {
                 MaterialTheme.typography.titleMedium.copy(textDecoration = TextDecoration.LineThrough)
-            } else {
-                MaterialTheme.typography.titleMedium
-            }
+            } else MaterialTheme.typography.titleMedium
 
             Text(
                 text = reminder.reminderTitle.ifBlank {
@@ -611,36 +782,23 @@ private fun ReminderCard(
                 modifier = Modifier.weight(1f)
             )
 
-            // Quick export buttons (only shown when isTask / isEvent)
-            if (onQuickExportTasks != null || onQuickExportCalendar != null) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(0.dp),
-                ) {
-                    if (onQuickExportTasks != null) {
-                        IconButton(
-                            onClick = onQuickExportTasks,
-                            modifier = Modifier.size(36.dp),
-                        ) {
-                            Icon(
-                                painter = painterResource(R.drawable.task_add),
-                                contentDescription = stringResource(R.string.a11y_quick_export_tasks),
-                                modifier = Modifier.size(20.dp),
-                            )
-                        }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(0.dp)) {
+                if (onQuickExportTasks != null) {
+                    IconButton(onClick = onQuickExportTasks, modifier = Modifier.size(36.dp)) {
+                        Icon(painter = painterResource(R.drawable.task_add), contentDescription = stringResource(R.string.a11y_quick_export_tasks), modifier = Modifier.size(20.dp))
                     }
-                    if (onQuickExportCalendar != null) {
-                        IconButton(
-                            onClick = onQuickExportCalendar,
-                            modifier = Modifier.size(36.dp),
-                        ) {
-                            Icon(
-                                painter = painterResource(R.drawable.calendar_add),
-                                contentDescription = stringResource(R.string.a11y_quick_export_calendar),
-                                modifier = Modifier.size(20.dp),
-                            )
-                        }
+                }
+                if (onQuickExportCalendar != null) {
+                    IconButton(onClick = onQuickExportCalendar, modifier = Modifier.size(36.dp)) {
+                        Icon(painter = painterResource(R.drawable.calendar_add), contentDescription = stringResource(R.string.a11y_quick_export_calendar), modifier = Modifier.size(20.dp))
                     }
+                }
+                IconButton(onClick = onTogglePinned, modifier = Modifier.size(36.dp)) {
+                    Icon(
+                        painter = painterResource(if (reminder.isPinned) R.drawable.pin_yes else R.drawable.pin_no),
+                        contentDescription = stringResource(if (reminder.isPinned) R.string.a11y_unpin else R.string.a11y_pin),
+                        modifier = Modifier.size(20.dp),
+                    )
                 }
             }
 
@@ -650,75 +808,76 @@ private fun ReminderCard(
         }
 
         if (reminder.isTask) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
+            Row(modifier = Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                 val deadline = reminder.deadlineTimestamp
                 val deadlineStr = if (deadline > 0L) {
-                    val abs = getAbsoluteTimeStr(deadline, context)
-                    val rel = getRelativeTimeStr(deadline, context)
-                    "$abs ($rel)"
-                } else {
-                    stringResource(R.string.ui_reminders_no_deadline)
-                }
-
-                Text(
-                    text = deadlineStr,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (deadline > 0L && deadline < System.currentTimeMillis()) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                val ectStr = if (reminder.estimatedCompletionTime > 0)
-                    stringResource(R.string.ui_reminders_ect_short, reminder.estimatedCompletionTime)
-                else
-                    ""
+                    "${getAbsoluteTimeStr(deadline, context)} (${getRelativeTimeStr(deadline, context)})"
+                } else stringResource(R.string.ui_reminders_no_deadline)
+                Text(text = deadlineStr, style = MaterialTheme.typography.bodySmall,
+                    color = if (deadline > 0L && deadline < System.currentTimeMillis()) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
+                val ectStr = if (reminder.estimatedCompletionTime > 0) stringResource(R.string.ui_reminders_ect_short, reminder.estimatedCompletionTime) else ""
                 Text(text = ectStr, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
 
         val contentPreview = reminder.reminderContent.lineSequence().take(2).joinToString("\n")
         if (contentPreview.isNotBlank()) {
-            Text(
-                text = contentPreview,
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.padding(top = 6.dp)
-            )
+            Text(text = contentPreview, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 6.dp))
         }
 
-        if (urls.isNotEmpty()) {
-            FlowRow(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                urls.forEachIndexed { idx, url ->
-                    val host = try { Uri.parse(url).host } catch (_: Exception) { null }
-                    val label = host?.takeIf { it.isNotBlank() } ?: "Link ${idx + 1}"
-                    Button(
-                        onClick = {
-                            try {
-                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
-                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                }
-                                context.startActivity(intent)
-                            } catch (_: Exception) {
-                                // no-op: malformed URL or no handler
-                            }
-                        }
-                    ) {
-                        Text(label)
-                    }
+        if (buttons.isNotEmpty()) {
+            FlowRow(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                buttons.forEach { (buttonText, intent, type) ->
+                    ReminderActionChip(buttonText = buttonText, intent = intent, type = type, context = context, clipboard = clipboard)
                 }
             }
         }
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * A chip button for LLM-generated reminder actions (copy text or open link).
+ */
+@Composable
+private fun ReminderActionChip(
+    buttonText: String,
+    intent: String,
+    type: String,
+    context: android.content.Context,
+    clipboard: AndroidClipboardController,
+) {
+    val iconRes = when (type) {
+        "copy" -> R.drawable.copy
+        else -> R.drawable.link
+    }
+    AssistChip(
+        onClick = {
+            when (type) {
+                "copy" -> {
+                    CoroutineScope(Dispatchers.Main).launch { clipboard.copyPlainText("reminder_button", intent) }
+                }
+                else -> {
+                    try {
+                        val viewIntent = Intent(Intent.ACTION_VIEW, Uri.parse(intent)).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        context.startActivity(viewIntent)
+                    } catch (_: Exception) { /* no handler */ }
+                }
+            }
+        },
+        label = { Text(buttonText, style = MaterialTheme.typography.labelSmall) },
+        leadingIcon = {
+            Icon(
+                painter = painterResource(iconRes),
+                contentDescription = if (type == "copy") stringResource(R.string.a11y_copy_text) else stringResource(R.string.a11y_open_link),
+                modifier = Modifier.size(16.dp),
+            )
+        },
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun ReminderDetailScreen(
     initial: ReminderUnit,
@@ -729,6 +888,8 @@ private fun ReminderDetailScreen(
     onExportToGoogleTasks: (ReminderUnit) -> Unit = {},
     isGoogleTasksExporting: Boolean = false,
     onOpenExportDialog: (ReminderUnit, ExportType) -> Unit = { _, _ -> },
+    onRegenerate: () -> Unit = {},
+    reminderViewModel: ReminderViewModel? = null,
 ) {
     val context = LocalContext.current
 
@@ -758,6 +919,7 @@ private fun ReminderDetailScreen(
     }
 
     var showDatePicker by remember { mutableStateOf(false) }
+    var showTimePicker by remember { mutableStateOf(false) }
 
     Column(Modifier.fillMaxSize()) {
         TopAppBar(
@@ -787,21 +949,9 @@ private fun ReminderDetailScreen(
                 }
             },
             actions = {
-                // Test ESM button: only show when reminder has associated notifications.
-//                if (initial.associatedNotis.isNotEmpty()) {
-//                    IconButton(onClick = {
-//                        CoroutineScope(Dispatchers.IO).launch {
-//                            try {
-//                                val repo = EsmRepository(context.applicationContext)
-//                                repo.createTestEsmForReminder(initial)
-//                            } catch (_: Throwable) {
-//                            }
-//                        }
-//                    }) {
-//                        Icon(Icons.Default.Notifications, contentDescription = stringResource(R.string.a11y_test_esm))
-//                    }
-//                }
-
+                IconButton(onClick = onRegenerate) {
+                    Icon(painter = painterResource(R.drawable.refresh), contentDescription = stringResource(R.string.a11y_regenerate), modifier = Modifier.size(20.dp))
+                }
                 IconButton(onClick = { onDelete(initial.reminderId) }) {
                     Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.a11y_delete))
                 }
@@ -820,6 +970,7 @@ private fun ReminderDetailScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            // Task toggle row
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                 Text(stringResource(R.string.ui_reminders_editor_task_label), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
                 Switch(checked = isTask, onCheckedChange = { isTask = it })
@@ -834,22 +985,27 @@ private fun ReminderDetailScreen(
 
                 HorizontalDivider()
 
-                val deadlineStr = if (deadlineTimestamp > 0L) {
-                    val abs = getAbsoluteTimeStr(deadlineTimestamp, context)
-                    val rel = getRelativeTimeStr(deadlineTimestamp, context)
-                    "$abs ($rel)"
-                } else {
-                    stringResource(R.string.ui_reminders_no_deadline)
+                // Separate date and time pickers for deadline
+                val deadlineCal = remember(deadlineTimestamp) {
+                    if (deadlineTimestamp > 0L) Calendar.getInstance().apply { timeInMillis = deadlineTimestamp } else null
                 }
+                val deadlineDateStr = if (deadlineCal != null) {
+                    java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date(deadlineTimestamp))
+                } else stringResource(R.string.reminder_no_date)
+                val deadlineTimeStr = if (deadlineCal != null) {
+                    java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date(deadlineTimestamp))
+                } else stringResource(R.string.reminder_no_time)
 
-                TextButton(onClick = { showDatePicker = true }) {
-                    Text(
-                        text = deadlineStr,
-                        color = if (deadlineTimestamp > 0L && deadlineTimestamp < System.currentTimeMillis())
-                            MaterialTheme.colorScheme.error
-                        else
-                            MaterialTheme.colorScheme.primary
-                    )
+                val deadlineColor = if (deadlineTimestamp > 0L && deadlineTimestamp < System.currentTimeMillis())
+                    MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = { showDatePicker = true }) {
+                        Text(text = "${stringResource(R.string.reminder_pick_date)}: $deadlineDateStr", color = deadlineColor)
+                    }
+                    TextButton(onClick = { showTimePicker = true }) {
+                        Text(text = "${stringResource(R.string.reminder_pick_time)}: $deadlineTimeStr", color = deadlineColor)
+                    }
                 }
 
                 OutlinedTextField(
@@ -889,23 +1045,70 @@ private fun ReminderDetailScreen(
                 )
             }
 
-            // === Export to external apps ===
-            HorizontalDivider(modifier = Modifier.padding(top = 8.dp))
-
-            // Export to Google Tasks (via confirmation dialog)
-            Button(
-                onClick = { onOpenExportDialog(buildUpdated(), ExportType.GOOGLE_TASKS) },
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(stringResource(R.string.google_tasks_export))
+            // === LLM-generated button chips ===
+            val detailButtons = remember(initial.buttons) {
+                try {
+                    val arr = JSONArray(initial.buttons)
+                    buildList {
+                        for (i in 0 until arr.length()) {
+                            val obj = arr.getJSONObject(i)
+                            add(Triple(
+                                obj.optString("buttonText", ""),
+                                obj.optString("intent", ""),
+                                obj.optString("type", "link"),
+                            ))
+                        }
+                    }
+                } catch (_: Exception) { emptyList() }
             }
 
-            // Export to Google Calendar (via confirmation dialog)
-            OutlinedButton(
-                onClick = { onOpenExportDialog(buildUpdated(), ExportType.GOOGLE_CALENDAR) },
+            if (detailButtons.isNotEmpty()) {
+                val detailClipboard = remember(context) { AndroidClipboardController(context) }
+                FlowRow(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    detailButtons.forEach { (buttonText, intent, type) ->
+                        ReminderActionChip(buttonText = buttonText, intent = intent, type = type, context = context, clipboard = detailClipboard)
+                    }
+                }
+            }
+
+            // === Export to external apps (chips) ===
+            HorizontalDivider(modifier = Modifier.padding(top = 8.dp))
+
+            FlowRow(
                 modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Text(stringResource(R.string.google_calendar_export))
+                // Google Tasks chip
+                AssistChip(
+                    onClick = { onOpenExportDialog(buildUpdated(), ExportType.GOOGLE_TASKS) },
+                    label = { Text(stringResource(R.string.google_tasks_export), style = MaterialTheme.typography.labelSmall) },
+                    leadingIcon = {
+                        Icon(painter = painterResource(R.drawable.task_add), contentDescription = stringResource(R.string.a11y_export_google_tasks), modifier = Modifier.size(16.dp))
+                    },
+                )
+                // Google Calendar chip
+                AssistChip(
+                    onClick = { onOpenExportDialog(buildUpdated(), ExportType.GOOGLE_CALENDAR) },
+                    label = { Text(stringResource(R.string.google_calendar_export), style = MaterialTheme.typography.labelSmall) },
+                    leadingIcon = {
+                        Icon(painter = painterResource(R.drawable.calendar_add), contentDescription = stringResource(R.string.a11y_export_google_calendar), modifier = Modifier.size(16.dp))
+                    },
+                )
+                // Share chip
+                AssistChip(
+                    onClick = {
+                        val shareText = "${title}\n\n${content}"
+                        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(Intent.EXTRA_TEXT, shareText)
+                        }
+                        context.startActivity(Intent.createChooser(shareIntent, null))
+                    },
+                    label = { Text(stringResource(R.string.reminder_share), style = MaterialTheme.typography.labelSmall) },
+                    leadingIcon = {
+                        Icon(painter = painterResource(R.drawable.share), contentDescription = stringResource(R.string.a11y_share_reminder), modifier = Modifier.size(16.dp))
+                    },
+                )
             }
 
             // === Related notifications (from extraction snapshot) ===
@@ -1116,10 +1319,7 @@ private fun ReminderDetailScreen(
         }
     }
 
-    // 2-step deadline picker: date first, then time
-    var showTimePickerAfterDate by remember { mutableStateOf(false) }
-    var pickedDeadlineDateMs by remember { mutableStateOf(0L) }
-
+    // Separate date picker (only modifies the date component of deadlineTimestamp)
     if (showDatePicker) {
         val datePickerState = rememberDatePickerState(
             initialSelectedDateMillis = if (deadlineTimestamp > 0L) deadlineTimestamp else System.currentTimeMillis()
@@ -1132,9 +1332,19 @@ private fun ReminderDetailScreen(
                     onClick = {
                         val selectedDate = datePickerState.selectedDateMillis
                         if (selectedDate != null) {
-                            pickedDeadlineDateMs = selectedDate
+                            // Preserve existing time component if any, else default to noon
+                            val existingCal = Calendar.getInstance().apply {
+                                timeInMillis = if (deadlineTimestamp > 0L) deadlineTimestamp else System.currentTimeMillis()
+                            }
+                            val newCal = Calendar.getInstance().apply {
+                                timeInMillis = selectedDate
+                                set(Calendar.HOUR_OF_DAY, existingCal.get(Calendar.HOUR_OF_DAY))
+                                set(Calendar.MINUTE, existingCal.get(Calendar.MINUTE))
+                                set(Calendar.SECOND, 0)
+                                set(Calendar.MILLISECOND, 0)
+                            }
+                            deadlineTimestamp = newCal.timeInMillis
                             showDatePicker = false
-                            showTimePickerAfterDate = true
                         }
                     }
                 ) { Text(stringResource(R.string.ui_action_ok)) }
@@ -1147,28 +1357,31 @@ private fun ReminderDetailScreen(
         }
     }
 
-    if (showTimePickerAfterDate) {
-        LaunchedEffect(showTimePickerAfterDate) {
-            val cal = Calendar.getInstance().apply { timeInMillis = pickedDeadlineDateMs }
+    // Separate time picker (only modifies the time component of deadlineTimestamp)
+    if (showTimePicker) {
+        LaunchedEffect(showTimePicker) {
+            val cal = Calendar.getInstance().apply {
+                timeInMillis = if (deadlineTimestamp > 0L) deadlineTimestamp else System.currentTimeMillis()
+            }
             withContext(Dispatchers.Main) {
                 TimePickerDialog(
                     context,
                     { _, hour, minute ->
                         val c = Calendar.getInstance().apply {
-                            timeInMillis = pickedDeadlineDateMs
+                            timeInMillis = if (deadlineTimestamp > 0L) deadlineTimestamp else System.currentTimeMillis()
                             set(Calendar.HOUR_OF_DAY, hour)
                             set(Calendar.MINUTE, minute)
                             set(Calendar.SECOND, 0)
                             set(Calendar.MILLISECOND, 0)
                         }
                         deadlineTimestamp = c.timeInMillis
-                        showTimePickerAfterDate = false
+                        showTimePicker = false
                     },
                     cal.get(Calendar.HOUR_OF_DAY),
                     cal.get(Calendar.MINUTE),
                     true
                 ).apply {
-                    setOnCancelListener { showTimePickerAfterDate = false }
+                    setOnCancelListener { showTimePicker = false }
                 }.show()
             }
         }
@@ -1198,7 +1411,7 @@ private fun ExportConfirmationDialog(
     isGoogleTasksExporting: Boolean,
     onDismiss: () -> Unit,
     onConfirmGoogleTasks: (title: String, description: String, deadlineMs: Long) -> Unit,
-    onConfirmGoogleCalendar: (title: String, description: String, startMs: Long, endMs: Long, allDay: Boolean) -> Unit,
+    onConfirmGoogleCalendar: (title: String, description: String, startMs: Long, endMs: Long, allDay: Boolean, reminderMinutes: Int) -> Unit,
 ) {
     val context = LocalContext.current
     val isCalendar = state.type == ExportType.GOOGLE_CALENDAR
@@ -1210,21 +1423,48 @@ private fun ExportConfirmationDialog(
     var deadlineMs by remember { mutableStateOf(state.reminder.deadlineTimestamp) }
 
     // For Google Calendar: start / end + full-day toggle
-    var startMs by remember {
-        mutableStateOf(if (state.reminder.startTime > 0L) state.reminder.startTime else 0L)
-    }
+    val initialStart = if (state.reminder.startTime > 0L) state.reminder.startTime else 0L
+    var startMs by remember { mutableStateOf(initialStart) }
     var endMs by remember {
-        mutableStateOf(if (state.reminder.endTime > 0L) state.reminder.endTime else 0L)
+        mutableStateOf(
+            when {
+                state.reminder.endTime > 0L -> state.reminder.endTime
+                // No end time: default end date to same day as start so picker opens correctly
+                initialStart > 0L -> {
+                    val cal = Calendar.getInstance().apply {
+                        timeInMillis = initialStart
+                        set(Calendar.HOUR_OF_DAY, 23)
+                        set(Calendar.MINUTE, 59)
+                        set(Calendar.SECOND, 0)
+                        set(Calendar.MILLISECOND, 0)
+                    }
+                    cal.timeInMillis
+                }
+                else -> 0L
+            }
+        )
     }
     var isFullDay by remember { mutableStateOf(false) }
 
-    // 2-step picking: "date" step then "time" step
-    // pickingField = which field we're editing ("start" | "end" | "deadline")
+    // Reminder alarm offset. -1 = none.
+    val reminderOptions = remember {
+        listOf(-1, 0, 5, 10, 15, 30, 60, 120, 1440) // -1=none, 0=at time, others in minutes
+    }
+    var selectedReminderMinutes by remember { mutableIntStateOf(30) }
+    var reminderDropdownExpanded by remember { mutableStateOf(false) }
+
+    // Separate picking for date and time, per field
     var pickingField by remember { mutableStateOf<String?>(null) }
-    // pickingStep = "date" or "time"
-    var pickingStep by remember { mutableStateOf<String?>(null) }
-    // Holds the date chosen in step 1, used in step 2
-    var pickedDateMs by remember { mutableStateOf(0L) }
+    var pickingMode by remember { mutableStateOf<String?>(null) }
+
+    fun reminderLabel(minutes: Int): String = when (minutes) {
+        -1   -> context.getString(R.string.export_dialog_reminder_none)
+        0    -> context.getString(R.string.export_dialog_reminder_at_time)
+        60   -> context.getString(R.string.export_dialog_reminder_1_hour)
+        120  -> context.getString(R.string.export_dialog_reminder_2_hours)
+        1440 -> context.getString(R.string.export_dialog_reminder_1_day)
+        else -> context.getString(R.string.export_dialog_reminder_minutes, minutes)
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1271,46 +1511,77 @@ private fun ExportConfirmationDialog(
                         Switch(checked = isFullDay, onCheckedChange = { isFullDay = it })
                     }
 
-                    // Start
-                    val startLabel = if (startMs > 0L) {
-                        if (isFullDay) {
-                            java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date(startMs))
-                        } else {
-                            getAbsoluteTimeStr(startMs, context)
+                    // Start: separate date + time
+                    val sdf = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
+                    val stf = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
+
+                    val startDateLabel = if (startMs > 0L) sdf.format(java.util.Date(startMs)) else stringResource(R.string.reminder_no_date)
+                    val startTimeLabel = if (startMs > 0L) stf.format(java.util.Date(startMs)) else stringResource(R.string.reminder_no_time)
+
+                    Text(stringResource(R.string.export_dialog_field_start_time), style = MaterialTheme.typography.labelMedium)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(onClick = { pickingField = "start"; pickingMode = "date" }) {
+                            Text("${stringResource(R.string.reminder_pick_date)}: $startDateLabel")
                         }
-                    } else {
-                        stringResource(R.string.export_dialog_no_time)
-                    }
-                    TextButton(onClick = { pickingField = "start"; pickingStep = "date" }) {
-                        Text("${stringResource(R.string.export_dialog_field_start_time)}: $startLabel")
+                        if (!isFullDay) {
+                            TextButton(onClick = { pickingField = "start"; pickingMode = "time" }) {
+                                Text("${stringResource(R.string.reminder_pick_time)}: $startTimeLabel")
+                            }
+                        }
                     }
 
-                    // End
-                    val endLabel = if (endMs > 0L) {
-                        if (isFullDay) {
-                            java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date(endMs))
-                        } else {
-                            getAbsoluteTimeStr(endMs, context)
+                    // End: separate date + time
+                    val endDateLabel = if (endMs > 0L) sdf.format(java.util.Date(endMs)) else stringResource(R.string.reminder_no_date)
+                    val endTimeLabel = if (endMs > 0L) stf.format(java.util.Date(endMs)) else stringResource(R.string.reminder_no_time)
+
+                    Text(stringResource(R.string.export_dialog_field_end_time), style = MaterialTheme.typography.labelMedium)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(onClick = { pickingField = "end"; pickingMode = "date" }) {
+                            Text("${stringResource(R.string.reminder_pick_date)}: $endDateLabel")
                         }
-                    } else {
-                        stringResource(R.string.export_dialog_no_time)
+                        if (!isFullDay) {
+                            TextButton(onClick = { pickingField = "end"; pickingMode = "time" }) {
+                                Text("${stringResource(R.string.reminder_pick_time)}: $endTimeLabel")
+                            }
+                        }
                     }
-                    TextButton(onClick = { pickingField = "end"; pickingStep = "date" }) {
-                        Text("${stringResource(R.string.export_dialog_field_end_time)}: $endLabel")
+
+                    // Reminder alarm
+                    Text(stringResource(R.string.export_dialog_field_reminder), style = MaterialTheme.typography.labelMedium)
+                    Box {
+                        TextButton(onClick = { reminderDropdownExpanded = true }) {
+                            Text(reminderLabel(selectedReminderMinutes))
+                        }
+                        DropdownMenu(
+                            expanded = reminderDropdownExpanded,
+                            onDismissRequest = { reminderDropdownExpanded = false },
+                        ) {
+                            reminderOptions.forEach { minutes ->
+                                DropdownMenuItem(
+                                    text = { Text(reminderLabel(minutes)) },
+                                    onClick = {
+                                        selectedReminderMinutes = minutes
+                                        reminderDropdownExpanded = false
+                                    },
+                                )
+                            }
+                        }
                     }
                 } else {
-                    // Google Tasks: deadline with clear option
-                    val dlLabel = if (deadlineMs > 0L) {
-                        getAbsoluteTimeStr(deadlineMs, context)
-                    } else {
-                        stringResource(R.string.export_dialog_no_deadline)
-                    }
+                    // Google Tasks: deadline with separate date + time + clear option
+                    val dlDateLabel = if (deadlineMs > 0L) {
+                        java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date(deadlineMs))
+                    } else stringResource(R.string.reminder_no_date)
+                    val dlTimeLabel = if (deadlineMs > 0L) {
+                        java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date(deadlineMs))
+                    } else stringResource(R.string.reminder_no_time)
+
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        TextButton(
-                            onClick = { pickingField = "deadline"; pickingStep = "date" },
-                            modifier = Modifier.weight(1f),
-                        ) {
-                            Text("${stringResource(R.string.export_dialog_field_deadline)}: $dlLabel")
+                        TextButton(onClick = { pickingField = "deadline"; pickingMode = "date" }) {
+                            Text("${stringResource(R.string.reminder_pick_date)}: $dlDateLabel")
+                        }
+                        TextButton(onClick = { pickingField = "deadline"; pickingMode = "time" }) {
+                            Text("${stringResource(R.string.reminder_pick_time)}: $dlTimeLabel")
                         }
                         if (deadlineMs > 0L) {
                             TextButton(onClick = { deadlineMs = 0L }) {
@@ -1331,7 +1602,7 @@ private fun ExportConfirmationDialog(
                     if (isCalendar) {
                         val s = if (startMs > 0L) startMs else System.currentTimeMillis()
                         val e = if (endMs > 0L) endMs else s + 60 * 60 * 1000L
-                        onConfirmGoogleCalendar(title, description, s, e, isFullDay)
+                        onConfirmGoogleCalendar(title, description, s, e, isFullDay, selectedReminderMinutes)
                     } else {
                         onConfirmGoogleTasks(title, description, deadlineMs)
                     }
@@ -1356,8 +1627,8 @@ private fun ExportConfirmationDialog(
         },
     )
 
-    // ── Step 1: Date picker ──
-    if (pickingStep == "date" && pickingField != null) {
+    // ── Separate Date picker ──
+    if (pickingMode == "date" && pickingField != null) {
         val initialMs = when (pickingField) {
             "start" -> if (startMs > 0L) startMs else System.currentTimeMillis()
             "end" -> if (endMs > 0L) endMs else System.currentTimeMillis()
@@ -1365,39 +1636,42 @@ private fun ExportConfirmationDialog(
             else -> System.currentTimeMillis()
         }
         val datePickerState = rememberDatePickerState(initialSelectedDateMillis = initialMs)
+        val currentField = pickingField
 
         DatePickerDialog(
-            onDismissRequest = { pickingStep = null; pickingField = null },
+            onDismissRequest = { pickingMode = null; pickingField = null },
             confirmButton = {
                 TextButton(onClick = {
                     val selectedDate = datePickerState.selectedDateMillis
                     if (selectedDate != null) {
-                        pickedDateMs = selectedDate
-                        if (isCalendar && isFullDay) {
-                            // Full-day: no time step needed; set to start-of-day
-                            val cal = Calendar.getInstance().apply {
-                                timeInMillis = selectedDate
-                                set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
-                                set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
-                            }
-                            when (pickingField) {
-                                "start" -> startMs = cal.timeInMillis
-                                "end" -> {
-                                    // End of a full-day event: next midnight
-                                    cal.add(Calendar.DAY_OF_MONTH, 1)
-                                    endMs = cal.timeInMillis
-                                }
-                            }
-                            pickingStep = null; pickingField = null
-                        } else {
-                            // Go to time step
-                            pickingStep = "time"
+                        // Preserve existing time component, only change date
+                        val existingMs = when (currentField) {
+                            "start" -> startMs
+                            "end" -> endMs
+                            "deadline" -> deadlineMs
+                            else -> 0L
                         }
+                        val existingCal = Calendar.getInstance().apply {
+                            timeInMillis = if (existingMs > 0L) existingMs else System.currentTimeMillis()
+                        }
+                        val newCal = Calendar.getInstance().apply {
+                            timeInMillis = selectedDate
+                            set(Calendar.HOUR_OF_DAY, existingCal.get(Calendar.HOUR_OF_DAY))
+                            set(Calendar.MINUTE, existingCal.get(Calendar.MINUTE))
+                            set(Calendar.SECOND, 0)
+                            set(Calendar.MILLISECOND, 0)
+                        }
+                        when (currentField) {
+                            "start" -> startMs = newCal.timeInMillis
+                            "end" -> endMs = newCal.timeInMillis
+                            "deadline" -> deadlineMs = newCal.timeInMillis
+                        }
+                        pickingMode = null; pickingField = null
                     }
                 }) { Text(stringResource(R.string.ui_action_ok)) }
             },
             dismissButton = {
-                TextButton(onClick = { pickingStep = null; pickingField = null }) {
+                TextButton(onClick = { pickingMode = null; pickingField = null }) {
                     Text(stringResource(R.string.ui_action_cancel))
                 }
             },
@@ -1406,17 +1680,25 @@ private fun ExportConfirmationDialog(
         }
     }
 
-    // ── Step 2: Time picker (native dialog, via LaunchedEffect) ──
-    if (pickingStep == "time" && pickingField != null) {
+    // ── Separate Time picker ──
+    if (pickingMode == "time" && pickingField != null) {
         val currentField = pickingField
-        LaunchedEffect(pickingStep, pickingField) {
-            val cal = Calendar.getInstance().apply { timeInMillis = pickedDateMs }
+        LaunchedEffect(pickingMode, pickingField) {
+            val existingMs = when (currentField) {
+                "start" -> startMs
+                "end" -> endMs
+                "deadline" -> deadlineMs
+                else -> 0L
+            }
+            val cal = Calendar.getInstance().apply {
+                timeInMillis = if (existingMs > 0L) existingMs else System.currentTimeMillis()
+            }
             withContext(Dispatchers.Main) {
                 TimePickerDialog(
                     context,
                     { _, hour, minute ->
                         val c = Calendar.getInstance().apply {
-                            timeInMillis = pickedDateMs
+                            timeInMillis = if (existingMs > 0L) existingMs else System.currentTimeMillis()
                             set(Calendar.HOUR_OF_DAY, hour)
                             set(Calendar.MINUTE, minute)
                             set(Calendar.SECOND, 0)
@@ -1427,13 +1709,13 @@ private fun ExportConfirmationDialog(
                             "end" -> endMs = c.timeInMillis
                             "deadline" -> deadlineMs = c.timeInMillis
                         }
-                        pickingStep = null; pickingField = null
+                        pickingMode = null; pickingField = null
                     },
                     cal.get(Calendar.HOUR_OF_DAY),
                     cal.get(Calendar.MINUTE),
                     true
                 ).apply {
-                    setOnCancelListener { pickingStep = null; pickingField = null }
+                    setOnCancelListener { pickingMode = null; pickingField = null }
                 }.show()
             }
         }

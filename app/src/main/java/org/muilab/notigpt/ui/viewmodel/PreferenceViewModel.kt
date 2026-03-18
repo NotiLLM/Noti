@@ -113,6 +113,13 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
         _bottomSheetStep.value = BottomSheetStep.Scope(event.entryPoint, event.contextData)
     }
 
+    /** Channel-based overload: event is passed directly, StateFlow already cleared. */
+    fun promoteSnackbarToFlow(event: SnackbarEvent) {
+        _currentReminder = event.reminder
+        _currentReminderBefore = event.reminderBefore
+        _bottomSheetStep.value = BottomSheetStep.Scope(event.entryPoint, event.contextData)
+    }
+
     // ══════════════════════════════════════════════════════════════════
     //  Bottom-sheet progressive disclosure state (Flows 1-3)
     // ══════════════════════════════════════════════════════════════════

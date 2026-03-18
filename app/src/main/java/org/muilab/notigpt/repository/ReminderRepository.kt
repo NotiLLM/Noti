@@ -19,6 +19,8 @@ class ReminderRepository(
     fun observeMemos(): Flow<List<ReminderUnit>> = reminderListDao.observeMemos()
     fun observeCompletedTasks(): Flow<List<ReminderUnit>> = reminderListDao.observeCompletedTasks()
 
+    suspend fun getAllVisible(): List<ReminderUnit> = reminderListDao.getAllVisible()
+
     suspend fun upsert(reminder: ReminderUnit) {
         reminderListDao.upsert(reminder)
         // Best-effort; never block core UX.
@@ -48,4 +50,28 @@ class ReminderRepository(
     }
 
     suspend fun getById(reminderId: String): ReminderUnit? = reminderListDao.getById(reminderId)
+
+    suspend fun setViewed(reminderId: String) {
+        reminderListDao.setViewed(reminderId)
+        val updated = reminderListDao.getById(reminderId) ?: return
+        withContext(Dispatchers.IO) { firestoreSync.syncReminder(updated) }
+    }
+
+    suspend fun setPinned(reminderId: String, pinned: Boolean) {
+        reminderListDao.setPinned(reminderId, pinned)
+        val updated = reminderListDao.getById(reminderId) ?: return
+        withContext(Dispatchers.IO) { firestoreSync.syncReminder(updated) }
+    }
+
+    suspend fun updateSortScoreAndHistory(reminderId: String, sortScore: Float, reRankHistory: String) {
+        reminderListDao.updateSortScoreAndHistory(reminderId, sortScore, reRankHistory)
+        val updated = reminderListDao.getById(reminderId) ?: return
+        withContext(Dispatchers.IO) { firestoreSync.syncReminder(updated) }
+    }
+
+    suspend fun updateButtons(reminderId: String, buttons: String) {
+        reminderListDao.updateButtons(reminderId, buttons)
+        val updated = reminderListDao.getById(reminderId) ?: return
+        withContext(Dispatchers.IO) { firestoreSync.syncReminder(updated) }
+    }
 }

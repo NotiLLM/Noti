@@ -83,6 +83,42 @@ data class ReminderUnit(
      * If false, the reminder remains in DB but is hidden from list queries.
      */
     val isVisible: Boolean = true,
+
+    // ── LLM-generated action buttons ──
+    /**
+     * JSON array of button objects: [{buttonText, intent, type}].
+     * type is "copy" (copy intent text to clipboard) or "link" (open intent as URL).
+     */
+    @ColumnInfo(defaultValue = "[]")
+    val buttons: String = "[]",
+
+    // ── Sorting / ranking columns ──
+
+    /**
+     * Whether the user has fully seen this reminder at least once since its latest
+     * creation or regeneration. Default true for existing rows (migration).
+     */
+    @ColumnInfo(defaultValue = "1")
+    val isViewed: Boolean = true,
+
+    /**
+     * Whether the reminder is pinned by the user.
+     */
+    @ColumnInfo(defaultValue = "0")
+    val isPinned: Boolean = false,
+
+    /**
+     * Sort score (0f–100f). Higher = higher position within the scored section.
+     */
+    @ColumnInfo(defaultValue = "50.0")
+    val sortScore: Float = 50f,
+
+    /**
+     * JSON array of rerank history records. Each record:
+     * {rankedAt, trigger, newScore, scoreExplanation}.
+     */
+    @ColumnInfo(defaultValue = "[]")
+    val reRankHistory: String = "[]",
 ) {
     /**
      * Derive the set of notification keys from the record IDs.

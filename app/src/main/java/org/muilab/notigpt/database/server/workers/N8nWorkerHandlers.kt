@@ -6,7 +6,9 @@ import org.muilab.notigpt.database.server.workers.n8n.N8nWorkerContext
 import org.muilab.notigpt.database.server.workers.n8n.PostNotificationActionHandler
 import org.muilab.notigpt.database.server.workers.n8n.PreferenceQuickSyncHandler
 import org.muilab.notigpt.database.server.workers.n8n.ReminderExtractionHandler
+import org.muilab.notigpt.database.server.workers.n8n.ReminderRegenerationHandler
 import org.muilab.notigpt.database.server.workers.n8n.ReminderScanHandler
+import org.muilab.notigpt.database.server.workers.n8n.RerankHandler
 import org.muilab.notigpt.database.server.workers.n8n.UpdateNotificationHandler
 
 /**
@@ -22,6 +24,9 @@ internal object N8nWorkerHandlers {
             is N8nWorkerInput.ReminderExtraction -> ReminderExtractionHandler.handle(ctx, raw)
             is N8nWorkerInput.PostNotificationAction -> PostNotificationActionHandler.handle(ctx, raw)
             is N8nWorkerInput.PreferenceQuickSync -> PreferenceQuickSyncHandler.handle(ctx, raw)
+            is N8nWorkerInput.RegenerateOne -> ReminderRegenerationHandler.handleOne(ctx, raw)
+            is N8nWorkerInput.RegenerateAll -> ReminderRegenerationHandler.handleAll(ctx, raw)
+            is N8nWorkerInput.Rerank -> RerankHandler.handle(ctx, raw)
         }
     }
 }

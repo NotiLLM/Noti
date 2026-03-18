@@ -29,6 +29,9 @@ android {
         buildConfigField("String", "N8N_POST_NOTIFICATION_ACTION_PATH", "\"webhook-test/notification-action\"")
         buildConfigField("String", "N8N_TASK_SCAN_PATH", "\"webhook/task-scan-developers\"")
         buildConfigField("String", "N8N_TASK_EXTRACTION_PATH", "\"webhook/task-extraction-developers\"")
+        buildConfigField("String", "N8N_REGENERATE_ONE_PATH", "\"webhook/reminder-regenerate-one\"")
+        buildConfigField("String", "N8N_REGENERATE_ALL_PATH", "\"webhook/reminder-regenerate-all\"")
+        buildConfigField("String", "N8N_RERANK_PATH", "\"webhook/reminder-rerank\"")
         buildConfigField("String", "N8N_PREFERENCE_QUICK_SYNC_PATH", "\"webhook/preference-quick-sync\"")
         buildConfigField("String", "N8N_PREFERENCE_CHAT_INTERACT_PATH", "\"webhook/preference-chat-interact\"")
     }

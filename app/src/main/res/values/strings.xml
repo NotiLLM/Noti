@@ -175,6 +175,13 @@
     <string name="export_dialog_field_deadline">Deadline</string>
     <string name="export_dialog_field_start_time">Start time</string>
     <string name="export_dialog_field_end_time">End time</string>
+    <string name="export_dialog_field_reminder">Reminder</string>
+    <string name="export_dialog_reminder_none">None</string>
+    <string name="export_dialog_reminder_at_time">At time of event</string>
+    <string name="export_dialog_reminder_minutes">%d minutes before</string>
+    <string name="export_dialog_reminder_1_hour">1 hour before</string>
+    <string name="export_dialog_reminder_2_hours">2 hours before</string>
+    <string name="export_dialog_reminder_1_day">1 day before</string>
     <string name="export_dialog_no_deadline">No deadline set</string>
     <string name="export_dialog_no_time">Not set (tap to set)</string>
     <string name="export_dialog_confirm">Export</string>
@@ -305,5 +312,42 @@
     <!-- Generic -->
     <string name="ok">OK</string>
     <string name="cancel">Cancel</string>
+
+    <!-- Reminder sorting sections -->
+    <string name="reminder_section_unseen">New</string>
+    <string name="reminder_section_pinned">Pinned</string>
+    <string name="reminder_section_scored">All Reminders</string>
+
+    <!-- Reminder actions -->
+    <string name="reminder_refresh_all">Refresh all reminders</string>
+    <string name="reminder_regenerate">Regenerate</string>
+    <string name="reminder_share">Share</string>
+    <string name="reminder_pin">Pin</string>
+    <string name="reminder_unpin">Unpin</string>
+    <string name="reminder_make_copy_button">Make Copy Button</string>
+
+    <!-- Reminder feedback dialog -->
+    <string name="reminder_feedback_title">How should this reminder be ranked?</string>
+    <string name="reminder_feedback_important">Important</string>
+    <string name="reminder_feedback_handle_later">Handle Later</string>
+
+    <!-- Reminder button chips -->
+    <string name="a11y_open_link">Open link</string>
+    <string name="a11y_copy_text">Copy text</string>
+    <string name="a11y_share_reminder">Share reminder</string>
+    <string name="a11y_refresh_all">Refresh all reminders</string>
+    <string name="dialog_regenerate_all_title">Regenerate All Reminders?</string>
+    <string name="dialog_regenerate_all_message">This will resend all existing reminders and their notification context to the pipeline for regeneration. Reminders may be rewritten or merged.</string>
+    <string name="dialog_regenerate_all_confirm">Regenerate</string>
+    <string name="a11y_regenerate">Regenerate reminder</string>
+    <string name="a11y_pin">Pin reminder</string>
+    <string name="a11y_unpin">Unpin reminder</string>
+    <string name="a11y_drag_handle">Drag to reorder</string>
+
+    <!-- Separate date/time pickers -->
+    <string name="reminder_pick_date">Date</string>
+    <string name="reminder_pick_time">Time</string>
+    <string name="reminder_no_date">No date</string>
+    <string name="reminder_no_time">No time</string>
 </resources>
 

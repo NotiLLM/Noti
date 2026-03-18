@@ -122,8 +122,13 @@ class FirestoreSyncRepository(
             "isVisible" to reminder.isVisible,
             "deletedAt" to (reminder.deletedAtMs?.let { TimeFormatters.toLocalIso(it, zoneId) } ?: ""),
             "lastUpdateTimestamp" to TimeFormatters.toLocalIso(reminder.lastUpdateTimestamp, zoneId),
+            "buttons" to reminder.buttons,
+            "isViewed" to reminder.isViewed,
+            "isPinned" to reminder.isPinned,
+            "sortScore" to reminder.sortScore,
+            "reRankHistory" to reminder.reRankHistory,
             "syncedAt" to TimeFormatters.toLocalIso(now, zoneId),
-            "schemaVersion" to 2,
+            "schemaVersion" to 3,
         )
 
         try {

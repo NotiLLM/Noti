@@ -12,6 +12,9 @@ import org.muilab.notigpt.BuildConfig
 import org.muilab.notigpt.database.server.workers.N8nAPIWorker
 import org.muilab.notigpt.util.Constants.Companion.N8N_TASK_SCAN
 import org.muilab.notigpt.util.Constants.Companion.N8N_TASK_EXTRACTION
+import org.muilab.notigpt.util.Constants.Companion.N8N_REGENERATE_ONE
+import org.muilab.notigpt.util.Constants.Companion.N8N_REGENERATE_ALL
+import org.muilab.notigpt.util.Constants.Companion.N8N_RERANK
 import org.muilab.notigpt.util.Constants.Companion.DIFY_POST_NOTIFICATION_ACTION
 import org.muilab.notigpt.util.Constants.Companion.DIFY_UPDATE_NOTIFICATION
 import java.util.concurrent.TimeUnit
@@ -189,3 +192,70 @@ fun enqueueTaskScan(context: Context, notiKey: String) {
      WorkManager.getInstance(context)
          .enqueueUniqueWork("n8n_task_extraction_debounce", ExistingWorkPolicy.REPLACE, workerRequest)
  }
+
+ fun enqueueRegenerateOne(context: Context, reminderId: String) {
+    Log.d("N8nAPI", "enqueueRegenerateOne: reminderId=$reminderId")
+    val inputData = Data.Builder()
+        .putString("api_type", N8N_REGENERATE_ONE)
+        .putString("webhook_path", BuildConfig.N8N_REGENERATE_ONE_PATH)
+        .putString("reminder_id", reminderId)
+        .build()
+
+    val constraints = Constraints.Builder()
+        .setRequiredNetworkType(NetworkType.CONNECTED)
+        .build()
+
+    val workerRequest = OneTimeWorkRequestBuilder<N8nAPIWorker>()
+        .setBackoffCriteria(BackoffPolicy.LINEAR, 1, TimeUnit.MINUTES)
+        .setConstraints(constraints)
+        .setInputData(inputData)
+        .build()
+
+    val uniqueName = "n8n_regenerate_one_$reminderId"
+    WorkManager.getInstance(context).enqueueUniqueWork(uniqueName, ExistingWorkPolicy.REPLACE, workerRequest)
+ }
+
+ fun enqueueRegenerateAll(context: Context) {
+    Log.d("N8nAPI", "enqueueRegenerateAll")
+    val inputData = Data.Builder()
+        .putString("api_type", N8N_REGENERATE_ALL)
+        .putString("webhook_path", BuildConfig.N8N_REGENERATE_ALL_PATH)
+        .build()
+
+    val constraints = Constraints.Builder()
+        .setRequiredNetworkType(NetworkType.CONNECTED)
+        .build()
+
+    val workerRequest = OneTimeWorkRequestBuilder<N8nAPIWorker>()
+        .setBackoffCriteria(BackoffPolicy.LINEAR, 1, TimeUnit.MINUTES)
+        .setConstraints(constraints)
+        .setInputData(inputData)
+        .build()
+
+    WorkManager.getInstance(context)
+        .enqueueUniqueWork("n8n_regenerate_all", ExistingWorkPolicy.REPLACE, workerRequest)
+ }
+
+ fun enqueueRerank(context: Context, reminderId: String, trigger: String) {
+    Log.d("N8nAPI", "enqueueRerank: reminderId=$reminderId trigger=$trigger")
+    val inputData = Data.Builder()
+        .putString("api_type", N8N_RERANK)
+        .putString("webhook_path", BuildConfig.N8N_RERANK_PATH)
+        .putString("reminder_id", reminderId)
+        .putString("trigger", trigger)
+        .build()
+
+    val constraints = Constraints.Builder()
+        .setRequiredNetworkType(NetworkType.CONNECTED)
+        .build()
+
+    val workerRequest = OneTimeWorkRequestBuilder<N8nAPIWorker>()
+        .setBackoffCriteria(BackoffPolicy.LINEAR, 1, TimeUnit.MINUTES)
+        .setConstraints(constraints)
+        .setInputData(inputData)
+        .build()
+
+    val uniqueName = "n8n_rerank_${reminderId}_$trigger"
+    WorkManager.getInstance(context).enqueueUniqueWork(uniqueName, ExistingWorkPolicy.REPLACE, workerRequest)
+ }
+

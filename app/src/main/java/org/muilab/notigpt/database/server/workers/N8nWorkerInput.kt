@@ -6,6 +6,9 @@ import org.muilab.notigpt.util.Constants.Companion.DIFY_UPDATE_NOTIFICATION
 import org.muilab.notigpt.util.Constants.Companion.N8N_TASK_EXTRACTION
 import org.muilab.notigpt.util.Constants.Companion.N8N_TASK_SCAN
 import org.muilab.notigpt.util.Constants.Companion.N8N_PREFERENCE_QUICK_SYNC
+import org.muilab.notigpt.util.Constants.Companion.N8N_REGENERATE_ONE
+import org.muilab.notigpt.util.Constants.Companion.N8N_REGENERATE_ALL
+import org.muilab.notigpt.util.Constants.Companion.N8N_RERANK
 
 /**
  * Typed view of WorkManager input data for [N8nAPIWorker].
@@ -43,6 +46,24 @@ sealed interface N8nWorkerInput {
         val payloadJson: String,
     ) : N8nWorkerInput
 
+    /** Regenerate a single reminder. */
+    data class RegenerateOne(
+        override val webhookPath: String,
+        val reminderId: String,
+    ) : N8nWorkerInput
+
+    /** Regenerate all visible reminders. */
+    data class RegenerateAll(
+        override val webhookPath: String,
+    ) : N8nWorkerInput
+
+    /** Rerank a single reminder (triggered by user feedback, etc.). */
+    data class Rerank(
+        override val webhookPath: String,
+        val reminderId: String,
+        val trigger: String,
+    ) : N8nWorkerInput
+
     companion object {
         /** Parses the legacy wire format used throughout the app. */
         fun from(input: Data): N8nWorkerInput? {
@@ -75,6 +96,21 @@ sealed interface N8nWorkerInput {
                 N8N_PREFERENCE_QUICK_SYNC -> PreferenceQuickSync(
                     webhookPath = webhookPath,
                     payloadJson = input.getString("payload_json") ?: return null,
+                )
+
+                N8N_REGENERATE_ONE -> RegenerateOne(
+                    webhookPath = webhookPath,
+                    reminderId = input.getString("reminder_id") ?: return null,
+                )
+
+                N8N_REGENERATE_ALL -> RegenerateAll(
+                    webhookPath = webhookPath,
+                )
+
+                N8N_RERANK -> Rerank(
+                    webhookPath = webhookPath,
+                    reminderId = input.getString("reminder_id") ?: return null,
+                    trigger = input.getString("trigger") ?: return null,
                 )
 
                 else -> null

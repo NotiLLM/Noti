@@ -33,7 +33,7 @@ import org.muilab.notigpt.model.features.ReminderExtractionSnapshot
         PreferenceConflict::class,
     ],
     views = [VisibleNotiRecord::class],
-    version = 31,
+    version = 32,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -110,6 +110,16 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_31_32 = object : Migration(31, 32) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE reminder_list ADD COLUMN buttons TEXT NOT NULL DEFAULT '[]'")
+                db.execSQL("ALTER TABLE reminder_list ADD COLUMN isViewed INTEGER NOT NULL DEFAULT 1")
+                db.execSQL("ALTER TABLE reminder_list ADD COLUMN isPinned INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE reminder_list ADD COLUMN sortScore REAL NOT NULL DEFAULT 50.0")
+                db.execSQL("ALTER TABLE reminder_list ADD COLUMN reRankHistory TEXT NOT NULL DEFAULT '[]'")
+            }
+        }
+
         private fun buildDatabase(context: Context): AppDatabase {
             return Room.databaseBuilder(context, AppDatabase::class.java, DATABASE_NAME)
                 .addMigrations(AppDatabaseMigrations.MIGRATION_1_2)
@@ -142,6 +152,7 @@ abstract class AppDatabase : RoomDatabase() {
                 .addMigrations(MIGRATION_28_29)
                 .addMigrations(MIGRATION_29_30)
                 .addMigrations(MIGRATION_30_31)
+                .addMigrations(MIGRATION_31_32)
                 .setJournalMode(JournalMode.TRUNCATE)
                 .build()
         }

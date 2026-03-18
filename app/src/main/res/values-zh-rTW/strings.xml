@@ -154,6 +154,13 @@
     <string name="export_dialog_field_deadline">期限</string>
     <string name="export_dialog_field_start_time">開始時間</string>
     <string name="export_dialog_field_end_time">結束時間</string>
+    <string name="export_dialog_field_reminder">提醒</string>
+    <string name="export_dialog_reminder_none">無</string>
+    <string name="export_dialog_reminder_at_time">活動開始時</string>
+    <string name="export_dialog_reminder_minutes">%d 分鐘前</string>
+    <string name="export_dialog_reminder_1_hour">1 小時前</string>
+    <string name="export_dialog_reminder_2_hours">2 小時前</string>
+    <string name="export_dialog_reminder_1_day">1 天前</string>
     <string name="export_dialog_no_deadline">未設定期限</string>
     <string name="export_dialog_no_time">未設定（點擊設定）</string>
     <string name="export_dialog_confirm">匯出</string>
@@ -284,6 +291,43 @@
     <!-- Generic -->
     <string name="ok">確定</string>
     <string name="cancel">取消</string>
+
+    <!-- Reminder sorting sections -->
+    <string name="reminder_section_unseen">新提醒</string>
+    <string name="reminder_section_pinned">已釘選</string>
+    <string name="reminder_section_scored">所有提醒</string>
+
+    <!-- Reminder actions -->
+    <string name="reminder_refresh_all">重新整理所有提醒</string>
+    <string name="reminder_regenerate">重新生成</string>
+    <string name="reminder_share">分享</string>
+    <string name="reminder_pin">釘選</string>
+    <string name="reminder_unpin">取消釘選</string>
+    <string name="reminder_make_copy_button">建立複製按鈕</string>
+
+    <!-- Reminder feedback dialog -->
+    <string name="reminder_feedback_title">這個提醒的排序應如何調整？</string>
+    <string name="reminder_feedback_important">重要</string>
+    <string name="reminder_feedback_handle_later">稍後處理</string>
+
+    <!-- Reminder button chips -->
+    <string name="a11y_open_link">開啟連結</string>
+    <string name="a11y_copy_text">複製文字</string>
+    <string name="a11y_share_reminder">分享提醒</string>
+    <string name="a11y_refresh_all">重新整理所有提醒</string>
+    <string name="dialog_regenerate_all_title">重新生成所有提醒？</string>
+    <string name="dialog_regenerate_all_message">這將把所有現有提醒及其通知內容重新送交處理流程進行重新生成，提醒可能會被改寫或合併。</string>
+    <string name="dialog_regenerate_all_confirm">重新生成</string>
+    <string name="a11y_regenerate">重新生成提醒</string>
+    <string name="a11y_pin">釘選提醒</string>
+    <string name="a11y_unpin">取消釘選提醒</string>
+    <string name="a11y_drag_handle">拖曳以重新排序</string>
+
+    <!-- Separate date/time pickers -->
+    <string name="reminder_pick_date">日期</string>
+    <string name="reminder_pick_time">時間</string>
+    <string name="reminder_no_date">未設定日期</string>
+    <string name="reminder_no_time">未設定時間</string>
 </resources>
 
 

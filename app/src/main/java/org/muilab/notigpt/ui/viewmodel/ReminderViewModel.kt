@@ -9,7 +9,12 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import org.json.JSONArray
+import org.json.JSONObject
 import org.muilab.notigpt.database.room.AppDatabase
+import org.muilab.notigpt.database.server.enqueueRegenerateAll
+import org.muilab.notigpt.database.server.enqueueRegenerateOne
+import org.muilab.notigpt.database.server.enqueueRerank
 import org.muilab.notigpt.model.features.ReminderUnit
 import org.muilab.notigpt.repository.GoogleTasksRepository
 import org.muilab.notigpt.repository.ReminderRepository
@@ -99,6 +104,131 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
             userEdited = false,
         )
         upsert(reminder)
+    }
+
+    // ========== Sorting / Ranking ==========
+
+    fun togglePinned(reminderId: String) {
+        viewModelScope.launch {
+            val existing = repo.getById(reminderId) ?: return@launch
+            repo.setPinned(reminderId, !existing.isPinned)
+        }
+    }
+
+    fun markViewed(reminderId: String) {
+        viewModelScope.launch {
+            repo.setViewed(reminderId)
+        }
+    }
+
+    /** Batch-mark multiple reminders as viewed (called when leaving the screen). */
+    fun markViewedBatch(reminderIds: Set<String>) {
+        if (reminderIds.isEmpty()) return
+        viewModelScope.launch {
+            reminderIds.forEach { repo.setViewed(it) }
+        }
+    }
+
+    /**
+     * Handle drag-and-drop reorder within the scored section.
+     * [scoreAbove] and [scoreBelow] are the sort scores of the neighbors,
+     * or null if at the top/bottom of the scored section.
+     */
+    fun onDragDrop(reminderId: String, scoreAbove: Float?, scoreBelow: Float?) {
+        viewModelScope.launch {
+            val epsilon = 0.01f
+            val newScore = when {
+                scoreAbove != null && scoreBelow != null -> (scoreAbove + scoreBelow) / 2f
+                scoreAbove == null && scoreBelow != null -> minOf(100f, scoreBelow + epsilon)
+                scoreAbove != null && scoreBelow == null -> maxOf(0f, scoreAbove - epsilon)
+                else -> 50f
+            }
+
+            val existing = repo.getById(reminderId) ?: return@launch
+            val history = try {
+                JSONArray(existing.reRankHistory)
+            } catch (_: Exception) {
+                JSONArray()
+            }
+            history.put(JSONObject().apply {
+                put("rankedAt", System.currentTimeMillis())
+                put("trigger", "USER_DRAG")
+                put("newScore", newScore)
+                put("scoreExplanation", "User manually reordered reminder via drag")
+            })
+
+            repo.updateSortScoreAndHistory(reminderId, newScore, history.toString())
+
+            // Score normalization check
+            normalizeScoresIfNeeded()
+        }
+    }
+
+    fun submitFeedback(reminderId: String, trigger: String) {
+        viewModelScope.launch {
+            enqueueRerank(getApplication(), reminderId, trigger)
+        }
+    }
+
+    private suspend fun normalizeScoresIfNeeded() {
+        val all = repo.getAllVisible()
+        val scored = all.filter { it.isViewed && !it.isPinned }
+            .sortedByDescending { it.sortScore }
+
+        if (scored.size < 2) return
+
+        var minGap = Float.MAX_VALUE
+        for (i in 0 until scored.size - 1) {
+            val gap = scored[i].sortScore - scored[i + 1].sortScore
+            if (gap < minGap) minGap = gap
+        }
+
+        if (minGap >= 0.001f) return
+
+        // Renormalize: evenly space from 100 to 0
+        val step = if (scored.size > 1) 100f / (scored.size - 1) else 0f
+        for ((idx, reminder) in scored.withIndex()) {
+            val newScore = 100f - (step * idx)
+            // Do NOT append reRankHistory for normalization
+            repo.updateSortScoreAndHistory(reminder.reminderId, newScore, reminder.reRankHistory)
+        }
+    }
+
+    // ========== Regeneration ==========
+
+    fun regenerateOne(reminderId: String) {
+        enqueueRegenerateOne(getApplication(), reminderId)
+    }
+
+    fun regenerateAll() {
+        enqueueRegenerateAll(getApplication())
+    }
+
+    // ========== Buttons ==========
+
+    /**
+     * Add a copy button to a reminder's button list.
+     */
+    fun addCopyButton(reminderId: String, text: String) {
+        viewModelScope.launch {
+            val existing = repo.getById(reminderId) ?: return@launch
+            val arr = try {
+                JSONArray(existing.buttons)
+            } catch (_: Exception) {
+                JSONArray()
+            }
+            // Check for duplicate
+            for (i in 0 until arr.length()) {
+                val obj = arr.optJSONObject(i) ?: continue
+                if (obj.optString("type") == "copy" && obj.optString("intent") == text) return@launch
+            }
+            arr.put(JSONObject().apply {
+                put("buttonText", text)
+                put("intent", text)
+                put("type", "copy")
+            })
+            repo.updateButtons(reminderId, arr.toString())
+        }
     }
 
     // ========== Google Tasks Integration ==========
