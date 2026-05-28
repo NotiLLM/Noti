@@ -1,6 +1,8 @@
 package org.muilab.notigpt.ui.viewmodel
 
 import android.app.Application
+import android.content.Intent
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -12,14 +14,15 @@ import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
 import org.muilab.notigpt.database.room.AppDatabase
-import org.muilab.notigpt.database.server.enqueueRegenerateAll
-import org.muilab.notigpt.database.server.enqueueRegenerateOne
-import org.muilab.notigpt.database.server.enqueueRerank
+import org.muilab.notigpt.data.remote.n8n.enqueueRegenerateAll
+import org.muilab.notigpt.data.remote.n8n.enqueueRegenerateOne
+import org.muilab.notigpt.data.remote.n8n.enqueueRerank
 import org.muilab.notigpt.model.features.ExportableItem
 import org.muilab.notigpt.model.features.ReminderUnit
 import org.muilab.notigpt.model.features.SubTask
 import org.muilab.notigpt.repository.GoogleTasksRepository
 import org.muilab.notigpt.repository.ReminderRepository
+import org.muilab.notigpt.repository.ReminderRelatedNotificationsRepository
 import org.muilab.notigpt.repository.SubTaskRepository
 import org.muilab.notigpt.platform.GoogleTasksAuthManager
 import java.util.UUID
@@ -42,12 +45,14 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
     private val repo: ReminderRepository
     private val subTaskRepo: SubTaskRepository
     private val googleTasksRepo: GoogleTasksRepository
+    private val relatedNotificationsRepo: ReminderRelatedNotificationsRepository
 
     init {
         val db = AppDatabase.getInstance(application.applicationContext)
         repo = ReminderRepository(db.reminderListDao(), application.applicationContext)
         subTaskRepo = SubTaskRepository(db.subTaskDao())
         googleTasksRepo = GoogleTasksRepository(application.applicationContext)
+        relatedNotificationsRepo = ReminderRelatedNotificationsRepository(application.applicationContext)
     }
 
     private val _filter = MutableStateFlow(FilterTab.All)
@@ -149,6 +154,41 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
             userEdited = false,
         )
         upsert(reminder)
+    }
+
+
+    data class RelatedNotificationsState(
+        val reminderId: String? = null,
+        val isLoading: Boolean = false,
+        val related: ReminderRelatedNotificationsRepository.RelatedNotifications = ReminderRelatedNotificationsRepository.RelatedNotifications.Empty,
+    )
+
+    private val _relatedNotificationsState = MutableStateFlow(RelatedNotificationsState())
+    val relatedNotificationsState: StateFlow<RelatedNotificationsState> = _relatedNotificationsState
+
+    fun loadRelatedNotifications(reminder: ReminderUnit) {
+        val current = _relatedNotificationsState.value
+        if (current.reminderId == reminder.reminderId && current.isLoading) return
+
+        viewModelScope.launch {
+            _relatedNotificationsState.value = RelatedNotificationsState(
+                reminderId = reminder.reminderId,
+                isLoading = true,
+            )
+
+            val related = try {
+                relatedNotificationsRepo.getRelatedNotifications(reminder)
+            } catch (t: Throwable) {
+                Log.e("ReminderRelatedNotis", "Failed loading related notifications", t)
+                ReminderRelatedNotificationsRepository.RelatedNotifications.Empty
+            }
+
+            _relatedNotificationsState.value = RelatedNotificationsState(
+                reminderId = reminder.reminderId,
+                isLoading = false,
+                related = related,
+            )
+        }
     }
 
     // ========== Sub-task CRUD ==========
@@ -320,6 +360,18 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
      */
     fun isGoogleSignedIn(): Boolean {
         return GoogleTasksAuthManager.isSignedIn(getApplication())
+    }
+
+
+    fun handleGoogleTasksSignInResult(data: Intent?, pendingReminder: ReminderUnit?) {
+        viewModelScope.launch {
+            val account = GoogleTasksAuthManager.handleSignInResult(data)
+            if (account != null && pendingReminder != null) {
+                exportToGoogleTasks(pendingReminder)
+            } else if (account == null) {
+                _googleTasksExportResult.value = GoogleTasksExportResult.NotSignedIn
+            }
+        }
     }
 
     /**

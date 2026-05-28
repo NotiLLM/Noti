@@ -4,7 +4,6 @@ import android.app.TimePickerDialog
 import android.content.Intent
 import android.net.Uri
 import android.provider.CalendarContract
-import android.util.Log
 import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.activity.compose.BackHandler
@@ -77,25 +76,17 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import org.json.JSONArray
-import org.json.JSONObject
 import org.muilab.notigpt.R
 import org.muilab.notigpt.model.features.PreferenceEntryPoint
 import org.muilab.notigpt.model.features.ReminderUnit
 import org.muilab.notigpt.model.features.SubTask
 import org.muilab.notigpt.model.features.asExportable
-import org.muilab.notigpt.model.notifications.NotiRecord
-import org.muilab.notigpt.repository.EsmRepository
-import org.muilab.notigpt.repository.NotiRepositoryProvider
 import org.muilab.notigpt.ui.component.PreferenceLearningBottomSheet
+import org.muilab.notigpt.ui.component.notification.RelatedNotificationPreview
 import org.muilab.notigpt.ui.component.reminder.SubTaskRow
 import org.muilab.notigpt.ui.component.reminder.SubTaskListInCard
 import org.muilab.notigpt.ui.component.reminder.SubTaskDetailScreen
-import org.muilab.notigpt.ui.screens.esm.EsmNotiCardLikePreview
 import org.muilab.notigpt.ui.viewmodel.DrawerViewModel
 import org.muilab.notigpt.ui.viewmodel.DrawerViewModelFactory
 import org.muilab.notigpt.ui.viewmodel.PreferenceViewModel
@@ -165,6 +156,7 @@ fun RemindersScreen(
 
     // ===== Google Tasks integration =====
     val googleTasksExportResult by vm.googleTasksExportResult.collectAsState()
+    val relatedNotificationsState by vm.relatedNotificationsState.collectAsState()
 
     // Reminder pending export after sign-in completes.
     var pendingGoogleTasksReminder by remember { mutableStateOf<ReminderUnit?>(null) }
@@ -172,24 +164,8 @@ fun RemindersScreen(
     val googleSignInLauncher = rememberLauncherForActivityResult(
         contract = androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
     ) { result ->
-        CoroutineScope(Dispatchers.IO).launch {
-            val account = org.muilab.notigpt.platform.GoogleTasksAuthManager.handleSignInResult(result.data)
-            withContext(Dispatchers.Main) {
-                if (account != null) {
-                    // Sign-in succeeded – export the pending reminder if any
-                    pendingGoogleTasksReminder?.let { reminder ->
-                        vm.exportToGoogleTasks(reminder)
-                    }
-                } else {
-                    android.widget.Toast.makeText(
-                        context,
-                        strGoogleTasksNotSignedIn,
-                        android.widget.Toast.LENGTH_SHORT
-                    ).show()
-                }
-                pendingGoogleTasksReminder = null
-            }
-        }
+        vm.handleGoogleTasksSignInResult(result.data, pendingGoogleTasksReminder)
+        pendingGoogleTasksReminder = null
     }
 
     // Show Toast when Google Tasks export result changes.
@@ -304,25 +280,6 @@ fun RemindersScreen(
 
                 viewedReminderIds = viewedReminderIds + newlyViewed
 
-                CoroutineScope(Dispatchers.IO).launch {
-                    try {
-                        val repo = EsmRepository(context.applicationContext)
-                        newlyViewed.forEach { rid ->
-                            val reminder = localReminders.firstOrNull { it.reminderId == rid } ?: return@forEach
-                            if (reminder.associatedNotiRecords.isEmpty()) return@forEach
-
-                            // Trigger B: schedule delivery using the A/B timing rule.
-                            val requestedDelay = repo.computeTriggerAbRequestedDelayMs(
-                                org.muilab.notigpt.domain.esm.EsmConfig.TRIGGER_B_AVAILABLE_DELAY_MS,
-                            )
-                            repo.promoteToTriggerBAndReschedule(
-                                reminderId = rid,
-                                requestedDelayMs = requestedDelay,
-                            )
-                        }
-                    } catch (_: Exception) {
-                    }
-                }
             }
     }
 
@@ -658,6 +615,8 @@ fun RemindersScreen(
                     isGoogleTasksExporting = googleTasksExportResult is ReminderViewModel.GoogleTasksExportResult.Loading,
                     onOpenExportDialog = openExportDialog,
                     onRegenerate = { vm.regenerateOne(current.reminderId) },
+                    relatedNotificationsState = relatedNotificationsState,
+                    onLoadRelatedNotifications = { reminder -> vm.loadRelatedNotifications(reminder) },
                     // Sub-task parameters
                     subTasks = allSubTasksByReminder[current.reminderId] ?: emptyList(),
                     onAddSubTask = { vm.addSubTask(current.reminderId) },
@@ -1062,7 +1021,7 @@ private fun ReminderActionChip(
         onClick = {
             when (type) {
                 "copy" -> {
-                    CoroutineScope(Dispatchers.Main).launch { clipboard.copyPlainText("reminder_button", intent) }
+                    clipboard.copyPlainText("reminder_button", intent)
                 }
                 else -> {
                     try {
@@ -1097,7 +1056,8 @@ private fun ReminderDetailScreen(
     isGoogleTasksExporting: Boolean = false,
     onOpenExportDialog: (ReminderUnit, ExportType) -> Unit = { _, _ -> },
     onRegenerate: () -> Unit = {},
-    reminderViewModel: ReminderViewModel? = null,
+    relatedNotificationsState: ReminderViewModel.RelatedNotificationsState = ReminderViewModel.RelatedNotificationsState(),
+    onLoadRelatedNotifications: (ReminderUnit) -> Unit = {},
     // Sub-task parameters
     subTasks: List<SubTask> = emptyList(),
     onAddSubTask: () -> Unit = {},
@@ -1353,116 +1313,15 @@ private fun ReminderDetailScreen(
                 }
             }
 
-            // === Related notifications (from extraction snapshot) ===
+            // === Related notifications ===
             var relatedExpanded by remember(initial.reminderId) { mutableStateOf(false) }
-            var relatedRecordsByKey by remember(initial.reminderId) { mutableStateOf<Map<String, List<NotiRecord>>>(emptyMap()) }
-            var relatedUnitsByKey by remember(initial.reminderId) { mutableStateOf<Map<String, org.muilab.notigpt.model.notifications.NotiUnit>>(emptyMap()) }
-            var relatedLoading by remember(initial.reminderId) { mutableStateOf(false) }
+            val relatedForThisReminder = relatedNotificationsState.reminderId == initial.reminderId
+            val relatedLoading = relatedForThisReminder && relatedNotificationsState.isLoading
+            val relatedRecordsByKey = if (relatedForThisReminder) relatedNotificationsState.related.recordsByKey else emptyMap()
+            val relatedUnitsByKey = if (relatedForThisReminder) relatedNotificationsState.related.unitsByKey else emptyMap()
 
-            LaunchedEffect(initial.reminderId, initial.extractionSnapshotId) {
-                val TAG = "ReminderRelatedNotis"
-                relatedLoading = true
-                relatedRecordsByKey = emptyMap()
-                relatedUnitsByKey = emptyMap()
-
-                val snapshotId = initial.extractionSnapshotId
-                if (snapshotId.isNullOrBlank() || initial.associatedNotiRecords.isEmpty()) {
-                    Log.d(TAG, "Skip loading: snapshotId=$snapshotId, associatedNotiRecords=${initial.associatedNotiRecords.size}")
-                    relatedLoading = false
-                    return@LaunchedEffect
-                }
-
-                Log.d(TAG, "Load related: reminderId=${initial.reminderId}, snapshotId=$snapshotId, keys=${initial.associatedNotiKeys}")
-
-                try {
-                    val db = org.muilab.notigpt.database.room.AppDatabase.getInstance(context.applicationContext)
-
-                    // Run all Room I/O off the main thread.
-                    val (finalRecords, unitsMap) = withContext(Dispatchers.IO) {
-                        val snap = db.reminderSnapshotDao().getSnapshot(snapshotId) ?: return@withContext (emptyList<NotiRecord>() to emptyMap())
-
-                        Log.d(TAG, "Snapshot found. status=${snap.status}, reminderId=${snap.reminderId}, payloadLen=${snap.payloadJson.length}")
-
-                        val obj = JSONObject(snap.payloadJson)
-                        val v = obj.optInt("v", 1)
-                        Log.d(TAG, "Snapshot payload version v=$v")
-                        if (v != 2) return@withContext (emptyList<NotiRecord>() to emptyMap())
-
-                        val wantedKeys = initial.associatedNotiKeys.toList()
-
-                        val mappingObj = obj.optJSONObject("notiKeyToRecordIds")
-                        val mappedIds = mutableListOf<String>()
-                        if (mappingObj != null) {
-                            wantedKeys.forEach { key ->
-                                val arr = mappingObj.optJSONArray(key)
-                                val cnt = arr?.length() ?: 0
-                                Log.d(TAG, "Mapping: key=$key -> $cnt ids")
-                                if (arr == null) return@forEach
-                                for (i in 0 until arr.length()) {
-                                    val rid = arr.optString(i)
-                                    if (!rid.isNullOrBlank()) mappedIds += rid
-                                }
-                            }
-                        } else {
-                            Log.w(TAG, "Snapshot payload missing notiKeyToRecordIds")
-                        }
-
-                        val recordIds: List<String> = when {
-                            mappedIds.isNotEmpty() -> mappedIds.distinct().also {
-                                Log.d(TAG, "Using mappedIds count=${it.size}")
-                            }
-                            else -> {
-                                val arr = obj.optJSONArray("recordIds")
-                                val ids = if (arr == null) {
-                                    Log.w(TAG, "Snapshot payload missing recordIds")
-                                    emptyList()
-                                } else buildList {
-                                    for (i in 0 until arr.length()) {
-                                        val rid = arr.optString(i)
-                                        if (!rid.isNullOrBlank()) add(rid)
-                                    }
-                                }.distinct()
-                                Log.d(TAG, "Using fallback recordIds count=${ids.size}")
-                                ids
-                            }
-                        }
-
-                        if (recordIds.isEmpty()) {
-                            Log.w(TAG, "No recordIds resolved from snapshot.")
-                            return@withContext (emptyList<NotiRecord>() to emptyMap())
-                        } else {
-                            Log.d(TAG, "First recordId=${recordIds.firstOrNull()}")
-                        }
-
-                        val allForKeys = db.recordDao().getRecordsByKeys(wantedKeys)
-                        Log.d(TAG, "Fetched records by keys: keys=${wantedKeys.size} -> records=${allForKeys.size}")
-
-                        val idSet = recordIds.toHashSet()
-                        val matched = allForKeys.filter { it.notiRecordId in idSet }
-                        Log.d(TAG, "Matched by ID filter: matched=${matched.size} (expected around ${recordIds.size})")
-
-                        val records = if (matched.isNotEmpty()) {
-                            matched
-                        } else {
-                            val byIds = db.recordDao().getRecordsByIds(recordIds)
-                            Log.w(TAG, "Fallback getRecordsByIds returned=${byIds.size}")
-                            byIds
-                        }
-
-                        val units = db.drawerDao().getByNotiKeys(wantedKeys).associateBy { it.notiKey }
-                        (records to units)
-                    }
-
-                    relatedRecordsByKey = finalRecords.groupBy { it.notiKey }
-                    relatedUnitsByKey = unitsMap
-                    Log.d(TAG, "Grouped relatedRecordsByKey keys=${relatedRecordsByKey.keys.size}, totalRecords=${finalRecords.size}, units=${unitsMap.size}")
-                } catch (t: Throwable) {
-                    Log.e(TAG, "Failed loading related notifications", t)
-                    relatedRecordsByKey = emptyMap()
-                    relatedUnitsByKey = emptyMap()
-                } finally {
-                    relatedLoading = false
-                }
+            LaunchedEffect(initial.reminderId, initial.extractionSnapshotId, initial.associatedNotiRecords) {
+                onLoadRelatedNotifications(initial)
             }
 
             // Show the section as long as this reminder claims it has associated notifications.
@@ -1516,7 +1375,7 @@ private fun ReminderDetailScreen(
                                 if (unit != null) {
                                     // IMPORTANT: show ALL records that were deemed related by the snapshot.
                                     val displayUnit = org.muilab.notigpt.model.notifications.NotiDisplayUnit(unit, recs)
-                                    EsmNotiCardLikePreview(
+                                    RelatedNotificationPreview(
                                         notiDisplayUnit = displayUnit,
                                         showOpenButton = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S,
                                         onOpen = {
@@ -1605,27 +1464,25 @@ private fun ReminderDetailScreen(
             val cal = Calendar.getInstance().apply {
                 timeInMillis = if (deadlineTimestamp > 0L) deadlineTimestamp else System.currentTimeMillis()
             }
-            withContext(Dispatchers.Main) {
-                TimePickerDialog(
-                    context,
-                    { _, hour, minute ->
-                        val c = Calendar.getInstance().apply {
-                            timeInMillis = if (deadlineTimestamp > 0L) deadlineTimestamp else System.currentTimeMillis()
-                            set(Calendar.HOUR_OF_DAY, hour)
-                            set(Calendar.MINUTE, minute)
-                            set(Calendar.SECOND, 0)
-                            set(Calendar.MILLISECOND, 0)
-                        }
-                        deadlineTimestamp = c.timeInMillis
-                        showTimePicker = false
-                    },
-                    cal.get(Calendar.HOUR_OF_DAY),
-                    cal.get(Calendar.MINUTE),
-                    true
-                ).apply {
-                    setOnCancelListener { showTimePicker = false }
-                }.show()
-            }
+            TimePickerDialog(
+                context,
+                { _, hour, minute ->
+                    val c = Calendar.getInstance().apply {
+                        timeInMillis = if (deadlineTimestamp > 0L) deadlineTimestamp else System.currentTimeMillis()
+                        set(Calendar.HOUR_OF_DAY, hour)
+                        set(Calendar.MINUTE, minute)
+                        set(Calendar.SECOND, 0)
+                        set(Calendar.MILLISECOND, 0)
+                    }
+                    deadlineTimestamp = c.timeInMillis
+                    showTimePicker = false
+                },
+                cal.get(Calendar.HOUR_OF_DAY),
+                cal.get(Calendar.MINUTE),
+                true
+            ).apply {
+                setOnCancelListener { showTimePicker = false }
+            }.show()
         }
     }
 }
@@ -1935,31 +1792,29 @@ private fun ExportConfirmationDialog(
             val cal = Calendar.getInstance().apply {
                 timeInMillis = if (existingMs > 0L) existingMs else System.currentTimeMillis()
             }
-            withContext(Dispatchers.Main) {
-                TimePickerDialog(
-                    context,
-                    { _, hour, minute ->
-                        val c = Calendar.getInstance().apply {
-                            timeInMillis = if (existingMs > 0L) existingMs else System.currentTimeMillis()
-                            set(Calendar.HOUR_OF_DAY, hour)
-                            set(Calendar.MINUTE, minute)
-                            set(Calendar.SECOND, 0)
-                            set(Calendar.MILLISECOND, 0)
-                        }
-                        when (currentField) {
-                            "start" -> startMs = c.timeInMillis
-                            "end" -> endMs = c.timeInMillis
-                            "deadline" -> deadlineMs = c.timeInMillis
-                        }
-                        pickingMode = null; pickingField = null
-                    },
-                    cal.get(Calendar.HOUR_OF_DAY),
-                    cal.get(Calendar.MINUTE),
-                    true
-                ).apply {
-                    setOnCancelListener { pickingMode = null; pickingField = null }
-                }.show()
-            }
+            TimePickerDialog(
+                context,
+                { _, hour, minute ->
+                    val c = Calendar.getInstance().apply {
+                        timeInMillis = if (existingMs > 0L) existingMs else System.currentTimeMillis()
+                        set(Calendar.HOUR_OF_DAY, hour)
+                        set(Calendar.MINUTE, minute)
+                        set(Calendar.SECOND, 0)
+                        set(Calendar.MILLISECOND, 0)
+                    }
+                    when (currentField) {
+                        "start" -> startMs = c.timeInMillis
+                        "end" -> endMs = c.timeInMillis
+                        "deadline" -> deadlineMs = c.timeInMillis
+                    }
+                    pickingMode = null; pickingField = null
+                },
+                cal.get(Calendar.HOUR_OF_DAY),
+                cal.get(Calendar.MINUTE),
+                true
+            ).apply {
+                setOnCancelListener { pickingMode = null; pickingField = null }
+            }.show()
         }
     }
 }

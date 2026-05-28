@@ -4,7 +4,7 @@ This project uses a **layered Android + Jetpack Compose** structure. It’s a co
 
 - **UI (Compose) + ViewModels**: rendering and presentation state
 - **Domain**: business logic / rules (Android-free when possible)
-- **Data**: persistence + network clients + repositories
+- **Data**: local persistence + remote clients + repositories
 - **Platform**: small wrappers around Android system APIs (clipboard, toast, MediaStore, etc.)
 
 The goal is to keep code readable, testable, and easy to extend.
@@ -49,18 +49,22 @@ This makes it easy to unit-test domain logic as plain Kotlin.
 - Task repository logic
 
 **Notes:**
-- Repositories may depend on `database/*` and `database/server/*`.
+- Repositories may depend on `database/room/*`, `data/remote/*`, and shared models/domain helpers.
 - They should not depend on Compose UI.
 
 ### `database/`
-**What it is:** Data sources.
+**What it is:** Local Room data sources.
 
 - `database/room`: Room DB + DAOs + converters
-- `database/server`: outward communications (Retrofit API client/service and related DTO helpers)
-- `database/server/workers`: WorkManager workers that run background jobs that typically call network/repository code
 
-> Naming note: many Android projects call this `data/local` + `data/remote`, or `network/`.
-> We keep `database/server` here to minimize churn while remaining understandable.
+### `data/remote/`
+**What it is:** Remote integrations.
+
+- `data/remote/n8n`: Retrofit API client/service, n8n DTO helpers, and WorkManager handlers that call n8n webhooks.
+
+n8n belongs here because this app uses it as a remote HTTP function layer. It should not live under Room/database packages, and domain rules should not be hidden inside n8n handlers when they can be pure Kotlin helpers.
+
+> Naming note: Room still uses the historical `database/room` package. New remote integrations should use `data/remote/<service>`.
 
 ### `platform/`
 **What it is:** Small, testable wrappers around Android/system APIs.
@@ -95,7 +99,7 @@ A clean, low-coupling direction looks like:
 
 - `ui/*` → depends on `ui/viewmodel` only (and shared models)
 - `ui/viewmodel` → depends on `repository` and `platform`
-- `repository` → depends on `database/room` and `database/server` and `model`/`domain`
+- `repository` → depends on `database/room`, `data/remote`, and `model`/`domain`
 - `domain` → depends on `model` (optional) but **not Android**
 - `platform` → depends on Android APIs
 
@@ -110,8 +114,8 @@ This avoids UI depending directly on persistence/network code.
 - New state holder for UI? → `ui/viewmodel`
 - New business rule / algorithm? → `domain/…`
 - New Room table/DAO? → `database/room`
-- New API client/endpoint? → `database/server`
-- New background sync job? → `database/server/workers`
+- New API client/endpoint? → `data/remote/<service>`
+- New background sync job? → usually `data/remote/<service>/workers` if it primarily calls a remote service
 - New Android-system side effect wrapper? → `platform/`
 
 ---

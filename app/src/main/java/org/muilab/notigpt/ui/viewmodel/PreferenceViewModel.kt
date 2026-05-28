@@ -19,9 +19,9 @@ import org.muilab.notigpt.database.room.NotiDrawerDao
 import org.muilab.notigpt.database.room.PreferenceConflictDao
 import org.muilab.notigpt.database.room.ReminderListDao
 import org.muilab.notigpt.database.room.UserContextDao
-import org.muilab.notigpt.database.server.PreferenceChatClient
-import org.muilab.notigpt.database.server.PreferenceContextDiscoverClient
-import org.muilab.notigpt.database.server.PreferenceQuickSyncClient
+import org.muilab.notigpt.data.remote.n8n.PreferenceChatClient
+import org.muilab.notigpt.data.remote.n8n.PreferenceContextDiscoverClient
+import org.muilab.notigpt.data.remote.n8n.PreferenceQuickSyncClient
 import org.muilab.notigpt.model.features.ChatFlowContext
 import org.muilab.notigpt.model.features.ChatInteractRequest
 import org.muilab.notigpt.model.features.ChatMessage

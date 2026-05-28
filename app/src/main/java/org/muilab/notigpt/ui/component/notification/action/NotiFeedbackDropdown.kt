@@ -21,8 +21,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.muilab.notigpt.R
-import org.muilab.notigpt.database.server.enqueueNotificationAction
-import org.muilab.notigpt.database.server.enqueueUpdateNotification
+import org.muilab.notigpt.data.remote.n8n.enqueueNotificationAction
+import org.muilab.notigpt.data.remote.n8n.enqueueUpdateNotification
 import org.muilab.notigpt.model.notifications.NotiUnit
 
 @Composable

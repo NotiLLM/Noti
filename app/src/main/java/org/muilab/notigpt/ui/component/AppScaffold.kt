@@ -1,6 +1,5 @@
 package org.muilab.notigpt.ui.component
 
-import android.app.Activity
 import android.os.Build
 import android.util.Log
 import androidx.annotation.RequiresApi
@@ -30,11 +29,9 @@ import org.muilab.notigpt.model.features.PreferenceEntryPoint
 import org.muilab.notigpt.ui.component.appbar.AppTopBar
 import org.muilab.notigpt.ui.screen.HomeScreen
 import org.muilab.notigpt.ui.screen.SettingsScreen
-import org.muilab.notigpt.ui.screens.EsmScreen
 import org.muilab.notigpt.ui.screens.PreferenceChatScreen
 import org.muilab.notigpt.ui.screens.RemindersScreen
 import org.muilab.notigpt.ui.viewmodel.DrawerViewModel
-import org.muilab.notigpt.ui.viewmodel.EsmViewModel
 import org.muilab.notigpt.ui.viewmodel.PreferenceViewModel
 import org.muilab.notigpt.ui.viewmodel.ReminderViewModel
 
@@ -50,21 +47,10 @@ fun AppScaffold(
     var isSettingsShown by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
-    val activity = context as? Activity
 
     var selectedTab by remember { mutableStateOf(org.muilab.notigpt.ui.component.appbar.Tab.Notifications) }
 
-    LaunchedEffect(activity?.intent) {
-        val openEsm = activity?.intent?.getBooleanExtra("open_esm", false) ?: false
-        if (openEsm) {
-            selectedTab = org.muilab.notigpt.ui.component.appbar.Tab.ESM
-            // consume
-            activity?.intent?.removeExtra("open_esm")
-        }
-    }
-
     val reminderViewModel: ReminderViewModel = viewModel()
-    val esmViewModel: EsmViewModel = viewModel()
     val preferenceViewModel: PreferenceViewModel = viewModel()
 
     val unreadNotiCount by drawerViewModel.unreadActiveCount.collectAsState()
@@ -72,9 +58,6 @@ fun AppScaffold(
     val pendingTaskCount = remember(reminderList) {
         reminderList.count { it.isTask && !it.isCompleted }
     }
-
-    val esmAvailable by esmViewModel.available.collectAsState()
-    val pendingEsmCount = remember(esmAvailable) { esmAvailable.size }
 
     val unresolvedConflicts by preferenceViewModel.unresolvedConflicts.collectAsState()
 
@@ -186,7 +169,6 @@ fun AppScaffold(
                     selectedTab = selectedTab,
                     unreadNotificationCount = unreadNotiCount,
                     pendingTaskCount = pendingTaskCount,
-                    pendingEsmCount = pendingEsmCount,
                     unresolvedConflictCount = unresolvedConflicts.size,
                     onTabSelected = { tab ->
                         // Leaving Notifications: persist any pending read marks so border colors update.
@@ -212,7 +194,6 @@ fun AppScaffold(
                         drawerViewModel = drawerViewModel,
                         preferenceViewModel = preferenceViewModel,
                     )
-                    org.muilab.notigpt.ui.component.appbar.Tab.ESM -> EsmScreen()
                     org.muilab.notigpt.ui.component.appbar.Tab.Preferences -> PreferenceChatScreen(
                         preferenceViewModel = preferenceViewModel,
                     )
