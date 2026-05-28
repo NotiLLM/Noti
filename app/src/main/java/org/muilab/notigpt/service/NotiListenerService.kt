@@ -17,7 +17,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import org.muilab.notigpt.data.remote.n8n.enqueueUpdateNotification
 import org.muilab.notigpt.domain.notification.NotificationFilter
 import org.muilab.notigpt.model.notifications.NotiUnit
 import org.muilab.notigpt.repository.NotiRepository

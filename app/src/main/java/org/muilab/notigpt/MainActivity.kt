@@ -20,7 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.core.app.NotificationManagerCompat
 import org.muilab.notigpt.repository.NotiRepositoryProvider
 import org.muilab.notigpt.service.NotiListenerService
-import org.muilab.notigpt.ui.theme.NotiLLMTheme
+import org.muilab.notigpt.ui.theme.NotiTheme
 import org.muilab.notigpt.util.SharedPreferencesManager
 import org.muilab.notigpt.ui.component.AppScaffold
 import org.muilab.notigpt.ui.viewmodel.DrawerViewModel
@@ -70,7 +70,7 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            NotiLLMTheme {
+            NotiTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background

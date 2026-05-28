@@ -12,8 +12,7 @@ class BootUpReceiver : BroadcastReceiver() {
             Log.i("BootUpReceiver", "BOOT_COMPLETED received; ensuring periodic work is scheduled")
 
             // On modern Android versions, starting background services from boot is heavily restricted
-            // and can cause the receiver to fail early. The notification listener will be rebound by
-            // the system once the user has enabled it.
+            // and can cause the receiver to fail early.
 
             // Ensure periodic scan/extract restarts after reboot.
             ReminderPeriodicWork.enqueue(context.applicationContext)

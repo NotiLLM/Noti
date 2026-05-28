@@ -4,7 +4,6 @@ import android.app.TimePickerDialog
 import android.content.Intent
 import android.net.Uri
 import android.provider.CalendarContract
-import android.util.Log
 import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.activity.compose.BackHandler
@@ -77,23 +76,17 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.muilab.notigpt.R
 import org.muilab.notigpt.model.features.PreferenceEntryPoint
 import org.muilab.notigpt.model.features.ReminderUnit
 import org.muilab.notigpt.model.features.SubTask
 import org.muilab.notigpt.model.features.asExportable
-import org.muilab.notigpt.repository.ReminderRelatedNotificationsRepository
-import org.muilab.notigpt.repository.NotiRepositoryProvider
 import org.muilab.notigpt.ui.component.PreferenceLearningBottomSheet
+import org.muilab.notigpt.ui.component.notification.RelatedNotificationPreview
 import org.muilab.notigpt.ui.component.reminder.SubTaskRow
 import org.muilab.notigpt.ui.component.reminder.SubTaskListInCard
 import org.muilab.notigpt.ui.component.reminder.SubTaskDetailScreen
-import org.muilab.notigpt.ui.screens.esm.EsmNotiCardLikePreview
 import org.muilab.notigpt.ui.viewmodel.DrawerViewModel
 import org.muilab.notigpt.ui.viewmodel.DrawerViewModelFactory
 import org.muilab.notigpt.ui.viewmodel.PreferenceViewModel
@@ -163,6 +156,7 @@ fun RemindersScreen(
 
     // ===== Google Tasks integration =====
     val googleTasksExportResult by vm.googleTasksExportResult.collectAsState()
+    val relatedNotificationsState by vm.relatedNotificationsState.collectAsState()
 
     // Reminder pending export after sign-in completes.
     var pendingGoogleTasksReminder by remember { mutableStateOf<ReminderUnit?>(null) }
@@ -170,24 +164,8 @@ fun RemindersScreen(
     val googleSignInLauncher = rememberLauncherForActivityResult(
         contract = androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
     ) { result ->
-        CoroutineScope(Dispatchers.IO).launch {
-            val account = org.muilab.notigpt.platform.GoogleTasksAuthManager.handleSignInResult(result.data)
-            withContext(Dispatchers.Main) {
-                if (account != null) {
-                    // Sign-in succeeded – export the pending reminder if any
-                    pendingGoogleTasksReminder?.let { reminder ->
-                        vm.exportToGoogleTasks(reminder)
-                    }
-                } else {
-                    android.widget.Toast.makeText(
-                        context,
-                        strGoogleTasksNotSignedIn,
-                        android.widget.Toast.LENGTH_SHORT
-                    ).show()
-                }
-                pendingGoogleTasksReminder = null
-            }
-        }
+        vm.handleGoogleTasksSignInResult(result.data, pendingGoogleTasksReminder)
+        pendingGoogleTasksReminder = null
     }
 
     // Show Toast when Google Tasks export result changes.
@@ -637,6 +615,8 @@ fun RemindersScreen(
                     isGoogleTasksExporting = googleTasksExportResult is ReminderViewModel.GoogleTasksExportResult.Loading,
                     onOpenExportDialog = openExportDialog,
                     onRegenerate = { vm.regenerateOne(current.reminderId) },
+                    relatedNotificationsState = relatedNotificationsState,
+                    onLoadRelatedNotifications = { reminder -> vm.loadRelatedNotifications(reminder) },
                     // Sub-task parameters
                     subTasks = allSubTasksByReminder[current.reminderId] ?: emptyList(),
                     onAddSubTask = { vm.addSubTask(current.reminderId) },
@@ -1041,7 +1021,7 @@ private fun ReminderActionChip(
         onClick = {
             when (type) {
                 "copy" -> {
-                    CoroutineScope(Dispatchers.Main).launch { clipboard.copyPlainText("reminder_button", intent) }
+                    clipboard.copyPlainText("reminder_button", intent)
                 }
                 else -> {
                     try {
@@ -1076,7 +1056,8 @@ private fun ReminderDetailScreen(
     isGoogleTasksExporting: Boolean = false,
     onOpenExportDialog: (ReminderUnit, ExportType) -> Unit = { _, _ -> },
     onRegenerate: () -> Unit = {},
-    reminderViewModel: ReminderViewModel? = null,
+    relatedNotificationsState: ReminderViewModel.RelatedNotificationsState = ReminderViewModel.RelatedNotificationsState(),
+    onLoadRelatedNotifications: (ReminderUnit) -> Unit = {},
     // Sub-task parameters
     subTasks: List<SubTask> = emptyList(),
     onAddSubTask: () -> Unit = {},
@@ -1334,27 +1315,13 @@ private fun ReminderDetailScreen(
 
             // === Related notifications ===
             var relatedExpanded by remember(initial.reminderId) { mutableStateOf(false) }
-            var relatedRecordsByKey by remember(initial.reminderId) { mutableStateOf(ReminderRelatedNotificationsRepository.RelatedNotifications.Empty.recordsByKey) }
-            var relatedUnitsByKey by remember(initial.reminderId) { mutableStateOf(ReminderRelatedNotificationsRepository.RelatedNotifications.Empty.unitsByKey) }
-            var relatedLoading by remember(initial.reminderId) { mutableStateOf(false) }
+            val relatedForThisReminder = relatedNotificationsState.reminderId == initial.reminderId
+            val relatedLoading = relatedForThisReminder && relatedNotificationsState.isLoading
+            val relatedRecordsByKey = if (relatedForThisReminder) relatedNotificationsState.related.recordsByKey else emptyMap()
+            val relatedUnitsByKey = if (relatedForThisReminder) relatedNotificationsState.related.unitsByKey else emptyMap()
 
             LaunchedEffect(initial.reminderId, initial.extractionSnapshotId, initial.associatedNotiRecords) {
-                relatedLoading = true
-                relatedRecordsByKey = emptyMap()
-                relatedUnitsByKey = emptyMap()
-
-                try {
-                    val repo = ReminderRelatedNotificationsRepository(context.applicationContext)
-                    val related = repo.getRelatedNotifications(initial)
-                    relatedRecordsByKey = related.recordsByKey
-                    relatedUnitsByKey = related.unitsByKey
-                } catch (t: Throwable) {
-                    Log.e("ReminderRelatedNotis", "Failed loading related notifications", t)
-                    relatedRecordsByKey = emptyMap()
-                    relatedUnitsByKey = emptyMap()
-                } finally {
-                    relatedLoading = false
-                }
+                onLoadRelatedNotifications(initial)
             }
 
             // Show the section as long as this reminder claims it has associated notifications.
@@ -1408,7 +1375,7 @@ private fun ReminderDetailScreen(
                                 if (unit != null) {
                                     // IMPORTANT: show ALL records that were deemed related by the snapshot.
                                     val displayUnit = org.muilab.notigpt.model.notifications.NotiDisplayUnit(unit, recs)
-                                    EsmNotiCardLikePreview(
+                                    RelatedNotificationPreview(
                                         notiDisplayUnit = displayUnit,
                                         showOpenButton = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S,
                                         onOpen = {
@@ -1497,27 +1464,25 @@ private fun ReminderDetailScreen(
             val cal = Calendar.getInstance().apply {
                 timeInMillis = if (deadlineTimestamp > 0L) deadlineTimestamp else System.currentTimeMillis()
             }
-            withContext(Dispatchers.Main) {
-                TimePickerDialog(
-                    context,
-                    { _, hour, minute ->
-                        val c = Calendar.getInstance().apply {
-                            timeInMillis = if (deadlineTimestamp > 0L) deadlineTimestamp else System.currentTimeMillis()
-                            set(Calendar.HOUR_OF_DAY, hour)
-                            set(Calendar.MINUTE, minute)
-                            set(Calendar.SECOND, 0)
-                            set(Calendar.MILLISECOND, 0)
-                        }
-                        deadlineTimestamp = c.timeInMillis
-                        showTimePicker = false
-                    },
-                    cal.get(Calendar.HOUR_OF_DAY),
-                    cal.get(Calendar.MINUTE),
-                    true
-                ).apply {
-                    setOnCancelListener { showTimePicker = false }
-                }.show()
-            }
+            TimePickerDialog(
+                context,
+                { _, hour, minute ->
+                    val c = Calendar.getInstance().apply {
+                        timeInMillis = if (deadlineTimestamp > 0L) deadlineTimestamp else System.currentTimeMillis()
+                        set(Calendar.HOUR_OF_DAY, hour)
+                        set(Calendar.MINUTE, minute)
+                        set(Calendar.SECOND, 0)
+                        set(Calendar.MILLISECOND, 0)
+                    }
+                    deadlineTimestamp = c.timeInMillis
+                    showTimePicker = false
+                },
+                cal.get(Calendar.HOUR_OF_DAY),
+                cal.get(Calendar.MINUTE),
+                true
+            ).apply {
+                setOnCancelListener { showTimePicker = false }
+            }.show()
         }
     }
 }
@@ -1827,31 +1792,29 @@ private fun ExportConfirmationDialog(
             val cal = Calendar.getInstance().apply {
                 timeInMillis = if (existingMs > 0L) existingMs else System.currentTimeMillis()
             }
-            withContext(Dispatchers.Main) {
-                TimePickerDialog(
-                    context,
-                    { _, hour, minute ->
-                        val c = Calendar.getInstance().apply {
-                            timeInMillis = if (existingMs > 0L) existingMs else System.currentTimeMillis()
-                            set(Calendar.HOUR_OF_DAY, hour)
-                            set(Calendar.MINUTE, minute)
-                            set(Calendar.SECOND, 0)
-                            set(Calendar.MILLISECOND, 0)
-                        }
-                        when (currentField) {
-                            "start" -> startMs = c.timeInMillis
-                            "end" -> endMs = c.timeInMillis
-                            "deadline" -> deadlineMs = c.timeInMillis
-                        }
-                        pickingMode = null; pickingField = null
-                    },
-                    cal.get(Calendar.HOUR_OF_DAY),
-                    cal.get(Calendar.MINUTE),
-                    true
-                ).apply {
-                    setOnCancelListener { pickingMode = null; pickingField = null }
-                }.show()
-            }
+            TimePickerDialog(
+                context,
+                { _, hour, minute ->
+                    val c = Calendar.getInstance().apply {
+                        timeInMillis = if (existingMs > 0L) existingMs else System.currentTimeMillis()
+                        set(Calendar.HOUR_OF_DAY, hour)
+                        set(Calendar.MINUTE, minute)
+                        set(Calendar.SECOND, 0)
+                        set(Calendar.MILLISECOND, 0)
+                    }
+                    when (currentField) {
+                        "start" -> startMs = c.timeInMillis
+                        "end" -> endMs = c.timeInMillis
+                        "deadline" -> deadlineMs = c.timeInMillis
+                    }
+                    pickingMode = null; pickingField = null
+                },
+                cal.get(Calendar.HOUR_OF_DAY),
+                cal.get(Calendar.MINUTE),
+                true
+            ).apply {
+                setOnCancelListener { pickingMode = null; pickingField = null }
+            }.show()
         }
     }
 }

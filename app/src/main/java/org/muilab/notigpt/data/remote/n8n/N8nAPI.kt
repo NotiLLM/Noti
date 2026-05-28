@@ -16,7 +16,6 @@ import org.muilab.notigpt.util.Constants.Companion.N8N_REGENERATE_ONE
 import org.muilab.notigpt.util.Constants.Companion.N8N_REGENERATE_ALL
 import org.muilab.notigpt.util.Constants.Companion.N8N_RERANK
 import org.muilab.notigpt.util.Constants.Companion.DIFY_POST_NOTIFICATION_ACTION
-import org.muilab.notigpt.util.Constants.Companion.DIFY_UPDATE_NOTIFICATION
 import java.util.concurrent.TimeUnit
 import androidx.work.ExistingWorkPolicy
 
@@ -30,29 +29,6 @@ data class N8nUpdateNotificationPayload(
 )
 
 // === WorkManager enqueuers ===
-
-// Still using the same api_type flag; you can rename them later if you want.
-fun enqueueUpdateNotification(context: Context, notiKey: String) {
-    val inputData = Data.Builder()
-        .putString("api_type", DIFY_UPDATE_NOTIFICATION)
-        .putString("noti_key", notiKey)
-        // Let the Worker know which n8n webhook to call
-        .putString("webhook_path", BuildConfig.N8N_UPDATE_NOTIFICATION_PATH)
-        .build()
-
-    val constraints = Constraints.Builder()
-        .setRequiredNetworkType(NetworkType.CONNECTED)
-        .build()
-
-    val workerRequest = OneTimeWorkRequestBuilder<N8nAPIWorker>()
-        .setBackoffCriteria(BackoffPolicy.LINEAR, 1, TimeUnit.MINUTES)
-        .setConstraints(constraints)
-        .setInputData(inputData)
-        .build()
-
-    val uniqueName = "n8n_update_notification_$notiKey"
-    WorkManager.getInstance(context).enqueueUniqueWork(uniqueName, ExistingWorkPolicy.REPLACE, workerRequest)
-}
 
 fun enqueueNotificationAction(
     context: Context,

@@ -2,7 +2,7 @@ package org.muilab.notigpt.data.remote.n8n.workers
 
 import androidx.work.Data
 import androidx.work.ListenableWorker
-import org.muilab.notigpt.data.remote.n8n.workers.handlers.N8nWorkerContext
+import org.muilab.notigpt.data.remote.n8n.workers.handlers.utils.N8nWorkerContext
 import org.muilab.notigpt.data.remote.n8n.workers.handlers.PostNotificationActionHandler
 import org.muilab.notigpt.data.remote.n8n.workers.handlers.PreferenceQuickSyncHandler
 import org.muilab.notigpt.data.remote.n8n.workers.handlers.ReminderExtractionHandler

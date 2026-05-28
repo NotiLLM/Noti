@@ -41,7 +41,7 @@ fun Modifier.notiCardSwipeHandler(
         val maxActionsOffset = endActionsWidth + extraPx
 
         // Restore thresholds
-        val horizontalBiasFactor = 0.5f
+        val horizontalBiasFactor = 0.4f
         val minHorizontalPx = viewTouchSlop
 
         awaitEachGesture {

@@ -523,4 +523,99 @@ object AppDatabaseMigrations {
             db.execSQL("ALTER TABLE reminder_list ADD COLUMN isVisible INTEGER NOT NULL DEFAULT 1")
         }
     }
+
+    val MIGRATION_27_28 = object : Migration(27, 28) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE reminder_list ADD COLUMN origin TEXT NOT NULL DEFAULT 'manual'")
+            db.execSQL("ALTER TABLE reminder_list ADD COLUMN humanEditCount INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE reminder_list ADD COLUMN deletedAtMs INTEGER")
+        }
+    }
+
+    val MIGRATION_28_29 = object : Migration(28, 29) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """CREATE TABLE IF NOT EXISTS extraction_preferences (
+                        id TEXT NOT NULL PRIMARY KEY,
+                        statement TEXT NOT NULL,
+                        preferenceType TEXT NOT NULL,
+                        createdAt INTEGER NOT NULL,
+                        updatedAt INTEGER NOT NULL
+                    )"""
+            )
+        }
+    }
+
+    val MIGRATION_29_30 = object : Migration(29, 30) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """CREATE TABLE IF NOT EXISTS preference_conflicts (
+                        conflictId TEXT NOT NULL PRIMARY KEY,
+                        description TEXT NOT NULL,
+                        involvedPreferenceIds TEXT NOT NULL,
+                        source TEXT NOT NULL,
+                        createdAt INTEGER NOT NULL
+                    )"""
+            )
+        }
+    }
+
+    val MIGRATION_30_31 = object : Migration(30, 31) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE reminder_list ADD COLUMN isEvent INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE reminder_list ADD COLUMN startTime INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE reminder_list ADD COLUMN endTime INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE noti_drawer ADD COLUMN hasEvent INTEGER NOT NULL DEFAULT 0")
+        }
+    }
+
+    val MIGRATION_31_32 = object : Migration(31, 32) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE reminder_list ADD COLUMN buttons TEXT NOT NULL DEFAULT '[]'")
+            db.execSQL("ALTER TABLE reminder_list ADD COLUMN isViewed INTEGER NOT NULL DEFAULT 1")
+            db.execSQL("ALTER TABLE reminder_list ADD COLUMN isPinned INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE reminder_list ADD COLUMN sortScore REAL NOT NULL DEFAULT 50.0")
+            db.execSQL("ALTER TABLE reminder_list ADD COLUMN reRankHistory TEXT NOT NULL DEFAULT '[]'")
+        }
+    }
+
+    val MIGRATION_32_33 = object : Migration(32, 33) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """CREATE TABLE IF NOT EXISTS user_contexts (
+                        id TEXT NOT NULL PRIMARY KEY,
+                        statement TEXT NOT NULL,
+                        category TEXT NOT NULL,
+                        createdAt INTEGER NOT NULL,
+                        updatedAt INTEGER NOT NULL
+                    )"""
+            )
+        }
+    }
+
+    val MIGRATION_33_34 = object : Migration(33, 34) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """CREATE TABLE IF NOT EXISTS sub_tasks (
+                        subTaskId TEXT NOT NULL PRIMARY KEY,
+                        parentReminderId TEXT NOT NULL,
+                        title TEXT NOT NULL DEFAULT '',
+                        description TEXT NOT NULL DEFAULT '',
+                        isTask INTEGER NOT NULL DEFAULT 1,
+                        isEvent INTEGER NOT NULL DEFAULT 0,
+                        isCompleted INTEGER NOT NULL DEFAULT 0,
+                        deadlineTimestamp INTEGER NOT NULL DEFAULT 0,
+                        startTime INTEGER NOT NULL DEFAULT 0,
+                        endTime INTEGER NOT NULL DEFAULT 0,
+                        buttons TEXT NOT NULL DEFAULT '[]',
+                        sortOrder INTEGER NOT NULL DEFAULT 0,
+                        createdAt INTEGER NOT NULL,
+                        lastUpdateTimestamp INTEGER NOT NULL,
+                        isVisible INTEGER NOT NULL DEFAULT 1,
+                        FOREIGN KEY(parentReminderId) REFERENCES reminder_list(reminderId) ON DELETE NO ACTION
+                    )"""
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS idx_subtask_parent ON sub_tasks (parentReminderId)")
+        }
+    }
 }

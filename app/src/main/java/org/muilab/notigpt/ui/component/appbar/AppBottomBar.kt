@@ -47,7 +47,6 @@ fun AppBottomBar(
     onTabSelected: (Tab) -> Unit,
     unreadNotificationCount: Int,
     pendingTaskCount: Int,
-    pendingEsmCount: Int,
     unresolvedConflictCount: Int = 0,
 ) {
     NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer) {
@@ -79,22 +78,6 @@ fun AppBottomBar(
             },
             label = { Text(stringResource(R.string.tab_reminders)) }
         )
-        // TODO: ESM Survey tab disabled (hide, no notifications, no Firestore sync)
-        // NavigationBarItem(
-        //     selected = selectedTab == Tab.ESM,
-        //     onClick = { onTabSelected(Tab.ESM) },
-        //     icon = {
-        //         BadgeIcon(
-        //             iconRes = R.drawable.esm,
-        //             contentDescription = stringResource(R.string.tab_esm),
-        //             badgeCount = pendingEsmCount,
-        //             badgeColor = MaterialTheme.colorScheme.tertiary,
-        //             badgeTextColor = MaterialTheme.colorScheme.onTertiary,
-        //         )
-        //     },
-        //     label = { Text(stringResource(R.string.tab_esm)) }
-        // )
-
         NavigationBarItem(
             selected = selectedTab == Tab.Preferences,
             onClick = { onTabSelected(Tab.Preferences) },
@@ -115,6 +98,5 @@ fun AppBottomBar(
 enum class Tab {
     Notifications,
     Reminders,
-    ESM,
     Preferences,
 }

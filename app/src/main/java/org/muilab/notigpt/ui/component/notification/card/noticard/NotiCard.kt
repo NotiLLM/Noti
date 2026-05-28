@@ -221,7 +221,6 @@ fun NotiCard(
                 // by the swipe handler via `cardWidth` state updates.
                 cardWidth = it.width.toFloat()
             }
-            .then(if (isSortingMode) Modifier else swipeModifier)
             .clip(MaterialTheme.shapes.large)
             .onGloballyPositioned { coordinates ->
                 if (!isRead && parentViewport != null) {
@@ -297,7 +296,8 @@ fun NotiCard(
             color = backgroundColor,
         ) {
             Box(modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp)) {
-                Column(Modifier.fillMaxWidth()) {
+                Column(Modifier.fillMaxWidth()
+                    .then(if (isSortingMode) Modifier else swipeModifier)) {
 
                     // Header layer: main content + overlay buttons stacked.
                     Box(modifier = Modifier.fillMaxWidth()) {

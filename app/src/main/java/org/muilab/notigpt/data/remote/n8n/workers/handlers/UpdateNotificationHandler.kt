@@ -9,9 +9,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import org.muilab.notigpt.data.remote.n8n.N8nUpdateNotificationPayload
-import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_ARCHIVE
-import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_DELETED
-import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_GENERAL
+import org.muilab.notigpt.data.remote.n8n.workers.handlers.utils.N8nWorkerContext
 import org.muilab.notigpt.util.SharedPreferencesManager
 import org.muilab.notigpt.util.toN8nNotiActions
 import org.muilab.notigpt.util.toN8nNotiRecords

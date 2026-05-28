@@ -11,12 +11,19 @@ import org.muilab.notigpt.model.notifications.NotiItem
  *
  * Contract:
  * - Grouping: unchanged; groups are formed iff a group has >= 2 children.
- * - Manual ordering: applies to loose (non-grouped) items only.
- *   - If a loose unit has sortPosition >= 0, it is placed at that position (clamped).
- *   - Remaining loose units fill the remaining gaps by latestTime desc.
- * - Groups are inserted after, and are not manually ordered (sortPosition ignored).
+ * - Manual ordering: applies to loose (non-grouped) items only when any loose unit has sortPosition >= 0.
+ * - Otherwise drawer ordering follows the visible product semantics: topped first, newer top time first, latest time next.
+ * - Groups inherit topped/top-time/latest-time from their children.
  */
 object DrawerGrouper {
+
+    private val drawerDisplayUnitComparator = compareByDescending<NotiDisplayUnit> { it.notiUnit.isSetToTop }
+        .thenByDescending { it.notiUnit.setToTopTime }
+        .thenByDescending { it.lastUpdateTime }
+
+    private val drawerItemComparator = compareByDescending<NotiDrawerItem> { it.isSetToTop }
+        .thenByDescending { it.setToTopTime }
+        .thenByDescending { it.latestTime }
 
     fun groupAndSort(
         displayUnits: List<NotiDisplayUnit>,
@@ -36,7 +43,7 @@ object DrawerGrouper {
         groupedItemsMap.forEach { (groupId, children) ->
             val group = groupMap[groupId]
             if (group != null && children.size > 1) {
-                val sortedChildren = children.sortedByDescending { it.lastUpdateTime }
+                val sortedChildren = children.sortedWith(drawerDisplayUnitComparator)
 
                 // Ensure children inherit "no manual sort" semantics.
                 // This is defensive: DB layer also enforces sortPosition=-1 for grouped items.
@@ -58,13 +65,17 @@ object DrawerGrouper {
 
         val allLoose = (looseUnits + orphanedChildren)
 
-        val finalLooseItems = applyManualPositions(allLoose)
-            .map { NotiItem(it) }
+        val looseHasManualOrder = allLoose.any { it.notiUnit.sortPosition >= 0 }
+        val finalLooseItems = if (looseHasManualOrder) {
+            applyManualPositions(allLoose).map { NotiItem(it) }
+        } else {
+            allLoose.sortedWith(drawerDisplayUnitComparator).map { NotiItem(it) }
+        }
 
-        // Final list = manual-sorted loose items first, then groups, both stable.
-        // Sort groups by latest child time desc.
-        return finalLooseItems + groupItems.sortedByDescending { gi ->
-            gi.children.maxOfOrNull { it.lastUpdateTime } ?: 0L
+        return if (looseHasManualOrder) {
+            finalLooseItems + groupItems.sortedWith(drawerItemComparator)
+        } else {
+            (finalLooseItems + groupItems).sortedWith(drawerItemComparator)
         }
     }
 

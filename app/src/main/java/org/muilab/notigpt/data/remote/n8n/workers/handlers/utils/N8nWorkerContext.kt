@@ -1,4 +1,4 @@
-package org.muilab.notigpt.data.remote.n8n.workers.handlers
+package org.muilab.notigpt.data.remote.n8n.workers.handlers.utils
 
 import android.content.Context
 import androidx.work.ListenableWorker
