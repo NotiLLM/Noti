@@ -166,6 +166,49 @@ fun SettingsScreen() {
             }
         }
 
+        Spacer(modifier = Modifier.size(12.dp))
+
+        // --- Extraction language preference ---
+        var extractionLanguage by remember { mutableStateOf(SharedPreferencesManager.targetExtractionLanguage) }
+
+        val languageOptions = listOf(
+            "original" to R.string.ui_settings_extraction_language_original,
+            "en" to R.string.ui_settings_extraction_language_en,
+            "zh-TW" to R.string.ui_settings_extraction_language_zhtw,
+        )
+
+        Text(
+            stringResource(R.string.ui_settings_extraction_language),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            style = androidx.compose.material3.MaterialTheme.typography.titleMedium
+        )
+
+        languageOptions.forEach { (value, labelResId) ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .selectable(
+                        selected = extractionLanguage == value,
+                        onClick = {
+                            extractionLanguage = value
+                            SharedPreferencesManager.targetExtractionLanguage = value
+                        },
+                        role = Role.RadioButton
+                    )
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                RadioButton(
+                    selected = extractionLanguage == value,
+                    onClick = {
+                        extractionLanguage = value
+                        SharedPreferencesManager.targetExtractionLanguage = value
+                    }
+                )
+                Text(stringResource(labelResId), modifier = Modifier.padding(start = 8.dp))
+            }
+        }
+
         Spacer(modifier = Modifier.size(24.dp))
 
         // --- Export Data Section ---

@@ -15,13 +15,18 @@ import kotlinx.coroutines.withContext
 import org.muilab.notigpt.R
 import org.muilab.notigpt.database.room.AppDatabase
 import org.muilab.notigpt.database.room.ExtractionPreferenceDao
+import org.muilab.notigpt.database.room.NotiDrawerDao
 import org.muilab.notigpt.database.room.PreferenceConflictDao
+import org.muilab.notigpt.database.room.ReminderListDao
+import org.muilab.notigpt.database.room.UserContextDao
 import org.muilab.notigpt.database.server.PreferenceChatClient
+import org.muilab.notigpt.database.server.PreferenceContextDiscoverClient
 import org.muilab.notigpt.database.server.PreferenceQuickSyncClient
 import org.muilab.notigpt.model.features.ChatFlowContext
 import org.muilab.notigpt.model.features.ChatInteractRequest
 import org.muilab.notigpt.model.features.ChatMessage
 import org.muilab.notigpt.model.features.ConflictDto
+import org.muilab.notigpt.model.features.ContextDiscoverRequest
 import org.muilab.notigpt.model.features.ExtractionPreference
 import org.muilab.notigpt.model.features.PreferenceConflict
 import org.muilab.notigpt.model.features.PreferenceEntryPoint
@@ -29,6 +34,7 @@ import org.muilab.notigpt.model.features.ProposedAction
 import org.muilab.notigpt.model.features.ProposedActionType
 import org.muilab.notigpt.model.features.QuickSyncRequest
 import org.muilab.notigpt.model.features.ReminderUnit
+import org.muilab.notigpt.model.features.UserContext
 import org.muilab.notigpt.model.features.UserSelections
 import org.muilab.notigpt.util.SharedPreferencesManager
 import java.util.Locale
@@ -52,12 +58,34 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
     private val conflictDao: PreferenceConflictDao =
         AppDatabase.getInstance(application).preferenceConflictDao()
 
+    private val userContextDao: UserContextDao =
+        AppDatabase.getInstance(application).userContextDao()
+
+    private val drawerDao: NotiDrawerDao =
+        AppDatabase.getInstance(application).drawerDao()
+
+    private val reminderListDao: ReminderListDao =
+        AppDatabase.getInstance(application).reminderListDao()
+
+    companion object {
+        /** Max number of notification summaries sent to the context-discover endpoint. */
+        const val CONTEXT_DISCOVER_NOTI_LIMIT = 80
+    }
+
     // ══════════════════════════════════════════════════════════════════
     //  Active preferences (from Room)
     // ══════════════════════════════════════════════════════════════════
 
     val activePreferences: StateFlow<List<ExtractionPreference>> =
         prefDao.getAllPreferencesFlow()
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    // ══════════════════════════════════════════════════════════════════
+    //  Active user contexts (from Room)
+    // ══════════════════════════════════════════════════════════════════
+
+    val activeContexts: StateFlow<List<UserContext>> =
+        userContextDao.getAllContextsFlow()
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     // ══════════════════════════════════════════════════════════════════
@@ -127,8 +155,7 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
     sealed interface BottomSheetStep {
         object Hidden : BottomSheetStep
         data class Scope(val entryPoint: PreferenceEntryPoint, val contextData: Map<String, Any?>) : BottomSheetStep
-        data class Reason(val entryPoint: PreferenceEntryPoint, val contextData: Map<String, Any?>, val scope: Int) : BottomSheetStep
-        data class SubReason(val entryPoint: PreferenceEntryPoint, val contextData: Map<String, Any?>, val scope: Int, val reason: Int, val subOptions: List<Int>) : BottomSheetStep
+        data class RuleSelection(val entryPoint: PreferenceEntryPoint, val contextData: Map<String, Any?>, val scope: Int, val ruleOptions: List<Int>) : BottomSheetStep
         /** Syncing in progress after user completed selections. */
         data class Syncing(val entryPoint: PreferenceEntryPoint) : BottomSheetStep
     }
@@ -232,48 +259,55 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
                 dismissBottomSheet()
             }
             else -> {
-                _bottomSheetStep.value = BottomSheetStep.Reason(
+                val ruleOptions = getRuleOptions(current.entryPoint)
+                _bottomSheetStep.value = BottomSheetStep.RuleSelection(
                     entryPoint = current.entryPoint,
                     contextData = current.contextData,
                     scope = scopeResId,
+                    ruleOptions = ruleOptions,
                 )
             }
         }
     }
 
-    fun selectReason(reasonResId: Int) {
-        val current = _bottomSheetStep.value
-        if (current !is BottomSheetStep.Reason) return
-
-        if (reasonResId == R.string.pref_reason_other) {
-            openChatFromFlow(current.entryPoint, current.contextData)
-            return
-        }
-
-        val subOptions = getSubOptions(current.entryPoint, reasonResId)
-        if (subOptions.isNotEmpty()) {
-            _bottomSheetStep.value = BottomSheetStep.SubReason(
-                entryPoint = current.entryPoint,
-                contextData = current.contextData,
-                scope = current.scope,
-                reason = reasonResId,
-                subOptions = subOptions,
+    /**
+     * Returns the concrete rule options for a given entry point.
+     */
+    private fun getRuleOptions(entryPoint: PreferenceEntryPoint): List<Int> {
+        return when (entryPoint) {
+            PreferenceEntryPoint.DELETE -> listOf(
+                R.string.pref_rule_delete_sender,
+                R.string.pref_rule_delete_group,
+                R.string.pref_rule_delete_info,
+                R.string.pref_rule_delete_topic,
+                R.string.pref_rule_delete_app,
+                R.string.pref_reason_other,
             )
-        } else {
-            // No sub-options: fire quick-sync now
-            val ctx = getApplication<Application>()
-            fireQuickSync(
-                current.entryPoint, current.contextData,
-                ctx.getString(current.scope), ctx.getString(reasonResId), null,
+            PreferenceEntryPoint.MANUAL_EXTRACT -> listOf(
+                R.string.pref_rule_extract_sender,
+                R.string.pref_rule_extract_thread,
+                R.string.pref_rule_extract_wording,
+                R.string.pref_rule_extract_situational,
+                R.string.pref_reason_other,
+            )
+            PreferenceEntryPoint.EDIT -> listOf(
+                R.string.pref_rule_edit_context,
+                R.string.pref_rule_edit_urgency,
+                R.string.pref_rule_edit_responsibility,
+                R.string.pref_rule_edit_granularity,
+                R.string.pref_reason_other,
             )
         }
     }
 
-    fun selectSubReason(subReasonResId: Int) {
+    /**
+     * Called when user selects a concrete rule from the RuleSelection step.
+     */
+    fun selectRule(ruleResId: Int) {
         val current = _bottomSheetStep.value
-        if (current !is BottomSheetStep.SubReason) return
+        if (current !is BottomSheetStep.RuleSelection) return
 
-        if (subReasonResId == R.string.pref_sub_let_me_explain || subReasonResId == R.string.pref_reason_other) {
+        if (ruleResId == R.string.pref_reason_other) {
             openChatFromFlow(current.entryPoint, current.contextData)
             return
         }
@@ -281,54 +315,8 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
         val ctx = getApplication<Application>()
         fireQuickSync(
             current.entryPoint, current.contextData,
-            ctx.getString(current.scope), ctx.getString(current.reason), ctx.getString(subReasonResId),
+            ctx.getString(current.scope), ctx.getString(ruleResId), null,
         )
-    }
-
-    private fun getSubOptions(entryPoint: PreferenceEntryPoint, reasonResId: Int): List<Int> {
-        return when (entryPoint) {
-            PreferenceEntryPoint.DELETE -> when (reasonResId) {
-                R.string.pref_reason_delete_handled -> listOf(
-                    R.string.pref_sub_no_task_next_time,
-                    R.string.pref_sub_only_if_not_handled,
-                    R.string.pref_sub_save_as_memo,
-                    R.string.pref_sub_ask_when_unsure,
-                )
-                R.string.pref_reason_delete_not_mine -> listOf(
-                    R.string.pref_sub_only_directly_addressed,
-                    R.string.pref_sub_only_clearly_for_me,
-                    R.string.pref_sub_ask_ambiguous_group,
-                )
-                R.string.pref_reason_delete_informational -> listOf(
-                    R.string.pref_sub_save_as_memo,
-                    R.string.pref_sub_do_not_extract,
-                    R.string.pref_sub_only_action_request,
-                )
-                R.string.pref_reason_delete_incorrect -> listOf(
-                    R.string.pref_sub_wrong_wording,
-                    R.string.pref_sub_wrong_person,
-                    R.string.pref_sub_missing_context,
-                    R.string.pref_sub_should_update,
-                    R.string.pref_reason_other,
-                )
-                else -> emptyList()
-            }
-            PreferenceEntryPoint.EDIT -> listOf(
-                R.string.pref_sub_same_sender,
-                R.string.pref_sub_same_topic,
-                R.string.pref_sub_similar_wording,
-                R.string.pref_sub_same_thread,
-                R.string.pref_sub_let_me_explain,
-            )
-            PreferenceEntryPoint.MANUAL_EXTRACT -> listOf(
-                R.string.pref_sub_same_sender,
-                R.string.pref_sub_same_topic,
-                R.string.pref_sub_similar_wording,
-                R.string.pref_sub_similar_timing,
-                R.string.pref_sub_similar_update_type,
-                R.string.pref_sub_let_me_explain,
-            )
-        }
     }
 
     private fun fireQuickSync(
@@ -347,6 +335,11 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
                     mapOf("id" to p.id, "statement" to p.statement, "type" to p.preferenceType)
                 }
 
+                val contexts = userContextDao.getAllContexts()
+                val contextsPayload = contexts.map { c ->
+                    mapOf("id" to c.id, "statement" to c.statement, "category" to c.category)
+                }
+
                 val request = QuickSyncRequest(
                     userId = SharedPreferencesManager.userId,
                     language =  Locale.getDefault().toLanguageTag(),
@@ -354,6 +347,7 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
                     contextData = contextData,
                     userSelections = UserSelections(scope = scope, reason = reason, subReason = subReason),
                     currentPreferences = prefsPayload,
+                    userContexts = contextsPayload,
                 )
 
                 val result = PreferenceQuickSyncClient.sync(request)
@@ -411,6 +405,17 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
 
     private val _isChatLoading = MutableStateFlow(false)
     val isChatLoading: StateFlow<Boolean> = _isChatLoading
+
+    /** "RULES" or "ABOUT_ME" — determines the LLM system prompt on n8n. */
+    private val _chatMode = MutableStateFlow("RULES")
+    val chatMode: StateFlow<String> = _chatMode
+
+    fun switchChatMode(mode: String) {
+        if (_chatMode.value == mode) return
+        _chatMode.value = mode
+        // Clear chat when switching modes to avoid cross-context confusion
+        clearChatHistory()
+    }
 
     private var _chatContextData: Map<String, Any?>? = null
 
@@ -474,12 +479,19 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
                     mapOf("id" to p.id, "statement" to p.statement, "type" to p.preferenceType)
                 }
 
+                val contexts = userContextDao.getAllContexts()
+                val contextsPayload = contexts.map { c ->
+                    mapOf("id" to c.id, "statement" to c.statement, "category" to c.category)
+                }
+
                 val request = ChatInteractRequest(
                     userId = SharedPreferencesManager.userId,
                     language = Locale.getDefault().toLanguageTag(),
                     chatHistory = _chatMessages.value,
                     contextData = _chatContextData,
                     currentPreferences = prefsPayload,
+                    userContexts = contextsPayload,
+                    chatMode = _chatMode.value,
                 )
 
                 val result = PreferenceChatClient.interact(request)
@@ -506,6 +518,7 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
                                     targetPreferenceId = dto.targetPreferenceId,
                                     newStatement = dto.newStatement,
                                     newPreferenceType = dto.newPreferenceType,
+                                    targetType = dto.targetType,
                                 )
                             }
                             _pendingActions.value = _pendingActions.value + actions
@@ -541,31 +554,59 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
 
         viewModelScope.launch(Dispatchers.IO) {
             val now = System.currentTimeMillis()
+            val isContext = action.targetType == "CONTEXT"
+
             when (action.type) {
                 ProposedActionType.ADD -> {
-                    val pref = ExtractionPreference(
-                        id = action.actionId,
-                        statement = action.newStatement ?: "",
-                        preferenceType = action.newPreferenceType ?: "",
-                        createdAt = now,
-                        updatedAt = now,
-                    )
-                    prefDao.upsertPreference(pref)
+                    if (isContext) {
+                        val ctx = UserContext(
+                            id = action.actionId,
+                            statement = action.newStatement ?: "",
+                            category = action.newPreferenceType ?: "general",
+                            createdAt = now,
+                            updatedAt = now,
+                        )
+                        userContextDao.upsertContext(ctx)
+                    } else {
+                        val pref = ExtractionPreference(
+                            id = action.actionId,
+                            statement = action.newStatement ?: "",
+                            preferenceType = action.newPreferenceType ?: "",
+                            createdAt = now,
+                            updatedAt = now,
+                        )
+                        prefDao.upsertPreference(pref)
+                    }
                 }
                 ProposedActionType.MODIFY -> {
                     val targetId = action.targetPreferenceId ?: action.actionId
-                    val pref = ExtractionPreference(
-                        id = targetId,
-                        statement = action.newStatement ?: "",
-                        preferenceType = action.newPreferenceType ?: "",
-                        createdAt = now,
-                        updatedAt = now,
-                    )
-                    prefDao.upsertPreference(pref)
+                    if (isContext) {
+                        val ctx = UserContext(
+                            id = targetId,
+                            statement = action.newStatement ?: "",
+                            category = action.newPreferenceType ?: "general",
+                            createdAt = now,
+                            updatedAt = now,
+                        )
+                        userContextDao.upsertContext(ctx)
+                    } else {
+                        val pref = ExtractionPreference(
+                            id = targetId,
+                            statement = action.newStatement ?: "",
+                            preferenceType = action.newPreferenceType ?: "",
+                            createdAt = now,
+                            updatedAt = now,
+                        )
+                        prefDao.upsertPreference(pref)
+                    }
                 }
                 ProposedActionType.DELETE -> {
                     val targetId = action.targetPreferenceId ?: return@launch
-                    prefDao.deletePreference(targetId)
+                    if (isContext) {
+                        userContextDao.deleteContext(targetId)
+                    } else {
+                        prefDao.deletePreference(targetId)
+                    }
                 }
             }
 
@@ -622,6 +663,119 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
     fun deleteActivePreference(id: String) {
         viewModelScope.launch(Dispatchers.IO) {
             prefDao.deletePreference(id)
+        }
+    }
+
+    /** Delete a single active user context (from the About Me UI). */
+    fun deleteActiveContext(id: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            userContextDao.deleteContext(id)
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════════════
+    //  "Learn About Me" — proactive context discovery
+    // ══════════════════════════════════════════════════════════════════
+
+    /**
+     * Sends a curated summary of notifications and reminders to an n8n endpoint
+     * that infers factual statements about the user.
+     * Results are displayed as ProposedAction cards in the chat UI.
+     * Chat remains active afterwards so the user can correct / discuss.
+     */
+    fun discoverUserContext() {
+        if (_isChatLoading.value) return
+        _isChatLoading.value = true
+
+        val systemMsg = ChatMessage(
+            role = "assistant",
+            content = getApplication<Application>().getString(R.string.pref_chat_discover_analyzing),
+        )
+        _chatMessages.value = _chatMessages.value + systemMsg
+
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                // Curated notification summary (most recent active notis)
+                val activeNotis = drawerDao.getAllActive()
+                    .sortedByDescending { it.lastUpdateTime }
+                    .take(CONTEXT_DISCOVER_NOTI_LIMIT)
+                val notiSummary = activeNotis.map { noti ->
+                    mapOf(
+                        "appName" to noti.appName,
+                        "summary" to noti.summary,
+                    )
+                }
+
+                // Current visible reminders
+                val reminders = reminderListDao.getAllVisible()
+                val remindersPayload = reminders.map { r ->
+                    mapOf(
+                        "title" to r.reminderTitle,
+                        "content" to r.reminderContent,
+                        "isTask" to r.isTask.toString(),
+                    )
+                }
+
+                // Existing user contexts (to avoid duplicates)
+                val contexts = userContextDao.getAllContexts()
+                val contextsPayload = contexts.map { c ->
+                    mapOf("id" to c.id, "statement" to c.statement, "category" to c.category)
+                }
+
+                val request = ContextDiscoverRequest(
+                    userId = SharedPreferencesManager.userId,
+                    language = Locale.getDefault().toLanguageTag(),
+                    notificationSummary = notiSummary,
+                    currentReminders = remindersPayload,
+                    existingUserContexts = contextsPayload,
+                )
+
+                val result = PreferenceContextDiscoverClient.discover(request)
+
+                withContext(Dispatchers.Main) {
+                    if (result != null) {
+                        val assistantMsg = ChatMessage(role = "assistant", content = result.assistantMessage)
+                        _chatMessages.value = _chatMessages.value + assistantMsg
+
+                        if (result.proposedActions.isNotEmpty()) {
+                            val actions = result.proposedActions.map { dto ->
+                                ProposedAction(
+                                    actionId = dto.actionId,
+                                    type = try {
+                                        ProposedActionType.valueOf(dto.type)
+                                    } catch (_: Exception) {
+                                        ProposedActionType.ADD
+                                    },
+                                    targetPreferenceId = dto.targetPreferenceId,
+                                    newStatement = dto.newStatement,
+                                    newPreferenceType = dto.newPreferenceType,
+                                    targetType = dto.targetType ?: "CONTEXT",
+                                )
+                            }
+                            _pendingActions.value = _pendingActions.value + actions
+                        }
+                    } else {
+                        val errorMsg = ChatMessage(
+                            role = "assistant",
+                            content = "Sorry, I couldn't analyze your notifications right now. Please check your network and try again.",
+                        )
+                        _chatMessages.value = _chatMessages.value + errorMsg
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Context discover error", e)
+                withContext(Dispatchers.Main) {
+                    val errorMsg = ChatMessage(
+                        role = "assistant",
+                        content = "An error occurred while analyzing your notifications.",
+                    )
+                    _chatMessages.value = _chatMessages.value + errorMsg
+                }
+            } finally {
+                withContext(Dispatchers.Main) {
+                    _isChatLoading.value = false
+                }
+            }
         }
     }
 

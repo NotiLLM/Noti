@@ -15,9 +15,12 @@ import org.muilab.notigpt.database.room.AppDatabase
 import org.muilab.notigpt.database.server.enqueueRegenerateAll
 import org.muilab.notigpt.database.server.enqueueRegenerateOne
 import org.muilab.notigpt.database.server.enqueueRerank
+import org.muilab.notigpt.model.features.ExportableItem
 import org.muilab.notigpt.model.features.ReminderUnit
+import org.muilab.notigpt.model.features.SubTask
 import org.muilab.notigpt.repository.GoogleTasksRepository
 import org.muilab.notigpt.repository.ReminderRepository
+import org.muilab.notigpt.repository.SubTaskRepository
 import org.muilab.notigpt.platform.GoogleTasksAuthManager
 import java.util.UUID
 
@@ -37,11 +40,13 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
     }
 
     private val repo: ReminderRepository
+    private val subTaskRepo: SubTaskRepository
     private val googleTasksRepo: GoogleTasksRepository
 
     init {
         val db = AppDatabase.getInstance(application.applicationContext)
         repo = ReminderRepository(db.reminderListDao(), application.applicationContext)
+        subTaskRepo = SubTaskRepository(db.subTaskDao())
         googleTasksRepo = GoogleTasksRepository(application.applicationContext)
     }
 
@@ -52,19 +57,57 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
         _filter.value = tab
     }
 
+    private val _searchQuery = MutableStateFlow("")
+    val searchQuery: StateFlow<String> = _searchQuery
+
+    fun updateSearchQuery(query: String) {
+        _searchQuery.value = query
+    }
+
     private val allFlow = repo.observeAll()
     private val tasksFlow = repo.observeTasks()
     private val memosFlow = repo.observeMemos()
     private val completedFlow = repo.observeCompletedTasks()
 
-    val reminders: StateFlow<List<ReminderUnit>> = combine(_filter, allFlow, tasksFlow, memosFlow, completedFlow) { f, all, tasks, memos, completed ->
-        when (f) {
+    val reminders: StateFlow<List<ReminderUnit>> = combine(_filter, _searchQuery, allFlow, tasksFlow, memosFlow, completedFlow) { values ->
+        val f = values[0] as FilterTab
+        @Suppress("UNCHECKED_CAST")
+        val query = values[1] as String
+        @Suppress("UNCHECKED_CAST")
+        val all = values[2] as List<ReminderUnit>
+        @Suppress("UNCHECKED_CAST")
+        val tasks = values[3] as List<ReminderUnit>
+        @Suppress("UNCHECKED_CAST")
+        val memos = values[4] as List<ReminderUnit>
+        @Suppress("UNCHECKED_CAST")
+        val completed = values[5] as List<ReminderUnit>
+
+        val baseList = when (f) {
             FilterTab.All -> all
             FilterTab.Tasks -> tasks
             FilterTab.Memos -> memos
             FilterTab.Completed -> completed
         }
+
+        if (query.isBlank()) {
+            baseList
+        } else {
+            val terms = query.split("+").map { it.trim().lowercase() }.filter { it.isNotBlank() }
+            if (terms.isEmpty()) {
+                baseList
+            } else {
+                baseList.filter { reminder ->
+                    val searchable = "${reminder.reminderTitle} ${reminder.reminderContent}".lowercase()
+                    terms.all { term -> searchable.contains(term) }
+                }
+            }
+        }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** Sub-tasks grouped by parent reminder ID. */
+    val allSubTasksByReminder: StateFlow<Map<String, List<SubTask>>> =
+        subTaskRepo.observeAllByReminder()
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
 
     fun toggleCompleted(reminder: ReminderUnit, completed: Boolean) {
         viewModelScope.launch {
@@ -74,7 +117,9 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
 
     fun delete(reminderId: String) {
         viewModelScope.launch {
-            repo.deleteById(reminderId, System.currentTimeMillis())
+            val ts = System.currentTimeMillis()
+            subTaskRepo.softDeleteByParentId(reminderId, ts)
+            repo.deleteById(reminderId, ts)
         }
     }
 
@@ -104,6 +149,40 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
             userEdited = false,
         )
         upsert(reminder)
+    }
+
+    // ========== Sub-task CRUD ==========
+
+    fun addSubTask(parentReminderId: String) {
+        val id = "st_" + UUID.randomUUID().toString().take(8)
+        val now = System.currentTimeMillis()
+        val subTask = SubTask(
+            subTaskId = id,
+            parentReminderId = parentReminderId,
+            title = "",
+            isTask = true,
+            createdAt = now,
+            lastUpdateTimestamp = now,
+        )
+        viewModelScope.launch { subTaskRepo.upsert(subTask) }
+    }
+
+    fun upsertSubTask(subTask: SubTask) {
+        viewModelScope.launch {
+            subTaskRepo.upsert(subTask.copy(lastUpdateTimestamp = System.currentTimeMillis()))
+        }
+    }
+
+    fun deleteSubTask(subTaskId: String) {
+        viewModelScope.launch {
+            subTaskRepo.softDeleteById(subTaskId, System.currentTimeMillis())
+        }
+    }
+
+    fun toggleSubTaskCompleted(subTaskId: String, completed: Boolean) {
+        viewModelScope.launch {
+            subTaskRepo.setCompleted(subTaskId, completed, System.currentTimeMillis())
+        }
     }
 
     // ========== Sorting / Ranking ==========
@@ -249,19 +328,26 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
     fun exportToGoogleTasks(reminder: ReminderUnit) {
         viewModelScope.launch {
             _googleTasksExportResult.value = GoogleTasksExportResult.Loading
-
             val result = googleTasksRepo.createTaskFromReminder(reminder)
-
             _googleTasksExportResult.value = when (result) {
-                is GoogleTasksRepository.TaskResult.Success -> {
-                    GoogleTasksExportResult.Success(result.taskTitle)
-                }
-                is GoogleTasksRepository.TaskResult.Error -> {
-                    GoogleTasksExportResult.Error(result.message)
-                }
-                is GoogleTasksRepository.TaskResult.NotSignedIn -> {
-                    GoogleTasksExportResult.NotSignedIn
-                }
+                is GoogleTasksRepository.TaskResult.Success -> GoogleTasksExportResult.Success(result.taskTitle)
+                is GoogleTasksRepository.TaskResult.Error -> GoogleTasksExportResult.Error(result.message)
+                is GoogleTasksRepository.TaskResult.NotSignedIn -> GoogleTasksExportResult.NotSignedIn
+            }
+        }
+    }
+
+    /**
+     * Export any [ExportableItem] (including SubTask) to Google Tasks.
+     */
+    fun exportToGoogleTasks(item: ExportableItem) {
+        viewModelScope.launch {
+            _googleTasksExportResult.value = GoogleTasksExportResult.Loading
+            val result = googleTasksRepo.createTaskFromExportable(item)
+            _googleTasksExportResult.value = when (result) {
+                is GoogleTasksRepository.TaskResult.Success -> GoogleTasksExportResult.Success(result.taskTitle)
+                is GoogleTasksRepository.TaskResult.Error -> GoogleTasksExportResult.Error(result.message)
+                is GoogleTasksRepository.TaskResult.NotSignedIn -> GoogleTasksExportResult.NotSignedIn
             }
         }
     }

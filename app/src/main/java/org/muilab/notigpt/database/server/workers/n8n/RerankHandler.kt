@@ -53,6 +53,7 @@ internal object RerankHandler {
             "language" to Locale.getDefault().toLanguageTag(),
             "timezone" to TimeZone.getDefault().displayName,
             "currentTime" to sdf.format(Date()),
+            "targetExtractionLanguage" to SharedPreferencesManager.targetExtractionLanguage,
             "trigger" to trigger,
             "reminder" to mapOf(
                 "reminderId" to reminder.reminderId,
@@ -69,6 +70,7 @@ internal object RerankHandler {
             ),
             "notiContext" to notiContext,
             "extractionPreferences" to ctx.getExtractionPreferencesPayload(),
+            "userContexts" to ctx.getUserContextsPayload(),
         )
 
         val gson = Gson()

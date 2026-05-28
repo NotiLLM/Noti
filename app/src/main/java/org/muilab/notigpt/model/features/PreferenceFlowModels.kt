@@ -47,6 +47,8 @@ data class ProposedAction(
     val targetPreferenceId: String? = null,
     val newStatement: String? = null,
     val newPreferenceType: String? = null,
+    /** "RULE" or "CONTEXT" — indicates whether this action targets a preference or a user context. */
+    val targetType: String? = null,
     val confirmed: Boolean = false,
     val dismissed: Boolean = false,
 )
@@ -62,6 +64,7 @@ data class QuickSyncRequest(
     val contextData: Map<String, Any?>,
     val userSelections: UserSelections,
     val currentPreferences: List<Map<String, String>>,
+    val userContexts: List<Map<String, String>>? = null,
 )
 
 data class QuickSyncResponse(
@@ -83,6 +86,22 @@ data class ChatInteractRequest(
     val chatHistory: List<ChatMessage>,
     val contextData: Map<String, Any?>?,
     val currentPreferences: List<Map<String, String>>,
+    val userContexts: List<Map<String, String>>? = null,
+    /** "RULES" or "ABOUT_ME" — tells n8n which system prompt to use. */
+    val chatMode: String = "RULES",
+)
+
+/**
+ * Request to the context-discover n8n endpoint.
+ * Sends a curated summary of notifications and reminders so the LLM
+ * can infer factual statements about the user.
+ */
+data class ContextDiscoverRequest(
+    val userId: String,
+    val language: String,
+    val notificationSummary: List<Map<String, String>>,
+    val currentReminders: List<Map<String, String>>,
+    val existingUserContexts: List<Map<String, String>>,
 )
 
 data class ChatInteractResponse(
@@ -97,6 +116,8 @@ data class ProposedActionDto(
     val targetPreferenceId: String?,
     val newStatement: String?,
     val newPreferenceType: String?,
+    /** "RULE" or "CONTEXT" — indicates whether this action targets a preference or a user context. */
+    val targetType: String? = null,
 )
 
 // ── Conflict DTO (returned by both Quick-Sync and Chat-Interact) ────

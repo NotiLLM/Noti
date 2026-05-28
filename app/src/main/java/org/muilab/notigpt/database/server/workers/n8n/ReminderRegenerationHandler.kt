@@ -46,6 +46,7 @@ internal object ReminderRegenerationHandler {
             notiContextMap = mapOf(reminderId to notiContext),
             trigger = "REGENERATE_ONE",
             extractionPreferences = ctx.getExtractionPreferencesPayload(),
+            userContexts = ctx.getUserContextsPayload(),
         )
 
         return postAndApply(ctx, webhookPath, payload, trigger = "REGENERATE_ONE")
@@ -76,6 +77,7 @@ internal object ReminderRegenerationHandler {
             notiContextMap = notiContextMap,
             trigger = "REGENERATE_ALL",
             extractionPreferences = ctx.getExtractionPreferencesPayload(),
+            userContexts = ctx.getUserContextsPayload(),
         )
 
         return postAndApply(ctx, webhookPath, payload, trigger = "REGENERATE_ALL")
@@ -118,6 +120,7 @@ internal object ReminderRegenerationHandler {
         notiContextMap: Map<String, List<Map<String, Any>>>,
         trigger: String,
         extractionPreferences: List<Map<String, String>>,
+        userContexts: List<Map<String, String>>,
     ): Map<String, Any> {
         val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.getDefault())
 
@@ -151,9 +154,11 @@ internal object ReminderRegenerationHandler {
             "language" to Locale.getDefault().toLanguageTag(),
             "timezone" to TimeZone.getDefault().displayName,
             "currentTime" to sdf.format(Date()),
+            "targetExtractionLanguage" to SharedPreferencesManager.targetExtractionLanguage,
             "trigger" to trigger,
             "reminders" to remindersPayload,
             "extractionPreferences" to extractionPreferences,
+            "userContexts" to userContexts,
         )
     }
 

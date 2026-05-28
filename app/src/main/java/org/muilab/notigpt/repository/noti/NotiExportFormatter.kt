@@ -4,7 +4,6 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.muilab.notigpt.model.notifications.NotiAction
 import org.muilab.notigpt.model.notifications.NotiRecord
-import org.muilab.notigpt.model.notifications.NotiUnit
 
 /**
  * Pure-ish formatter for the export log JSON.
@@ -15,15 +14,17 @@ import org.muilab.notigpt.model.notifications.NotiUnit
 object NotiExportFormatter {
 
     fun formatUnit(
-        notiUnit: NotiUnit,
+        notiKey: String,
+        appName: String,
+        isPeople: Boolean,
         records: List<NotiRecord>,
         actions: List<NotiAction>,
         includeContext: Boolean,
     ): JSONObject {
         val notificationJson = JSONObject()
-        notificationJson.put("id", notiUnit.notiKey)
-        notificationJson.put("app", notiUnit.appName)
-        notificationJson.put("isPeople", notiUnit.isPeople)
+        notificationJson.put("id", notiKey)
+        notificationJson.put("app", appName)
+        notificationJson.put("isPeople", isPeople)
 
         val lastRecord = records.lastOrNull()
         val lastTitle = lastRecord?.title ?: ""
@@ -54,7 +55,7 @@ object NotiExportFormatter {
                 is NotiRecord -> {
                     val recordJson = JSONObject()
                     recordJson.put("type", "noti")
-                    recordJson.put("title", item.getDisplayedTitle(notiUnit.isPeople))
+                    recordJson.put("title", item.getDisplayedTitle(isPeople))
                     recordJson.put("content", item.content.takeIf { it != "null" } ?: "")
                     recordJson.put("time", item.time)
                     recordJson.put("is_dismissed", item.isDismissed)

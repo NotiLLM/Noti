@@ -7,6 +7,7 @@ import org.muilab.notigpt.database.server.N8nAPIClient
 import org.muilab.notigpt.repository.NotiRepository
 import org.muilab.notigpt.repository.NotiRepositoryProvider
 import org.muilab.notigpt.repository.ReminderRepository
+import org.muilab.notigpt.util.SharedPreferencesManager
 
 /**
  * Common dependencies for N8n worker handlers.
@@ -36,6 +37,32 @@ internal class N8nWorkerContext(
                     "id" to p.id,
                     "statement" to p.statement,
                     "type" to p.preferenceType,
+                )
+            }
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    /**
+     * Returns the user's chosen target extraction language for n8n payloads.
+     * Values: "original", "en", "zh-TW".
+     */
+    fun getTargetExtractionLanguage(): String {
+        return SharedPreferencesManager.targetExtractionLanguage
+    }
+
+    /**
+     * Returns the current user context facts formatted
+     * for inclusion in n8n webhook payloads.
+     */
+    suspend fun getUserContextsPayload(): List<Map<String, String>> {
+        return try {
+            database.userContextDao().getAllContexts().map { c ->
+                mapOf(
+                    "id" to c.id,
+                    "statement" to c.statement,
+                    "category" to c.category,
                 )
             }
         } catch (_: Exception) {

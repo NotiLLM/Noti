@@ -10,6 +10,8 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import org.muilab.notigpt.model.features.ExtractionPreference
 import org.muilab.notigpt.model.features.PreferenceConflict
 import org.muilab.notigpt.model.features.ReminderUnit
+import org.muilab.notigpt.model.features.SubTask
+import org.muilab.notigpt.model.features.UserContext
 import org.muilab.notigpt.model.notifications.NotiAction
 import org.muilab.notigpt.model.notifications.NotiGroup
 import org.muilab.notigpt.model.notifications.NotiRecord
@@ -25,15 +27,17 @@ import org.muilab.notigpt.model.features.ReminderExtractionSnapshot
         NotiRecord::class,
         NotiAction::class,
         ReminderUnit::class,
+        SubTask::class,
         NotiGroup::class,
         EsmInstance::class,
         EsmAnswerEvent::class,
         ReminderExtractionSnapshot::class,
         ExtractionPreference::class,
         PreferenceConflict::class,
+        UserContext::class,
     ],
     views = [VisibleNotiRecord::class],
-    version = 32,
+    version = 34,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -43,11 +47,13 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun recordDao(): NotiRecordDao
     abstract fun actionDao(): NotiActionDao
     abstract fun reminderListDao(): ReminderListDao
+    abstract fun subTaskDao(): SubTaskDao
     abstract fun groupDao(): NotiGroupDao
     abstract fun esmDao(): EsmDao
     abstract fun reminderSnapshotDao(): ReminderSnapshotDao
     abstract fun extractionPreferenceDao(): ExtractionPreferenceDao
     abstract fun preferenceConflictDao(): PreferenceConflictDao
+    abstract fun userContextDao(): UserContextDao
 
     companion object {
         @Volatile
@@ -120,6 +126,46 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_32_33 = object : Migration(32, 33) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """CREATE TABLE IF NOT EXISTS user_contexts (
+                        id TEXT NOT NULL PRIMARY KEY,
+                        statement TEXT NOT NULL,
+                        category TEXT NOT NULL,
+                        createdAt INTEGER NOT NULL,
+                        updatedAt INTEGER NOT NULL
+                    )"""
+                )
+            }
+        }
+
+        private val MIGRATION_33_34 = object : Migration(33, 34) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """CREATE TABLE IF NOT EXISTS sub_tasks (
+                        subTaskId TEXT NOT NULL PRIMARY KEY,
+                        parentReminderId TEXT NOT NULL,
+                        title TEXT NOT NULL DEFAULT '',
+                        description TEXT NOT NULL DEFAULT '',
+                        isTask INTEGER NOT NULL DEFAULT 1,
+                        isEvent INTEGER NOT NULL DEFAULT 0,
+                        isCompleted INTEGER NOT NULL DEFAULT 0,
+                        deadlineTimestamp INTEGER NOT NULL DEFAULT 0,
+                        startTime INTEGER NOT NULL DEFAULT 0,
+                        endTime INTEGER NOT NULL DEFAULT 0,
+                        buttons TEXT NOT NULL DEFAULT '[]',
+                        sortOrder INTEGER NOT NULL DEFAULT 0,
+                        createdAt INTEGER NOT NULL,
+                        lastUpdateTimestamp INTEGER NOT NULL,
+                        isVisible INTEGER NOT NULL DEFAULT 1,
+                        FOREIGN KEY(parentReminderId) REFERENCES reminder_list(reminderId) ON DELETE NO ACTION
+                    )"""
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS idx_subtask_parent ON sub_tasks (parentReminderId)")
+            }
+        }
+
         private fun buildDatabase(context: Context): AppDatabase {
             return Room.databaseBuilder(context, AppDatabase::class.java, DATABASE_NAME)
                 .addMigrations(AppDatabaseMigrations.MIGRATION_1_2)
@@ -153,6 +199,8 @@ abstract class AppDatabase : RoomDatabase() {
                 .addMigrations(MIGRATION_29_30)
                 .addMigrations(MIGRATION_30_31)
                 .addMigrations(MIGRATION_31_32)
+                .addMigrations(MIGRATION_32_33)
+                .addMigrations(MIGRATION_33_34)
                 .setJournalMode(JournalMode.TRUNCATE)
                 .build()
         }

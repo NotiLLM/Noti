@@ -31,10 +31,12 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
@@ -84,10 +86,15 @@ import org.json.JSONObject
 import org.muilab.notigpt.R
 import org.muilab.notigpt.model.features.PreferenceEntryPoint
 import org.muilab.notigpt.model.features.ReminderUnit
+import org.muilab.notigpt.model.features.SubTask
+import org.muilab.notigpt.model.features.asExportable
 import org.muilab.notigpt.model.notifications.NotiRecord
 import org.muilab.notigpt.repository.EsmRepository
 import org.muilab.notigpt.repository.NotiRepositoryProvider
 import org.muilab.notigpt.ui.component.PreferenceLearningBottomSheet
+import org.muilab.notigpt.ui.component.reminder.SubTaskRow
+import org.muilab.notigpt.ui.component.reminder.SubTaskListInCard
+import org.muilab.notigpt.ui.component.reminder.SubTaskDetailScreen
 import org.muilab.notigpt.ui.screens.esm.EsmNotiCardLikePreview
 import org.muilab.notigpt.ui.viewmodel.DrawerViewModel
 import org.muilab.notigpt.ui.viewmodel.DrawerViewModelFactory
@@ -105,6 +112,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.constraintlayout.helper.widget.Grid
 import kotlinx.coroutines.flow.distinctUntilChanged
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.material3.AssistChip
 import sh.calvin.reorderable.ReorderableItem
@@ -128,6 +136,7 @@ fun RemindersScreen(
 
     val reminders by vm.reminders.collectAsState()
     val filter by vm.filter.collectAsState()
+    val searchQuery by vm.searchQuery.collectAsState()
 
     // Local mutable copy for live drag reordering visual feedback
     val localReminders = remember { androidx.compose.runtime.mutableStateListOf<ReminderUnit>() }
@@ -140,6 +149,13 @@ fun RemindersScreen(
     var editing by remember { mutableStateOf<ReminderUnit?>(null) }
     var editingId by remember { mutableStateOf<String?>(null) }
     var editingInitialSnapshot by remember { mutableStateOf<ReminderUnit?>(null) }
+
+    // Sub-task editing (overlaid on top of reminder detail)
+    var editingSubTask by remember { mutableStateOf<SubTask?>(null) }
+    var editingSubTaskInitial by remember { mutableStateOf<SubTask?>(null) }
+
+    // Bulk sub-task observation (one DB query for all reminders)
+    val allSubTasksByReminder by vm.allSubTasksByReminder.collectAsState()
 
     // Long-press feedback dialog
     var feedbackDialogReminder by remember { mutableStateOf<ReminderUnit?>(null) }
@@ -337,6 +353,46 @@ fun RemindersScreen(
                 }
             }
 
+            // Search bar
+            val keyboardController = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+            val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
+
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { vm.updateSearchQuery(it) },
+                placeholder = { Text(stringResource(R.string.ui_reminders_search_placeholder)) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(percent = 100),
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Filled.Search,
+                        contentDescription = null,
+                    )
+                },
+                trailingIcon = {
+                    if (searchQuery.isNotBlank()) {
+                        IconButton(onClick = { vm.updateSearchQuery("") }) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = stringResource(R.string.a11y_close_search),
+                            )
+                        }
+                    }
+                },
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                    imeAction = androidx.compose.ui.text.input.ImeAction.Done,
+                ),
+                keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                    onDone = {
+                        keyboardController?.hide()
+                        focusManager.clearFocus()
+                    }
+                ),
+                singleLine = true,
+            )
+
             val reorderableState = rememberReorderableLazyListState(lazyListState = listState) { from, to ->
                 val fromReminder = localReminders.getOrNull(from.index)
                 val toReminder = localReminders.getOrNull(to.index)
@@ -365,6 +421,7 @@ fun RemindersScreen(
                     ReorderableItem(reorderableState, key = reminder.reminderId) {
                         ReminderCard(
                             reminder = reminder,
+                            subTasks = allSubTasksByReminder[reminder.reminderId] ?: emptyList(),
                             onDelete = {
                                 vm.delete(reminder.reminderId)
                                 if (reminder.origin.contains("llm")) {
@@ -390,6 +447,34 @@ fun RemindersScreen(
                             } else null,
                             showDragHandle = isDraggable,
                             dragHandleModifier = if (isDraggable) Modifier.draggableHandle() else Modifier,
+                            onSubTaskToggle = { stId, checked -> vm.toggleSubTaskCompleted(stId, checked) },
+                            onSubTaskClick = { st ->
+                                // Open parent reminder detail first, then navigate to sub-task detail
+                                editing = reminder
+                                editingId = reminder.reminderId
+                                editingInitialSnapshot = reminder
+                                editingSubTask = st
+                                editingSubTaskInitial = st
+                            },
+                            onSubTaskEdit = { st ->
+                                editing = reminder
+                                editingId = reminder.reminderId
+                                editingInitialSnapshot = reminder
+                                editingSubTask = st
+                                editingSubTaskInitial = st
+                            },
+                            onSubTaskDelete = { st -> vm.deleteSubTask(st.subTaskId) },
+                            onSubTaskExportGoogleTasks = { st -> vm.exportToGoogleTasks(st.asExportable()) },
+                            onSubTaskExportGoogleCalendar = { st ->
+                                val calIntent = Intent(Intent.ACTION_INSERT).apply {
+                                    data = CalendarContract.Events.CONTENT_URI
+                                    putExtra(CalendarContract.Events.TITLE, st.title)
+                                    putExtra(CalendarContract.Events.DESCRIPTION, st.description)
+                                    if (st.startTime > 0L) putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, st.startTime)
+                                    if (st.endTime > 0L) putExtra(CalendarContract.EXTRA_EVENT_END_TIME, st.endTime)
+                                }
+                                try { context.startActivity(calIntent) } catch (_: Exception) {}
+                            },
                         )
                     }
                 }
@@ -573,7 +658,90 @@ fun RemindersScreen(
                     isGoogleTasksExporting = googleTasksExportResult is ReminderViewModel.GoogleTasksExportResult.Loading,
                     onOpenExportDialog = openExportDialog,
                     onRegenerate = { vm.regenerateOne(current.reminderId) },
+                    // Sub-task parameters
+                    subTasks = allSubTasksByReminder[current.reminderId] ?: emptyList(),
+                    onAddSubTask = { vm.addSubTask(current.reminderId) },
+                    onSubTaskToggle = { stId, checked -> vm.toggleSubTaskCompleted(stId, checked) },
+                    onSubTaskClick = { st ->
+                        editingSubTask = st
+                        editingSubTaskInitial = st
+                    },
+                    onSubTaskEdit = { st ->
+                        editingSubTask = st
+                        editingSubTaskInitial = st
+                    },
+                    onSubTaskDelete = { st -> vm.deleteSubTask(st.subTaskId) },
+                    onSubTaskExportGoogleTasks = { st -> vm.exportToGoogleTasks(st.asExportable()) },
+                    onSubTaskExportGoogleCalendar = { st ->
+                        val calIntent = Intent(Intent.ACTION_INSERT).apply {
+                            data = CalendarContract.Events.CONTENT_URI
+                            putExtra(CalendarContract.Events.TITLE, st.title)
+                            putExtra(CalendarContract.Events.DESCRIPTION, st.description)
+                            if (st.startTime > 0L) putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, st.startTime)
+                            if (st.endTime > 0L) putExtra(CalendarContract.EXTRA_EVENT_END_TIME, st.endTime)
+                        }
+                        try { context.startActivity(calIntent) } catch (_: Exception) {}
+                    },
                 )
+
+                // Sub-task detail overlay (on top of reminder detail)
+                editingSubTask?.let { stCurrent ->
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(MaterialTheme.colorScheme.background)
+                            .clickable(
+                                indication = null,
+                                interactionSource = remember { MutableInteractionSource() },
+                                onClick = { /* consume */ }
+                            )
+                    ) {
+                        SubTaskDetailScreen(
+                            initial = stCurrent,
+                            onBack = { updatedOrNull ->
+                                if (updatedOrNull != null) {
+                                    val base = editingSubTaskInitial
+                                    val changed = base != null && (
+                                        base.title != updatedOrNull.title ||
+                                            base.description != updatedOrNull.description ||
+                                            base.isTask != updatedOrNull.isTask ||
+                                            base.isEvent != updatedOrNull.isEvent ||
+                                            base.isCompleted != updatedOrNull.isCompleted ||
+                                            base.deadlineTimestamp != updatedOrNull.deadlineTimestamp ||
+                                            base.startTime != updatedOrNull.startTime ||
+                                            base.endTime != updatedOrNull.endTime
+                                    )
+                                    if (changed) {
+                                        vm.upsertSubTask(updatedOrNull)
+                                    }
+                                }
+                                editingSubTask = null
+                                editingSubTaskInitial = null
+                            },
+                            onDelete = { stId ->
+                                vm.deleteSubTask(stId)
+                                editingSubTask = null
+                                editingSubTaskInitial = null
+                            },
+                            onSave = { updated ->
+                                vm.upsertSubTask(updated)
+                                editingSubTask = null
+                                editingSubTaskInitial = null
+                            },
+                            onExportGoogleTasks = { st -> vm.exportToGoogleTasks(st.asExportable()) },
+                            onExportGoogleCalendar = { st ->
+                                val calIntent = Intent(Intent.ACTION_INSERT).apply {
+                                    data = CalendarContract.Events.CONTENT_URI
+                                    putExtra(CalendarContract.Events.TITLE, st.title)
+                                    putExtra(CalendarContract.Events.DESCRIPTION, st.description)
+                                    if (st.startTime > 0L) putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, st.startTime)
+                                    if (st.endTime > 0L) putExtra(CalendarContract.EXTRA_EVENT_END_TIME, st.endTime)
+                                }
+                                try { context.startActivity(calIntent) } catch (_: Exception) {}
+                            },
+                        )
+                    }
+                }
             }
         }
     }
@@ -706,6 +874,7 @@ private fun FilterChip(text: String, selected: Boolean, onClick: () -> Unit) {
 @Composable
 private fun ReminderCard(
     reminder: ReminderUnit,
+    subTasks: List<SubTask> = emptyList(),
     onDelete: () -> Unit,
     onToggleCompleted: (Boolean) -> Unit,
     onEdit: () -> Unit,
@@ -715,6 +884,13 @@ private fun ReminderCard(
     onTogglePinned: () -> Unit = {},
     showDragHandle: Boolean = false,
     dragHandleModifier: Modifier = Modifier,
+    // Sub-task callbacks
+    onSubTaskToggle: (String, Boolean) -> Unit = { _, _ -> },
+    onSubTaskClick: (SubTask) -> Unit = {},
+    onSubTaskEdit: (SubTask) -> Unit = {},
+    onSubTaskDelete: (SubTask) -> Unit = {},
+    onSubTaskExportGoogleTasks: (SubTask) -> Unit = {},
+    onSubTaskExportGoogleCalendar: (SubTask) -> Unit = {},
 ) {
     val context = LocalContext.current
     val clipboard = remember(context) { AndroidClipboardController(context) }
@@ -752,83 +928,115 @@ private fun ReminderCard(
             .then(if (!reminder.isViewed) Modifier.padding(2.dp) else Modifier)
             .combinedClickable(onClick = onEdit, onLongClick = onLongPress)
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            if (showDragHandle) {
-                Icon(
-                    painter = painterResource(R.drawable.drag_indicator),
-                    contentDescription = stringResource(R.string.a11y_drag_handle),
-                    modifier = Modifier
-                        .size(32.dp)
-                        .then(dragHandleModifier)
-                        .padding(6.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-
-            if (reminder.isTask) {
-                Checkbox(checked = reminder.isCompleted, onCheckedChange = { onToggleCompleted(it) })
-                Spacer(Modifier.width(8.dp))
-            }
-
-            val titleStyle = if (reminder.isTask && reminder.isCompleted) {
-                MaterialTheme.typography.titleMedium.copy(textDecoration = TextDecoration.LineThrough)
-            } else MaterialTheme.typography.titleMedium
-
-            Text(
-                text = reminder.reminderTitle.ifBlank {
-                    if (reminder.isTask) stringResource(R.string.ui_reminders_untitled_task) else stringResource(R.string.ui_reminders_untitled_memo)
-                },
-                style = titleStyle,
-                modifier = Modifier.weight(1f)
-            )
-
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(0.dp)) {
-                if (onQuickExportTasks != null) {
-                    IconButton(onClick = onQuickExportTasks, modifier = Modifier.size(36.dp)) {
-                        Icon(painter = painterResource(R.drawable.task_add), contentDescription = stringResource(R.string.a11y_quick_export_tasks), modifier = Modifier.size(20.dp))
+        Row(modifier = Modifier.fillMaxWidth()) {
+            // Left gutter: checkbox (if task) on top, drag handle below — vertically stacked
+            if (reminder.isTask || showDragHandle) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.padding(end = 4.dp),
+                ) {
+                    if (reminder.isTask) {
+                        Checkbox(
+                            checked = reminder.isCompleted,
+                            onCheckedChange = { onToggleCompleted(it) },
+                        )
+                    }
+                    if (showDragHandle) {
+                        Icon(
+                            painter = painterResource(R.drawable.drag_indicator),
+                            contentDescription = stringResource(R.string.a11y_drag_handle),
+                            modifier = Modifier
+                                .size(32.dp)
+                                .then(dragHandleModifier)
+                                .padding(6.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                 }
-                if (onQuickExportCalendar != null) {
-                    IconButton(onClick = onQuickExportCalendar, modifier = Modifier.size(36.dp)) {
-                        Icon(painter = painterResource(R.drawable.calendar_add), contentDescription = stringResource(R.string.a11y_quick_export_calendar), modifier = Modifier.size(20.dp))
+            }
+
+            // Right content column
+            Column(modifier = Modifier.weight(1f)) {
+                // Title row
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    val titleStyle = if (reminder.isTask && reminder.isCompleted) {
+                        MaterialTheme.typography.titleMedium.copy(textDecoration = TextDecoration.LineThrough)
+                    } else MaterialTheme.typography.titleMedium
+
+                    Text(
+                        text = reminder.reminderTitle.ifBlank {
+                            if (reminder.isTask) stringResource(R.string.ui_reminders_untitled_task) else stringResource(R.string.ui_reminders_untitled_memo)
+                        },
+                        style = titleStyle,
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(0.dp)) {
+                        if (onQuickExportTasks != null) {
+                            IconButton(onClick = onQuickExportTasks, modifier = Modifier.size(36.dp)) {
+                                Icon(painter = painterResource(R.drawable.task_add), contentDescription = stringResource(R.string.a11y_quick_export_tasks), modifier = Modifier.size(20.dp))
+                            }
+                        }
+                        if (onQuickExportCalendar != null) {
+                            IconButton(onClick = onQuickExportCalendar, modifier = Modifier.size(36.dp)) {
+                                Icon(painter = painterResource(R.drawable.calendar_add), contentDescription = stringResource(R.string.a11y_quick_export_calendar), modifier = Modifier.size(20.dp))
+                            }
+                        }
+                        IconButton(onClick = onTogglePinned, modifier = Modifier.size(36.dp)) {
+                            Icon(
+                                painter = painterResource(if (reminder.isPinned) R.drawable.pin_yes else R.drawable.pin_no),
+                                contentDescription = stringResource(if (reminder.isPinned) R.string.a11y_unpin else R.string.a11y_pin),
+                                modifier = Modifier.size(20.dp),
+                            )
+                        }
+                    }
+
+                    IconButton(onClick = onDelete) {
+                        Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.a11y_delete))
                     }
                 }
-                IconButton(onClick = onTogglePinned, modifier = Modifier.size(36.dp)) {
-                    Icon(
-                        painter = painterResource(if (reminder.isPinned) R.drawable.pin_yes else R.drawable.pin_no),
-                        contentDescription = stringResource(if (reminder.isPinned) R.string.a11y_unpin else R.string.a11y_pin),
-                        modifier = Modifier.size(20.dp),
+
+                // Deadline (no ECT)
+                if (reminder.isTask) {
+                    val deadline = reminder.deadlineTimestamp
+                    val deadlineStr = if (deadline > 0L) {
+                        "${getAbsoluteTimeStr(deadline, context)} (${getRelativeTimeStr(deadline, context)})"
+                    } else stringResource(R.string.ui_reminders_no_deadline)
+                    Text(
+                        text = deadlineStr,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (deadline > 0L && deadline < System.currentTimeMillis()) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 4.dp),
                     )
                 }
-            }
 
-            IconButton(onClick = onDelete) {
-                Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.a11y_delete))
-            }
-        }
+                // Content preview
+                val contentPreview = reminder.reminderContent.lineSequence().take(2).joinToString("\n")
+                if (contentPreview.isNotBlank()) {
+                    Text(text = contentPreview, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 6.dp))
+                }
 
-        if (reminder.isTask) {
-            Row(modifier = Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                val deadline = reminder.deadlineTimestamp
-                val deadlineStr = if (deadline > 0L) {
-                    "${getAbsoluteTimeStr(deadline, context)} (${getRelativeTimeStr(deadline, context)})"
-                } else stringResource(R.string.ui_reminders_no_deadline)
-                Text(text = deadlineStr, style = MaterialTheme.typography.bodySmall,
-                    color = if (deadline > 0L && deadline < System.currentTimeMillis()) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
-                val ectStr = if (reminder.estimatedCompletionTime > 0) stringResource(R.string.ui_reminders_ect_short, reminder.estimatedCompletionTime) else ""
-                Text(text = ectStr, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
+                // Action buttons
+                if (buttons.isNotEmpty()) {
+                    val reminderActionScrollState = rememberScrollState()
+                    Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp).horizontalScroll(reminderActionScrollState), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        buttons.forEach { (buttonText, intent, type) ->
+                            ReminderActionChip(buttonText = buttonText, intent = intent, type = type, context = context, clipboard = clipboard)
+                        }
+                    }
+                }
 
-        val contentPreview = reminder.reminderContent.lineSequence().take(2).joinToString("\n")
-        if (contentPreview.isNotBlank()) {
-            Text(text = contentPreview, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 6.dp))
-        }
-
-        if (buttons.isNotEmpty()) {
-            FlowRow(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                buttons.forEach { (buttonText, intent, type) ->
-                    ReminderActionChip(buttonText = buttonText, intent = intent, type = type, context = context, clipboard = clipboard)
+                // Inline sub-tasks
+                if (subTasks.isNotEmpty()) {
+                    SubTaskListInCard(
+                        subTasks = subTasks,
+                        onToggleCompleted = onSubTaskToggle,
+                        onSubTaskClick = onSubTaskClick,
+                        onSubTaskEdit = onSubTaskEdit,
+                        onSubTaskDelete = onSubTaskDelete,
+                        onSubTaskExportGoogleTasks = onSubTaskExportGoogleTasks,
+                        onSubTaskExportGoogleCalendar = onSubTaskExportGoogleCalendar,
+                    )
                 }
             }
         }
@@ -890,6 +1098,15 @@ private fun ReminderDetailScreen(
     onOpenExportDialog: (ReminderUnit, ExportType) -> Unit = { _, _ -> },
     onRegenerate: () -> Unit = {},
     reminderViewModel: ReminderViewModel? = null,
+    // Sub-task parameters
+    subTasks: List<SubTask> = emptyList(),
+    onAddSubTask: () -> Unit = {},
+    onSubTaskToggle: (String, Boolean) -> Unit = { _, _ -> },
+    onSubTaskClick: (SubTask) -> Unit = {},
+    onSubTaskEdit: (SubTask) -> Unit = {},
+    onSubTaskDelete: (SubTask) -> Unit = {},
+    onSubTaskExportGoogleTasks: (SubTask) -> Unit = {},
+    onSubTaskExportGoogleCalendar: (SubTask) -> Unit = {},
 ) {
     val context = LocalContext.current
 
@@ -1007,13 +1224,6 @@ private fun ReminderDetailScreen(
                         Text(text = "${stringResource(R.string.reminder_pick_time)}: $deadlineTimeStr", color = deadlineColor)
                     }
                 }
-
-                OutlinedTextField(
-                    value = if (ectMinutes == 0L) "" else ectMinutes.toString(),
-                    onValueChange = { ectMinutes = it.toLongOrNull() ?: 0L },
-                    label = { Text(stringResource(R.string.ui_reminders_editor_ect_label)) },
-                    singleLine = true,
-                )
             }
 
             Text(stringResource(R.string.ui_reminders_editor_note), style = MaterialTheme.typography.titleMedium)
@@ -1109,6 +1319,38 @@ private fun ReminderDetailScreen(
                         Icon(painter = painterResource(R.drawable.share), contentDescription = stringResource(R.string.a11y_share_reminder), modifier = Modifier.size(16.dp))
                     },
                 )
+            }
+
+            // === Sub-tasks section ===
+            if (subTasks.isNotEmpty() || isTask) {
+                HorizontalDivider(modifier = Modifier.padding(top = 8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        stringResource(R.string.subtask_section_title),
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    TextButton(onClick = onAddSubTask) {
+                        Icon(Icons.Default.Add, contentDescription = stringResource(R.string.a11y_add_subtask), modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text(stringResource(R.string.subtask_add), style = MaterialTheme.typography.labelMedium)
+                    }
+                }
+
+                subTasks.forEach { st ->
+                    SubTaskRow(
+                        subTask = st,
+                        onToggleCompleted = { checked -> onSubTaskToggle(st.subTaskId, checked) },
+                        onClick = { onSubTaskClick(st) },
+                        onEdit = { onSubTaskEdit(st) },
+                        onDelete = { onSubTaskDelete(st) },
+                        onExportGoogleTasks = { onSubTaskExportGoogleTasks(st) },
+                        onExportGoogleCalendar = { onSubTaskExportGoogleCalendar(st) },
+                    )
+                }
             }
 
             // === Related notifications (from extraction snapshot) ===
@@ -1721,4 +1963,3 @@ private fun ExportConfirmationDialog(
         }
     }
 }
-

@@ -33,6 +33,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -65,6 +66,7 @@ import org.muilab.notigpt.model.features.PreferenceConflict
 import org.muilab.notigpt.model.features.PreferenceEntryPoint
 import org.muilab.notigpt.model.features.ProposedAction
 import org.muilab.notigpt.model.features.ProposedActionType
+import org.muilab.notigpt.model.features.UserContext
 import org.muilab.notigpt.ui.viewmodel.PreferenceViewModel
 
 /**
@@ -80,8 +82,10 @@ fun PreferenceChatScreen(
     val pendingActions by preferenceViewModel.pendingActions.collectAsState()
     val isLoading by preferenceViewModel.isChatLoading.collectAsState()
     val activePreferences by preferenceViewModel.activePreferences.collectAsState()
+    val activeContexts by preferenceViewModel.activeContexts.collectAsState()
     val unresolvedConflicts by preferenceViewModel.unresolvedConflicts.collectAsState()
     val chatFlowContext by preferenceViewModel.chatFlowContext.collectAsState()
+    val chatMode by preferenceViewModel.chatMode.collectAsState()
 
     var inputText by remember { mutableStateOf("") }
     var showClearConfirm by remember { mutableStateOf(false) }
@@ -120,6 +124,27 @@ fun PreferenceChatScreen(
 
         HorizontalDivider()
 
+        // ── Chat mode toggle ────────────────────────────────────
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            FilterChip(
+                selected = chatMode == "RULES",
+                onClick = { preferenceViewModel.switchChatMode("RULES") },
+                label = { Text(stringResource(R.string.pref_chat_mode_rules)) },
+            )
+            FilterChip(
+                selected = chatMode == "ABOUT_ME",
+                onClick = { preferenceViewModel.switchChatMode("ABOUT_ME") },
+                label = { Text(stringResource(R.string.pref_chat_mode_about_me)) },
+            )
+        }
+
+        HorizontalDivider()
+
         // ── Unresolved conflicts banner ─────────────────────────
         if (unresolvedConflicts.isNotEmpty()) {
             ConflictsBanner(
@@ -130,11 +155,28 @@ fun PreferenceChatScreen(
             HorizontalDivider()
         }
 
-        // ── Collapsible active preferences panel ─────────────────
-        ActivePreferencesPanel(
-            preferences = activePreferences,
-            onDelete = { preferenceViewModel.deleteActivePreference(it.id) },
-        )
+        // ── Collapsible panels (relevant panel shown first based on mode) ──
+        if (chatMode == "ABOUT_ME") {
+            UserContextPanel(
+                contexts = activeContexts,
+                onDelete = { preferenceViewModel.deleteActiveContext(it.id) },
+            )
+            HorizontalDivider()
+            ActivePreferencesPanel(
+                preferences = activePreferences,
+                onDelete = { preferenceViewModel.deleteActivePreference(it.id) },
+            )
+        } else {
+            ActivePreferencesPanel(
+                preferences = activePreferences,
+                onDelete = { preferenceViewModel.deleteActivePreference(it.id) },
+            )
+            HorizontalDivider()
+            UserContextPanel(
+                contexts = activeContexts,
+                onDelete = { preferenceViewModel.deleteActiveContext(it.id) },
+            )
+        }
         HorizontalDivider()
 
         // ── Flow context card (when redirected from edit/delete/extract) ──
@@ -144,6 +186,9 @@ fun PreferenceChatScreen(
 
         // ── Empty state ─────────────────────────────────────────
         if (messages.isEmpty()) {
+            val emptyPromptRes = if (chatMode == "ABOUT_ME") R.string.pref_chat_empty_prompt_about_me else R.string.pref_chat_empty_prompt
+            val emptyExampleRes = if (chatMode == "ABOUT_ME") R.string.pref_chat_empty_example_about_me else R.string.pref_chat_empty_example
+
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -152,20 +197,36 @@ fun PreferenceChatScreen(
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        stringResource(R.string.pref_chat_empty_prompt),
+                        stringResource(emptyPromptRes),
                         style = MaterialTheme.typography.bodyLarge,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.padding(horizontal = 32.dp),
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        stringResource(R.string.pref_chat_empty_example),
+                        stringResource(emptyExampleRes),
                         style = MaterialTheme.typography.bodyMedium,
                         fontStyle = FontStyle.Italic,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.padding(horizontal = 32.dp),
                     )
+                    // "Learn About Me" button — only in ABOUT_ME mode
+                    if (chatMode == "ABOUT_ME") {
+                        Spacer(Modifier.height(16.dp))
+                        OutlinedButton(
+                            onClick = {
+                                if (!isNetworkAvailable(context)) {
+                                    showNoNetworkAlert = true
+                                } else {
+                                    preferenceViewModel.discoverUserContext()
+                                }
+                            },
+                            enabled = !isLoading,
+                        ) {
+                            Text(stringResource(R.string.pref_chat_discover_button))
+                        }
+                    }
                 }
             }
         } else {
@@ -337,10 +398,17 @@ private fun ProposedActionCard(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val actionLabel = when (action.type) {
-        ProposedActionType.ADD -> stringResource(R.string.pref_action_add)
-        ProposedActionType.MODIFY -> stringResource(R.string.pref_action_modify)
-        ProposedActionType.DELETE -> stringResource(R.string.pref_action_delete)
+    val actionLabel = when {
+        action.targetType == "CONTEXT" -> when (action.type) {
+            ProposedActionType.ADD -> stringResource(R.string.pref_action_add_fact)
+            ProposedActionType.MODIFY -> stringResource(R.string.pref_action_modify_fact)
+            ProposedActionType.DELETE -> stringResource(R.string.pref_action_delete_fact)
+        }
+        else -> when (action.type) {
+            ProposedActionType.ADD -> stringResource(R.string.pref_action_add)
+            ProposedActionType.MODIFY -> stringResource(R.string.pref_action_modify)
+            ProposedActionType.DELETE -> stringResource(R.string.pref_action_delete)
+        }
     }
 
     val cardColor = when {
@@ -502,6 +570,108 @@ private fun ActivePreferencesPanel(
             onDismissRequest = { deleteTarget = null },
             title = { Text(stringResource(R.string.pref_active_rule_delete_confirm_title)) },
             text = { Text(stringResource(R.string.pref_active_rule_delete_confirm_body)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    onDelete(deleteTarget!!)
+                    deleteTarget = null
+                }) {
+                    Text(stringResource(R.string.pref_chat_clear_confirm))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { deleteTarget = null }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        )
+    }
+}
+
+// ── User context (About Me) panel ───────────────────────────────
+
+@Composable
+private fun UserContextPanel(
+    contexts: List<UserContext>,
+    onDelete: (UserContext) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    var deleteTarget by remember { mutableStateOf<UserContext?>(null) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 6.dp),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { expanded = !expanded },
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                stringResource(R.string.pref_user_context_title),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                stringResource(R.string.pref_user_context_count, contexts.size),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.width(4.dp))
+            Icon(
+                imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                contentDescription = if (expanded) stringResource(R.string.a11y_collapse) else stringResource(R.string.a11y_expand),
+                modifier = Modifier.size(20.dp),
+            )
+        }
+
+        if (expanded) {
+            Spacer(Modifier.height(6.dp))
+            if (contexts.isEmpty()) {
+                Text(
+                    stringResource(R.string.pref_user_context_empty),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontStyle = FontStyle.Italic,
+                )
+            } else {
+                contexts.forEach { ctx ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 3.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = "• ${ctx.statement}",
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.weight(1f),
+                        )
+                        IconButton(
+                            onClick = { deleteTarget = ctx },
+                            modifier = Modifier.size(24.dp),
+                        ) {
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = stringResource(R.string.pref_action_dismiss),
+                                modifier = Modifier.size(16.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Delete confirmation dialog
+    if (deleteTarget != null) {
+        AlertDialog(
+            onDismissRequest = { deleteTarget = null },
+            title = { Text(stringResource(R.string.pref_user_context_delete_confirm_title)) },
+            text = { Text(stringResource(R.string.pref_user_context_delete_confirm_body)) },
             confirmButton = {
                 TextButton(onClick = {
                     onDelete(deleteTarget!!)

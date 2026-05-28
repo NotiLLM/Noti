@@ -25,6 +25,14 @@ interface NotiDrawerDao {
     @Query("SELECT * FROM noti_drawer WHERE isDismissed = 0")
     fun getAllActive(): List<NotiUnit>
 
+    /** Paginated variant used by the export pipeline to avoid loading all rows at once. */
+    @Query("SELECT * FROM noti_drawer LIMIT :limit OFFSET :offset")
+    fun getAllPaged(limit: Int, offset: Int): List<NotiUnit>
+
+    /** Paginated variant for active-only export. */
+    @Query("SELECT * FROM noti_drawer WHERE isDismissed = 0 LIMIT :limit OFFSET :offset")
+    fun getAllActivePaged(limit: Int, offset: Int): List<NotiUnit>
+
     @Query("SELECT * FROM noti_drawer WHERE isDismissed = 0")
     fun getAllActiveFlow(): Flow<List<NotiUnit>>
 

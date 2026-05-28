@@ -5,12 +5,11 @@ import android.os.Build
 import android.service.notification.StatusBarNotification
 import androidx.annotation.RequiresApi
 import kotlinx.coroutines.flow.Flow
-import org.json.JSONArray
+import org.json.JSONObject
 import org.muilab.notigpt.database.room.NotiActionDao
 import org.muilab.notigpt.database.room.NotiDrawerDao
 import org.muilab.notigpt.database.room.NotiGroupDao
 import org.muilab.notigpt.database.room.NotiRecordDao
-import org.muilab.notigpt.domain.action.NotiActionType
 import org.muilab.notigpt.model.notifications.NotiAction
 import org.muilab.notigpt.model.notifications.NotiDrawerItem
 import org.muilab.notigpt.model.notifications.NotiRecord
@@ -184,7 +183,7 @@ class NotiRepository(
         return recordsRepo.getRecordsAfter(pivotTime, limit)
     }
 
-    fun exportLog(includeContext: Boolean, includeDismissed: Boolean): JSONArray {
+    fun exportLog(includeContext: Boolean, includeDismissed: Boolean): Sequence<JSONObject> {
         return exportRepo.exportLog(includeContext, includeDismissed)
     }
 
@@ -211,10 +210,6 @@ class NotiRepository(
 
     suspend fun actOnNoti(notiKey: String, action: String) {
         actionsRepo.actOnNotiLegacy(notiKey, action)
-    }
-
-    suspend fun actOnNoti(notiKey: String, action: NotiActionType) {
-        actionsRepo.actOnNoti(notiKey, action)
     }
 
     /** Worker/adapter-friendly accessor. */

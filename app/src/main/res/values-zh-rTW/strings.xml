@@ -17,11 +17,18 @@
     <string name="ui_settings_esm_wakeup">短問卷起床時間</string>
     <string name="ui_settings_esm_bedtime">短問卷就寢時間</string>
 
+    <!-- Extraction language preference -->
+    <string name="ui_settings_extraction_language">擷取語言</string>
+    <string name="ui_settings_extraction_language_original">原始語言（通知語言）</string>
+    <string name="ui_settings_extraction_language_en">English</string>
+    <string name="ui_settings_extraction_language_zhtw">繁體中文 (zh-TW)</string>
+
     <!-- Reminders -->
     <string name="ui_reminders_filter_all">全部</string>
     <string name="ui_reminders_filter_tasks">任務</string>
     <string name="ui_reminders_filter_memos">備忘</string>
     <string name="ui_reminders_filter_completed">已完成</string>
+    <string name="ui_reminders_search_placeholder">搜尋提醒（用 + 代表「且」）</string>
     <string name="ui_reminders_add_dialog_title">新增</string>
     <string name="ui_reminders_add_dialog_body">建立任務或備忘</string>
     <string name="ui_reminders_add_dialog_task">任務</string>
@@ -188,52 +195,35 @@
 
     <!-- Preference learning – BottomSheet reason (EDIT) -->
     <string name="pref_reason_edit_title">原本的擷取結果有什麼問題？</string>
-    <string name="pref_reason_edit_missing">缺少重要細節</string>
-    <string name="pref_reason_edit_wording">用詞不對</string>
-    <string name="pref_reason_edit_deadline">截止日期／時間有誤</string>
-    <string name="pref_reason_edit_person">負責人不對</string>
-    <string name="pref_reason_edit_should_update">應該更新現有任務，而非建立新的</string>
-    <string name="pref_reason_edit_too_much">包含太多不必要的細節</string>
     <string name="pref_reason_other">其他（讓我說明）</string>
 
     <!-- Preference learning – BottomSheet reason (DELETE) -->
     <string name="pref_reason_delete_title">為什麼這不值得保留為任務？</string>
-    <string name="pref_reason_delete_handled">我已經處理了</string>
-    <string name="pref_reason_delete_not_mine">不是我的責任</string>
-    <string name="pref_reason_delete_informational">只是資訊性的內容</string>
-    <string name="pref_reason_delete_incorrect">擷取結果有誤</string>
-    <string name="pref_reason_delete_not_interested">我不在意／沒興趣</string>
 
     <!-- Preference learning – BottomSheet reason (MANUAL_EXTRACT) -->
     <string name="pref_reason_extract_title">為什麼這類通知應該變成任務或備忘？</string>
-    <string name="pref_reason_extract_later">我需要之後再處理</string>
-    <string name="pref_reason_extract_followup">需要後續跟進或回覆</string>
-    <string name="pref_reason_extract_urgent">這很重要或很緊急</string>
-    <string name="pref_reason_extract_tracking">這是我已在追蹤的事項的更新</string>
-    <string name="pref_reason_extract_keep">我想保留以便日後查看</string>
 
-    <!-- Preference learning – BottomSheet sub-reason -->
-    <string name="pref_subreason_title">能否更具體說明？</string>
-    <string name="pref_sub_no_task_next_time">下次不要建立任務</string>
-    <string name="pref_sub_only_if_not_handled">只在我尚未處理時才建立</string>
-    <string name="pref_sub_save_as_memo">改為儲存為備忘</string>
-    <string name="pref_sub_ask_when_unsure">不確定時先問我</string>
-    <string name="pref_sub_only_directly_addressed">只在直接提到我時才擷取</string>
-    <string name="pref_sub_only_clearly_for_me">只在明確是給我的時候才擷取</string>
-    <string name="pref_sub_ask_ambiguous_group">群組訊息不明確時先問我</string>
-    <string name="pref_sub_do_not_extract">不要擷取這類通知</string>
-    <string name="pref_sub_only_action_request">只在有明確行動要求時才擷取</string>
-    <string name="pref_sub_wrong_wording">用詞不對</string>
-    <string name="pref_sub_wrong_person">負責人不對</string>
-    <string name="pref_sub_missing_context">缺少背景資訊</string>
-    <string name="pref_sub_should_update">應該更新現有任務</string>
-    <string name="pref_sub_same_sender">同一個發送者</string>
-    <string name="pref_sub_same_topic">同一個主題</string>
-    <string name="pref_sub_similar_wording">類似的用詞</string>
-    <string name="pref_sub_same_thread">同一個對話串／更新類型</string>
-    <string name="pref_sub_similar_timing">類似的時間／期限</string>
-    <string name="pref_sub_similar_update_type">類似的更新類型</string>
-    <string name="pref_sub_let_me_explain">讓我說明</string>
+    <!-- Preference learning – Concrete quick rules -->
+    <string name="pref_rule_title">我應該學習哪條規則？</string>
+
+    <!-- DELETE Quick Rules -->
+    <string name="pref_rule_delete_sender">忽略此發送者未來的任務</string>
+    <string name="pref_rule_delete_group">只有在群組中明確提到我時才擷取任務</string>
+    <string name="pref_rule_delete_info">這類訊息只是更新／新聞，不是任務</string>
+    <string name="pref_rule_delete_topic">忽略此主題的任務</string>
+    <string name="pref_rule_delete_app">不要從此應用程式擷取任何任務</string>
+
+    <!-- MANUAL EXTRACT Quick Rules -->
+    <string name="pref_rule_extract_sender">總是從此人擷取行動請求或問題</string>
+    <string name="pref_rule_extract_thread">追蹤此特定對話串中的所有更新</string>
+    <string name="pref_rule_extract_wording">將此特定措辭學習為隱含任務</string>
+    <string name="pref_rule_extract_situational">我目前正在積極關注此主題</string>
+
+    <!-- EDIT Quick Rules -->
+    <string name="pref_rule_edit_context">總是包含任務背後的「原因」（理由）</string>
+    <string name="pref_rule_edit_urgency">更加留意隱含的緊急程度或截止日期</string>
+    <string name="pref_rule_edit_responsibility">指派的負責人不正確</string>
+    <string name="pref_rule_edit_granularity">將此與相同主題的現有任務合併，而非建立新任務</string>
 
     <!-- Preference learning – syncing -->
     <string name="pref_syncing">正在儲存您的偏好…</string>
@@ -243,8 +233,14 @@
     <!-- Preference Chat screen -->
     <string name="pref_chat_title">偏好規則對話</string>
     <string name="pref_chat_clear_desc">清除對話</string>
+    <string name="pref_chat_mode_rules">擷取規則</string>
+    <string name="pref_chat_mode_about_me">關於我</string>
     <string name="pref_chat_empty_prompt">告訴我您希望如何處理您的通知。</string>
     <string name="pref_chat_empty_example">例如：「只有 Slack 提到我的訊息才擷取任務」</string>
+    <string name="pref_chat_empty_prompt_about_me">告訴我關於您自己的資訊，讓我更了解您的通知。</string>
+    <string name="pref_chat_empty_example_about_me">例如：「我是 Google 的軟體工程師」或「我的伴侶叫 Alice」</string>
+    <string name="pref_chat_discover_button">了解我</string>
+    <string name="pref_chat_discover_analyzing">正在分析您的通知與提醒以了解您…</string>
     <string name="pref_chat_active_rules_count">您有 %1$d 條有效規則。</string>
     <string name="pref_chat_input_placeholder">描述一項偏好…</string>
     <string name="pref_chat_send_desc">傳送</string>
@@ -288,6 +284,18 @@
     <string name="pref_active_rule_delete_confirm_title">刪除此規則？</string>
     <string name="pref_active_rule_delete_confirm_body">確定要移除這條偏好規則嗎？</string>
 
+    <!-- User context (About Me) panel -->
+    <string name="pref_user_context_title">關於我（背景資訊）</string>
+    <string name="pref_user_context_empty">尚未設定個人背景資訊。告訴助手關於您自己的資訊以提升擷取準確度。</string>
+    <string name="pref_user_context_count">%1$d 條事實</string>
+    <string name="pref_user_context_delete_confirm_title">刪除此事實？</string>
+    <string name="pref_user_context_delete_confirm_body">確定要移除此個人背景資訊嗎？</string>
+
+    <!-- Proposed action labels for Rule vs Context -->
+    <string name="pref_action_add_fact">新增事實</string>
+    <string name="pref_action_modify_fact">修改事實</string>
+    <string name="pref_action_delete_fact">刪除事實</string>
+
     <!-- Generic -->
     <string name="ok">確定</string>
     <string name="cancel">取消</string>
@@ -296,6 +304,19 @@
     <string name="reminder_section_unseen">新提醒</string>
     <string name="reminder_section_pinned">已釘選</string>
     <string name="reminder_section_scored">所有提醒</string>
+
+    <!-- Sub-task list / row -->
+    <string name="subtask_section_title">子任務</string>
+    <string name="subtask_add">新增子任務</string>
+    <string name="a11y_add_subtask">新增子任務</string>
+    <string name="subtask_untitled">（未命名子任務）</string>
+    <string name="subtask_show_less">顯示較少</string>
+    <string name="subtask_n_more">還有 %1$d 項</string>
+    <string name="subtask_hide_completed">隱藏已完成</string>
+    <string name="subtask_n_completed">%1$d 項已完成</string>
+    <string name="subtask_edit">編輯</string>
+    <string name="subtask_delete">刪除</string>
+    <string name="a11y_subtask_more">更多選項</string>
 
     <!-- Reminder actions -->
     <string name="reminder_refresh_all">重新整理所有提醒</string>

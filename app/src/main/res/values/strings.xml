@@ -31,6 +31,12 @@
     <string name="ui_settings_expand_task_list">Expand Task List on startup</string>
     <string name="ui_settings_esm_wakeup">ESM wake-up time</string>
     <string name="ui_settings_esm_bedtime">ESM bedtime</string>
+    <!-- Extraction language preference -->
+    <string name="ui_settings_extraction_language">Extraction language</string>
+    <string name="ui_settings_extraction_language_original">Original (notification language)</string>
+    <string name="ui_settings_extraction_language_en">English</string>
+    <string name="ui_settings_extraction_language_zhtw">繁體中文 (zh-TW)</string>
+
     <string name="ui_settings_export_data">Export Data</string>
     <string name="ui_settings_export_description">Export all notifications and user actions</string>
     <string name="ui_settings_export_include_dismissed">Include dismissed notifications</string>
@@ -41,6 +47,7 @@
     <string name="ui_reminders_filter_tasks">Tasks</string>
     <string name="ui_reminders_filter_memos">Memos</string>
     <string name="ui_reminders_filter_completed">Completed</string>
+    <string name="ui_reminders_search_placeholder">Search reminders (use + for AND)</string>
     <string name="ui_reminders_add_dialog_title">Add</string>
     <string name="ui_reminders_add_dialog_body">Create a Task or a Memo</string>
     <string name="ui_reminders_add_dialog_task">Task</string>
@@ -209,52 +216,35 @@
 
     <!-- Preference learning – BottomSheet reason (EDIT) -->
     <string name="pref_reason_edit_title">What was wrong with the original extraction?</string>
-    <string name="pref_reason_edit_missing">Missing important details</string>
-    <string name="pref_reason_edit_wording">Wrong wording</string>
-    <string name="pref_reason_edit_deadline">Wrong deadline/time</string>
-    <string name="pref_reason_edit_person">Wrong person/responsibility</string>
-    <string name="pref_reason_edit_should_update">Should have updated an existing task instead of creating a new one</string>
-    <string name="pref_reason_edit_too_much">Included too much unnecessary detail</string>
     <string name="pref_reason_other">Other (Let me explain)</string>
 
     <!-- Preference learning – BottomSheet reason (DELETE) -->
     <string name="pref_reason_delete_title">Why wasn\'t this worth keeping as a task?</string>
-    <string name="pref_reason_delete_handled">I already handled it</string>
-    <string name="pref_reason_delete_not_mine">It was not my responsibility</string>
-    <string name="pref_reason_delete_informational">It was only informational</string>
-    <string name="pref_reason_delete_incorrect">It was extracted incorrectly</string>
-    <string name="pref_reason_delete_not_interested">I did not care about it / Not interested</string>
 
     <!-- Preference learning – BottomSheet reason (MANUAL_EXTRACT) -->
     <string name="pref_reason_extract_title">Why should notifications like this become tasks/memos?</string>
-    <string name="pref_reason_extract_later">I needed to do something later</string>
-    <string name="pref_reason_extract_followup">It needed follow-up or a reply</string>
-    <string name="pref_reason_extract_urgent">It was important or urgent</string>
-    <string name="pref_reason_extract_tracking">It updates something I was already tracking</string>
-    <string name="pref_reason_extract_keep">I wanted to keep it for later</string>
 
-    <!-- Preference learning – BottomSheet sub-reason -->
-    <string name="pref_subreason_title">Can you be more specific?</string>
-    <string name="pref_sub_no_task_next_time">Don\'t create a task next time</string>
-    <string name="pref_sub_only_if_not_handled">Only create if I haven\'t handled it soon</string>
-    <string name="pref_sub_save_as_memo">Save as memo instead</string>
-    <string name="pref_sub_ask_when_unsure">Ask me when unsure</string>
-    <string name="pref_sub_only_directly_addressed">Only extract when I am directly addressed</string>
-    <string name="pref_sub_only_clearly_for_me">Only extract when it is clearly for me</string>
-    <string name="pref_sub_ask_ambiguous_group">Ask me when group messages are ambiguous</string>
-    <string name="pref_sub_do_not_extract">Do not extract these</string>
-    <string name="pref_sub_only_action_request">Only extract when there is a direct action request</string>
-    <string name="pref_sub_wrong_wording">Wrong wording</string>
-    <string name="pref_sub_wrong_person">Wrong person/responsibility</string>
-    <string name="pref_sub_missing_context">Missing context</string>
-    <string name="pref_sub_should_update">Should update an existing task</string>
-    <string name="pref_sub_same_sender">Same sender</string>
-    <string name="pref_sub_same_topic">Same topic</string>
-    <string name="pref_sub_similar_wording">Similar wording</string>
-    <string name="pref_sub_same_thread">Same thread/update type</string>
-    <string name="pref_sub_similar_timing">Similar timing/deadline</string>
-    <string name="pref_sub_similar_update_type">Similar type of update</string>
-    <string name="pref_sub_let_me_explain">Let me explain</string>
+    <!-- Preference learning – Concrete quick rules -->
+    <string name="pref_rule_title">Which rule should I learn?</string>
+
+    <!-- DELETE Quick Rules -->
+    <string name="pref_rule_delete_sender">Ignore future tasks from this specific sender</string>
+    <string name="pref_rule_delete_group">Only extract tasks from this group if I am explicitly mentioned</string>
+    <string name="pref_rule_delete_info">This type of message is just an update/news, never a task</string>
+    <string name="pref_rule_delete_topic">Mute tasks about this specific topic</string>
+    <string name="pref_rule_delete_app">Do not extract any tasks from this app</string>
+
+    <!-- MANUAL EXTRACT Quick Rules -->
+    <string name="pref_rule_extract_sender">Always extract action requests or questions from this person</string>
+    <string name="pref_rule_extract_thread">Track all updates in this specific conversation thread</string>
+    <string name="pref_rule_extract_wording">Learn this specific phrasing as an implied task</string>
+    <string name="pref_rule_extract_situational">I am actively monitoring this topic right now</string>
+
+    <!-- EDIT Quick Rules -->
+    <string name="pref_rule_edit_context">Always include the \'why\' (the rationale) behind the task</string>
+    <string name="pref_rule_edit_urgency">Pay closer attention to implied urgency or deadlines</string>
+    <string name="pref_rule_edit_responsibility">The assigned responsibility/person was incorrect</string>
+    <string name="pref_rule_edit_granularity">Combine this with existing tasks for this topic instead of making a new one</string>
 
     <!-- Preference learning – syncing -->
     <string name="pref_syncing">Saving your preference…</string>
@@ -264,8 +254,14 @@
     <!-- Preference Chat screen -->
     <string name="pref_chat_title">Preference Rules Chat</string>
     <string name="pref_chat_clear_desc">Clear chat</string>
+    <string name="pref_chat_mode_rules">Extraction Rules</string>
+    <string name="pref_chat_mode_about_me">About Me</string>
     <string name="pref_chat_empty_prompt">Tell me how you\'d like me to handle your notifications.</string>
     <string name="pref_chat_empty_example">For example: \"Only extract tasks from Slack if they mention me\"</string>
+    <string name="pref_chat_empty_prompt_about_me">Tell me about yourself so I can better understand your notifications.</string>
+    <string name="pref_chat_empty_example_about_me">For example: \"I am a software engineer at Google\" or \"My partner\'s name is Alice\"</string>
+    <string name="pref_chat_discover_button">Learn about me</string>
+    <string name="pref_chat_discover_analyzing">Analyzing your notifications and reminders to learn about you…</string>
     <string name="pref_chat_active_rules_count">You have %1$d active rule(s).</string>
     <string name="pref_chat_input_placeholder">Describe a preference…</string>
     <string name="pref_chat_send_desc">Send</string>
@@ -309,6 +305,18 @@
     <string name="pref_active_rule_delete_confirm_title">Delete this rule?</string>
     <string name="pref_active_rule_delete_confirm_body">Are you sure you want to remove this preference rule?</string>
 
+    <!-- User context (About Me) panel -->
+    <string name="pref_user_context_title">About Me (Context)</string>
+    <string name="pref_user_context_empty">No personal context set yet. Tell the assistant about yourself to improve extraction accuracy.</string>
+    <string name="pref_user_context_count">%1$d fact(s)</string>
+    <string name="pref_user_context_delete_confirm_title">Delete this fact?</string>
+    <string name="pref_user_context_delete_confirm_body">Are you sure you want to remove this personal context?</string>
+
+    <!-- Proposed action labels for Rule vs Context -->
+    <string name="pref_action_add_fact">Add Fact</string>
+    <string name="pref_action_modify_fact">Modify Fact</string>
+    <string name="pref_action_delete_fact">Delete Fact</string>
+
     <!-- Generic -->
     <string name="ok">OK</string>
     <string name="cancel">Cancel</string>
@@ -317,6 +325,19 @@
     <string name="reminder_section_unseen">New</string>
     <string name="reminder_section_pinned">Pinned</string>
     <string name="reminder_section_scored">All Reminders</string>
+
+    <!-- Sub-task list / row -->
+    <string name="subtask_section_title">Sub-tasks</string>
+    <string name="subtask_add">Add sub-task</string>
+    <string name="a11y_add_subtask">Add sub-task</string>
+    <string name="subtask_untitled">(Untitled sub-task)</string>
+    <string name="subtask_show_less">Show less</string>
+    <string name="subtask_n_more">%1$d more</string>
+    <string name="subtask_hide_completed">Hide completed</string>
+    <string name="subtask_n_completed">%1$d completed</string>
+    <string name="subtask_edit">Edit</string>
+    <string name="subtask_delete">Delete</string>
+    <string name="a11y_subtask_more">More options</string>
 
     <!-- Reminder actions -->
     <string name="reminder_refresh_all">Refresh all reminders</string>

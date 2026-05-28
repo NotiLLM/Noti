@@ -284,28 +284,63 @@ class DrawerViewModel(
 
     fun exportPostContent(includeContext: Boolean, includeDismissed: Boolean) {
         viewModelScope.launch(Dispatchers.IO) {
-            val notiLogs = notiRepository.exportLog(includeContext, includeDismissed)
-            val notiLogsStr = notiLogs.toString(2)
+            try {
+                val ts = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.getDefault())
+                    .format(java.util.Date())
+                val baseFilename = "notigpt_$ts"
 
-            val ts = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.getDefault())
-                .format(java.util.Date())
-            val filename = "notigpt_$ts.txt"
+                // Pass 1: write to file(s) using DataExportManager — at most one 5 MB chunk
+                // is held in memory at a time, so OOM is not possible here.
+                val dataExportManager = org.muilab.notigpt.platform.DataExportManager(context)
+                val createdFiles = dataExportManager.exportNotificationData(
+                    items = notiRepository.exportLog(includeContext, includeDismissed),
+                    filename = baseFilename,
+                )
 
-            // Persist file (best-effort)
-            logExporter.exportToDocuments(filename = filename, content = notiLogsStr)
+                // Pass 2: attempt to collect up to 500 KB for the clipboard.
+                // We consume the sequence a second time (fresh DB queries) but bail out
+                // early the moment we exceed the IPC binder limit, so the full dataset is
+                // never materialised in RAM for this path either.
+                val clipboardLimitBytes = 500 * 1024
+                val clipboardBuf = StringBuilder()
+                var tooLarge = false
+                clipboardBuf.append("[\n")
+                var first = true
+                for (item in notiRepository.exportLog(includeContext, includeDismissed)) {
+                    val itemStr = item.toString(2)
+                    if (clipboardBuf.length + itemStr.length > clipboardLimitBytes) {
+                        tooLarge = true
+                        break
+                    }
+                    if (!first) clipboardBuf.append(",\n")
+                    clipboardBuf.append(itemStr)
+                    first = false
+                }
+                if (!tooLarge) clipboardBuf.append("\n]")
 
-            // Copy
-            clipboard.copyPlainText(label = "NotiGPT logs", text = notiLogsStr)
-
-            withContext(Dispatchers.Main) {
-                notifier.showShort("Copied to clipboard")
+                withContext(Dispatchers.Main) {
+                    if (!tooLarge) {
+                        clipboard.copyPlainText(label = "NotiGPT logs", text = clipboardBuf.toString())
+                        val saved = createdFiles.firstOrNull()
+                        if (saved != null) notifier.showShort("Copied to clipboard & saved to: $saved")
+                        else notifier.showShort("Copied to clipboard")
+                    } else {
+                        val fileMsg = if (createdFiles.size == 1) "saved to: ${createdFiles[0]}"
+                                      else "saved to ${createdFiles.size} files"
+                        notifier.showShort("Data too large for clipboard — $fileMsg")
+                    }
+                }
+            } catch (e: Throwable) {
+                withContext(Dispatchers.Main) {
+                    notifier.showShort("Export error: ${e.message}")
+                }
             }
         }
     }
 
     /**
      * Export all notification content and user action data, splitting into multiple files if needed.
-     * Includes both notification content and user interaction logs.
+     * Consumes a lazy sequence so at most one 5 MB chunk is held in memory at once.
      */
     fun exportAllData(includeContext: Boolean, includeDismissed: Boolean) {
         viewModelScope.launch(Dispatchers.IO) {
@@ -314,23 +349,15 @@ class DrawerViewModel(
                     .format(java.util.Date())
                 val baseFilename = "notigpt_all_data_$ts"
 
-                // Fetch all notification logs
-                val notiLogs = notiRepository.exportLog(includeContext, includeDismissed)
-
-                // Fetch all action data (not currently used but fetched for completeness)
-                @Suppress("UNUSED_VARIABLE")
-                val allActions = notiRepository.getAllActions()
-
-                // Export with file splitting if needed
                 val dataExportManager = org.muilab.notigpt.platform.DataExportManager(context)
                 val createdFiles = dataExportManager.exportNotificationData(
-                    notiLogs,
-                    baseFilename
+                    items = notiRepository.exportLog(includeContext, includeDismissed),
+                    filename = baseFilename,
                 )
 
                 withContext(Dispatchers.Main) {
                     val message = if (createdFiles.isEmpty()) {
-                        "Export failed"
+                        "No data to export"
                     } else if (createdFiles.size == 1) {
                         "Data exported to: ${createdFiles[0]}"
                     } else {
@@ -338,7 +365,7 @@ class DrawerViewModel(
                     }
                     notifier.showShort(message)
                 }
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 withContext(Dispatchers.Main) {
                     notifier.showShort("Export error: ${e.message}")
                 }

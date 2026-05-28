@@ -11,7 +11,9 @@ import com.google.api.services.tasks.TasksScopes
 import com.google.api.services.tasks.model.Task
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.muilab.notigpt.model.features.ExportableItem
 import org.muilab.notigpt.model.features.ReminderUnit
+import org.muilab.notigpt.model.features.asExportable
 import org.muilab.notigpt.platform.GoogleTasksAuthManager
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -61,15 +63,10 @@ class GoogleTasksRepository(
     }
 
     /**
-     * Create a task in the user's default task list from a ReminderUnit.
-     *
-     * Maps:
-     * - reminderTitle → task title
-     * - reminderContent → task notes
-     * - isCompleted → task status (completed/needsAction)
-     * - deadlineTimestamp → task due date (RFC 3339)
+     * Create a task in the user's default task list from any [ExportableItem]
+     * (works for both [ReminderUnit] and [SubTask]).
      */
-    suspend fun createTaskFromReminder(reminder: ReminderUnit): TaskResult = withContext(Dispatchers.IO) {
+    suspend fun createTaskFromExportable(item: ExportableItem): TaskResult = withContext(Dispatchers.IO) {
         val account = GoogleTasksAuthManager.getAccount(appContext)
         if (account == null) {
             Log.w(TAG, "User not signed in to Google")
@@ -79,45 +76,28 @@ class GoogleTasksRepository(
         try {
             val service = buildTasksService(account)
 
-            // Build the task object
             val task = Task().apply {
-                title = reminder.reminderTitle.ifBlank { "(Untitled reminder)" }
-
-                if (reminder.reminderContent.isNotBlank()) {
-                    notes = reminder.reminderContent
-                }
-
-                // Set completion status
-                status = if (reminder.isCompleted) "completed" else "needsAction"
-                if (reminder.isCompleted) {
-                    completed = formatRfc3339(System.currentTimeMillis())
-                }
-
-                // Set due date if deadline is set
-                if (reminder.deadlineTimestamp > 0L) {
-                    due = formatRfc3339(reminder.deadlineTimestamp)
-                }
+                title = item.exportTitle.ifBlank { "(Untitled)" }
+                if (item.exportDescription.isNotBlank()) notes = item.exportDescription
+                status = if (item.exportIsCompleted) "completed" else "needsAction"
+                if (item.exportIsCompleted) completed = formatRfc3339(System.currentTimeMillis())
+                if (item.exportDeadlineTimestamp > 0L) due = formatRfc3339(item.exportDeadlineTimestamp)
             }
 
-            // Insert into default task list ("@default")
-            val createdTask = service.tasks()
-                .insert("@default", task)
-                .execute()
-
+            val createdTask = service.tasks().insert("@default", task).execute()
             Log.d(TAG, "Task created: id=${createdTask.id}, title=${createdTask.title}")
-            TaskResult.Success(
-                taskId = createdTask.id ?: "",
-                taskTitle = createdTask.title ?: ""
-            )
-
+            TaskResult.Success(taskId = createdTask.id ?: "", taskTitle = createdTask.title ?: "")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to create task", e)
-            TaskResult.Error(
-                message = e.message ?: "Unknown error",
-                exception = e
-            )
+            TaskResult.Error(message = e.message ?: "Unknown error", exception = e)
         }
     }
+
+    /**
+     * Create a task in the user's default task list from a ReminderUnit.
+     */
+    suspend fun createTaskFromReminder(reminder: ReminderUnit): TaskResult =
+        createTaskFromExportable(reminder.asExportable())
 
     /**
      * Get the user's task lists (for future use if we want list selection).

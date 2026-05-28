@@ -15,7 +15,6 @@ import org.muilab.notigpt.database.server.enqueueTaskExtraction
 import org.muilab.notigpt.database.server.enqueueTaskScan
 import org.muilab.notigpt.database.room.NotiDrawerDao
 import org.muilab.notigpt.database.room.NotiRecordDao
-import org.muilab.notigpt.domain.action.NotiActionType
 import org.muilab.notigpt.model.notifications.NotiRecord
 import org.muilab.notigpt.model.notifications.NotiUnit
 import org.muilab.notigpt.repository.firestore.FirestoreSyncRepository
@@ -134,10 +133,6 @@ class NotiActionsRepository(
 
     suspend fun markNotiRead(notiKey: String) {
         notiDrawerDao.setUnitReadByKey(notiKey)
-    }
-
-    suspend fun actOnNoti(notiKey: String, action: NotiActionType) {
-        actOnNotiLegacy(notiKey, action.wireValue)
     }
 
     suspend fun actOnNotiLegacy(notiKey: String, action: String) {

@@ -212,10 +212,12 @@ internal object ReminderExtractionHandler {
                 "language" to Locale.getDefault().toLanguageTag(),
                 "timezone" to TimeZone.getDefault().displayName,
                 "currentTime" to SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.getDefault()).format(Date()),
+                "targetExtractionLanguage" to ctx.getTargetExtractionLanguage(),
                 "userTriggered" to true,
                 "notis" to notisPayload,
                 "currentReminders" to remindersForPayload,
-                "extractionPreferences" to ctx.getExtractionPreferencesPayload()
+                "extractionPreferences" to ctx.getExtractionPreferencesPayload(),
+                "userContexts" to ctx.getUserContextsPayload()
             )
 
             val jsonPayload = gson.toJson(payload)
@@ -571,10 +573,12 @@ internal object ReminderExtractionHandler {
             "language" to Locale.getDefault().toLanguageTag(),
             "timezone" to TimeZone.getDefault().displayName,
             "currentTime" to SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.getDefault()).format(Date()),
+            "targetExtractionLanguage" to ctx.getTargetExtractionLanguage(),
             "userTriggered" to false,
             "notis" to notisPayload,
             "currentReminders" to remindersForPayload,
-            "extractionPreferences" to ctx.getExtractionPreferencesPayload()
+            "extractionPreferences" to ctx.getExtractionPreferencesPayload(),
+            "userContexts" to ctx.getUserContextsPayload()
         )
 
         val jsonPayload = gson.toJson(payload)

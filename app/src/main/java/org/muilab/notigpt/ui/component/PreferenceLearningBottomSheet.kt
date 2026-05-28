@@ -47,8 +47,7 @@ fun PreferenceLearningBottomSheet(
     ) {
         when (val s = step) {
             is BottomSheetStep.Scope -> ScopeContent(s.entryPoint, preferenceViewModel)
-            is BottomSheetStep.Reason -> ReasonContent(s.entryPoint, preferenceViewModel)
-            is BottomSheetStep.SubReason -> SubReasonContent(s.subOptions, preferenceViewModel)
+            is BottomSheetStep.RuleSelection -> RuleSelectionContent(s.ruleOptions, preferenceViewModel)
             is BottomSheetStep.Syncing -> SyncingContent()
             is BottomSheetStep.Hidden -> { /* handled above */ }
         }
@@ -81,50 +80,14 @@ private fun ScopeContent(
 }
 
 @Composable
-private fun ReasonContent(
-    entryPoint: PreferenceEntryPoint,
-    vm: PreferenceViewModel,
-) {
-    val (titleResId, options) = when (entryPoint) {
-        PreferenceEntryPoint.EDIT -> R.string.pref_reason_edit_title to listOf(
-            R.string.pref_reason_edit_missing,
-            R.string.pref_reason_edit_wording,
-            R.string.pref_reason_edit_deadline,
-            R.string.pref_reason_edit_person,
-            R.string.pref_reason_edit_should_update,
-            R.string.pref_reason_edit_too_much,
-            R.string.pref_reason_other,
-        )
-        PreferenceEntryPoint.DELETE -> R.string.pref_reason_delete_title to listOf(
-            R.string.pref_reason_delete_handled,
-            R.string.pref_reason_delete_not_mine,
-            R.string.pref_reason_delete_informational,
-            R.string.pref_reason_delete_incorrect,
-            R.string.pref_reason_delete_not_interested,
-            R.string.pref_reason_other,
-        )
-        PreferenceEntryPoint.MANUAL_EXTRACT -> R.string.pref_reason_extract_title to listOf(
-            R.string.pref_reason_extract_later,
-            R.string.pref_reason_extract_followup,
-            R.string.pref_reason_extract_urgent,
-            R.string.pref_reason_extract_tracking,
-            R.string.pref_reason_extract_keep,
-            R.string.pref_reason_other,
-        )
-    }
-
-    OptionList(titleResId = titleResId, optionResIds = options, onSelect = { vm.selectReason(it) })
-}
-
-@Composable
-private fun SubReasonContent(
-    subOptions: List<Int>,
+private fun RuleSelectionContent(
+    ruleOptions: List<Int>,
     vm: PreferenceViewModel,
 ) {
     OptionList(
-        titleResId = R.string.pref_subreason_title,
-        optionResIds = subOptions,
-        onSelect = { vm.selectSubReason(it) },
+        titleResId = R.string.pref_rule_title,
+        optionResIds = ruleOptions,
+        onSelect = { vm.selectRule(it) },
     )
 }
 

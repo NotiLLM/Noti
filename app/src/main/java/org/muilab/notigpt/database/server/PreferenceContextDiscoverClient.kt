@@ -5,31 +5,27 @@ import com.google.gson.Gson
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.muilab.notigpt.BuildConfig
-import org.muilab.notigpt.model.features.ChatInteractRequest
 import org.muilab.notigpt.model.features.ChatInteractResponse
 import org.muilab.notigpt.model.features.ConflictDto
+import org.muilab.notigpt.model.features.ContextDiscoverRequest
 import org.muilab.notigpt.model.features.ProposedActionDto
 
 /**
- * Direct (non-WorkManager) client for the Chat-Interact n8n endpoint.
- *
- * Chat needs a synchronous response to render inline, so we call Retrofit
- * suspend functions directly from the ViewModel coroutine scope.
+ * Client for the context-discover n8n endpoint.
+ * Sends notification/reminder summaries and gets back proposed user context facts.
+ * Reuses [ChatInteractResponse] since the response shape is identical.
  */
-object PreferenceChatClient {
+object PreferenceContextDiscoverClient {
 
-    private const val TAG = "PrefChatClient"
+    private const val TAG = "CtxDiscoverClient"
 
-    /**
-     * Send a chat interaction and return the parsed response, or null on failure.
-     */
-    suspend fun interact(request: ChatInteractRequest): ChatInteractResponse? {
+    suspend fun discover(request: ContextDiscoverRequest): ChatInteractResponse? {
         val gson = Gson()
         val json = gson.toJson(request)
         Log.d(TAG, "Request: $json")
 
         val requestBody = json.toRequestBody("application/json; charset=utf-8".toMediaType())
-        val webhookPath = BuildConfig.N8N_PREFERENCE_CHAT_INTERACT_PATH
+        val webhookPath = BuildConfig.N8N_CONTEXT_DISCOVER_PATH
 
         val response = try {
             N8nAPIClient.n8nAPIService.postToWebhook(webhookPath, requestBody)
@@ -64,7 +60,7 @@ object PreferenceChatClient {
                     targetPreferenceId = m["targetPreferenceId"]?.toString(),
                     newStatement = m["newStatement"]?.toString(),
                     newPreferenceType = m["newPreferenceType"]?.toString(),
-                    targetType = m["targetType"]?.toString(),
+                    targetType = m["targetType"]?.toString() ?: "CONTEXT",
                 )
             }
             ChatInteractResponse(
@@ -91,7 +87,4 @@ object PreferenceChatClient {
         }
     }
 }
-
-
-
 

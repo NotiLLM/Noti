@@ -69,7 +69,7 @@ fun DevControlPanel(context: Context, drawerViewModel: DrawerViewModel) {
                     Text(stringResource(R.string.ui_dev_update_user))
                 }
                 Button(onClick = {
-                    drawerViewModel.exportPostContent(true, true)
+                    drawerViewModel.exportAllData(true, true)
                 }) {
                     Text(stringResource(R.string.ui_dev_export_data))
                 }

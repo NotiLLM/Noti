@@ -34,6 +34,7 @@ android {
         buildConfigField("String", "N8N_RERANK_PATH", "\"webhook/reminder-rerank\"")
         buildConfigField("String", "N8N_PREFERENCE_QUICK_SYNC_PATH", "\"webhook/preference-quick-sync\"")
         buildConfigField("String", "N8N_PREFERENCE_CHAT_INTERACT_PATH", "\"webhook/preference-chat-interact\"")
+        buildConfigField("String", "N8N_CONTEXT_DISCOVER_PATH", "\"webhook/preference-context-discover\"")
     }
 
     buildTypes {

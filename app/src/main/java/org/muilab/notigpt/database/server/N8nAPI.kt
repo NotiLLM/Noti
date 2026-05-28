@@ -100,32 +100,10 @@ fun enqueueTaskScan(context: Context, notiKey: String) {
          .setInputData(inputData)
          .build()
 
-     WorkManager.getInstance(context).enqueue(workerRequest)
- }
-
- fun enqueueTaskExtraction(context: Context, notiKeys: List<String>, userTriggered: Boolean = false) {
-    Log.d("N8nAPI", "enqueueTaskExtraction: keys=${notiKeys.size} ${notiKeys.take(5)} userTriggered=$userTriggered")
-     val inputDataBuilder = Data.Builder()
-         .putString("api_type", N8N_TASK_EXTRACTION)
-         .putString("webhook_path", BuildConfig.N8N_TASK_EXTRACTION_PATH)
-         .putBoolean("user_triggered", userTriggered)
-     // Put the list as a JSON string to pass through WorkManager
-     val gson = com.google.gson.Gson()
-     inputDataBuilder.putString("noti_keys_json", gson.toJson(notiKeys))
-
-     val inputData = inputDataBuilder.build()
-
-     val constraints = Constraints.Builder()
-         .setRequiredNetworkType(NetworkType.CONNECTED)
-         .build()
-
-     val workerRequest = OneTimeWorkRequestBuilder<N8nAPIWorker>()
-         .setBackoffCriteria(BackoffPolicy.LINEAR, 1, TimeUnit.MINUTES)
-         .setConstraints(constraints)
-         .setInputData(inputData)
-         .build()
-
-     WorkManager.getInstance(context).enqueue(workerRequest)
+     // Use per-key unique name to prevent unbounded job accumulation in JobScheduler.
+     // KEEP: if a scan for this key is already pending/running, don't restart it.
+     WorkManager.getInstance(context)
+         .enqueueUniqueWork("n8n_task_scan_$notiKey", ExistingWorkPolicy.KEEP, workerRequest)
  }
 
  fun enqueueTaskExtraction(
@@ -159,7 +137,10 @@ fun enqueueTaskScan(context: Context, notiKey: String) {
         .setInputData(inputData)
         .build()
 
-    WorkManager.getInstance(context).enqueue(workerRequest)
+    // Single unique slot for all extraction work: REPLACE so newer key lists win and the
+    // job count stays bounded. Consistent with enqueueDelayedTaskExtraction.
+    WorkManager.getInstance(context)
+        .enqueueUniqueWork("n8n_task_extraction", ExistingWorkPolicy.REPLACE, workerRequest)
  }
 
  /**

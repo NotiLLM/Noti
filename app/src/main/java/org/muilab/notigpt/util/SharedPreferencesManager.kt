@@ -129,6 +129,12 @@ object SharedPreferencesManager {
         get() = get(KEY_LOCAL_PREFS, KEY_HISTORY_NOTI_HOURS_THRESHOLD, -1)
         set(value) = put(KEY_LOCAL_PREFS, KEY_HISTORY_NOTI_HOURS_THRESHOLD, value)
 
+    // --- Target extraction language ---
+    const val KEY_TARGET_EXTRACTION_LANGUAGE = "targetExtractionLanguage"
+    var targetExtractionLanguage: String
+        get() = get(KEY_LOCAL_PREFS, KEY_TARGET_EXTRACTION_LANGUAGE, "original")
+        set(value) = put(KEY_LOCAL_PREFS, KEY_TARGET_EXTRACTION_LANGUAGE, value)
+
     const val KEY_LAST_APP_RESUME_TIME = "lastAppResumeTime"
     var lastAppResumeTime: Long
         get() = get(KEY_LOCAL_PREFS, KEY_LAST_APP_RESUME_TIME, 0L)
