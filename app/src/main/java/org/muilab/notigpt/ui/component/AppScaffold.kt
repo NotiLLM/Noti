@@ -59,8 +59,6 @@ fun AppScaffold(
         reminderList.count { it.isTask && !it.isCompleted }
     }
 
-    val pendingEsmCount = 0
-
     val unresolvedConflicts by preferenceViewModel.unresolvedConflicts.collectAsState()
 
     // ── Snackbar for delete / manual-extract preference prompt ───
@@ -171,7 +169,6 @@ fun AppScaffold(
                     selectedTab = selectedTab,
                     unreadNotificationCount = unreadNotiCount,
                     pendingTaskCount = pendingTaskCount,
-                    pendingEsmCount = pendingEsmCount,
                     unresolvedConflictCount = unresolvedConflicts.size,
                     onTabSelected = { tab ->
                         // Leaving Notifications: persist any pending read marks so border colors update.
@@ -197,7 +194,6 @@ fun AppScaffold(
                         drawerViewModel = drawerViewModel,
                         preferenceViewModel = preferenceViewModel,
                     )
-                    org.muilab.notigpt.ui.component.appbar.Tab.ESM -> selectedTab = org.muilab.notigpt.ui.component.appbar.Tab.Reminders
                     org.muilab.notigpt.ui.component.appbar.Tab.Preferences -> PreferenceChatScreen(
                         preferenceViewModel = preferenceViewModel,
                     )

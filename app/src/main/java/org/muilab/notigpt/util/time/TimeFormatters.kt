@@ -27,8 +27,6 @@ fun getRelativeTimeStr(unixTime: Long, context: Context?, locale: Locale = Local
     val now = System.currentTimeMillis()
     val diffInMillis = unixTime - now
 
-    val formatter = RelativeDateTimeFormatter.getInstance(ULocale.forLocale(locale))
-
     val isFuture = diffInMillis > 0
     val direction = if (isFuture) {
         RelativeDateTimeFormatter.Direction.NEXT
@@ -45,6 +43,22 @@ fun getRelativeTimeStr(unixTime: Long, context: Context?, locale: Locale = Local
     val monthDayPattern = context?.getString(R.string.time_pattern_month_day) ?: "M/d"
 
     val timeFormat = SimpleDateFormat(timePattern, locale)
+
+    fun formatRelative(value: Double, unit: RelativeDateTimeFormatter.RelativeUnit): String {
+        return try {
+            RelativeDateTimeFormatter.getInstance(ULocale.forLocale(locale))
+                .format(value, direction, unit)
+                .toString()
+        } catch (_: RuntimeException) {
+            val rounded = value.toLong()
+            val unitText = when (unit) {
+                RelativeDateTimeFormatter.RelativeUnit.MINUTES -> if (rounded == 1L) "minute" else "minutes"
+                RelativeDateTimeFormatter.RelativeUnit.HOURS -> if (rounded == 1L) "hour" else "hours"
+                else -> "units"
+            }
+            if (isFuture) "in $rounded $unitText" else "$rounded $unitText ago"
+        }
+    }
 
     // Localized day labels:
     // - Prefer resources.
@@ -78,22 +92,20 @@ fun getRelativeTimeStr(unixTime: Long, context: Context?, locale: Locale = Local
     return when {
         diffAbsMillis < TimeUnit.MINUTES.toMillis(1) -> {
             val soon = context?.getString(R.string.time_now)
-                ?: formatter.format(1.0, RelativeDateTimeFormatter.Direction.NEXT, RelativeDateTimeFormatter.RelativeUnit.MINUTES).toString()
+                ?: "in 1 minute"
             val nowStr = context?.getString(R.string.time_now) ?: "now"
             if (isFuture) soon else nowStr
         }
 
-        diffInMinutes < 60 -> formatter.format(
+        diffInMinutes < 60 -> formatRelative(
             diffInMinutes.toDouble(),
-            direction,
             RelativeDateTimeFormatter.RelativeUnit.MINUTES
-        ).toString()
+        )
 
-        diffInHours < 3 -> formatter.format(
+        diffInHours < 3 -> formatRelative(
             diffInHours.toDouble(),
-            direction,
             RelativeDateTimeFormatter.RelativeUnit.HOURS
-        ).toString()
+        )
 
         diffAbsMillis < TimeUnit.DAYS.toMillis(2) -> {
             // Within about 48h: show Today/Yesterday/Tomorrow + time when applicable.

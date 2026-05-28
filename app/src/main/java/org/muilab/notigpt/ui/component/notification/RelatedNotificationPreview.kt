@@ -1,11 +1,20 @@
-package org.muilab.notigpt.ui.screens.esm
+package org.muilab.notigpt.ui.component.notification
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.layout.*
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material3.*
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -20,18 +29,18 @@ import org.muilab.notigpt.R
 import org.muilab.notigpt.model.notifications.NotiDisplayUnit
 
 /**
- * Read-only NotiCard-like preview.
+ * Read-only notification preview used as reminder provenance.
  *
- * Uses a lightweight header similar to NotiRecordContextCard, and renders all snapshotted records.
+ * This intentionally lives outside the legacy ESM package: the reminder screen uses it to show
+ * where a generated reminder came from, independent of whether ESM is enabled.
  */
 @Composable
-fun EsmNotiCardLikePreview(
+fun RelatedNotificationPreview(
     notiDisplayUnit: NotiDisplayUnit,
     showOpenButton: Boolean = false,
     onOpen: (() -> Unit)? = null,
 ) {
     val notiUnit = notiDisplayUnit.notiUnit
-    // Ensure stable order for context display.
     val notiRecords = notiDisplayUnit.notiRecords.sortedBy { it.time }
 
     val lastRecord = notiRecords.lastOrNull()
@@ -53,10 +62,9 @@ fun EsmNotiCardLikePreview(
         modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.medium,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-        color = MaterialTheme.colorScheme.surface
+        color = MaterialTheme.colorScheme.surface,
     ) {
         Column {
-            // === Header (NotiRecordContextCard-like) ===
             val displayTitle = notiOverallTitle.ifBlank { notiUnit.appName }
 
             Row(
@@ -76,7 +84,7 @@ fun EsmNotiCardLikePreview(
                 }
 
                 Column(modifier = Modifier.weight(1f)) {
-                    androidx.compose.material3.Text(
+                    Text(
                         text = displayTitle,
                         style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.ExtraBold),
                         maxLines = 1,
@@ -84,7 +92,7 @@ fun EsmNotiCardLikePreview(
                         fontSize = 14.sp,
                     )
                     if (hasSecondTitle) {
-                        androidx.compose.material3.Text(
+                        Text(
                             text = notiSecondOverallTitle,
                             style = MaterialTheme.typography.labelSmall.copy(fontStyle = FontStyle.Italic),
                             maxLines = 1,
@@ -103,25 +111,17 @@ fun EsmNotiCardLikePreview(
                 }
             }
 
-            // Full content preview (no interactive expansion): show all snapshotted records.
-            // Guardrail: avoid huge vertical blow-ups by showing at most the last 30 records.
             val recordsToShow = if (notiRecords.size > 30) notiRecords.takeLast(30) else notiRecords
-
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 10.dp),
             ) {
-                recordsToShow.forEachIndexed { idx, r ->
-                    val content = r.content
+                recordsToShow.forEachIndexed { idx, record ->
+                    val content = record.content
                     if (content.isBlank() || content == "null") return@forEachIndexed
-
-                    // A light separator between messages.
-                    if (idx != 0) {
-                        Spacer(Modifier.height(8.dp))
-                    }
-
-                    androidx.compose.material3.Text(
+                    if (idx != 0) Spacer(Modifier.height(8.dp))
+                    Text(
                         text = content,
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.fillMaxWidth(),
