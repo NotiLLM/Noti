@@ -1,4 +1,4 @@
-package org.muilab.notigpt.database.server.workers.n8n
+package org.muilab.notigpt.data.remote.n8n.workers.handlers
 
 import java.text.SimpleDateFormat
 import java.util.Date

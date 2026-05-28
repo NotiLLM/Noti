@@ -1,4 +1,4 @@
-package org.muilab.notigpt.database.server.workers.n8n
+package org.muilab.notigpt.data.remote.n8n.workers.handlers
 
 import android.util.Log
 import androidx.work.Data
@@ -9,13 +9,11 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
-import org.muilab.notigpt.domain.esm.EsmConfig
 import org.muilab.notigpt.domain.esm.EsmSnapshotStatuses
-import org.muilab.notigpt.domain.esm.EsmTriggerTypes
 import org.muilab.notigpt.model.features.ReminderExtractionSnapshot
 import org.muilab.notigpt.model.features.ReminderUnit
+import org.muilab.notigpt.domain.reminder.ReminderAssociationMerger
 import org.muilab.notigpt.model.notifications.NotiRecord
-import org.muilab.notigpt.repository.EsmRepository
 import org.muilab.notigpt.util.SharedPreferencesManager
 import java.text.SimpleDateFormat
 import java.time.OffsetDateTime
@@ -250,15 +248,9 @@ internal object ReminderExtractionHandler {
                     // No reminders extracted -> discard snapshot
                     snapshotDao.deleteSnapshot(snapshotId)
                 } else {
-                    // Track the first reminderId we actually upsert (used for snapshot link + ESM binding).
-                    var firstCreatedReminderId: String? = null
-
                     for (i in 0 until arr.length()) {
                         val it = arr.getJSONObject(i)
                         val reminderId = it.optString("reminderId", it.optString("taskId"))
-                        if (firstCreatedReminderId == null && reminderId.isNotBlank()) {
-                            firstCreatedReminderId = reminderId
-                        }
                         val reminderTitle = it.optString("reminderTitle", "")
                         val reminderContent = it.optString("reminderContent", it.optString("taskDescription"))
                         val isTask = it.optBoolean("isTask", true)
@@ -267,14 +259,13 @@ internal object ReminderExtractionHandler {
                         val startTimeMs = isoToUnixMillis(it.optString("startTimeString", "-1")).let { v -> if (v == -1L) 0L else v }
                         val endTimeMs = isoToUnixMillis(it.optString("endTimeString", "-1")).let { v -> if (v == -1L) 0L else v }
                         val estimate = it.optLong("estimatedCompletionTime", it.optLong("estimatedCompletionMinutes", 0L))
-                        val assocIds = mutableSetOf<String>()
-                        // Prefer associatedNotiRecords; fall back to associatedNotis for backward compat
-                        val assoc = it.optJSONArray("associatedNotiRecords") ?: it.optJSONArray("associatedNotis")
-                        if (assoc != null) {
-                            for (j in 0 until assoc.length()) {
-                                assocIds.add(assoc.optString(j))
-                            }
-                        }
+                        val responseAssocIds = ReminderAssociationMerger.associationIdsFrom(it)
+                        val existing = if (reminderId.isNotBlank()) reminderRepository.getById(reminderId) else null
+                        val assocIds = ReminderAssociationMerger.merge(
+                            existing = existing,
+                            responseAssociationIds = responseAssocIds,
+                            requestRecordIds = combined.map { rec -> rec.notiRecordId }.toSet(),
+                        )
                         val isCompleted = it.optBoolean("isCompleted", false)
 
                         // Parse buttons
@@ -300,7 +291,6 @@ internal object ReminderExtractionHandler {
                         // If we're overwriting an existing reminder, merge relevant records from its old snapshot
                         // into this extraction snapshot (so downstream sync/UI have the full context).
                         try {
-                            val existing = if (reminderId.isNotBlank()) reminderRepository.getById(reminderId) else null
                             val oldSnapshotId = existing?.extractionSnapshotId
                             if (!oldSnapshotId.isNullOrBlank() && assocIds.isNotEmpty()) {
                                 val oldSnap = snapshotDao.getSnapshot(oldSnapshotId)
@@ -336,7 +326,7 @@ internal object ReminderExtractionHandler {
                             startTime = startTimeMs,
                             endTime = endTimeMs,
                             estimatedCompletionTime = estimate,
-                            associatedNotiRecords = assocIds.toSet(),
+                            associatedNotiRecords = assocIds,
                             extractionSnapshotId = snapshotId,
                             origin = "llm_manual_extraction",
                             humanEditCount = 0,
@@ -358,31 +348,6 @@ internal object ReminderExtractionHandler {
                         ?: firstObj?.optString("taskId")
                     snapshotDao.updateSnapshotStatusAndReminderId(snapshotId, EsmSnapshotStatuses.KEPT, firstReminderId)
 
-                    // === Trigger A: create an ESM after a user-triggered extraction actually created a reminder ===
-                    val bindReminderId = firstCreatedReminderId ?: firstReminderId
-                    if (!bindReminderId.isNullOrBlank()) {
-                        try {
-                            val esmRepo = EsmRepository(ctx.appContext)
-                            if (!esmRepo.hasAnsweredOrAvailableInstanceForReminder(bindReminderId)) {
-                                val requestedDelay = esmRepo.computeTriggerAbRequestedDelayMs(EsmConfig.TRIGGER_A_AVAILABLE_DELAY_MS)
-                                if (requestedDelay <= EsmConfig.TRIGGER_AB_RECENT_WINDOW_MS) {
-                                    val inst = esmRepo.createEsmForSnapshot(
-                                        reminderId = bindReminderId,
-                                        snapshotId = snapshotId,
-                                        triggerType = EsmTriggerTypes.A_USER_TRIGGERED_EXTRACTION,
-                                        // If it's been >= 1h since last ESM, deliver immediately.
-                                        availableDelayMs = requestedDelay,
-                                    )
-                                    // Enqueue with caps/cooldowns + "single-active" gating.
-                                    esmRepo.maybeEnqueueWithPolicy(inst.instanceId, requestedDelay)
-                                }
-                            }
-                        } catch (_: IllegalStateException) {
-                            // ESM already exists for this reminder; no-op.
-                        } catch (e: Exception) {
-                            Log.w("N8nWebhook", "Failed to create/enqueue Trigger A ESM", e)
-                        }
-                    }
                 }
 
                 drawerDao.setShouldExtractReminderByKeys(listOf(notiKey), false)
@@ -617,9 +582,6 @@ internal object ReminderExtractionHandler {
                 for (i in 0 until arr.length()) {
                     val it = arr.getJSONObject(i)
                     val reminderId = it.optString("reminderId", it.optString("taskId"))
-                    if (firstCreatedReminderId == null && reminderId.isNotBlank()) {
-                        firstCreatedReminderId = reminderId
-                    }
                     val reminderTitle = it.optString("reminderTitle", "")
                     val reminderContent = it.optString("reminderContent", it.optString("taskDescription"))
                     val isTask = it.optBoolean("isTask", true)
@@ -628,14 +590,13 @@ internal object ReminderExtractionHandler {
                     val startTimeMs = isoToUnixMillis(it.optString("startTimeString", "-1")).let { v -> if (v == -1L) 0L else v }
                     val endTimeMs = isoToUnixMillis(it.optString("endTimeString", "-1")).let { v -> if (v == -1L) 0L else v }
                     val estimate = it.optLong("estimatedCompletionTime", it.optLong("estimatedCompletionMinutes", 0L))
-                    val assocIds = mutableSetOf<String>()
-                    // Prefer associatedNotiRecords; fall back to associatedNotis for backward compat
-                    val assoc = it.optJSONArray("associatedNotiRecords") ?: it.optJSONArray("associatedNotis")
-                    if (assoc != null) {
-                        for (j in 0 until assoc.length()) {
-                            assocIds.add(assoc.optString(j))
-                        }
-                    }
+                    val responseAssocIds = ReminderAssociationMerger.associationIdsFrom(it)
+                    val existing = if (reminderId.isNotBlank()) reminderRepository.getById(reminderId) else null
+                    val assocIds = ReminderAssociationMerger.merge(
+                        existing = existing,
+                        responseAssociationIds = responseAssocIds,
+                        requestRecordIds = candidateRecordIds.toSet(),
+                    )
                     val isCompleted = it.optBoolean("isCompleted", false)
 
                     // Parse buttons
@@ -660,7 +621,6 @@ internal object ReminderExtractionHandler {
 
                     // Merge old snapshot context if this reminderId already exists.
                     try {
-                        val existing = if (reminderId.isNotBlank()) reminderRepository.getById(reminderId) else null
                         val oldSnapshotId = existing?.extractionSnapshotId
                         if (!oldSnapshotId.isNullOrBlank() && assocIds.isNotEmpty()) {
                             val oldSnap = snapshotDao.getSnapshot(oldSnapshotId)
@@ -696,7 +656,7 @@ internal object ReminderExtractionHandler {
                         startTime = startTimeMs,
                         endTime = endTimeMs,
                         estimatedCompletionTime = estimate,
-                        associatedNotiRecords = assocIds.toSet(),
+                        associatedNotiRecords = assocIds,
                         extractionSnapshotId = snapshotId,
                         origin = "llm_auto_extraction",
                         humanEditCount = 0,

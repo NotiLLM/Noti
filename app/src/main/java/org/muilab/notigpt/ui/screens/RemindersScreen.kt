@@ -82,14 +82,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
-import org.json.JSONObject
 import org.muilab.notigpt.R
 import org.muilab.notigpt.model.features.PreferenceEntryPoint
 import org.muilab.notigpt.model.features.ReminderUnit
 import org.muilab.notigpt.model.features.SubTask
 import org.muilab.notigpt.model.features.asExportable
-import org.muilab.notigpt.model.notifications.NotiRecord
-import org.muilab.notigpt.repository.EsmRepository
+import org.muilab.notigpt.repository.ReminderRelatedNotificationsRepository
 import org.muilab.notigpt.repository.NotiRepositoryProvider
 import org.muilab.notigpt.ui.component.PreferenceLearningBottomSheet
 import org.muilab.notigpt.ui.component.reminder.SubTaskRow
@@ -304,25 +302,6 @@ fun RemindersScreen(
 
                 viewedReminderIds = viewedReminderIds + newlyViewed
 
-                CoroutineScope(Dispatchers.IO).launch {
-                    try {
-                        val repo = EsmRepository(context.applicationContext)
-                        newlyViewed.forEach { rid ->
-                            val reminder = localReminders.firstOrNull { it.reminderId == rid } ?: return@forEach
-                            if (reminder.associatedNotiRecords.isEmpty()) return@forEach
-
-                            // Trigger B: schedule delivery using the A/B timing rule.
-                            val requestedDelay = repo.computeTriggerAbRequestedDelayMs(
-                                org.muilab.notigpt.domain.esm.EsmConfig.TRIGGER_B_AVAILABLE_DELAY_MS,
-                            )
-                            repo.promoteToTriggerBAndReschedule(
-                                reminderId = rid,
-                                requestedDelayMs = requestedDelay,
-                            )
-                        }
-                    } catch (_: Exception) {
-                    }
-                }
             }
     }
 
@@ -1353,111 +1332,24 @@ private fun ReminderDetailScreen(
                 }
             }
 
-            // === Related notifications (from extraction snapshot) ===
+            // === Related notifications ===
             var relatedExpanded by remember(initial.reminderId) { mutableStateOf(false) }
-            var relatedRecordsByKey by remember(initial.reminderId) { mutableStateOf<Map<String, List<NotiRecord>>>(emptyMap()) }
-            var relatedUnitsByKey by remember(initial.reminderId) { mutableStateOf<Map<String, org.muilab.notigpt.model.notifications.NotiUnit>>(emptyMap()) }
+            var relatedRecordsByKey by remember(initial.reminderId) { mutableStateOf(ReminderRelatedNotificationsRepository.RelatedNotifications.Empty.recordsByKey) }
+            var relatedUnitsByKey by remember(initial.reminderId) { mutableStateOf(ReminderRelatedNotificationsRepository.RelatedNotifications.Empty.unitsByKey) }
             var relatedLoading by remember(initial.reminderId) { mutableStateOf(false) }
 
-            LaunchedEffect(initial.reminderId, initial.extractionSnapshotId) {
-                val TAG = "ReminderRelatedNotis"
+            LaunchedEffect(initial.reminderId, initial.extractionSnapshotId, initial.associatedNotiRecords) {
                 relatedLoading = true
                 relatedRecordsByKey = emptyMap()
                 relatedUnitsByKey = emptyMap()
 
-                val snapshotId = initial.extractionSnapshotId
-                if (snapshotId.isNullOrBlank() || initial.associatedNotiRecords.isEmpty()) {
-                    Log.d(TAG, "Skip loading: snapshotId=$snapshotId, associatedNotiRecords=${initial.associatedNotiRecords.size}")
-                    relatedLoading = false
-                    return@LaunchedEffect
-                }
-
-                Log.d(TAG, "Load related: reminderId=${initial.reminderId}, snapshotId=$snapshotId, keys=${initial.associatedNotiKeys}")
-
                 try {
-                    val db = org.muilab.notigpt.database.room.AppDatabase.getInstance(context.applicationContext)
-
-                    // Run all Room I/O off the main thread.
-                    val (finalRecords, unitsMap) = withContext(Dispatchers.IO) {
-                        val snap = db.reminderSnapshotDao().getSnapshot(snapshotId) ?: return@withContext (emptyList<NotiRecord>() to emptyMap())
-
-                        Log.d(TAG, "Snapshot found. status=${snap.status}, reminderId=${snap.reminderId}, payloadLen=${snap.payloadJson.length}")
-
-                        val obj = JSONObject(snap.payloadJson)
-                        val v = obj.optInt("v", 1)
-                        Log.d(TAG, "Snapshot payload version v=$v")
-                        if (v != 2) return@withContext (emptyList<NotiRecord>() to emptyMap())
-
-                        val wantedKeys = initial.associatedNotiKeys.toList()
-
-                        val mappingObj = obj.optJSONObject("notiKeyToRecordIds")
-                        val mappedIds = mutableListOf<String>()
-                        if (mappingObj != null) {
-                            wantedKeys.forEach { key ->
-                                val arr = mappingObj.optJSONArray(key)
-                                val cnt = arr?.length() ?: 0
-                                Log.d(TAG, "Mapping: key=$key -> $cnt ids")
-                                if (arr == null) return@forEach
-                                for (i in 0 until arr.length()) {
-                                    val rid = arr.optString(i)
-                                    if (!rid.isNullOrBlank()) mappedIds += rid
-                                }
-                            }
-                        } else {
-                            Log.w(TAG, "Snapshot payload missing notiKeyToRecordIds")
-                        }
-
-                        val recordIds: List<String> = when {
-                            mappedIds.isNotEmpty() -> mappedIds.distinct().also {
-                                Log.d(TAG, "Using mappedIds count=${it.size}")
-                            }
-                            else -> {
-                                val arr = obj.optJSONArray("recordIds")
-                                val ids = if (arr == null) {
-                                    Log.w(TAG, "Snapshot payload missing recordIds")
-                                    emptyList()
-                                } else buildList {
-                                    for (i in 0 until arr.length()) {
-                                        val rid = arr.optString(i)
-                                        if (!rid.isNullOrBlank()) add(rid)
-                                    }
-                                }.distinct()
-                                Log.d(TAG, "Using fallback recordIds count=${ids.size}")
-                                ids
-                            }
-                        }
-
-                        if (recordIds.isEmpty()) {
-                            Log.w(TAG, "No recordIds resolved from snapshot.")
-                            return@withContext (emptyList<NotiRecord>() to emptyMap())
-                        } else {
-                            Log.d(TAG, "First recordId=${recordIds.firstOrNull()}")
-                        }
-
-                        val allForKeys = db.recordDao().getRecordsByKeys(wantedKeys)
-                        Log.d(TAG, "Fetched records by keys: keys=${wantedKeys.size} -> records=${allForKeys.size}")
-
-                        val idSet = recordIds.toHashSet()
-                        val matched = allForKeys.filter { it.notiRecordId in idSet }
-                        Log.d(TAG, "Matched by ID filter: matched=${matched.size} (expected around ${recordIds.size})")
-
-                        val records = if (matched.isNotEmpty()) {
-                            matched
-                        } else {
-                            val byIds = db.recordDao().getRecordsByIds(recordIds)
-                            Log.w(TAG, "Fallback getRecordsByIds returned=${byIds.size}")
-                            byIds
-                        }
-
-                        val units = db.drawerDao().getByNotiKeys(wantedKeys).associateBy { it.notiKey }
-                        (records to units)
-                    }
-
-                    relatedRecordsByKey = finalRecords.groupBy { it.notiKey }
-                    relatedUnitsByKey = unitsMap
-                    Log.d(TAG, "Grouped relatedRecordsByKey keys=${relatedRecordsByKey.keys.size}, totalRecords=${finalRecords.size}, units=${unitsMap.size}")
+                    val repo = ReminderRelatedNotificationsRepository(context.applicationContext)
+                    val related = repo.getRelatedNotifications(initial)
+                    relatedRecordsByKey = related.recordsByKey
+                    relatedUnitsByKey = related.unitsByKey
                 } catch (t: Throwable) {
-                    Log.e(TAG, "Failed loading related notifications", t)
+                    Log.e("ReminderRelatedNotis", "Failed loading related notifications", t)
                     relatedRecordsByKey = emptyMap()
                     relatedUnitsByKey = emptyMap()
                 } finally {

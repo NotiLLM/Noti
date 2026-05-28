@@ -1,4 +1,4 @@
-package org.muilab.notigpt.database.server.workers
+package org.muilab.notigpt.data.remote.n8n.workers
 
 import android.content.Context
 import android.util.Log
@@ -27,6 +27,6 @@ class N8nAPIWorker(
         }
     }
 
-    // NOTE: Large handler methods were extracted into database.server.workers.n8n.*
+    // NOTE: Large handler methods were extracted into data.remote.n8n.workers.handlers.*
     // (UpdateNotificationHandler, TaskScanHandler, TaskExtractionHandler, PostNotificationActionHandler)
 }

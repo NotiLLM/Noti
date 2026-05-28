@@ -1,9 +1,9 @@
-package org.muilab.notigpt.database.server.workers.n8n
+package org.muilab.notigpt.data.remote.n8n.workers.handlers
 
 import android.content.Context
 import androidx.work.ListenableWorker
 import org.muilab.notigpt.database.room.AppDatabase
-import org.muilab.notigpt.database.server.N8nAPIClient
+import org.muilab.notigpt.data.remote.n8n.N8nAPIClient
 import org.muilab.notigpt.repository.NotiRepository
 import org.muilab.notigpt.repository.NotiRepositoryProvider
 import org.muilab.notigpt.repository.ReminderRepository

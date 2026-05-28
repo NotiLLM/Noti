@@ -9,8 +9,8 @@ This project is evolving toward a clean-ish layering:
 - **UI (Compose)**: `org.muilab.notigpt.ui.*`
 - **State**: `org.muilab.notigpt.ui.viewmodel.*`
 - **Repository / orchestration**: `org.muilab.notigpt.repository.*`
-- **Persistence**: Room DAOs and entities under `org.muilab.notigpt.database.room.*`
-- **Background work**: WorkManager worker under `org.muilab.notigpt.database.server.workers.*`
+- **Local persistence**: Room DAOs and entities under `org.muilab.notigpt.database.room.*`
+- **Remote n8n integration**: Retrofit clients and WorkManager handlers under `org.muilab.notigpt.data.remote.n8n.*`
 - **Domain (pure Kotlin)**: `org.muilab.notigpt.domain.*`
 - **Platform (Android wrappers)**: `org.muilab.notigpt.platform.*`
 
@@ -26,8 +26,18 @@ See additional docs:
 2. **Store**:
    - `NotiRepository.upsertNotiUnit()` stores/updates the drawer item (`NotiUnit`).
    - `NotiRepository.insertNotiRecord()` stores the record (`NotiRecord`).
-3. **Schedule enrichment** (optional): repository calls helper functions (e.g. `enqueueTaskScan`, `enqueueTaskExtraction`) which enqueue `N8nAPIWorker` jobs.
+3. **Schedule enrichment** (optional): repository calls helper functions (e.g. `enqueueTaskScan`, `enqueueTaskExtraction`) which enqueue `N8nAPIWorker` jobs in `data.remote.n8n`.
 4. **Render**: `DrawerViewModel` collects `NotiRepository.getGroupedNotifications()` and the Compose UI renders the drawer.
+
+## Firebase setup
+
+Firebase/Firestore sync is kept enabled. Do not commit credentials. Put your local Firebase config at:
+
+```text
+app/google-services.json
+```
+
+The Google Services Gradle plugin reads this file during Android builds.
 
 ## Testing strategy
 

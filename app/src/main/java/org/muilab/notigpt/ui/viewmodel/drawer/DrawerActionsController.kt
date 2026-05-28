@@ -5,7 +5,7 @@ import android.os.Build
 import androidx.annotation.RequiresApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import org.muilab.notigpt.database.server.enqueueNotificationAction
+import org.muilab.notigpt.data.remote.n8n.enqueueNotificationAction
 import org.muilab.notigpt.domain.action.NotiActionType
 import org.muilab.notigpt.repository.NotiRepository
 import org.muilab.notigpt.util.SharedPreferencesManager

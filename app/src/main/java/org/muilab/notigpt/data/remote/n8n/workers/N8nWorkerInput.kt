@@ -1,4 +1,4 @@
-package org.muilab.notigpt.database.server.workers
+package org.muilab.notigpt.data.remote.n8n.workers
 
 import androidx.work.Data
 import org.muilab.notigpt.util.Constants.Companion.DIFY_POST_NOTIFICATION_ACTION

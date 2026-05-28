@@ -12,9 +12,9 @@ import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
 import org.muilab.notigpt.database.room.AppDatabase
-import org.muilab.notigpt.database.server.enqueueRegenerateAll
-import org.muilab.notigpt.database.server.enqueueRegenerateOne
-import org.muilab.notigpt.database.server.enqueueRerank
+import org.muilab.notigpt.data.remote.n8n.enqueueRegenerateAll
+import org.muilab.notigpt.data.remote.n8n.enqueueRegenerateOne
+import org.muilab.notigpt.data.remote.n8n.enqueueRerank
 import org.muilab.notigpt.model.features.ExportableItem
 import org.muilab.notigpt.model.features.ReminderUnit
 import org.muilab.notigpt.model.features.SubTask

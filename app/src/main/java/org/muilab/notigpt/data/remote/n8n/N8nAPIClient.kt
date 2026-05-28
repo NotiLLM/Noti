@@ -1,4 +1,4 @@
-package org.muilab.notigpt.database.server
+package org.muilab.notigpt.data.remote.n8n
 
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor

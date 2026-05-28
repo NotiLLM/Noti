@@ -1,4 +1,4 @@
-package org.muilab.notigpt.database.server.workers.n8n
+package org.muilab.notigpt.data.remote.n8n.workers.handlers
 
 import android.util.Log
 import androidx.work.Data
@@ -8,7 +8,7 @@ import kotlinx.coroutines.delay
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
-import org.muilab.notigpt.database.server.N8nUpdateNotificationPayload
+import org.muilab.notigpt.data.remote.n8n.N8nUpdateNotificationPayload
 import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_ARCHIVE
 import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_DELETED
 import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_GENERAL

@@ -10,9 +10,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import org.muilab.notigpt.database.server.enqueueDelayedTaskExtraction
-import org.muilab.notigpt.database.server.enqueueTaskExtraction
-import org.muilab.notigpt.database.server.enqueueTaskScan
+import org.muilab.notigpt.data.remote.n8n.enqueueDelayedTaskExtraction
+import org.muilab.notigpt.data.remote.n8n.enqueueTaskExtraction
+import org.muilab.notigpt.data.remote.n8n.enqueueTaskScan
 import org.muilab.notigpt.database.room.NotiDrawerDao
 import org.muilab.notigpt.database.room.NotiRecordDao
 import org.muilab.notigpt.model.notifications.NotiRecord

@@ -1,4 +1,4 @@
-package org.muilab.notigpt.database.server
+package org.muilab.notigpt.data.remote.n8n
 
 import android.content.Context
 import android.util.Log
@@ -9,7 +9,7 @@ import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import org.muilab.notigpt.BuildConfig
-import org.muilab.notigpt.database.server.workers.N8nAPIWorker
+import org.muilab.notigpt.data.remote.n8n.workers.N8nAPIWorker
 import org.muilab.notigpt.util.Constants.Companion.N8N_TASK_SCAN
 import org.muilab.notigpt.util.Constants.Companion.N8N_TASK_EXTRACTION
 import org.muilab.notigpt.util.Constants.Companion.N8N_REGENERATE_ONE

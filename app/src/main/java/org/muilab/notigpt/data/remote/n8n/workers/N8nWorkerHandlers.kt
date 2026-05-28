@@ -1,15 +1,15 @@
-package org.muilab.notigpt.database.server.workers
+package org.muilab.notigpt.data.remote.n8n.workers
 
 import androidx.work.Data
 import androidx.work.ListenableWorker
-import org.muilab.notigpt.database.server.workers.n8n.N8nWorkerContext
-import org.muilab.notigpt.database.server.workers.n8n.PostNotificationActionHandler
-import org.muilab.notigpt.database.server.workers.n8n.PreferenceQuickSyncHandler
-import org.muilab.notigpt.database.server.workers.n8n.ReminderExtractionHandler
-import org.muilab.notigpt.database.server.workers.n8n.ReminderRegenerationHandler
-import org.muilab.notigpt.database.server.workers.n8n.ReminderScanHandler
-import org.muilab.notigpt.database.server.workers.n8n.RerankHandler
-import org.muilab.notigpt.database.server.workers.n8n.UpdateNotificationHandler
+import org.muilab.notigpt.data.remote.n8n.workers.handlers.N8nWorkerContext
+import org.muilab.notigpt.data.remote.n8n.workers.handlers.PostNotificationActionHandler
+import org.muilab.notigpt.data.remote.n8n.workers.handlers.PreferenceQuickSyncHandler
+import org.muilab.notigpt.data.remote.n8n.workers.handlers.ReminderExtractionHandler
+import org.muilab.notigpt.data.remote.n8n.workers.handlers.ReminderRegenerationHandler
+import org.muilab.notigpt.data.remote.n8n.workers.handlers.ReminderScanHandler
+import org.muilab.notigpt.data.remote.n8n.workers.handlers.RerankHandler
+import org.muilab.notigpt.data.remote.n8n.workers.handlers.UpdateNotificationHandler
 
 /**
  * Thin routing layer so [N8nAPIWorker] stays readable.

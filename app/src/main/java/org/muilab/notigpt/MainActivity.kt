@@ -18,7 +18,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import androidx.core.app.NotificationManagerCompat
-import org.muilab.notigpt.domain.esm.EsmScheduling
 import org.muilab.notigpt.repository.NotiRepositoryProvider
 import org.muilab.notigpt.service.NotiListenerService
 import org.muilab.notigpt.ui.theme.NotiLLMTheme
@@ -26,7 +25,6 @@ import org.muilab.notigpt.util.SharedPreferencesManager
 import org.muilab.notigpt.ui.component.AppScaffold
 import org.muilab.notigpt.ui.viewmodel.DrawerViewModel
 import org.muilab.notigpt.ui.viewmodel.DrawerViewModelFactory
-import org.muilab.notigpt.work.EsmTriggerCWork
 import org.muilab.notigpt.work.ReminderPeriodicWork
 
 class MainActivity : ComponentActivity() {
@@ -115,20 +113,11 @@ class MainActivity : ComponentActivity() {
         SharedPreferencesManager.lastAppResumeTime = System.currentTimeMillis()
         super.onResume()
 
-        // Enqueue any deferred auto-generated (Trigger C) ESM deliveries now that the user is in the app.
-        try {
-            EsmScheduling.flushPendingEnqueue(applicationContext, delayMs = 0L)
-        } catch (e: Exception) {
-            Log.w("MainActivity", "Failed to flush pending ESM deliveries", e)
-        }
-
         // Opportunistic wake-up: if WorkManager got delayed in doze, kick once when user opens app.
         // Rate limit to avoid spamming when user switches apps quickly.
         try {
             SharedPreferencesManager.init(this)
             ReminderPeriodicWork.enqueue(applicationContext)
-            EsmTriggerCWork.enqueue(applicationContext)
-
             val now = System.currentTimeMillis()
             val last = SharedPreferencesManager.lastReminderPeriodicRunTime
             val shouldKick = (last == 0L) || (now - last) >= (5 * 60 * 1000L)
@@ -136,7 +125,6 @@ class MainActivity : ComponentActivity() {
             if (shouldKick) {
                 Log.i("MainActivity", "Kicking reminder periodic worker; lastRun=$last")
                 ReminderPeriodicWork.kickNow(applicationContext)
-                EsmTriggerCWork.kickNow(applicationContext)
             }
         } catch (e: Exception) {
             Log.w("MainActivity", "Failed to enqueue/kick periodic reminder work", e)
