@@ -1339,7 +1339,7 @@ private fun ReminderDetailScreen(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        text = stringResource(R.string.esm_related_notifications, relatedKeys.size),
+                        text = stringResource(R.string.reminder_related_notifications, relatedKeys.size),
                         style = MaterialTheme.typography.titleSmall
                     )
                     Icon(
@@ -1352,7 +1352,7 @@ private fun ReminderDetailScreen(
                     when {
                         relatedLoading -> {
                             Text(
-                                text = stringResource(R.string.esm_loading_context),
+                                text = stringResource(R.string.reminder_related_notifications_loading),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -1360,7 +1360,7 @@ private fun ReminderDetailScreen(
 
                         relatedRecordsByKey.isEmpty() -> {
                             Text(
-                                text = stringResource(R.string.esm_no_related_notifications),
+                                text = stringResource(R.string.reminder_no_related_notifications),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )

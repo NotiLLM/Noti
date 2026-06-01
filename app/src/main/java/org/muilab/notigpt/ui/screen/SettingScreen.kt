@@ -1,6 +1,5 @@
 package org.muilab.notigpt.ui.screen
 
-import android.app.TimePickerDialog
 import android.app.Application
 import android.os.Build
 import androidx.annotation.RequiresApi
@@ -31,8 +30,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import java.util.Calendar
-import java.util.Locale
 import org.muilab.notigpt.R
 import org.muilab.notigpt.repository.NotiRepositoryProvider
 import org.muilab.notigpt.ui.viewmodel.DrawerViewModel
@@ -106,67 +103,6 @@ fun SettingsScreen() {
 
         Spacer(modifier = Modifier.size(12.dp))
 
-        // --- ESM receptive window ---
-        var wakeMin by remember { mutableStateOf(SharedPreferencesManager.esmWakeupMinutes) }
-        var bedMin by remember { mutableStateOf(SharedPreferencesManager.esmBedtimeMinutes) }
-
-        fun fmt(mins: Int): String {
-            val h = (mins / 60).coerceIn(0, 23)
-            val m = (mins % 60).coerceIn(0, 59)
-            return String.format(Locale.getDefault(), "%02d:%02d", h, m)
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(stringResource(R.string.ui_settings_esm_wakeup), modifier = Modifier.weight(1f))
-            TextButton(onClick = {
-                val cal = Calendar.getInstance().apply {
-                    set(Calendar.HOUR_OF_DAY, wakeMin / 60)
-                    set(Calendar.MINUTE, wakeMin % 60)
-                }
-                TimePickerDialog(
-                    context,
-                    { _, hour, minute ->
-                        wakeMin = hour * 60 + minute
-                        SharedPreferencesManager.esmWakeupMinutes = wakeMin
-                    },
-                    cal.get(Calendar.HOUR_OF_DAY),
-                    cal.get(Calendar.MINUTE),
-                    true
-                ).show()
-            }) {
-                Text(fmt(wakeMin))
-            }
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(stringResource(R.string.ui_settings_esm_bedtime), modifier = Modifier.weight(1f))
-            TextButton(onClick = {
-                val cal = Calendar.getInstance().apply {
-                    set(Calendar.HOUR_OF_DAY, bedMin / 60)
-                    set(Calendar.MINUTE, bedMin % 60)
-                }
-                TimePickerDialog(
-                    context,
-                    { _, hour, minute ->
-                        bedMin = hour * 60 + minute
-                        SharedPreferencesManager.esmBedtimeMinutes = bedMin
-                    },
-                    cal.get(Calendar.HOUR_OF_DAY),
-                    cal.get(Calendar.MINUTE),
-                    true
-                ).show()
-            }) {
-                Text(fmt(bedMin))
-            }
-        }
-
-        Spacer(modifier = Modifier.size(12.dp))
 
         // --- Extraction language preference ---
         var extractionLanguage by remember { mutableStateOf(SharedPreferencesManager.targetExtractionLanguage) }

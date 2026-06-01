@@ -9,8 +9,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import org.muilab.notigpt.database.room.AppDatabase
-import org.muilab.notigpt.domain.esm.EsmUserSnapshot
-import org.muilab.notigpt.model.esm.EsmInstance
+import org.muilab.notigpt.domain.reminder.ReminderSnapshotPayload
 import org.muilab.notigpt.model.features.ReminderUnit
 import org.muilab.notigpt.model.notifications.NotiRecord
 import org.muilab.notigpt.model.notifications.NotiUnit
@@ -25,7 +24,6 @@ import java.util.TimeZone
  * Storage (as requested):
  * - reminders/{userId}/reminders/{reminderId}
  *   - notis/{notiKey}
- * - esms/{userId}/esms/{instanceId}
  * - users/{userId}
  */
 class FirestoreSyncRepository(
@@ -50,12 +48,6 @@ class FirestoreSyncRepository(
         .document(userId())
         .collection(FirestorePaths.SUBCOLLECTION_REMINDERS)
         .document(reminderId)
-
-    private fun esmDoc(instanceId: String) = firestore
-        .collection(FirestorePaths.COLLECTION_ESMS_ROOT)
-        .document(userId())
-        .collection(FirestorePaths.SUBCOLLECTION_ESMS)
-        .document(instanceId)
 
     private fun reminderNotiDoc(reminderId: String, notiKey: String) =
         reminderDoc(reminderId).collection(FirestorePaths.SUBCOLLECTION_NOTIS).document(notiKey)
@@ -144,7 +136,7 @@ class FirestoreSyncRepository(
 
         try {
             val snap = db.reminderSnapshotDao().getSnapshot(snapshotId) ?: return@withContext
-            val grouping = EsmUserSnapshot.parseRecordIdGrouping(snap.payloadJson) ?: return@withContext
+            val grouping = ReminderSnapshotPayload.parseRecordIdGrouping(snap.payloadJson) ?: return@withContext
 
             val mapping = grouping.notiKeyToRecordIds
             if (mapping.isEmpty()) return@withContext
@@ -198,42 +190,6 @@ class FirestoreSyncRepository(
 
         } catch (t: Throwable) {
             Log.w(tag, "syncReminder notis(snapshot-only) failed reminderId=${reminder.reminderId}", t)
-        }
-    }
-
-    suspend fun syncEsmAnswerEvent(instanceId: String, questionId: String) = withContext(Dispatchers.IO) {
-        ensureUserDoc()
-
-        try {
-            val inst: EsmInstance = db.esmDao().getInstance(instanceId) ?: return@withContext
-            val events = db.esmDao().getAnswerEvents(instanceId)
-            val answers: Map<String, Any?> = events.associate { it.questionId to it.answerJson }
-            val answeredAtLatest = events.maxOfOrNull { it.answeredAt } ?: 0L
-            val now = System.currentTimeMillis()
-
-            val payload: Map<String, Any?> = mapOf(
-                "instanceId" to inst.instanceId,
-                "questionnaireId" to inst.questionnaireId,
-                "questionnaireVersion" to inst.questionnaireVersion,
-                "triggerType" to inst.triggerType,
-                "reminderId" to inst.reminderId,
-                "snapshotId" to inst.snapshotId,
-                "createdAt" to TimeFormatters.toLocalIso(inst.createdAt, zoneId),
-                "availableAt" to TimeFormatters.toLocalIso(inst.availableAt, zoneId),
-                "expiresAt" to TimeFormatters.toLocalIso(inst.expiresAt, zoneId),
-                "status" to inst.status,
-                "answeredAt" to (if (inst.answeredAt > 0L) TimeFormatters.toLocalIso(inst.answeredAt, zoneId) else ""),
-                "isLate" to inst.isLate,
-                "answers" to answers,
-                "answeredAtLatest" to (if (answeredAtLatest > 0L) TimeFormatters.toLocalIso(answeredAtLatest, zoneId) else ""),
-                "lastAnswerQuestionId" to questionId,
-                "syncedAt" to TimeFormatters.toLocalIso(now, zoneId),
-                "schemaVersion" to 2,
-            )
-
-            esmDoc(instanceId).set(payload, SetOptions.merge()).await()
-        } catch (t: Throwable) {
-            Log.w(tag, "syncEsmAnswerEvent failed instanceId=$instanceId", t)
         }
     }
 }

@@ -1,5 +1,5 @@
 <resources>
-    <!-- UI strings (Traditional Chinese - Taiwan). Notifications text and ESM questionnaires are intentionally NOT localized here. -->
+    <!-- UI strings (Traditional Chinese - Taiwan). -->
 
     <!-- Common / actions -->
     <string name="ui_action_add">新增</string>
@@ -14,8 +14,6 @@
     <string name="ui_settings_left">向左</string>
     <string name="ui_settings_right">向右</string>
     <string name="ui_settings_expand_task_list">啟動時展開任務清單</string>
-    <string name="ui_settings_esm_wakeup">短問卷起床時間</string>
-    <string name="ui_settings_esm_bedtime">短問卷就寢時間</string>
 
     <!-- Extraction language preference -->
     <string name="ui_settings_extraction_language">擷取語言</string>
@@ -49,7 +47,6 @@
     <string name="a11y_add">新增</string>
     <string name="a11y_back">返回</string>
     <string name="a11y_delete">刪除</string>
-    <string name="a11y_test_esm">測試 ESM</string>
 
     <!-- Relative / absolute time (used in reminders and elsewhere). -->
     <string name="time_now">現在</string>
@@ -111,19 +108,10 @@
     <!-- Bottom bar tabs -->
     <string name="tab_notifications">通知</string>
     <string name="tab_reminders">提醒</string>
-    <string name="tab_esm">短問卷</string>
     <string name="tab_preferences">偏好</string>
-    <!-- ESM screen (UI chrome only; do not translate question/option content) -->
-    <string name="esm_short_survey">短問卷</string>
-    <string name="esm_short_surveys">短問卷</string>
-    <string name="esm_no_short_surveys">目前沒有短問卷。</string>
-    <string name="esm_available_count">可填寫（%1$d）</string>
-    <string name="esm_expires">截止：%1$s（%2$s）</string>
-    <string name="esm_loading_context">正在載入提醒與相關通知…</string>
-    <string name="esm_cannot_show_context">無法顯示此短問卷的提醒／通知內容。</string>
-    <string name="esm_reminder">提醒</string>
-    <string name="esm_related_notifications">相關通知（%1$d）</string>
-    <string name="esm_no_related_notifications">沒有相關通知。</string>
+    <string name="reminder_related_notifications">相關通知（%1$d）</string>
+    <string name="reminder_related_notifications_loading">正在載入提醒與相關通知…</string>
+    <string name="reminder_no_related_notifications">沒有相關通知。</string>
     <string name="a11y_expand">展開</string>
     <string name="a11y_collapse">收合</string>
 

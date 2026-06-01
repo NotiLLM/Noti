@@ -51,7 +51,7 @@ data class ReminderUnit(
     /**
      * Snapshot ID captured at the moment this reminder was extracted.
      *
-     * This lets the reminder UI render "associated notifications" even if no ESM exists.
+     * This lets the reminder UI render "associated notifications" from the extraction snapshot.
      */
     val extractionSnapshotId: String? = null,
 

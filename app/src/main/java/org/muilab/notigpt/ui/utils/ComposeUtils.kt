@@ -7,12 +7,6 @@ enum class NotiExpandState {
     Opened,
 }
 
-enum class NotiSwipeState {
-    Left,
-    Center,
-    Right
-}
-
 inline fun Modifier.conditional(
     condition: Boolean,
     ifTrue: Modifier.() -> Modifier,

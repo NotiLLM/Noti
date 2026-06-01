@@ -17,8 +17,6 @@ import org.muilab.notigpt.model.notifications.NotiGroup
 import org.muilab.notigpt.model.notifications.NotiRecord
 import org.muilab.notigpt.model.notifications.NotiUnit
 import org.muilab.notigpt.model.notifications.VisibleNotiRecord
-import org.muilab.notigpt.model.esm.EsmAnswerEvent
-import org.muilab.notigpt.model.esm.EsmInstance
 import org.muilab.notigpt.model.features.ReminderExtractionSnapshot
 
 @Database(
@@ -29,15 +27,13 @@ import org.muilab.notigpt.model.features.ReminderExtractionSnapshot
         ReminderUnit::class,
         SubTask::class,
         NotiGroup::class,
-        EsmInstance::class,
-        EsmAnswerEvent::class,
         ReminderExtractionSnapshot::class,
         ExtractionPreference::class,
         PreferenceConflict::class,
         UserContext::class,
     ],
     views = [VisibleNotiRecord::class],
-    version = 34,
+    version = 35,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -49,7 +45,6 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun reminderListDao(): ReminderListDao
     abstract fun subTaskDao(): SubTaskDao
     abstract fun groupDao(): NotiGroupDao
-    abstract fun esmDao(): EsmDao
     abstract fun reminderSnapshotDao(): ReminderSnapshotDao
     abstract fun extractionPreferenceDao(): ExtractionPreferenceDao
     abstract fun preferenceConflictDao(): PreferenceConflictDao
@@ -100,6 +95,7 @@ abstract class AppDatabase : RoomDatabase() {
                 .addMigrations(AppDatabaseMigrations.MIGRATION_31_32)
                 .addMigrations(AppDatabaseMigrations.MIGRATION_32_33)
                 .addMigrations(AppDatabaseMigrations.MIGRATION_33_34)
+                .addMigrations(AppDatabaseMigrations.MIGRATION_34_35)
                 .setJournalMode(JournalMode.TRUNCATE)
                 .build()
         }

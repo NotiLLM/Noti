@@ -32,7 +32,6 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // NOTE: This used to cancel all WorkManager jobs, which breaks scheduled ESM delivery.
         // WorkManager.getInstance(applicationContext).cancelAllWork()
 
         SharedPreferencesManager.init(this)

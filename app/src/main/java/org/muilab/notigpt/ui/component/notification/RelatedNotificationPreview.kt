@@ -31,8 +31,7 @@ import org.muilab.notigpt.model.notifications.NotiDisplayUnit
 /**
  * Read-only notification preview used as reminder provenance.
  *
- * This intentionally lives outside the legacy ESM package: the reminder screen uses it to show
- * where a generated reminder came from, independent of whether ESM is enabled.
+ * The reminder screen uses this to show where a generated reminder came from.
  */
 @Composable
 fun RelatedNotificationPreview(

@@ -8,7 +8,6 @@ import androidx.room.Transaction
 import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 import org.muilab.notigpt.model.notifications.NotiUnit
-import org.muilab.notigpt.model.server.SortOutcome
 
 @Dao
 interface NotiDrawerDao {
@@ -76,14 +75,6 @@ interface NotiDrawerDao {
 
     @Query("UPDATE noti_drawer SET explanation = :newExplanation WHERE notiKey = :notiKey")
     fun updateExplanation(notiKey: String, newExplanation: String)
-
-    @Transaction
-    suspend fun updateSorting(sortOutcomes: List<SortOutcome>) {
-        sortOutcomes.forEach { sortOutcome ->
-            updateSortScore(sortOutcome.id, sortOutcome.score)
-            updateExplanation(sortOutcome.id, sortOutcome.explanation)
-        }
-    }
 
     // Dismiss unit by key (Also set isRead = 1)
     @Query("UPDATE noti_drawer SET isDismissed = 1, isRead = 1, sortPosition = -1 WHERE notiKey = :notiKey")

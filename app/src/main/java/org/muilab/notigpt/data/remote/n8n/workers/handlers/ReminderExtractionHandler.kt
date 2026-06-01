@@ -11,7 +11,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.muilab.notigpt.data.remote.n8n.workers.handlers.utils.N8nRecordFormatter
 import org.muilab.notigpt.data.remote.n8n.workers.handlers.utils.N8nWorkerContext
-import org.muilab.notigpt.domain.esm.EsmSnapshotStatuses
+import org.muilab.notigpt.domain.reminder.ReminderSnapshotStatuses
 import org.muilab.notigpt.model.features.ReminderExtractionSnapshot
 import org.muilab.notigpt.model.features.ReminderUnit
 import org.muilab.notigpt.domain.reminder.ReminderAssociationMerger
@@ -131,7 +131,7 @@ internal object ReminderExtractionHandler {
             snapshotDao.upsertSnapshot(
                 ReminderExtractionSnapshot(
                     snapshotId = snapshotId,
-                    status = EsmSnapshotStatuses.STAGED,
+                    status = ReminderSnapshotStatuses.STAGED,
                     reminderId = null,
                     payloadJson = snapshotPayload,
                     createdAt = snapNow,
@@ -303,7 +303,7 @@ internal object ReminderExtractionHandler {
                                         snapshotDao.upsertSnapshot(
                                             ReminderExtractionSnapshot(
                                                 snapshotId = snapshotId,
-                                                status = EsmSnapshotStatuses.STAGED,
+                                                status = ReminderSnapshotStatuses.STAGED,
                                                 reminderId = null,
                                                 payloadJson = merged,
                                                 createdAt = snapNow,
@@ -348,7 +348,7 @@ internal object ReminderExtractionHandler {
                     val firstObj = arr.optJSONObject(0)
                     val firstReminderId = firstObj?.optString("reminderId").takeIf { !it.isNullOrBlank() }
                         ?: firstObj?.optString("taskId")
-                    snapshotDao.updateSnapshotStatusAndReminderId(snapshotId, EsmSnapshotStatuses.KEPT, firstReminderId)
+                    snapshotDao.updateSnapshotStatusAndReminderId(snapshotId, ReminderSnapshotStatuses.KEPT, firstReminderId)
 
                 }
 
@@ -443,7 +443,7 @@ internal object ReminderExtractionHandler {
         snapshotDao.upsertSnapshot(
             ReminderExtractionSnapshot(
                 snapshotId = snapshotId,
-                status = EsmSnapshotStatuses.STAGED,
+                status = ReminderSnapshotStatuses.STAGED,
                 reminderId = null,
                 payloadJson = snapshotPayload,
                 createdAt = snapNow,
@@ -633,7 +633,7 @@ internal object ReminderExtractionHandler {
                                     snapshotDao.upsertSnapshot(
                                         ReminderExtractionSnapshot(
                                             snapshotId = snapshotId,
-                                            status = EsmSnapshotStatuses.STAGED,
+                                            status = ReminderSnapshotStatuses.STAGED,
                                             reminderId = null,
                                             payloadJson = merged,
                                             createdAt = snapNow,
@@ -679,11 +679,7 @@ internal object ReminderExtractionHandler {
                 val firstObj = arr.optJSONObject(0)
                 val firstReminderId = firstObj?.optString("reminderId").takeIf { !it.isNullOrBlank() }
                     ?: firstObj?.optString("taskId")
-                snapshotDao.updateSnapshotStatusAndReminderId(snapshotId, EsmSnapshotStatuses.KEPT, firstReminderId)
-
-                // NOTE: Trigger C (auto-generated ESM) is scheduled by a separate periodic/timed check.
-                // We intentionally do NOT create Trigger C here, because it should fire once two hours
-                // have passed since the last ESM was answered or shown, independent of extraction.
+                snapshotDao.updateSnapshotStatusAndReminderId(snapshotId, ReminderSnapshotStatuses.KEPT, firstReminderId)
             }
 
         } catch (e: Exception) {

@@ -14,7 +14,7 @@
     <string name="sort_end_prompt" translatable="false">The three scores should each be a float within 0 to 10 (inclusive), with 10 being the most highly rated. Try to produce diversing scores unless you really rate them equal.</string>
     <string name="service_name" translatable="false">NotiManager NotiListenerService</string>
 
-    <!-- UI strings (default: English). Notifications text and ESM questionnaires are intentionally NOT localized here. -->
+    <!-- UI strings (default: English). -->
 
     <!-- Common / actions -->
     <string name="ui_action_add">Add</string>
@@ -29,8 +29,6 @@
     <string name="ui_settings_left">Left</string>
     <string name="ui_settings_right">Right</string>
     <string name="ui_settings_expand_task_list">Expand Task List on startup</string>
-    <string name="ui_settings_esm_wakeup">ESM wake-up time</string>
-    <string name="ui_settings_esm_bedtime">ESM bedtime</string>
     <!-- Extraction language preference -->
     <string name="ui_settings_extraction_language">Extraction language</string>
     <string name="ui_settings_extraction_language_original">Original (notification language)</string>
@@ -68,7 +66,6 @@
     <string name="a11y_add">Add</string>
     <string name="a11y_back">Back</string>
     <string name="a11y_delete">Delete</string>
-    <string name="a11y_test_esm">Test ESM</string>
     <string name="a11y_close_search">Close search</string>
 
     <!-- Relative / absolute time (used in reminders and elsewhere). -->
@@ -131,20 +128,11 @@
     <!-- Bottom bar tabs -->
     <string name="tab_notifications">Notifications</string>
     <string name="tab_reminders">Reminders</string>
-    <string name="tab_esm">Short survey</string>
     <string name="tab_preferences">Preferences</string>
 
-    <!-- ESM screen (UI chrome only; do not translate question/option content) -->
-    <string name="esm_short_survey">Short survey</string>
-    <string name="esm_short_surveys">Short surveys</string>
-    <string name="esm_no_short_surveys">No short surveys right now.</string>
-    <string name="esm_available_count">Available (%1$d)</string>
-    <string name="esm_expires">Expires: %1$s (%2$s)</string>
-    <string name="esm_loading_context">Loading reminder &amp; notifications…</string>
-    <string name="esm_cannot_show_context">Can\'t show reminder/notifications for this short survey.</string>
-    <string name="esm_reminder">Reminder</string>
-    <string name="esm_related_notifications">Related notifications (%1$d)</string>
-    <string name="esm_no_related_notifications">No related notifications.</string>
+    <string name="reminder_related_notifications">Related notifications (%1$d)</string>
+    <string name="reminder_related_notifications_loading">Loading reminder &amp; notifications…</string>
+    <string name="reminder_no_related_notifications">No related notifications.</string>
     <string name="a11y_expand">Expand</string>
     <string name="a11y_collapse">Collapse</string>
 
