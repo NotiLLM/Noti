@@ -21,6 +21,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import org.muilab.notigpt.R
 
+/**
+ * Header row for a notification group card.
+ *
+ * This renders group title, count, expansion affordance, and rename entry points. Persisted rename or expansion
+ * writes should continue flowing through callbacks rather than direct storage access.
+ */
 @Composable
 internal fun GroupCardHeader(
     title: String,

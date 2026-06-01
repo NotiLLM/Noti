@@ -4,12 +4,10 @@ import androidx.room.Entity
 import androidx.room.PrimaryKey
 
 /**
- * Represents an unresolved conflict between extraction preferences that the
- * backend LLM detected but could not auto-resolve during a Quick-Sync or
- * Chat-Interact round-trip.
+ * Room entity for a detected conflict among extraction preferences.
  *
- * Conflicts are surfaced to the user in the Preferences tab so they can
- * dismiss them or open a chat to resolve them.
+ * This model records the conflict explanation, source, and involved preference IDs. Keep resolution UI state
+ * outside this entity unless conflict lifecycle becomes a durable domain concept.
  */
 @Entity(tableName = "preference_conflicts")
 data class PreferenceConflict(

@@ -9,6 +9,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.muilab.notigpt.util.unescapeUserText
 
+/**
+ * Text renderer for notification record content.
+ *
+ * Keep text cleanup or truncation rules here only if they are purely visual. Semantic content normalization
+ * belongs in notification-record extraction/parsing code.
+ */
 @Composable
 fun NotiInfoContent(notiContent: String, modifier: Modifier = Modifier) {
     Text(

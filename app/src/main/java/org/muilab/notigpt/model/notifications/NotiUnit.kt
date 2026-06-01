@@ -12,7 +12,13 @@ import org.muilab.notigpt.model.notifications.components.NotiMetadata
 import org.muilab.notigpt.model.notifications.components.NotiDisplayState
 import org.muilab.notigpt.model.notifications.components.NotiReminderAttr
 
-// Add index on groupId for faster lookups
+/**
+ * Room entity for the latest drawer state of one Android notification key.
+ *
+ * NotiUnit owns current display metadata, read/pin/dismiss state, grouping, and scan/extraction flags.
+ * Detailed content history belongs to NotiRecord so repeated updates do not overwrite context. The groupId
+ * index supports drawer grouping and membership lookups.
+ */
 @Entity(tableName = "noti_drawer", primaryKeys = ["notiKey"], indices = [Index(value = ["groupId"])])
 data class NotiUnit(
     val notiKey: String,
@@ -33,10 +39,16 @@ data class NotiUnit(
         updateNoti(context, sbn)
     }
 
+    /**
+     * Refreshes this notification-key row from a newly observed Android notification.
+     *
+     * Metadata is replaced with current framework data, while user-facing state is reset only where a fresh
+     * active notification should behave differently from a dismissed or already-read row.
+     */
     @RequiresApi(Build.VERSION_CODES.S)
     fun updateNoti(context: Context, sbn: StatusBarNotification) {
         metadata.update(context, sbn)
-        // If the unit was previously dismissed, treat the incoming noti as a fresh active one.
+        // A newly observed notification key becomes active again after a dismiss.
         if (isDismissed) {
             displayState.resetUserState()
         }

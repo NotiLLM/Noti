@@ -9,6 +9,12 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.muilab.notigpt.data.remote.n8n.workers.handlers.utils.N8nWorkerContext
 import org.muilab.notigpt.util.SharedPreferencesManager
 
+/**
+ * Handler that posts user notification actions to the n8n backend.
+ *
+ * This is the outbound analytics/action-sync path for card actions. Keep local action persistence in the
+ * repository and use this handler only to serialize and deliver the backend event.
+ */
 internal object PostNotificationActionHandler {
 
     suspend fun handle(ctx: N8nWorkerContext, inputData: Data): ListenableWorker.Result {

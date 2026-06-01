@@ -12,10 +12,18 @@ import org.muilab.notigpt.data.remote.n8n.workers.handlers.RerankHandler
 import org.muilab.notigpt.data.remote.n8n.workers.handlers.UpdateNotificationHandler
 
 /**
- * Thin routing layer so [N8nAPIWorker] stays readable.
+ * Dispatcher from typed WorkManager input to the matching n8n workflow handler.
+ *
+ * Add new workflow types here only after defining a typed N8nWorkerInput and a handler. This keeps N8nAPIWorker
+ * small and makes the supported background jobs easy to audit.
  */
 internal object N8nWorkerHandlers {
 
+    /**
+     * Routes one typed worker input to its workflow handler.
+     *
+     * Keep the mapping exhaustive with N8nWorkerInput so unsupported WorkManager Data fails before side effects.
+     */
     suspend fun dispatch(worker: N8nAPIWorker, input: N8nWorkerInput, raw: Data): ListenableWorker.Result {
         val ctx = N8nWorkerContext(worker.applicationContext)
         return when (input) {

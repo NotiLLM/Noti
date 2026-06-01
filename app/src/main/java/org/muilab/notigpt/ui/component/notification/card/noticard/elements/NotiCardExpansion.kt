@@ -39,6 +39,12 @@ import kotlin.math.max
 
 const val NOTI_CARD_COLLAPSE_THRESHOLD_PX_DEFAULT = 20f
 
+/**
+ * Expansion-state helpers for NotiCard's contextual record list.
+ *
+ * Keep scroll/fling behavior here while data loading stays in the screen or ViewModel. If expansion rules become
+ * shared across cards, this is the right place to consolidate them.
+ */
 @Composable
 fun rememberNotiCardExpansionState(
     initialEstimatePx: Float,

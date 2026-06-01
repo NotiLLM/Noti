@@ -12,10 +12,10 @@ import org.muilab.notigpt.model.features.QuickSyncResponse
 import org.muilab.notigpt.model.features.PreferencePlain
 
 /**
- * Direct (non-WorkManager) client for the Preference Quick-Sync n8n endpoint.
+ * Direct client for quick-syncing local preference selections to n8n.
  *
- * Using a direct coroutine call (approach B) so the UI can show the toast
- * immediately after the round-trip completes.
+ * Keep this as the synchronous network path for preference replacement responses. Background scheduling and
+ * conflict application belong to the worker handler or preference repository layer.
  */
 object PreferenceQuickSyncClient {
 

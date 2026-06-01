@@ -5,6 +5,12 @@ import android.os.Handler
 import android.os.Looper
 import android.widget.Toast
 
+/**
+ * Platform boundary for short user-visible status messages.
+ *
+ * Compose/ViewModel code should depend on UserNotifier rather than Toast directly. Keep timing/cancellation
+ * behavior in the Android implementation so callers only express the message intent.
+ */
 interface UserNotifier {
     fun showShort(message: String, duration: Long = 1_000L)
 }

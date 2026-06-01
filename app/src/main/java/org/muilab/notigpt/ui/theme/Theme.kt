@@ -37,6 +37,12 @@ private val LightColorScheme = lightColorScheme(
     */
 )
 
+/**
+ * Compose Material theme configuration for NotiGPT.
+ *
+ * Keep color/typography/theme selection here so feature components can use MaterialTheme instead of hard-coding
+ * app-wide styling.
+ */
 @Composable
 fun NotiTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),

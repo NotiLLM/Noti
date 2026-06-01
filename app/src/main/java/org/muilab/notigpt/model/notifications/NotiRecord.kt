@@ -9,6 +9,12 @@ import androidx.room.Entity
 import androidx.room.ColumnInfo
 import androidx.room.Index
 
+/**
+ * Room entity for one captured notification content record.
+ *
+ * Records are the durable notification timeline used for context, scan, extraction, and reminder provenance.
+ * Keep display-level mutable state on NotiUnit unless the flag describes processing of this specific record.
+ */
 @Entity(
     tableName = "noti_record",
     primaryKeys = ["notiRecordId"],
@@ -39,10 +45,7 @@ data class NotiRecord (
     val extraSubText: String = "",
 
     // STATUS
-    /**
-     * New semantics: dismissed records are hidden from the active drawer context.
-     * This replaces the previous isVisible flag (flipped).
-     */
+    /** True when this record should be hidden from active drawer context queries. */
     var isDismissed: Boolean = false,
 
     // TASK DETECTION/EXTRACTION FLAGS
@@ -51,7 +54,7 @@ data class NotiRecord (
     @ColumnInfo(defaultValue = "0")
     var taskExtracted: Boolean = false,
 
-    // CLAIM FLAG: used to atomically claim records for extraction to avoid duplicates
+    /** Claim flag for atomically reserving records during extraction and avoiding duplicate work. */
     @ColumnInfo(defaultValue = "0")
     var taskExtractionClaimed: Boolean = false,
     // Timestamp when record was claimed for extraction (millis since epoch). 0 means not claimed.

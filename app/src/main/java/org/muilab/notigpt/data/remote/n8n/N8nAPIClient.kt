@@ -6,6 +6,12 @@ import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import java.util.concurrent.TimeUnit
 
+/**
+ * Retrofit client holder for the n8n webhook API.
+ *
+ * This object owns the mutable base URL used by settings/debug flows. Keep endpoint definitions in
+ * N8nAPIService and workflow-specific request parsing in the dedicated clients or worker handlers.
+ */
 object N8nAPIClient {
     @Volatile
     private var retrofit: Retrofit? = null

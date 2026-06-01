@@ -21,6 +21,12 @@ import org.muilab.notigpt.repository.noti.NotiExportRepository
 import org.muilab.notigpt.repository.noti.NotiMaintenanceRepository
 import org.muilab.notigpt.repository.noti.NotiRecordsRepository
 
+/**
+ * Facade over notification drawer, record, action, group, export, and maintenance repositories.
+ *
+ * The ViewModels and workers should depend on this class instead of individual DAOs. Keep new responsibilities
+ * delegated to focused repository helpers so this facade stays a stable API surface.
+ */
 class NotiRepository(
     private val appContext: Context,
     private val notiDrawerDao: NotiDrawerDao,
@@ -66,6 +72,11 @@ class NotiRepository(
         actionsRepo.removeExpiredNotiRecords()
     }
 
+    /**
+     * Returns the drawer-ready stream after active filtering, grouping, and sort rules are applied.
+     *
+     * Consumers should render this output directly instead of regrouping notification rows in UI code.
+     */
     fun getGroupedNotifications(): Flow<List<NotiDrawerItem>> {
         return groupingRepo.getGroupedNotifications()
     }
@@ -95,6 +106,12 @@ class NotiRepository(
         groupRepo.removeFromGroup(notiKey)
     }
 
+    /**
+     * Upserts the latest drawer row for an Android notification key.
+     *
+     * The service calls this for both initial active notifications and new posts; record history is inserted
+     * separately so current state and timeline remain distinct.
+     */
     @RequiresApi(Build.VERSION_CODES.S)
     fun upsertNotiUnit(context: Context, sbn: StatusBarNotification, isInit: Boolean) {
         actionsRepo.upsertNotiUnit(context, sbn, isInit)
@@ -108,6 +125,11 @@ class NotiRepository(
         actionsRepo.removeNotiUnit(notiKey)
     }
 
+    /**
+     * Appends one durable content record for a captured Android notification.
+     *
+     * Call this alongside NotiUnit upserts when the timeline needs to preserve repeated updates for the same key.
+     */
     @RequiresApi(Build.VERSION_CODES.S)
     suspend fun insertNotiRecord(sbn: StatusBarNotification) {
         actionsRepo.insertNotiRecord(sbn)
@@ -282,8 +304,9 @@ class NotiRepository(
     }
 
     /**
-     * Persist manual sort positions for *all* loose items (legacy behavior).
-     * Kept for potential future batch-mode sorting.
+     * Persists manual sort positions for every loose item in the supplied order.
+     *
+     * Prefer targeted manual-key commits for drag flows; use this when the whole loose list order is authoritative.
      */
     suspend fun commitManualSortPositions(keysInOrder: List<String>) {
         // Defensive: groups should never have manual positions.

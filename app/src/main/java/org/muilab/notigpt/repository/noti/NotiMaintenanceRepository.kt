@@ -9,7 +9,10 @@ import org.muilab.notigpt.database.room.NotiRecordDao
 import org.muilab.notigpt.util.SharedPreferencesManager
 
 /**
- * Bulk operations / maintenance tasks extracted from NotiRepository.
+ * Repository slice for bulk drawer maintenance operations.
+ *
+ * Keep destructive or broad state changes here, including delete-all, mark-all-read, seen-state persistence, and
+ * action logging. Feature-specific updates should stay in narrower repository slices.
  */
 class NotiMaintenanceRepository(
     private val notiDrawerDao: NotiDrawerDao,

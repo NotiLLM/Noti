@@ -67,6 +67,12 @@ import org.muilab.notigpt.util.SharedPreferencesManager
 import sh.calvin.reorderable.ReorderableCollectionItemScope
 import kotlin.math.max
 
+/**
+ * Renders one live drawer notification and exposes all user actions as callbacks.
+ *
+ * This component assembles header, actions, expansion, swipe, and overlay controls. The card may manage
+ * gesture/animation state, but durable changes should stay outside the composable.
+ */
 @OptIn(ExperimentalFoundationApi::class)
 @RequiresApi(Build.VERSION_CODES.S)
 @Composable

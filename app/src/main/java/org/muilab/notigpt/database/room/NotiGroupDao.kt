@@ -8,6 +8,12 @@ import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 import org.muilab.notigpt.model.notifications.NotiGroup
 
+/**
+ * Local access layer for notification grouping metadata.
+ *
+ * Groups are UI organization state over notification keys, not notification history. If grouping
+ * rules become more semantic, keep the rule engine separate from this storage interface.
+ */
 @Dao
 interface NotiGroupDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)

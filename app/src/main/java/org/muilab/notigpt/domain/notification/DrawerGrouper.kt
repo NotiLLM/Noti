@@ -7,13 +7,10 @@ import org.muilab.notigpt.model.notifications.NotiGroupItem
 import org.muilab.notigpt.model.notifications.NotiItem
 
 /**
- * Pure drawer grouping/sorting logic.
+ * Pure drawer grouping and ordering logic for notification display units.
  *
- * Contract:
- * - Grouping: unchanged; groups are formed iff a group has >= 2 children.
- * - Manual ordering: applies to loose (non-grouped) items only when any loose unit has sortPosition >= 0.
- * - Otherwise drawer ordering follows the visible product semantics: topped first, newer top time first, latest time next.
- * - Groups inherit topped/top-time/latest-time from their children.
+ * This owns the product semantics for loose items, groups, pinning, and manual loose-item ordering.
+ * Keep persistence and Compose state outside this object so the grouping rules stay testable.
  */
 object DrawerGrouper {
 
@@ -25,6 +22,12 @@ object DrawerGrouper {
         .thenByDescending { it.setToTopTime }
         .thenByDescending { it.latestTime }
 
+    /**
+     * Builds the final drawer rows from active notification units and stored groups.
+     *
+     * Loose notifications may use manual sort positions, while grouped notifications derive ordering from
+     * their children. Keep this pure so drag/grouping regressions can be tested without Compose or Room.
+     */
     fun groupAndSort(
         displayUnits: List<NotiDisplayUnit>,
         groups: List<NotiGroup>,

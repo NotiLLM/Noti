@@ -6,10 +6,10 @@ import org.muilab.notigpt.model.notifications.NotiAction
 import org.muilab.notigpt.model.notifications.NotiRecord
 
 /**
- * Pure-ish formatter for the export log JSON.
+ * Formatter for one notification unit and optional context records in export JSON.
  *
- * Keeping this out of [org.muilab.notigpt.repository.NotiRepository] reduces noise
- * and makes it easier to extend export formats later.
+ * Keep export field names and privacy-sensitive inclusion choices here. Repository code should decide which
+ * records to include, then delegate object shape to this formatter.
  */
 object NotiExportFormatter {
 

@@ -10,12 +10,10 @@ import kotlin.math.abs
 import kotlin.math.max
 
 /**
- * Detect horizontal intent and decide whether the GroupCard or a child NotiCard should own the swipe.
+ * Pointer-input helper for delegating horizontal swipes between group cards and child cards.
  *
- * Contract:
- * - If the swipe starts inside [childrenBoundsInParent], children win.
- * - Otherwise, group wins.
- * - We decide early (after touch slop) and keep that decision for the gesture.
+ * Keep nested gesture arbitration here. Card components should consume this as a modifier instead of embedding
+ * low-level pointer-state rules in their layout code.
  */
 internal fun Modifier.groupCardSwipeDelegation(
     enabled: Boolean,

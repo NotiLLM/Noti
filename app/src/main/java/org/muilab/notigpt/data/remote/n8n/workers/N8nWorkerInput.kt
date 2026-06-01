@@ -11,9 +11,10 @@ import org.muilab.notigpt.util.Constants.Companion.N8N_REGENERATE_ALL
 import org.muilab.notigpt.util.Constants.Companion.N8N_RERANK
 
 /**
- * Typed view of WorkManager input data for [N8nAPIWorker].
+ * Typed view of WorkManager input data for N8nAPIWorker.
  *
- * This keeps parsing/validation separate from the network/database side effects.
+ * This is the boundary between stringly-typed WorkManager Data and workflow handlers. Keep Data key parsing here
+ * so handlers receive validated job intent instead of raw key/value bundles.
  */
 sealed interface N8nWorkerInput {
     val webhookPath: String
@@ -65,7 +66,7 @@ sealed interface N8nWorkerInput {
     ) : N8nWorkerInput
 
     companion object {
-        /** Parses the legacy wire format used throughout the app. */
+        /** Parses WorkManager Data keys into a typed worker input. */
         fun from(input: Data): N8nWorkerInput? {
             val apiType = input.getString("api_type") ?: return null
             val webhookPath = input.getString("webhook_path") ?: return null

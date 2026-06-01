@@ -27,7 +27,19 @@ import org.muilab.notigpt.ui.viewmodel.DrawerViewModel
 import org.muilab.notigpt.ui.viewmodel.DrawerViewModelFactory
 import org.muilab.notigpt.work.ReminderPeriodicWork
 
+/**
+ * Main Android entry point for the app shell and notification-permission/service bootstrap.
+ *
+ * Keep process-wide startup wiring here. Feature state should stay in ViewModels, repositories, or workers so
+ * the activity remains a thin host for Compose and Android permission flows.
+ */
 class MainActivity : ComponentActivity() {
+    /**
+     * Initializes app-wide preferences, background work, and Compose content for the main shell.
+     *
+     * Keep permission prompts and service checks here because they depend on Android activity context; route
+     * feature behavior through Compose screens and ViewModels.
+     */
     @RequiresApi(Build.VERSION_CODES.S)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

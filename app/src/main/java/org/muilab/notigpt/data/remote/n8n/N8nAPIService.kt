@@ -7,6 +7,12 @@ import retrofit2.http.Body
 import retrofit2.http.POST
 import retrofit2.http.Url
 
+/**
+ * Retrofit endpoint contract for posting payloads to n8n webhook paths.
+ *
+ * Keep this interface transport-only. Workflow payload shape, retries, and response interpretation should live
+ * in clients or WorkManager handlers so the network contract stays small.
+ */
 interface N8nAPIService {
 
     // Example: webhookPath = "webhook-test/update-notification"

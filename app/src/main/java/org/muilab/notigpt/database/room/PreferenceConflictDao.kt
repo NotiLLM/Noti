@@ -7,6 +7,12 @@ import androidx.room.Query
 import kotlinx.coroutines.flow.Flow
 import org.muilab.notigpt.model.features.PreferenceConflict
 
+/**
+ * Local access layer for detected conflicts between extraction preferences.
+ *
+ * Conflict rows explain why preference rules may disagree. Conflict generation can live elsewhere,
+ * but reads/writes should stay centralized here so the UI and workers see the same state.
+ */
 @Dao
 interface PreferenceConflictDao {
 

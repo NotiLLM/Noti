@@ -13,6 +13,12 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import org.muilab.notigpt.R
 
+/**
+ * Bottom navigation bar and tab model for the main app shell.
+ *
+ * Keep tab labels, icons, and badge display here. Screen routing and feature state should stay in the scaffold
+ * or ViewModels.
+ */
 @Composable
 private fun BadgeIcon(
     iconRes: Int,

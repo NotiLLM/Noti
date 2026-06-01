@@ -18,6 +18,12 @@ import androidx.core.graphics.drawable.toBitmap
 import java.io.ByteArrayOutputStream
 import androidx.core.graphics.createBitmap
 
+/**
+ * Embedded metadata extracted from Android's StatusBarNotification.
+ *
+ * This component owns framework-to-app normalization for package, title, text, people, icons, and timestamps.
+ * Keep Android API parsing here so NotiUnit remains a composition of stable app-level fields.
+ */
 data class NotiMetadata(
     val pkgName: String,
     val hashKey: Int,

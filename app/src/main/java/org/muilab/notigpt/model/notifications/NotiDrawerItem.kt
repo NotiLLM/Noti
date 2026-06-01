@@ -8,6 +8,12 @@ sealed interface NotiDrawerItem {
     val setToTopTime: Long
 }
 
+/**
+ * Sealed-ish drawer row models used after grouping notification display units.
+ *
+ * A row is either a loose notification item or a group item. Keep this model presentation-focused;
+ * storage of group membership belongs to NotiUnit and NotiGroup.
+ */
 data class NotiItem(
     val displayUnit: NotiDisplayUnit
 ) : NotiDrawerItem {

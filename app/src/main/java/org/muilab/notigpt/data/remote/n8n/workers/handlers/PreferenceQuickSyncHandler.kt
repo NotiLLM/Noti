@@ -10,10 +10,10 @@ import org.muilab.notigpt.data.remote.n8n.workers.handlers.utils.N8nWorkerContex
 import org.muilab.notigpt.model.features.ExtractionPreference
 
 /**
- * WorkManager handler for the `N8N_PREFERENCE_QUICK_SYNC` pipeline.
+ * Worker handler for applying n8n preference quick-sync responses.
  *
- * Sends the user's button-click selections (Flows 1-3) to the backend and
- * atomically replaces the local preference rule set with the server response.
+ * This handler sends the queued preference payload, interprets conflicts, and updates local preference state.
+ * Keep request scheduling in N8nAPI and durable rule writes behind repository APIs.
  */
 internal object PreferenceQuickSyncHandler {
 

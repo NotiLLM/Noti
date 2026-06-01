@@ -12,12 +12,23 @@ import org.muilab.notigpt.domain.notification.DrawerGrouper
 import org.muilab.notigpt.model.notifications.NotiDisplayUnit
 import org.muilab.notigpt.model.notifications.NotiDrawerItem
 
+/**
+ * Repository slice that exposes grouped notification drawer rows.
+ *
+ * This is the read-side bridge between Room flows and DrawerGrouper's pure grouping logic. Keep UI ordering
+ * semantics in DrawerGrouper and persistence updates in the group/action repository slices.
+ */
 class NotiGroupingRepository(
     private val notiDrawerDao: NotiDrawerDao,
     private val notiRecordDao: NotiRecordDao,
     private val notiGroupDao: NotiGroupDao,
 ) {
 
+    /**
+     * Emits visible drawer rows by combining active notification units with persisted group metadata.
+     *
+     * This method is the read-side composition point; do not mutate group membership here.
+     */
     @OptIn(ExperimentalCoroutinesApi::class)
     fun getGroupedNotifications(): Flow<List<NotiDrawerItem>> {
         return notiGroupDao.getAllGroupsFlow().flatMapLatest { groups ->

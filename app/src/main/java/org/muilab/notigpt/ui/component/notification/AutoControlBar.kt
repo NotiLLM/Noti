@@ -20,6 +20,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import org.muilab.notigpt.util.SharedPreferencesManager
 
+/**
+ * Small control strip for automatic notification-processing actions.
+ *
+ * Keep this component presentation-only. If controls start coordinating worker scheduling or repository writes,
+ * route those actions through a ViewModel instead of expanding this composable.
+ */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun AutoControlBar() {

@@ -11,9 +11,10 @@ import org.muilab.notigpt.model.features.ContextDiscoverRequest
 import org.muilab.notigpt.model.features.ProposedActionDto
 
 /**
- * Client for the context-discover n8n endpoint.
- * Sends notification/reminder summaries and gets back proposed user context facts.
- * Reuses [ChatInteractResponse] since the response shape is identical.
+ * Direct client for context-discovery requests used by preference flows.
+ *
+ * This client shares response normalization with preference chat but represents a separate backend intent. Keep
+ * discovery parsing here and store accepted contexts through the repository/ViewModel layer.
  */
 object PreferenceContextDiscoverClient {
 

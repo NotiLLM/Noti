@@ -8,9 +8,10 @@ import org.muilab.notigpt.util.Constants.Companion.APP_CATEGORY_ALL
 import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_GENERAL
 
 /**
- * Keeps the filter + loading state for the drawer.
+ * Mutable filter/search/sort state for the notification drawer ViewModel.
  *
- * We keep this as a small state holder so DrawerViewModel stays readable.
+ * Keep this as UI-query state only. Persisted notification ordering, grouping, and read state should stay in
+ * their database-backed controllers instead of being hidden in filters.
  */
 @Immutable
 internal class DrawerFiltersState {

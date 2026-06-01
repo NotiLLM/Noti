@@ -4,9 +4,11 @@ import androidx.room.Entity
 import androidx.room.Index
 
 /**
- * Frozen extraction snapshot captured at the moment we send NotiCard context to the LLM.
+ * Room entity for the notification-record snapshot used during reminder extraction.
  *
- * This snapshot is JSON-first so we can evolve/extend content without schema churn.
+ * The JSON payload stores provenance/context for later UI rendering and sync while avoiding schema churn
+ * for each payload version. Keep this model as storage; format interpretation belongs in reminder-domain
+ * helpers so snapshot versions can evolve safely.
  */
 @Entity(
     tableName = "reminder_extraction_snapshot",

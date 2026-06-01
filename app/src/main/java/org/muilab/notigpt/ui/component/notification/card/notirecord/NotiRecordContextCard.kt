@@ -51,11 +51,10 @@ import org.muilab.notigpt.util.unescapeUserText
 import org.muilab.notigpt.platform.AndroidClipboardController
 
 /**
- * One card per notiKey.
- * - Header is shown once (icon + titles + access button)
- * - Records are shown inside the card (no redundant repeated headers)
- * - Built-in Load Older/Newer buttons expand context above/below
- * - Long-press copies a *single record's* content (not the whole card)
+ * Card for displaying one notification-key timeline as context.
+ *
+ * The header appears once while individual records are shown inside the card with load-older/newer controls.
+ * Keep this independent from live notification actions unless record-specific actions become product behavior.
  */
 @RequiresApi(Build.VERSION_CODES.S)
 @Composable

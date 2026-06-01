@@ -29,6 +29,12 @@ import org.muilab.notigpt.model.notifications.NotiDisplayUnit
 import org.muilab.notigpt.util.time.getRelativeTimeStr
 import org.muilab.notigpt.util.unescapeUserText
 
+/**
+ * Header content for the active notification card.
+ *
+ * This renders app identity, title, summary, and primary metadata. Keep record-history rendering in expansion
+ * components so the header remains focused on the latest drawer state.
+ */
 @Composable
 fun NotiCardHeaderContent(
     modifier: Modifier = Modifier,

@@ -6,9 +6,10 @@ import android.os.Environment
 import android.provider.MediaStore
 
 /**
- * Persists exported NotiGPT logs.
+ * Platform boundary for writing exported notification logs into Android Documents.
  *
- * Kept as a separate interface so ViewModels stay testable and avoid MediaStore APIs.
+ * Keep MediaStore details behind the NotiLogExporter interface so DataExportManager only decides filenames and
+ * content chunks, not storage-provider mechanics.
  */
 interface NotiLogExporter {
     /**

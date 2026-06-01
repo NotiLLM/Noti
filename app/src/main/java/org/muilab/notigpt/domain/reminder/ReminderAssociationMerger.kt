@@ -5,10 +5,10 @@ import org.json.JSONObject
 import org.muilab.notigpt.model.features.ReminderUnit
 
 /**
- * Pure helper for notification provenance attached to generated reminders.
+ * Pure merge helper for reminder-to-notification-record associations.
  *
- * n8n output can be partial or empty. Treat backend associations as additive,
- * not as an authoritative replacement for provenance already stored locally.
+ * This owns the rule for combining backend association output with existing reminder context. Keep it free of
+ * Room and JSON persistence details so extraction/regeneration handlers can share the same merge semantics.
  */
 object ReminderAssociationMerger {
     fun associationIdsFrom(response: JSONObject): Set<String> {

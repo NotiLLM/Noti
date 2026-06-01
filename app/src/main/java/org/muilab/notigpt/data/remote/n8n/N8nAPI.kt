@@ -19,8 +19,12 @@ import org.muilab.notigpt.util.Constants.Companion.DIFY_POST_NOTIFICATION_ACTION
 import java.util.concurrent.TimeUnit
 import androidx.work.ExistingWorkPolicy
 
-// You can rename these fields if you want, n8n doesn't care about the names.
-// Just make your workflow's Webhook node expect these keys.
+/**
+ * Payload shape for the notification-update webhook.
+ *
+ * Field names intentionally match the n8n workflow contract. Keep transport fields here and use worker handlers
+ * to build the payload from app models.
+ */
 data class N8nUpdateNotificationPayload(
     val userId: String,
     val noti_contents_str: String,
@@ -30,6 +34,12 @@ data class N8nUpdateNotificationPayload(
 
 // === WorkManager enqueuers ===
 
+/**
+ * Queues one user action event for backend delivery.
+ *
+ * The unique work name is scoped by notification key and action type so duplicate taps do not accumulate
+ * unbounded jobs while an equivalent action is already pending.
+ */
 fun enqueueNotificationAction(
     context: Context,
     notiKey: String,
@@ -58,6 +68,12 @@ fun enqueueNotificationAction(
     WorkManager.getInstance(context).enqueueUniqueWork(uniqueName, ExistingWorkPolicy.KEEP, workerRequest)
 }
 
+/**
+ * Queues reminder scan for one notification key.
+ *
+ * A per-key KEEP policy bounds scheduler growth and lets an in-flight scan finish before another identical scan
+ * is added. Extraction is scheduled separately after scan acceptance.
+ */
 fun enqueueTaskScan(context: Context, notiKey: String) {
     Log.d("N8nAPI", "enqueueTaskScan: key=$notiKey")
      val inputData = Data.Builder()
@@ -82,7 +98,13 @@ fun enqueueTaskScan(context: Context, notiKey: String) {
          .enqueueUniqueWork("n8n_task_scan_$notiKey", ExistingWorkPolicy.KEEP, workerRequest)
  }
 
- fun enqueueTaskExtraction(
+/**
+ * Queues reminder extraction for a set of notification keys or visible record ids.
+ *
+ * Extraction uses a single REPLACE slot so the latest selected/eligible context wins and the worker queue remains
+ * bounded. Use visibleRecordIds for user-triggered extraction from explicit UI context.
+ */
+fun enqueueTaskExtraction(
     context: Context,
     notiKeys: List<String>,
     userTriggered: Boolean = false,
@@ -119,12 +141,13 @@ fun enqueueTaskScan(context: Context, notiKey: String) {
         .enqueueUniqueWork("n8n_task_extraction", ExistingWorkPolicy.REPLACE, workerRequest)
  }
 
- /**
-  * Enqueue a unique delayed extraction work. Each call will replace the previous one so
-  * the timer restarts when another trigger comes in. This makes the debounce robust even
-  * when the app process dies or is backgrounded.
-  */
- fun enqueueDelayedTaskExtraction(context: Context, delaySeconds: Long, userTriggered: Boolean = false) {
+/**
+ * Queues delayed extraction after scan/capture activity settles.
+ *
+ * This shares the extraction unique-work slot with immediate extraction. A newer extraction intent restarts the
+ * debounce timer and prevents overlapping backend jobs.
+ */
+fun enqueueDelayedTaskExtraction(context: Context, delaySeconds: Long, userTriggered: Boolean = false) {
     Log.d("N8nAPI", "enqueueDelayedTaskExtraction: delaySeconds=$delaySeconds userTriggered=$userTriggered")
      val inputData = Data.Builder()
          .putString("api_type", N8N_TASK_EXTRACTION)
@@ -150,7 +173,8 @@ fun enqueueTaskScan(context: Context, notiKey: String) {
          .enqueueUniqueWork("n8n_task_extraction_debounce", ExistingWorkPolicy.REPLACE, workerRequest)
  }
 
- fun enqueueRegenerateOne(context: Context, reminderId: String) {
+/** Queues regeneration for one reminder from its stored notification context. */
+fun enqueueRegenerateOne(context: Context, reminderId: String) {
     Log.d("N8nAPI", "enqueueRegenerateOne: reminderId=$reminderId")
     val inputData = Data.Builder()
         .putString("api_type", N8N_REGENERATE_ONE)
@@ -172,7 +196,8 @@ fun enqueueTaskScan(context: Context, notiKey: String) {
     WorkManager.getInstance(context).enqueueUniqueWork(uniqueName, ExistingWorkPolicy.REPLACE, workerRequest)
  }
 
- fun enqueueRegenerateAll(context: Context) {
+/** Queues regeneration for all currently visible reminders. */
+fun enqueueRegenerateAll(context: Context) {
     Log.d("N8nAPI", "enqueueRegenerateAll")
     val inputData = Data.Builder()
         .putString("api_type", N8N_REGENERATE_ALL)
@@ -193,7 +218,8 @@ fun enqueueTaskScan(context: Context, notiKey: String) {
         .enqueueUniqueWork("n8n_regenerate_all", ExistingWorkPolicy.REPLACE, workerRequest)
  }
 
- fun enqueueRerank(context: Context, reminderId: String, trigger: String) {
+/** Queues reminder reranking for one feedback-triggered reminder update. */
+fun enqueueRerank(context: Context, reminderId: String, trigger: String) {
     Log.d("N8nAPI", "enqueueRerank: reminderId=$reminderId trigger=$trigger")
     val inputData = Data.Builder()
         .putString("api_type", N8N_RERANK)

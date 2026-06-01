@@ -30,6 +30,12 @@ import androidx.compose.ui.unit.dp
 import org.muilab.notigpt.R
 import org.muilab.notigpt.ui.viewmodel.DrawerViewModel
 
+/**
+ * Shared Compose search field used by drawer/reminder screens.
+ *
+ * Keep this component presentation-only. Query interpretation, debouncing, and persistence should remain in the
+ * calling screen or ViewModel.
+ */
 @Composable
 fun SearchBar(
     drawerViewModel: DrawerViewModel,

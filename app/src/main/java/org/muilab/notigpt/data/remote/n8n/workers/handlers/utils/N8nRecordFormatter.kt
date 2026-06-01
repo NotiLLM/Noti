@@ -2,6 +2,12 @@ package org.muilab.notigpt.data.remote.n8n.workers.handlers.utils
 
 import org.muilab.notigpt.model.notifications.NotiRecord
 
+/**
+ * Formatter for serializing NotiRecord context into n8n request payloads.
+ *
+ * Keep backend-facing field names and text selection here so reminder/update handlers do not each invent their
+ * own record schema. Model parsing stays in NotiRecord and NotiMetadata.
+ */
 internal object N8nRecordFormatter {
 
     fun format(record: NotiRecord, isPeople: Boolean): Map<String, Any> {

@@ -12,6 +12,12 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
 import org.muilab.notigpt.util.time.getRelativeTimeStr
 
+/**
+ * Time renderer for notification record timestamps.
+ *
+ * Keep display formatting here. Any logic that decides which timestamp matters should live in the model or
+ * card assembly layer before reaching this small component.
+ */
 @Composable
 fun NotiInfoTime(notiTime: Long, modifier: Modifier = Modifier) {
     val context = LocalContext.current

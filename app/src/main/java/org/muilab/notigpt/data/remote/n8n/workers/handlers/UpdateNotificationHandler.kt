@@ -14,6 +14,12 @@ import org.muilab.notigpt.util.SharedPreferencesManager
 import org.muilab.notigpt.util.toN8nNotiActions
 import org.muilab.notigpt.util.toN8nNotiRecords
 
+/**
+ * Handler for updating notification summaries/actions through the n8n backend.
+ *
+ * Keep this workflow scoped to one notification key and its available records/actions. Reminder extraction and
+ * preference sync have their own handlers because their persistence rules differ.
+ */
 internal object UpdateNotificationHandler {
 
     suspend fun handle(ctx: N8nWorkerContext, inputData: Data): ListenableWorker.Result {

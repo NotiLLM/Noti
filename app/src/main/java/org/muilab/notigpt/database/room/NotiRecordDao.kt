@@ -9,6 +9,12 @@ import androidx.sqlite.db.SupportSQLiteQuery
 import kotlinx.coroutines.flow.Flow
 import org.muilab.notigpt.model.notifications.NotiRecord
 
+/**
+ * Local access layer for immutable-ish notification record history.
+ *
+ * Records preserve the concrete notifications that fed scan, extraction, and reminder context.
+ * Keep lifecycle flags here only when they describe processing of the record itself.
+ */
 @Dao
 interface NotiRecordDao {
     @Upsert

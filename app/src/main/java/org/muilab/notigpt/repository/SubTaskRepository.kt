@@ -5,6 +5,12 @@ import kotlinx.coroutines.flow.map
 import org.muilab.notigpt.database.room.SubTaskDao
 import org.muilab.notigpt.model.features.SubTask
 
+/**
+ * Repository for reminder sub-task persistence and grouped observation.
+ *
+ * Keep sub-task writes here so ReminderViewModel can coordinate parent reminders without knowing DAO details or
+ * soft-delete mechanics.
+ */
 class SubTaskRepository(private val subTaskDao: SubTaskDao) {
 
     /** All visible sub-tasks grouped by their parent reminder ID. */

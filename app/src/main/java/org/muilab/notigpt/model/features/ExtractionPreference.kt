@@ -4,12 +4,11 @@ import androidx.room.Entity
 import androidx.room.PrimaryKey
 
 /**
- * A single active natural-language preference statement that governs how
- * the LLM extracts (or skips) tasks/memos from notifications.
+ * Room entity for a user-authored or learned rule that guides reminder extraction.
  *
- * The local Room table is treated as the **single source of truth** for the
- * current rule set.  Historical / superseded rules are not kept locally;
- * the backend LLM handles merging.
+ * Preferences are reusable behavior inputs across notifications and this local table is the source of
+ * truth for the active rule set. Keep UI chat state and conflict metadata in separate models so this
+ * table remains a clean set of active preference statements.
  */
 @Entity(tableName = "extraction_preferences")
 data class ExtractionPreference(

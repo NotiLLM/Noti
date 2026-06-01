@@ -10,10 +10,10 @@ import android.provider.Settings
 import android.util.Log
 
 /**
- * Centralized helper for "open notification" behavior.
+ * Platform boundary for opening a notification's PendingIntent or app fallback.
  *
- * Rationale: both NotiCard click and DrawerViewModel can trigger app/notification access.
- * This keeps Android-version specific PendingIntent launching logic in one place.
+ * Keep Android launch flags, activity options, and settings fallback here so notification cards can ask for an
+ * app launch without knowing PendingIntent failure modes.
  */
 object NotificationLauncher {
 

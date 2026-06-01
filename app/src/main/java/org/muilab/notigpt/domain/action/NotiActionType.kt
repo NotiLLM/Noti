@@ -38,9 +38,7 @@ sealed class NotiActionType(val wireValue: String) {
     data object ExtractReminder : NotiActionType("extract_reminder")
 
     companion object {
-        /**
-         * Best-effort mapper for legacy call sites.
-         */
+        /** Maps persisted or wire action strings into typed actions when the value is recognized. */
         fun fromWireValue(value: String): NotiActionType? = when (value) {
             "dismiss_swipe" -> DismissSwipe
             "access_click" -> AccessClick

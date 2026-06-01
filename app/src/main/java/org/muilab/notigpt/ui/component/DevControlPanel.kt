@@ -26,6 +26,12 @@ import org.muilab.notigpt.ui.viewmodel.DrawerViewModel
 import org.muilab.notigpt.util.SharedPreferencesManager
 import org.muilab.notigpt.work.ReminderPeriodicWork
 
+/**
+ * Developer-only control panel for invoking notification/debug operations from the UI.
+ *
+ * Keep this component separated from normal user flows. Any operation that changes durable app data should still
+ * route through ViewModel/repository methods.
+ */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun DevControlPanel(context: Context, drawerViewModel: DrawerViewModel) {

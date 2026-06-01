@@ -6,6 +6,12 @@ import androidx.room.Upsert
 import kotlinx.coroutines.flow.Flow
 import org.muilab.notigpt.model.features.ReminderUnit
 
+/**
+ * Local access layer for reminders and their visible lifecycle state.
+ *
+ * This DAO owns durable reminder rows. Keep notification provenance, subtasks, and external sync
+ * concerns as adjacent tables/adapters unless they need to be queried as reminder columns.
+ */
 @Dao
 interface ReminderListDao {
 

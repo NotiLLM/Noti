@@ -29,9 +29,10 @@ import org.muilab.notigpt.R
 import org.muilab.notigpt.model.notifications.NotiDisplayUnit
 
 /**
- * Read-only notification preview used as reminder provenance.
+ * Reminder-facing preview of notification records associated with a reminder.
  *
- * The reminder screen uses this to show where a generated reminder came from.
+ * This component renders provenance context, not the live drawer row. If it becomes a general notification
+ * card variant, merge shared rendering with the main notification-card components.
  */
 @Composable
 fun RelatedNotificationPreview(

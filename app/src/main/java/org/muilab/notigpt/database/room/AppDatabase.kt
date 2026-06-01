@@ -19,6 +19,12 @@ import org.muilab.notigpt.model.notifications.NotiUnit
 import org.muilab.notigpt.model.notifications.VisibleNotiRecord
 import org.muilab.notigpt.model.features.ReminderExtractionSnapshot
 
+/**
+ * Room database entry point for local app state.
+ *
+ * Entities listed here are the durable local source of truth. External sync, export, and
+ * analysis adapters should depend on this database instead of changing its ownership model.
+ */
 @Database(
     entities = [
         NotiUnit::class,

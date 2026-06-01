@@ -9,10 +9,10 @@ import org.muilab.notigpt.data.remote.n8n.enqueueTaskExtraction
 import org.muilab.notigpt.data.remote.n8n.enqueueTaskScan
 
 /**
- * Periodic safety-net for reminder scan + extraction.
+ * Periodic safety-net for reminder scan and extraction.
  *
- * Motivation: scan/extraction was previously only triggered by new notifications hitting counters.
- * This periodically checks the DB so reminders still get extracted even in quiet periods.
+ * This worker checks local notification state for unscanned records and extraction-ready keys, then enqueues the
+ * same n8n jobs used by foreground flows so reminders still progress during quiet periods.
  */
 class ReminderPeriodicWorker(
     appContext: Context,

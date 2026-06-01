@@ -9,6 +9,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
+/**
+ * Title renderer for notification record rows.
+ *
+ * Keep this component styling-focused. Choosing the best title source belongs to NotiRecord/NotiMetadata
+ * normalization or the card assembly layer.
+ */
 @Composable
 fun NotiInfoTitle(notiTitle: String, modifier: Modifier = Modifier) {
     Text(

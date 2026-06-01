@@ -9,6 +9,12 @@ import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 import org.muilab.notigpt.model.notifications.NotiUnit
 
+/**
+ * Local access layer for the current notification drawer rows.
+ *
+ * This DAO owns the mutable, latest-known state of each notification key. Historical notification
+ * records belong in NotiRecordDao; keep cross-record context assembly outside this DAO when possible.
+ */
 @Dao
 interface NotiDrawerDao {
 

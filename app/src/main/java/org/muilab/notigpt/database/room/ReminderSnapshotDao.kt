@@ -6,6 +6,12 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import org.muilab.notigpt.model.features.ReminderExtractionSnapshot
 
+/**
+ * Local access layer for extraction snapshots attached to generated reminders.
+ *
+ * Snapshots preserve which notification records were sent to the extraction pipeline. Keep JSON
+ * parsing out of this DAO; parsing belongs in domain helpers or repositories that need the context.
+ */
 @Dao
 interface ReminderSnapshotDao {
 

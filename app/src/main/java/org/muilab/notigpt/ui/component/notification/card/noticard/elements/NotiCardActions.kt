@@ -21,6 +21,12 @@ import kotlin.math.max
 
 private const val NOTI_SWIPE_TAG = "NotiSwipe"
 
+/**
+ * Background and foreground action rows used by NotiCard gestures.
+ *
+ * Keep layout and button composition here. Action semantics should remain in callbacks so swipe/tap UI does not
+ * duplicate repository or Android-notification behavior.
+ */
 @RequiresApi(Build.VERSION_CODES.S)
 @Composable
 fun NotiCardBackgroundActions(

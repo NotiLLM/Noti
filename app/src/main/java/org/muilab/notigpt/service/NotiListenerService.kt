@@ -26,6 +26,12 @@ import org.muilab.notigpt.util.SharedPreferencesManager
 import org.muilab.notigpt.util.createNotificationChannel
 import org.muilab.notigpt.util.postOngoingNotification
 
+/**
+ * Android notification-listener boundary for capturing, filtering, storing, and lightly cancelling notifications.
+ *
+ * Keep framework callbacks and PendingIntent caching here. Business rules should live in repositories or
+ * domain helpers so this service remains a thin adapter around Android's listener lifecycle.
+ */
 class NotiListenerService: NotificationListenerService() {
 
     private var componentName: ComponentName? = null
@@ -36,6 +42,11 @@ class NotiListenerService: NotificationListenerService() {
         val contentIntentCache = LruCache<String, PendingIntent>(cacheSize)
         val deleteIntentCache = LruCache<String, PendingIntent>(cacheSize)
 
+        /**
+         * Returns a launch PendingIntent for opening the app behind a notification key.
+         *
+         * The cache is best-effort framework state; Room should store only the metadata needed to request it.
+         */
         fun getContentIntent(context: Context, notiUnit: NotiUnit): PendingIntent? {
 
             val notiKey = notiUnit.notiKey
@@ -154,6 +165,12 @@ class NotiListenerService: NotificationListenerService() {
         addNotification(sbn, false)
     }
 
+    /**
+     * Applies capture policy for one posted or initially discovered notification.
+     *
+     * Accepted notifications update the current drawer row, append a record, cache actions, and schedule the
+     * lightweight cancel behavior that keeps Android's shade from duplicating the app drawer.
+     */
     @RequiresApi(Build.VERSION_CODES.S)
     private fun addNotification(sbn: StatusBarNotification, isInit: Boolean) {
 

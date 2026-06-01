@@ -5,10 +5,11 @@ import androidx.room.Entity
 import androidx.room.Ignore
 
 /**
- * A Reminder is the superset concept; Tasks are reminders where [isTask] is true.
+ * Room entity for a reminder shown and edited by the app.
  *
- * Delete behavior:
- * - reminders are soft-deleted (kept in DB, hidden from list queries; see [isVisible]).
+ * This is the local source of truth for reminder content, visibility, task/event state, and reminder-level
+ * ranking metadata. Tasks are reminders where [isTask] is true, and deletion is represented by [isVisible].
+ * Notification provenance should stay as record IDs unless the reminder model truly owns it.
  */
 @Entity(tableName = "reminder_list", primaryKeys = ["reminderId"])
 data class ReminderUnit(
@@ -43,7 +44,7 @@ data class ReminderUnit(
      * Associated notification record IDs (notiRecordId format: "notiKey_postTime").
      * More granular than notiKeys — identifies specific messages, not entire conversations.
      *
-     * DB column keeps the legacy name "associatedNotis" to avoid a destructive migration.
+     * Room column name remains "associatedNotis" so existing databases keep reading the same field.
      */
     @ColumnInfo(name = "associatedNotis")
     val associatedNotiRecords: Set<String> = emptySet(),

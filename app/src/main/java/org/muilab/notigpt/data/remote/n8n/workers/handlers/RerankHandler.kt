@@ -17,9 +17,10 @@ import java.util.Locale
 import java.util.TimeZone
 
 /**
- * Handles reranking a single reminder via an n8n webhook.
+ * Worker handler for reranking or refreshing a reminder after feedback-triggered events.
  *
- * Triggered by user feedback (Important / Handle Later), new creation, regeneration, or merge.
+ * Keep this as a focused backend bridge over one reminder. Broader reminder regeneration should continue using
+ * the regeneration handler so feedback paths stay easy to reason about.
  */
 internal object RerankHandler {
 

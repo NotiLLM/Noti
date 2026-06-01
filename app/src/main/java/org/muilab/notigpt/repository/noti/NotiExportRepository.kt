@@ -6,14 +6,10 @@ import org.muilab.notigpt.database.room.NotiDrawerDao
 import org.muilab.notigpt.database.room.NotiRecordDao
 
 /**
- * Export logic (JSON assembly) extracted from NotiRepository.
+ * Repository slice for building notification export JSON streams.
  *
- * Returns a lazy [Sequence] so records/actions for each notification are loaded on demand
- * and can be GC'd before the next unit is touched.
- *
- * NotiUnits themselves are fetched in pages of [BATCH_SIZE] rows so the entire noti_drawer
- * table is never materialised as a single List — the primary cause of heap fragmentation OOM
- * when a large number of dismissed notifications are present.
+ * Keep export query selection and NotiExportFormatter coordination here. File writing and chunking belong to the
+ * platform DataExportManager so export generation can remain lazy.
  */
 class NotiExportRepository(
     private val notiDrawerDao: NotiDrawerDao,
@@ -26,8 +22,10 @@ class NotiExportRepository(
     }
 
     /**
-     * Produces one [JSONObject] per notification, lazily and in paginated DB batches.
-     * At peak, only [BATCH_SIZE] NotiUnit objects + one unit's records/actions exist in RAM.
+     * Builds a lazy JSON stream for notification export.
+     *
+     * The sequence fetches paginated DB batches and keeps export memory bounded: at peak, only one batch of
+     * notification rows plus one unit's records/actions are materialized. File splitting stays in DataExportManager.
      */
     fun exportLog(includeContext: Boolean, includeDismissed: Boolean): Sequence<JSONObject> =
         sequence {

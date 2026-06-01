@@ -2,6 +2,12 @@ package org.muilab.notigpt.domain.reminder
 
 import org.json.JSONObject
 
+/**
+ * Parser helpers for reminder snapshot payloads stored with extraction results.
+ *
+ * Keep snapshot JSON interpretation here so n8n handlers and repositories agree on record grouping semantics
+ * without duplicating payload traversal code.
+ */
 object ReminderSnapshotPayload {
     data class RecordIdGrouping(
         val recordIds: List<String>,

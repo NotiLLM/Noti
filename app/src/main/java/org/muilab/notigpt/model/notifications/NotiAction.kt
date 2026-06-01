@@ -2,6 +2,12 @@ package org.muilab.notigpt.model.notifications
 
 import androidx.room.Entity
 
+/**
+ * Room entity for an executable action exposed by an Android notification.
+ *
+ * Store only the action metadata needed to render and route an action. The actual PendingIntent remains
+ * framework state managed by the listener/service layer rather than durable app data.
+ */
 @Entity(tableName = "notiAction", primaryKeys = ["notiActionId"])
 data class NotiAction (
     val notiActionId: String,

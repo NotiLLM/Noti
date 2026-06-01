@@ -8,12 +8,19 @@ import org.muilab.notigpt.database.room.ReminderListDao
 import org.muilab.notigpt.model.features.ReminderUnit
 import org.muilab.notigpt.repository.firestore.FirestoreSyncRepository
 
+/**
+ * Repository for reminder CRUD, filtering queries, soft deletes, and export-oriented reminder operations.
+ *
+ * Keep reminder persistence rules here rather than in Compose screens. Sub-task persistence and notification
+ * context live in adjacent repositories to keep reminder rows focused.
+ */
 class ReminderRepository(
     private val reminderListDao: ReminderListDao,
     private val appContext: Context,
 ) {
     private val firestoreSync by lazy { FirestoreSyncRepository(appContext.applicationContext) }
 
+    /** Returns visible reminders in the canonical list order used by the reminders screen. */
     fun observeAll(): Flow<List<ReminderUnit>> = reminderListDao.observeAll()
     fun observeTasks(): Flow<List<ReminderUnit>> = reminderListDao.observeTasks()
     fun observeMemos(): Flow<List<ReminderUnit>> = reminderListDao.observeMemos()
@@ -21,6 +28,12 @@ class ReminderRepository(
 
     suspend fun getAllVisible(): List<ReminderUnit> = reminderListDao.getAllVisible()
 
+    /**
+     * Upserts a reminder locally and mirrors the resulting row to Firestore.
+     *
+     * Callers should set edit timestamps and user-edit flags before calling this method so local and remote
+     * copies share the same reminder semantics.
+     */
     suspend fun upsert(reminder: ReminderUnit) {
         reminderListDao.upsert(reminder)
         // Best-effort; never block core UX.

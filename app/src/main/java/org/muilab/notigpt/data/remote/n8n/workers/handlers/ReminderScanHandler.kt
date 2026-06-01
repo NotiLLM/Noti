@@ -11,8 +11,20 @@ import org.muilab.notigpt.data.remote.n8n.workers.handlers.utils.N8nRecordFormat
 import org.muilab.notigpt.data.remote.n8n.workers.handlers.utils.N8nWorkerContext
 import org.muilab.notigpt.util.SharedPreferencesManager
 
+/**
+ * Worker handler that asks n8n whether a notification should enter reminder extraction.
+ *
+ * This handler owns scan request formatting, response parsing, and record-claim transitions. Extraction itself
+ * remains a separate queued workflow so scan and extraction can retry independently.
+ */
 internal object ReminderScanHandler {
 
+    /**
+     * Runs one scan job and writes only scan flags back to the notification drawer/records.
+     *
+     * Do not create reminders here. Keeping scan as a lightweight classification stage makes it safe
+     * to retry separately from extraction.
+     */
     suspend fun handle(ctx: N8nWorkerContext, inputData: Data): ListenableWorker.Result {
         Log.d("N8nWebhook", "Performing Task Scan")
 

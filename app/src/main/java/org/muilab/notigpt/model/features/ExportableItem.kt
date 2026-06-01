@@ -1,10 +1,10 @@
 package org.muilab.notigpt.model.features
 
 /**
- * Common shape for anything exportable to Google Tasks / Google Calendar.
+ * Small adapter interface for exporting reminders and subtasks through one formatting path.
  *
- * Both [ReminderUnit] and [SubTask] satisfy this contract, so the export
- * dialog and repository can be written once.
+ * Keep this as a presentation/export shape only. If export rules start affecting app behavior,
+ * move those rules back to the reminder or subtask domain layer.
  */
 interface ExportableItem {
     val exportTitle: String

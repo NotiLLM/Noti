@@ -16,7 +16,10 @@ import kotlin.math.abs
 import kotlin.math.max
 
 /**
- * GroupCard horizontal swipe (dismiss / reveal actions).
+ * Swipe gesture wrapper for group cards.
+ *
+ * Keep group-card gesture thresholds and callback dispatch here. Shared nested-swipe coordination lives in the
+ * swipe-delegation helpers so child cards and parent cards do not fight for the same drag.
  */
 internal fun Modifier.groupCardSwipe(
     enabled: Boolean,

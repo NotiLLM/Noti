@@ -22,6 +22,12 @@ import org.muilab.notigpt.ui.screens.NotificationsScreen
 import org.muilab.notigpt.ui.utils.LifecycleObserver
 import org.muilab.notigpt.ui.viewmodel.DrawerViewModel
 
+/**
+ * Home route that hosts the notification drawer experience.
+ *
+ * Keep route-level composition here and pass drawer behavior to NotificationsScreen/DrawerViewModel. Avoid adding
+ * notification business logic directly to this wrapper.
+ */
 @RequiresApi(Build.VERSION_CODES.S)
 @OptIn(ExperimentalFoundationApi::class)
 @Composable

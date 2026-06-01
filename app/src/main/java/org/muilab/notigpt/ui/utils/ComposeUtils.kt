@@ -2,6 +2,12 @@ package org.muilab.notigpt.ui.utils
 
 import androidx.compose.ui.Modifier
 
+/**
+ * Small shared Compose UI state types.
+ *
+ * Keep only cross-component UI primitives here. Feature-specific state belongs next to the screen or component
+ * that owns the behavior.
+ */
 enum class NotiExpandState {
     Collapsed,
     Opened,

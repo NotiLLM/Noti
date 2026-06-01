@@ -20,6 +20,12 @@ import org.muilab.notigpt.model.notifications.NotiDisplayUnit
 import org.muilab.notigpt.ui.component.notification.card.noticard.NotiCard
 import org.muilab.notigpt.ui.viewmodel.DrawerViewModel
 
+/**
+ * Renders the visible child notification cards inside a group card.
+ *
+ * This component owns child-list presentation and expansion display, not group membership changes. If child
+ * virtualization or pagination appears, keep it here rather than in the group header/actions components.
+ */
 @RequiresApi(Build.VERSION_CODES.S)
 @Composable
 internal fun GroupCardChildren(

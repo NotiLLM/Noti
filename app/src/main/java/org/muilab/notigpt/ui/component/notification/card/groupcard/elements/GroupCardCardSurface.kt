@@ -13,6 +13,12 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 
+/**
+ * Shared surface wrapper for a group card.
+ *
+ * Keep shape, elevation, and container styling here so GroupCard can focus on structure. Do not add group
+ * membership logic to this purely visual layer.
+ */
 @Composable
 internal fun GroupCardCardSurface(
     horizontalOffsetX: Float,

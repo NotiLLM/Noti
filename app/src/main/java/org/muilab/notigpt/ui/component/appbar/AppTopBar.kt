@@ -29,6 +29,12 @@ import org.muilab.notigpt.R
 import org.muilab.notigpt.ui.component.SearchBar
 import org.muilab.notigpt.ui.viewmodel.DrawerViewModel
 
+/**
+ * Top app bar for navigation title, search, and context actions.
+ *
+ * Keep app-bar UI decisions here while delegating search state and feature actions to the active screen or
+ * ViewModel.
+ */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalAnimationApi::class)
 @RequiresApi(Build.VERSION_CODES.S)
 @Composable

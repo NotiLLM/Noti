@@ -34,6 +34,12 @@ import org.muilab.notigpt.ui.viewmodel.DrawerViewModel
 import org.muilab.notigpt.domain.action.NotiActionType
 import sh.calvin.reorderable.ReorderableCollectionItemScope
 
+/**
+ * Overlay action buttons shown on top of a notification card.
+ *
+ * This layer bridges visible card affordances to ViewModel callbacks. Avoid adding direct repository or service
+ * calls here so overlay behavior stays testable through the card's action surface.
+ */
 @Composable
 fun NotiCardOverlayButtons(
     modifier: Modifier = Modifier,

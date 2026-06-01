@@ -3,6 +3,12 @@ package org.muilab.notigpt.database.room
 import androidx.room.TypeConverter
 import org.json.JSONArray
 
+/**
+ * Room type converters for compact value types stored inside local tables.
+ *
+ * Keep converters deterministic and format-stable. If a value needs querying or partial updates,
+ * prefer a table/column model over adding more JSON-like conversion here.
+ */
 object Converters {
     @TypeConverter
     @JvmStatic

@@ -6,7 +6,10 @@ import org.muilab.notigpt.model.notifications.NotiGroup
 import java.util.UUID
 
 /**
- * Owns all group mutation logic: merge/ungroup/metadata updates and group-level actions.
+ * Repository slice for group membership, group metadata, and group-level actions.
+ *
+ * Keep all multi-notification group mutations here so ViewModels do not manually coordinate NotiUnit groupId
+ * writes. DrawerGrouper remains responsible only for deriving visible grouped rows.
  */
 class NotiGroupRepository(
     private val notiDrawerDao: NotiDrawerDao,

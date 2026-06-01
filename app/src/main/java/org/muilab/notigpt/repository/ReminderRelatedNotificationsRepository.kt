@@ -10,6 +10,12 @@ import org.muilab.notigpt.model.features.ReminderUnit
 import org.muilab.notigpt.model.notifications.NotiRecord
 import org.muilab.notigpt.model.notifications.NotiUnit
 
+/**
+ * Repository for resolving notification context attached to a reminder.
+ *
+ * This bridges reminder associations back to active notification units and records. Keep it read-focused so
+ * reminder editing does not mutate notification history through this path.
+ */
 class ReminderRelatedNotificationsRepository(context: Context) {
     private val db = AppDatabase.getInstance(context.applicationContext)
 

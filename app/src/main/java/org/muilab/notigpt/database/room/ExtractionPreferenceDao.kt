@@ -9,6 +9,12 @@ import androidx.room.Upsert
 import kotlinx.coroutines.flow.Flow
 import org.muilab.notigpt.model.features.ExtractionPreference
 
+/**
+ * Local access layer for user extraction preferences.
+ *
+ * These rows are app behavior inputs, not UI-only settings. Keep conflict detection and chat flows
+ * reading through this DAO so preference state has one local source of truth.
+ */
 @Dao
 interface ExtractionPreferenceDao {
 

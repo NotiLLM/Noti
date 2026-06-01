@@ -22,6 +22,12 @@ import org.muilab.notigpt.util.Constants.Companion.MAX_EXPIRED_RECORDS_PER_KEY
 import org.muilab.notigpt.util.Constants.Companion.NOTI_RECORD_EXPIRE_TIME_MS
 import org.muilab.notigpt.util.SharedPreferencesManager
 
+/**
+ * Repository slice for notification lifecycle actions, scan counters, extraction scheduling, and action logging.
+ *
+ * This class bridges captured Android notifications to Room state and n8n WorkManager jobs. Keep low-level DAO
+ * writes here while grouping, export, and record-query concerns stay in their sibling repository slices.
+ */
 class NotiActionsRepository(
     private val appContext: Context,
     private val notiDrawerDao: NotiDrawerDao,
@@ -34,11 +40,18 @@ class NotiActionsRepository(
 
     private val scope = CoroutineScope(Dispatchers.IO)
 
+    /** Dismisses old read records while preserving the most recent context per notification key. */
     suspend fun removeExpiredNotiRecords() {
         val expireTimestamp = System.currentTimeMillis() - NOTI_RECORD_EXPIRE_TIME_MS
         notiRecordDao.dismissExpiredReadRecords(expireTimestamp, MAX_EXPIRED_RECORDS_PER_KEY)
     }
 
+    /**
+     * Creates or refreshes the current drawer row for a posted notification.
+     *
+     * Initial listener hydration inserts missing rows without resetting existing state; live posts refresh metadata
+     * and unread state because they represent new user-visible activity.
+     */
     @RequiresApi(Build.VERSION_CODES.S)
     fun upsertNotiUnit(context: Context, sbn: StatusBarNotification, isInit: Boolean) {
         val existingNoti = notiDrawerDao.getByNotiKey(sbn.key)
@@ -63,6 +76,12 @@ class NotiActionsRepository(
         notiRecordDao.dismissRecordsByKey(notiKey)
     }
 
+    /**
+     * Appends the captured notification contents and schedules downstream scan/extraction work.
+     *
+     * New records increment analytics, feed scan counters, and may trigger delayed extraction after enough context
+     * accumulates for a notification key.
+     */
     @RequiresApi(Build.VERSION_CODES.S)
     suspend fun insertNotiRecord(sbn: StatusBarNotification) {
         val notiRecord = NotiRecord(sbn)

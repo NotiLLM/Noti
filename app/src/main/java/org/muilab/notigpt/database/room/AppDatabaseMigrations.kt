@@ -4,9 +4,10 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 /**
- * Keeps AppDatabase.kt readable by isolating schema history.
+ * Ordered Room schema migrations for installed app databases.
  *
- * NOTE: These migrations are referenced from AppDatabase.buildDatabase().
+ * Keep these migrations compatible with real user upgrade paths. New schema cleanup should usually
+ * be expressed as a later migration instead of rewriting assumptions in active models only.
  */
 object AppDatabaseMigrations {
 

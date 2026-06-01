@@ -35,6 +35,12 @@ import org.muilab.notigpt.ui.viewmodel.DrawerViewModel
 import org.muilab.notigpt.ui.viewmodel.PreferenceViewModel
 import org.muilab.notigpt.ui.viewmodel.ReminderViewModel
 
+/**
+ * Top-level Compose scaffold that places app bars, navigation, and the selected screen content.
+ *
+ * Keep app-shell layout here. Screen state and feature actions should flow through ViewModels rather than being
+ * stored in the scaffold.
+ */
 @RequiresApi(Build.VERSION_CODES.S)
 @Composable
 fun AppScaffold(

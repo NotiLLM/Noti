@@ -8,6 +8,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.constraintlayout.compose.ConstraintLayout
 import androidx.constraintlayout.compose.Dimension
 
+/**
+ * Compact row for one expanded notification record inside a notification card.
+ *
+ * Keep this as composition over title, content, and time subcomponents. If record rows gain actions or loading
+ * state, move that behavior to a dedicated context-card component.
+ */
 @Composable
 fun ExpandedNotiRecord(
     notiTitle: String,

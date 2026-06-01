@@ -5,8 +5,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /**
- * Legacy: category-based unread counts were used by the old bottom bar.
- * Categories are removed in the redesign, so this controller is now a no-op.
+ * Controller for unread-count summaries used by drawer filters and badges.
+ *
+ * Keep count aggregation here instead of scattering count queries through the screen. If counts become expensive,
+ * this controller is the place to add throttling or cached flows.
  */
 internal class DrawerUnreadCounts(
     @Suppress("UNUSED_PARAMETER") private val scope: kotlinx.coroutines.CoroutineScope,

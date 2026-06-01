@@ -4,13 +4,10 @@ import androidx.room.Entity
 import androidx.room.PrimaryKey
 
 /**
- * A factual statement about the user (persona context), used alongside
- * extraction preferences to help the LLM understand implicit tasks.
+ * Room entity for stable user-context facts used by extraction and preference reasoning.
  *
- * Examples:
- * - "I am a software engineer at Google"
- * - "I am currently traveling in Taiwan"
- * - "My partner's name is Alice"
+ * User context should describe the person or environment, not one notification. If source evidence becomes
+ * important, add explicit provenance fields rather than embedding long raw transcripts here.
  */
 @Entity(tableName = "user_contexts")
 data class UserContext(

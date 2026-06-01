@@ -18,6 +18,12 @@ import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_MAKETASK
 import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_SAVE
 import kotlin.math.max
 
+/**
+ * Action row for group-level notification operations.
+ *
+ * Keep this component as a visual/action dispatch surface. Group semantics such as dismissing children or
+ * ungrouping should stay in the ViewModel/controller layer.
+ */
 @Composable
 internal fun GroupCardActionsRow(
     modifier: Modifier,

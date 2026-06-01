@@ -6,12 +6,11 @@ import androidx.room.ForeignKey
 import androidx.room.Index
 
 /**
- * A sub-task belongs to a [ReminderUnit]. Each reminder can have many sub-tasks.
+ * Room entity for a child task under a reminder.
  *
- * Sub-tasks carry their own title, description, deadline/event times, action buttons,
- * and completion state — like items inside a Google Tasks list.
- *
- * Delete behaviour mirrors the parent: soft-delete via [isVisible].
+ * Keep this model focused on nested checklist/event structure. It carries its own title, timing, buttons,
+ * and completion state while deletion mirrors the parent through [isVisible]. If subtasks need notification
+ * provenance or extraction snapshots, add that through an explicit relationship instead of copying ReminderUnit fields.
  */
 @Entity(
     tableName = "sub_tasks",

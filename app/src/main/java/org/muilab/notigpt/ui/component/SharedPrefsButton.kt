@@ -22,6 +22,12 @@ import org.muilab.notigpt.util.SharedPreferencesManager.KEY_HISTORY_NOTI_COUNT_T
 import org.muilab.notigpt.util.SharedPreferencesManager.KEY_HISTORY_NOTI_HOURS_THRESHOLD
 import org.muilab.notigpt.util.SharedPreferencesManager.KEY_SERVER_URL
 
+/**
+ * Settings UI for inspecting and editing shared-preference-backed configuration.
+ *
+ * Keep validation and preference writes explicit here because these values affect remote endpoints and app-wide
+ * behavior. If settings grow, split each setting group into a dedicated component.
+ */
 @Composable
 fun SharedPrefsButton(
     buttonText: String,

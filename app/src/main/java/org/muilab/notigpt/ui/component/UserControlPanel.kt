@@ -18,6 +18,12 @@ import androidx.compose.ui.unit.dp
 import org.muilab.notigpt.R
 import org.muilab.notigpt.ui.viewmodel.DrawerViewModel
 
+/**
+ * User-facing quick action panel for notification drawer operations.
+ *
+ * Keep action dispatch callback/ViewModel driven. This component should not know storage details or Android
+ * notification internals.
+ */
 @RequiresApi(Build.VERSION_CODES.S)
 @Composable
 fun UserControlPanel(drawerViewModel: DrawerViewModel) {

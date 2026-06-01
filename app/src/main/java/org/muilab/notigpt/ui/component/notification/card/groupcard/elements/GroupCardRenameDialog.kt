@@ -7,6 +7,12 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 
+/**
+ * Rename dialog for notification groups.
+ *
+ * Keep transient text-entry state here and send the committed title through callbacks. Validation that affects
+ * group identity or storage should stay with the ViewModel/repository path.
+ */
 @Composable
 internal fun GroupCardRenameDialog(
     value: String,

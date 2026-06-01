@@ -1,7 +1,10 @@
 package org.muilab.notigpt.model.notifications.components
 
 /**
- * Small embedded class to group task-related attributes for a NotiUnit's display state.
+ * Embedded reminder-detection attributes attached to the current notification row.
+ *
+ * These flags summarize scan/extraction results at the notification-key level. Record-level processing flags
+ * stay on NotiRecord because each captured record can be scanned or extracted independently.
  */
 data class NotiReminderAttr(
     var shouldExtractReminder: Boolean = false,

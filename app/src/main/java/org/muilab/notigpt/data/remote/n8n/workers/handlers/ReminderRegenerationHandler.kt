@@ -18,14 +18,19 @@ import java.util.Locale
 import java.util.TimeZone
 
 /**
- * Handles regeneration of one or all reminders via n8n webhooks.
+ * Worker handler for regenerating reminder content from stored notification context.
+ *
+ * Use this when an existing reminder needs fresh backend output without re-running scan selection. Keep payload
+ * building here and shared snapshot/status rules in the reminder domain helpers.
  */
 internal object ReminderRegenerationHandler {
 
     private const val TAG = "N8nRegeneration"
 
     /**
-     * Regenerate a single reminder.
+     * Regenerates one reminder using its current local reminder row and related notification context.
+     *
+     * The reminder ID stays stable; n8n is asked to revise content, not create a separate reminder.
      */
     suspend fun handleOne(ctx: N8nWorkerContext, inputData: Data): ListenableWorker.Result {
         val webhookPath = inputData.getString("webhook_path") ?: run {
@@ -55,7 +60,10 @@ internal object ReminderRegenerationHandler {
     }
 
     /**
-     * Regenerate all visible reminders.
+     * Regenerates every visible reminder in one remote request.
+     *
+     * Keep this path batch-oriented so global reranking/regeneration can see the current reminder set
+     * together instead of applying isolated single-reminder edits.
      */
     suspend fun handleAll(ctx: N8nWorkerContext, inputData: Data): ListenableWorker.Result {
         val webhookPath = inputData.getString("webhook_path") ?: run {
@@ -86,7 +94,10 @@ internal object ReminderRegenerationHandler {
     }
 
     /**
-     * Build notification context records for a single reminder.
+     * Builds notification context records from a reminder's stored provenance.
+     *
+     * This is shared preparation for regeneration payloads. If reminder context loading is needed by
+     * UI or sync too, move it behind a ReminderContextRepository instead of copying this DB traversal.
      */
     private suspend fun buildNotiContextForReminder(
         ctx: N8nWorkerContext,

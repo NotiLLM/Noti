@@ -7,6 +7,12 @@ import androidx.room.Query
 import kotlinx.coroutines.flow.Flow
 import org.muilab.notigpt.model.features.UserContext
 
+/**
+ * Local access layer for durable user-context statements used by extraction and preference flows.
+ *
+ * These rows describe the user, not individual notifications. Keep discovery and ranking logic outside
+ * the DAO so storage stays independent from the model that inferred the statement.
+ */
 @Dao
 interface UserContextDao {
 

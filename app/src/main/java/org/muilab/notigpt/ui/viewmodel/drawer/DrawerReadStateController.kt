@@ -6,6 +6,12 @@ import kotlinx.coroutines.withContext
 import org.muilab.notigpt.repository.NotiRepository
 import java.util.concurrent.ConcurrentHashMap
 
+/**
+ * Controller for batching read/seen-state updates from drawer rendering.
+ *
+ * This prevents Compose visibility events from writing to Room one row at a time. Keep it focused on read-state
+ * persistence; filtering and counts belong in adjacent drawer controllers.
+ */
 class DrawerReadStateController(
     private val notiRepository: NotiRepository,
 ) {

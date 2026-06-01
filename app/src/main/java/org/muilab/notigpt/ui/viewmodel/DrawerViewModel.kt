@@ -52,6 +52,12 @@ import org.muilab.notigpt.platform.NotificationLauncher
 import org.muilab.notigpt.ui.viewmodel.drawer.FullRecordsController
 import org.muilab.notigpt.ui.viewmodel.drawer.DrawerUnreadCounts
 
+/**
+ * ViewModel for notification drawer state, filters, grouping, actions, and record context loading.
+ *
+ * This class is the UI-facing coordinator over smaller drawer controllers. If a responsibility grows large,
+ * prefer extracting another controller/repository method over adding more direct database logic here.
+ */
 class DrawerViewModel(
     application: Application,
     private val notiRepository: NotiRepository,
@@ -72,6 +78,11 @@ class DrawerViewModel(
     val isTargetLoading: StateFlow<Boolean> = filters.isTargetLoading
     val isSortingMode: StateFlow<Boolean> = filters.isSortingMode
 
+    /**
+     * Updates the active drawer category filter and resets dependent app-filter state when needed.
+     *
+     * Keep filter coordination here so the screen does not need to understand category/app-category coupling.
+     */
     @RequiresApi(Build.VERSION_CODES.S)
     fun updateCategory(newCategory: String) {
         filters.startTargetLoading()

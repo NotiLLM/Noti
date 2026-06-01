@@ -109,6 +109,12 @@ import androidx.compose.material3.AssistChip
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 
+/**
+ * Main reminders screen for tasks, memos, completion state, sub-tasks, export, and related notifications.
+ *
+ * This screen owns local editing dialogs, drag visuals, and edit drafts. Durable reminder, sub-task, sync, and
+ * regeneration actions should stay in ReminderViewModel or related repositories.
+ */
 @Composable
 fun RemindersScreen(
     drawerViewModel: DrawerViewModel,

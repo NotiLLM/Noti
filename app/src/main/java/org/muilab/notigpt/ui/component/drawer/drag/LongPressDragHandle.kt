@@ -7,13 +7,10 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
 
 /**
- * A tiny, self-contained long-press drag handle.
+ * Compose modifier that turns long-press movement into drawer drag state updates.
  *
- * Design goals (matching the old Reorderable lib behavior):
- * - Drag starts ONLY after a long-press on this handle.
- * - While dragging, we consume pointer changes so other gestures (swipe, scroll, click)
- *   do not also trigger.
- * - Outside this handle, the rest of the item remains fully interactive.
+ * Keep gesture recognition here and grouping/sorting decisions outside it. The modifier should report drag
+ * identity and position, not decide how the drawer data model changes.
  */
 @Composable
 fun Modifier.longPressDragHandle(

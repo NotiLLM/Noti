@@ -4,13 +4,10 @@ import android.app.Notification
 import android.service.notification.StatusBarNotification
 
 /**
- * Pure(ish) rules for deciding whether a system notification should be processed by NotiGPT.
+ * Rules for deciding whether an Android system notification should enter the app pipeline.
  *
- * This logic used to live inline in [org.muilab.notigpt.service.NotiListenerService].
- * Extracting it:
- * - makes the service easier to read
- * - makes the rules easier to test
- * - centralizes ignore reasons for logging and future tuning
+ * Keep device/framework filtering here so the listener service only coordinates capture and storage.
+ * Add new ignore reasons here when they describe notification eligibility rather than UI behavior.
  */
 object NotificationFilter {
 
@@ -25,7 +22,9 @@ object NotificationFilter {
     }
 
     /**
-     * @return the [IgnoreReason] if the notification should be ignored, or null if it should be processed.
+     * Returns why a notification should be skipped, or null when it should be captured.
+     *
+     * Prefer adding explicit reasons over boolean checks so listener logging and future tuning stay inspectable.
      */
     fun ignoreReason(sbn: StatusBarNotification, appPackageName: String): IgnoreReason? {
         if (sbn.packageName == appPackageName) return IgnoreReason.FROM_OUR_APP

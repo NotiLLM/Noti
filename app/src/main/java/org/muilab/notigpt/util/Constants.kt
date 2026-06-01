@@ -1,5 +1,11 @@
 package org.muilab.notigpt.util
 
+/**
+ * Central constants for notification categories, actions, preference keys, and timing values.
+ *
+ * Keep constants here only when they are shared across layers. Feature-local constants should stay near their
+ * owning component or repository to avoid turning this class into a catch-all.
+ */
 class Constants {
     companion object {
         const val DIFY_UPDATE_NOTIFICATION = "update_notification"

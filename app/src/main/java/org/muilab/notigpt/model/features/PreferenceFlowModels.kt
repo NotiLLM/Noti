@@ -6,6 +6,12 @@ package org.muilab.notigpt.model.features
 
 // ── Entry point enum ────────────────────────────────────────────────
 
+/**
+ * Lightweight models for preference-chat and preference-discovery flows.
+ *
+ * These are interaction payloads, not Room entities. If a field needs to survive app restarts as source-of-truth
+ * state, promote it into the appropriate Room model instead of expanding these transient structures.
+ */
 enum class PreferenceEntryPoint(val wire: String) {
     EDIT("EDIT"),
     DELETE("DELETE"),

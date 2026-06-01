@@ -14,9 +14,10 @@ import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CoroutineScope
 
 /**
- * Keeps a per-notification full-record stream/cache.
+ * Controller for loading full notification-record timelines by notification key.
  *
- * Motivation: DrawerViewModel shouldn't manage job maps + caches.
+ * Keep per-key record flows here so expanded cards can request history without owning DAO queries. If this grows
+ * into general context loading, merge it with DrawerSearchController or a repository-level context loader.
  */
 class FullRecordsController(
     private val scope: CoroutineScope,

@@ -8,6 +8,12 @@ import org.muilab.notigpt.platform.AndroidClipboardController
 import org.muilab.notigpt.platform.MediaStoreNotiLogExporter
 import org.muilab.notigpt.platform.ToastUserNotifier
 
+/**
+ * Factory for constructing DrawerViewModel with Android context-backed repositories.
+ *
+ * Keep dependency creation here minimal. If the drawer starts needing more collaborators, consider a small
+ * dependency provider so the factory does not become the app's composition root.
+ */
 class DrawerViewModelFactory(
     private val application: Application,
     private val notiRepository: NotiRepository

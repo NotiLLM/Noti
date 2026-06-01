@@ -8,6 +8,12 @@ import org.muilab.notigpt.util.Constants.Companion.APP_CATEGORY_UNKNOWN
 // App category mapping cache
 private var appCategoryMap: Map<String, String>? = null
 
+/**
+ * Loads and queries the packaged app-name to category mapping.
+ *
+ * Keep asset parsing and fallback category behavior here so drawer filters can ask for categories without knowing
+ * the JSON file shape.
+ */
 fun loadAppCategoryMapping(context: Context): Map<String, String> {
     if (appCategoryMap == null) {
         appCategoryMap = try {

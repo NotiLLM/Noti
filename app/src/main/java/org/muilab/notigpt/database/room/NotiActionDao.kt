@@ -6,6 +6,12 @@ import androidx.room.Query
 import androidx.room.Upsert
 import org.muilab.notigpt.model.notifications.NotiAction
 
+/**
+ * Local access layer for actions that can be applied back to Android notifications.
+ *
+ * This DAO stores executable notification actions separately from notification display state.
+ * Keep framework-specific action execution outside the DAO so Room remains storage-only.
+ */
 @Dao
 interface NotiActionDao {
     @Upsert

@@ -5,6 +5,12 @@ import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 
+/**
+ * WorkManager worker that dispatches typed n8n jobs to workflow-specific handlers.
+ *
+ * Keep this class as the dependency/context assembly point. The worker should parse input, build a shared
+ * N8nWorkerContext, and delegate side effects to handlers rather than containing workflow logic directly.
+ */
 class N8nAPIWorker(
     context: Context,
     params: WorkerParameters

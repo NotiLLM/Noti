@@ -1,12 +1,15 @@
 package org.muilab.notigpt.model.notifications.components
 
+/**
+ * Embedded mutable display state for a notification drawer row.
+ *
+ * This keeps read, pin, dismissal, and LLM display annotations separate from notification metadata. If a
+ * flag is about captured content or extraction provenance, it probably belongs outside this component.
+ */
 data class NotiDisplayState(
     var isPinned: Boolean,
     var isArchived: Boolean,
-    /**
-     * New semantics: isDismissed = true means the notification is hidden from the active drawer.
-     * This replaces the previous isVisible flag (flipped).
-     */
+    /** True when this notification should be hidden from the active drawer. */
     var isDismissed: Boolean,
     var isRead: Boolean,
 

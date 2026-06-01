@@ -42,6 +42,12 @@ import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_MAKETASK
 import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_SAVE
 import org.muilab.notigpt.util.SharedPreferencesManager
 
+/**
+ * Renders one notification group and its currently visible child cards.
+ *
+ * This component assembles group header, children, swipe behavior, and group actions. Keep membership mutations
+ * callback-driven so grouping policy remains in the drawer layer.
+ */
 @OptIn(ExperimentalFoundationApi::class)
 @RequiresApi(Build.VERSION_CODES.S)
 @Suppress("AssignedValueIsNeverRead")
@@ -106,7 +112,7 @@ fun GroupCard(
             .padding(horizontal = 16.dp, vertical = 2.dp)
             .onSizeChanged {
                 cardWidth = it.width.toFloat()
-                // Keep the previous fallback until we measure.
+                // Fall back to the full child list until this path has measured visible rows.
                 if (actionsMeasuredWidthPx <= 0f) {
                     endActionsWidth = cardWidth * GroupCardConstants.ActionsRevealFraction
                 }

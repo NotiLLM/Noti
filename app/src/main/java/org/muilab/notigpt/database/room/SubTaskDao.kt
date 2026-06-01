@@ -6,6 +6,12 @@ import androidx.room.Upsert
 import kotlinx.coroutines.flow.Flow
 import org.muilab.notigpt.model.features.SubTask
 
+/**
+ * Local access layer for subtasks nested under reminders.
+ *
+ * Subtasks are durable reminder children, not independent notification-derived reminders. If they
+ * gain their own lifecycle or sync rules, consider a dedicated repository boundary before expanding this DAO.
+ */
 @Dao
 interface SubTaskDao {
 

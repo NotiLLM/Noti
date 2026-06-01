@@ -5,12 +5,10 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * Manages exporting large notification data by writing incrementally to one or more files.
+ * Exports notification JSON data by streaming objects into one or more Documents files.
  *
- * The previous implementation materialised the entire [JSONArray] in RAM before deciding how
- * to split it, which caused OOM with large datasets (full context + dismissed notifications).
- * This version consumes a lazy [Sequence] so each notification's JSON object is processed and
- * can be GC'd before the next one is loaded — at most one 5 MB chunk is held in memory at once.
+ * This manager consumes a lazy Sequence so large exports hold only the current JSON object and output chunk in
+ * memory. Keep file-size splitting here and export payload construction in repositories/formatters.
  */
 @Suppress("MemberVisibilityCanBePrivate")
 class DataExportManager(context: Context) {

@@ -27,6 +27,12 @@ import org.muilab.notigpt.repository.SubTaskRepository
 import org.muilab.notigpt.platform.GoogleTasksAuthManager
 import java.util.UUID
 
+/**
+ * ViewModel for reminders, sub-tasks, related notification context, Google Tasks export, and regeneration jobs.
+ *
+ * Keep screen orchestration here while persistence stays in repositories and remote/background work stays behind
+ * platform or n8n enqueue helpers.
+ */
 class ReminderViewModel(application: Application) : AndroidViewModel(application) {
 
     enum class FilterTab { All, Tasks, Memos, Completed }
@@ -74,6 +80,12 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
     private val memosFlow = repo.observeMemos()
     private val completedFlow = repo.observeCompletedTasks()
 
+    /**
+     * Filtered reminder list consumed by RemindersScreen.
+     *
+     * Search terms are split on '+', then AND-matched against title and content so users can narrow noisy reminder
+     * lists without changing persisted reminder data.
+     */
     val reminders: StateFlow<List<ReminderUnit>> = combine(_filter, _searchQuery, allFlow, tasksFlow, memosFlow, completedFlow) { values ->
         val f = values[0] as FilterTab
         @Suppress("UNCHECKED_CAST")
@@ -134,6 +146,7 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    /** Creates an empty manual reminder or memo and lets the screen open it for editing. */
     fun addNew(isTask: Boolean) {
         val id = "r_" + UUID.randomUUID().toString().take(8)
         val now = System.currentTimeMillis()
@@ -166,6 +179,11 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
     private val _relatedNotificationsState = MutableStateFlow(RelatedNotificationsState())
     val relatedNotificationsState: StateFlow<RelatedNotificationsState> = _relatedNotificationsState
 
+    /**
+     * Loads notification context linked to a reminder for provenance/preview UI.
+     *
+     * This is read-only reminder context; edits to reminders or notifications should use their own repository paths.
+     */
     fun loadRelatedNotifications(reminder: ReminderUnit) {
         val current = _relatedNotificationsState.value
         if (current.reminderId == reminder.reminderId && current.isLoading) return

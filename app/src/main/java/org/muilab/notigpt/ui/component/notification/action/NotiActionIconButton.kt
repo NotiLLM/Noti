@@ -16,6 +16,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 
+/**
+ * Icon button for one Android notification action.
+ *
+ * Keep this component focused on rendering and click dispatch. Action execution belongs to the drawer
+ * ViewModel/service path because it may interact with Android PendingIntents.
+ */
 @Composable
 fun NotiActionIconButton(
     @DrawableRes iconRes: Int,

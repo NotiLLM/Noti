@@ -36,6 +36,12 @@ import org.muilab.notigpt.ui.viewmodel.DrawerViewModel
 import org.muilab.notigpt.ui.viewmodel.DrawerViewModelFactory
 import org.muilab.notigpt.util.SharedPreferencesManager
 
+/**
+ * Settings route for runtime configuration, account integrations, and developer controls.
+ *
+ * Keep settings grouped by user-visible concern. Side effects should call platform/repository helpers rather than
+ * being embedded as long-running work in composables.
+ */
 @RequiresApi(Build.VERSION_CODES.S)
 @Composable
 fun SettingsScreen() {

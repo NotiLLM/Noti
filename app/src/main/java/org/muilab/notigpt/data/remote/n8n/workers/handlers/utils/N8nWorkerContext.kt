@@ -26,10 +26,12 @@ internal class N8nWorkerContext(
         ReminderRepository(database.reminderListDao(), appContext)
     }
 
-    /**
-     * Returns the current active extraction-preference statements formatted
-     * for inclusion in n8n webhook payloads.
-     */
+/**
+ * Shared dependency and payload helper context for n8n worker handlers.
+ *
+ * Handlers should use this context for repository access and common preference/user-context payloads. Keep it as
+ * a convenience boundary, not a place for workflow-specific business logic.
+ */
     suspend fun getExtractionPreferencesPayload(): List<Map<String, String>> {
         return try {
             database.extractionPreferenceDao().getAllPreferences().map { p ->

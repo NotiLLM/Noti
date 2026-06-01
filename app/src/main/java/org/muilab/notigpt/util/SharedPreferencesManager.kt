@@ -4,6 +4,12 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.core.content.edit
 
+/**
+ * SharedPreferences wrapper for app configuration and lightweight persisted flags.
+ *
+ * Initialize once with application context before use. Prefer Room or repositories for structured feature data;
+ * this manager is for small key-value settings.
+ */
 object SharedPreferencesManager {
 
     private const val KEY_LOCAL_PREFS = "local"
@@ -11,6 +17,7 @@ object SharedPreferencesManager {
     private lateinit var localSharedPrefs: SharedPreferences
     private lateinit var serverSharedPrefs: SharedPreferences
 
+    /** Stores application context for subsequent typed preference reads and writes. */
     fun init(context: Context) {
         localSharedPrefs = context.getSharedPreferences("local", Context.MODE_PRIVATE)
         serverSharedPrefs = context.getSharedPreferences("server", Context.MODE_PRIVATE)

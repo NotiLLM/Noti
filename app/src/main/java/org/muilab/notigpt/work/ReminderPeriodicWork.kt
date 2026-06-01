@@ -14,6 +14,12 @@ import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit
 
+/**
+ * Scheduling helper for the reminder scan/extraction safety-net worker.
+ *
+ * Keep unique WorkManager names and enqueue policy here so the app can schedule or kick reminder processing from
+ * multiple entry points without duplicating worker setup.
+ */
 object ReminderPeriodicWork {
 
     private const val TAG = "ReminderPeriodicWork"

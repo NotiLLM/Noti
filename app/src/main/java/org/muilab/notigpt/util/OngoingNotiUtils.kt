@@ -24,6 +24,12 @@ import kotlinx.coroutines.launch
 import org.muilab.notigpt.MainActivity
 import org.muilab.notigpt.database.room.AppDatabase
 
+/**
+ * Helpers for the app's persistent foreground-style status notification.
+ *
+ * Keep notification-channel creation, icon rendering, and status posting here. Business counts and unread rules
+ * should come from repositories before reaching this utility.
+ */
 fun createNotificationChannel(context: Context) {
     val channelId = "notigpt_all"
     val channelName = "NotiGPT All"
@@ -85,6 +91,11 @@ fun createCountIcon(context: Context, number: Int, hasNotRead: Boolean): Bitmap 
     return bitmap
 }
 
+/**
+ * Posts or refreshes the persistent app status notification with active/unread counts.
+ *
+ * Keep count reads here lightweight; any richer business state should be computed before this utility is called.
+ */
 @RequiresApi(Build.VERSION_CODES.S)
 fun postOngoingNotification(context: Context) {
 

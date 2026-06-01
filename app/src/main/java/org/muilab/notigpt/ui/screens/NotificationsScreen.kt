@@ -47,6 +47,12 @@ import sh.calvin.reorderable.rememberReorderableLazyListState
 
 private const val HISTORY_PAGE_SIZE = 20
 
+/**
+ * Main screen for browsing, searching, grouping, and acting on captured notifications.
+ *
+ * This screen wires drawer ViewModel state into notification and group cards. Keep persistent mutations behind
+ * DrawerViewModel callbacks and use screen-local state only for temporary UI concerns.
+ */
 @RequiresApi(Build.VERSION_CODES.S)
 @OptIn(ExperimentalFoundationApi::class)
 @Composable

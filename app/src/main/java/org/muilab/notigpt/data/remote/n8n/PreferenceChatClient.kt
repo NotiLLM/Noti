@@ -11,10 +11,10 @@ import org.muilab.notigpt.model.features.ConflictDto
 import org.muilab.notigpt.model.features.ProposedActionDto
 
 /**
- * Direct (non-WorkManager) client for the Chat-Interact n8n endpoint.
+ * Direct client for preference-chat interactions with the n8n backend.
  *
- * Chat needs a synchronous response to render inline, so we call Retrofit
- * suspend functions directly from the ViewModel coroutine scope.
+ * This client normalizes flexible webhook responses into app DTOs. Keep UI state and persistence outside it so
+ * chat flows can evolve without coupling Retrofit parsing to ViewModels.
  */
 object PreferenceChatClient {
 

@@ -4,7 +4,12 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 
-/** Simple wrapper around system clipboard (helps keep UI code tidy and testable). */
+/**
+ * Platform boundary for copying text to the Android clipboard.
+ *
+ * UI components depend on this interface so clipboard behavior can be tested or replaced without importing
+ * Android clipboard APIs throughout Compose code.
+ */
 interface ClipboardController {
     fun copyPlainText(label: String, text: String)
 }

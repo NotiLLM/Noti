@@ -12,13 +12,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
- * Manages Google Sign-In for Google Tasks API access.
+ * Platform boundary for Google Tasks sign-in and credential access.
  *
- * Usage:
- * 1. Call [getSignInIntent] to get the sign-in intent.
- * 2. Launch the intent with ActivityResultLauncher.
- * 3. Call [handleSignInResult] with the result intent.
- * 4. Use [getAccount] to check if user is signed in.
+ * Keep GoogleSignIn option construction and account/token lookup here. Task sync code should consume this API
+ * instead of reaching into Android/Google auth classes directly.
  */
 object GoogleTasksAuthManager {
 

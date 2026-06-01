@@ -7,9 +7,10 @@ import org.muilab.notigpt.domain.action.NotiActionType
 import org.muilab.notigpt.repository.NotiRepository
 
 /**
- * Grouping/merge actions extracted from DrawerViewModel.
+ * Controller for group membership, expansion, naming, and drag-related grouping actions.
  *
- * Keeps the VM surface smaller; all actions remain side-effecting and run on IO.
+ * Keep group mutations centralized here so cards and drag handles only emit user intent. Ordering/grouping
+ * persistence should flow through repository methods rather than direct UI model edits.
  */
 internal class DrawerGroupingActions(
     private val scope: CoroutineScope,

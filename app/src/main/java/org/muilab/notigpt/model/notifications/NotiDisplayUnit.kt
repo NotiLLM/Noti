@@ -1,5 +1,11 @@
 package org.muilab.notigpt.model.notifications
 
+/**
+ * In-memory display aggregate for one active drawer notification and its recent records.
+ *
+ * This is not a Room entity. Keep it as the UI-facing join between NotiUnit and NotiRecord so DAOs can
+ * stay normalized while cards receive the context they need.
+ */
 class NotiDisplayUnit (
     val notiUnit: NotiUnit,
     val notiRecords: List<NotiRecord>,

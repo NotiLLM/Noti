@@ -4,6 +4,12 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+/**
+ * Time formatting helpers for n8n request payloads.
+ *
+ * Keep backend-oriented ISO and relative-time strings here. UI-facing time formatting belongs in UI utility
+ * code so payload language and visual language can change independently.
+ */
 internal object N8nTimeUtils {
 
     fun isoTime(timeMs: Long): String {

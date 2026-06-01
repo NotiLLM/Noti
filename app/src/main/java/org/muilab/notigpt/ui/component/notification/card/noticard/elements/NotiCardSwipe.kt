@@ -21,6 +21,12 @@ import kotlin.math.max
 
 private const val ACTIONS_REVEAL_EXTRA_DP = 8
 
+/**
+ * Swipe gesture handler for one notification card.
+ *
+ * Keep gesture thresholds and translation math here, while action execution remains callback-driven. If group
+ * and notification swipe rules converge, extract shared gesture policy rather than duplicating thresholds.
+ */
 fun Modifier.notiCardSwipeHandler(
     enabled: Boolean,
     endActionsWidth: Float,

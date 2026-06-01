@@ -2,6 +2,12 @@ package org.muilab.notigpt.model.notifications
 
 import androidx.room.DatabaseView
 
+/**
+ * Room view model for notification records that are currently eligible for active context display.
+ *
+ * Keep this as a query projection over NotiRecord rather than a separately written table. If visibility
+ * rules change, update the backing view/migration and DAO queries together.
+ */
 @DatabaseView("""
     SELECT * FROM noti_record WHERE isDismissed = 0
 """)

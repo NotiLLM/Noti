@@ -20,6 +20,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.muilab.notigpt.model.notifications.NotiUnit
 
+/**
+ * Dropdown for user feedback on notification extraction/classification.
+ *
+ * This component should remain a UI affordance over a NotiUnit. If feedback becomes durable training data,
+ * move write logic behind a repository instead of storing side effects in the composable.
+ */
 @Composable
 fun NotiFeedbackDropdown(context: Context, notiUnit: NotiUnit, isDropdownMenuExpanded: MutableState<Boolean>) {
 

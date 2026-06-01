@@ -9,8 +9,10 @@ import org.muilab.notigpt.model.notifications.NotiUnit
 import org.muilab.notigpt.repository.NotiRepository
 
 /**
- * Search-related state and operations extracted from DrawerViewModel.
- * Keeps ViewModel focused on UI state wiring + delegation.
+ * Controller for drawer search and contextual record loading around a notification key.
+ *
+ * Keep search-result state and gap loading here so notification cards do not query Room directly. If reminder
+ * context loading starts sharing this logic, extract a repository-level record-context service.
  */
 class DrawerSearchController(
     private val notiRepository: NotiRepository,

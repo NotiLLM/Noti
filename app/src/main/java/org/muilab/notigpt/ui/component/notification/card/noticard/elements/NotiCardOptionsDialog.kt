@@ -22,6 +22,12 @@ import androidx.compose.ui.unit.dp
 import org.muilab.notigpt.R
 import org.muilab.notigpt.ui.viewmodel.DrawerViewModel
 
+/**
+ * Options dialog and transient dialog state for one notification card.
+ *
+ * Keep dialog-local visibility and text input here. Persisted actions such as grouping, renaming, or feedback
+ * should continue flowing through callbacks owned by the screen/ViewModel.
+ */
 data class NotiCardOptionsState(
     val isInGroup: Boolean,
     val isPinned: Boolean,

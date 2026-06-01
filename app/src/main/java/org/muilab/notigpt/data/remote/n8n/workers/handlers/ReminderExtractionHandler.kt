@@ -25,8 +25,22 @@ import java.util.Locale
 import java.util.TimeZone
 import java.util.UUID
 
+/**
+ * Worker handler for reminder extraction over selected notification records.
+ *
+ * This is the largest n8n workflow bridge: it builds record context, calls extraction, merges snapshot payloads,
+ * and persists reminder/subtask results. Keep helper functions near the handler until a stable domain service
+ * boundary emerges.
+ */
 internal object ReminderExtractionHandler {
 
+    /**
+     * Runs one extraction job from WorkManager input through remote n8n output and local Room writes.
+     *
+     * User-triggered extraction uses the UI-selected records, while periodic extraction claims eligible
+     * records before sending them. Keep those two paths visible in this function unless they are split
+     * into separate handlers with the same snapshot/provenance guarantees.
+     */
     suspend fun handle(ctx: N8nWorkerContext, inputData: Data): ListenableWorker.Result {
         val gson = Gson()
 
@@ -691,8 +705,14 @@ internal object ReminderExtractionHandler {
         return ctx.success()
     }
 
+    /**
+     * Converts n8n deadline/start/end timestamps into local epoch millis.
+     *
+     * Keep the no-deadline sentinel handling here so response parsing does not scatter timestamp
+     * edge cases across reminder construction code.
+     */
     fun isoToUnixMillis(iso: String): Long {
-        if (iso == "-1") return -1L  // your "no deadline" sentinel
+        if (iso == "-1") return -1L  // no-deadline sentinel from the n8n response schema
 
         // Most common: has an offset like +08:00 or ends with Z
         return try {
@@ -703,6 +723,12 @@ internal object ReminderExtractionHandler {
         }
     }
 
+    /**
+     * Reads record provenance from a v2 reminder snapshot payload.
+     *
+     * This exists only for merging old and new extraction context during reminder updates. If more
+     * callers need it, move this wrapper to ReminderSnapshotPayload and keep this handler orchestration-only.
+     */
     private fun parseRecordIdsFromSnapshotPayload(payloadJson: String): Pair<Set<String>, Map<String, Set<String>>?> {
         return try {
             val obj = JSONObject(payloadJson)

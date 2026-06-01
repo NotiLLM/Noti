@@ -4,6 +4,12 @@ import org.muilab.notigpt.model.notifications.NotiAction
 import org.muilab.notigpt.model.notifications.NotiRecord
 import org.muilab.notigpt.model.notifications.NotiUnit
 
+/**
+ * Mapping helpers from local notification models to n8n request payload fragments.
+ *
+ * Keep payload shape decisions here so worker enqueue/handler code does not duplicate notification serialization
+ * rules. Returns null from record serialization when a notification has no content context.
+ */
 fun toN8nNotiRecords(notiUnit: NotiUnit, notiRecords: List<NotiRecord>): Map<String, Any>? {
 
     val currentBody = notiRecords
