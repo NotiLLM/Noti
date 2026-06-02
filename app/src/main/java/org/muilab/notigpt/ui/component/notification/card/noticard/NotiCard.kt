@@ -288,7 +288,8 @@ fun NotiCard(
                             packageName = notiUnit.metadata.pkgName,
                             logTag = "AccessNotification",
                         )
-                        NotiListenerService.removeIntents(notiUnit.notiKey)
+                        if (!isPinned)
+                            NotiListenerService.removeIntents(notiUnit.notiKey)
                         drawerViewModel.actOnNoti(notiKey, "access_click_dismiss")
                     },
                     onLongClick = {

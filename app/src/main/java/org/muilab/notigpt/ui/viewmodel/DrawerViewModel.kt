@@ -241,7 +241,8 @@ class DrawerViewModel(
             packageName = notiUnit.metadata.pkgName,
             logTag = "DrawerViewModel",
         )
-
+        if (!notiUnit.isPinned)
+            NotiListenerService.removeIntents(notiUnit.notiKey)
         // Log action
         actOnNoti(notiUnit.notiKey, NotiActionType.AccessClickSearch)
     }
