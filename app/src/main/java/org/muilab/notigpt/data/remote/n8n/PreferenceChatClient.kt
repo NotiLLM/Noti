@@ -5,10 +5,10 @@ import com.google.gson.Gson
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.muilab.notigpt.BuildConfig
-import org.muilab.notigpt.model.features.ChatInteractRequest
-import org.muilab.notigpt.model.features.ChatInteractResponse
-import org.muilab.notigpt.model.features.ConflictDto
-import org.muilab.notigpt.model.features.ProposedActionDto
+import org.muilab.notigpt.data.remote.n8n.dto.N8nChatInteractRequestDto
+import org.muilab.notigpt.data.remote.n8n.dto.N8nChatInteractResponseDto
+import org.muilab.notigpt.data.remote.n8n.dto.N8nConflictDto
+import org.muilab.notigpt.data.remote.n8n.dto.N8nProposedActionDto
 
 /**
  * Direct client for preference-chat interactions with the n8n backend.
@@ -23,7 +23,7 @@ object PreferenceChatClient {
     /**
      * Send a chat interaction and return the parsed response, or null on failure.
      */
-    suspend fun interact(request: ChatInteractRequest): ChatInteractResponse? {
+    suspend fun interact(request: N8nChatInteractRequestDto): N8nChatInteractResponseDto? {
         val gson = Gson()
         val json = gson.toJson(request)
         Log.d(TAG, "Request: $json")
@@ -58,7 +58,7 @@ object PreferenceChatClient {
             @Suppress("UNCHECKED_CAST")
             val actionsRaw = root["proposedActions"] as? List<Map<String, Any?>> ?: emptyList()
             val actions = actionsRaw.map { m ->
-                ProposedActionDto(
+                N8nProposedActionDto(
                     actionId = m["actionId"]?.toString() ?: "",
                     type = m["type"]?.toString() ?: "ADD",
                     targetPreferenceId = m["targetPreferenceId"]?.toString(),
@@ -67,7 +67,7 @@ object PreferenceChatClient {
                     targetType = m["targetType"]?.toString(),
                 )
             }
-            ChatInteractResponse(
+            N8nChatInteractResponseDto(
                 assistantMessage = assistantMessage,
                 proposedActions = actions,
                 conflicts = parseConflicts(root),
@@ -79,11 +79,11 @@ object PreferenceChatClient {
     }
 
     @Suppress("UNCHECKED_CAST")
-    private fun parseConflicts(root: Map<*, *>): List<ConflictDto> {
+    private fun parseConflicts(root: Map<*, *>): List<N8nConflictDto> {
         val raw = root["conflicts"] as? List<Map<String, Any?>> ?: return emptyList()
         return raw.map { c ->
             val ids = (c["involvedPreferenceIds"] as? List<*>)?.mapNotNull { it?.toString() } ?: emptyList()
-            ConflictDto(
+            N8nConflictDto(
                 conflictId = c["conflictId"]?.toString() ?: "",
                 description = c["description"]?.toString() ?: "",
                 involvedPreferenceIds = ids,

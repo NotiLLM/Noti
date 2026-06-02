@@ -19,8 +19,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.muilab.notigpt.domain.notification.NotificationFilter
 import org.muilab.notigpt.model.notifications.NotiUnit
-import org.muilab.notigpt.repository.NotiRepository
-import org.muilab.notigpt.repository.NotiRepositoryProvider
+import org.muilab.notigpt.data.repository.notification.NotiRepository
+import org.muilab.notigpt.data.repository.notification.NotiRepositoryProvider
 import org.muilab.notigpt.util.Constants.Companion.NOTI_REMOVE_DELAY
 import org.muilab.notigpt.util.SharedPreferencesManager
 import org.muilab.notigpt.util.createNotificationChannel

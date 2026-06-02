@@ -1,0 +1,62 @@
+package org.muilab.notigpt.ui.notification.component.action
+
+import android.content.Context
+import android.widget.Toast
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.MutableState
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import org.muilab.notigpt.model.notifications.NotiUnit
+
+/**
+ * Dropdown for user feedback on notification extraction/classification.
+ *
+ * This component should remain a UI affordance over a NotiUnit. If feedback becomes durable training data,
+ * move write logic behind a repository instead of storing side effects in the composable.
+ */
+@Composable
+fun NotiFeedbackDropdown(context: Context, notiUnit: NotiUnit, isDropdownMenuExpanded: MutableState<Boolean>) {
+
+    val scrollState = rememberScrollState()
+
+    DropdownMenu(
+        expanded = isDropdownMenuExpanded.value,
+        onDismissRequest = { isDropdownMenuExpanded.value = false },
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column {
+            Row {
+                Button(onClick = {
+                    Toast.makeText(context, "Start Updating Notification", Toast.LENGTH_SHORT).show()
+//                    enqueueUpdateNotification(context, notiUnit.notiKey)
+                    isDropdownMenuExpanded.value = false
+                }) {
+                    Text("Update Notification")
+                }
+            }
+            Box(
+                modifier = Modifier
+                    .height(150.dp) // Set fixed height to demonstrate overflow
+                    .verticalScroll(scrollState)
+                    .padding(16.dp)
+            ) {
+                Text(
+                    text = notiUnit.explanation,
+                    fontSize = 10.sp
+                )
+            }
+        }
+    }
+}

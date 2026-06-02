@@ -9,10 +9,10 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import org.muilab.notigpt.data.remote.n8n.N8nUpdateNotificationPayload
-import org.muilab.notigpt.data.remote.n8n.workers.handlers.utils.N8nWorkerContext
+import org.muilab.notigpt.data.remote.n8n.context.N8nWorkerContext
 import org.muilab.notigpt.util.SharedPreferencesManager
-import org.muilab.notigpt.util.toN8nNotiActions
-import org.muilab.notigpt.util.toN8nNotiRecords
+import org.muilab.notigpt.data.remote.n8n.mapper.toN8nNotiActions
+import org.muilab.notigpt.data.remote.n8n.mapper.toN8nNotiRecords
 
 /**
  * Handler for updating notification summaries/actions through the n8n backend.

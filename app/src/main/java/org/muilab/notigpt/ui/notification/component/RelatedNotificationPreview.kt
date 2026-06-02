@@ -1,0 +1,133 @@
+package org.muilab.notigpt.ui.notification.component
+
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import org.muilab.notigpt.R
+import org.muilab.notigpt.model.notifications.NotiDisplayUnit
+
+/**
+ * Reminder-facing preview of notification records associated with a reminder.
+ *
+ * This component renders provenance context, not the live drawer row. If it becomes a general notification
+ * card variant, merge shared rendering with the main notification-card components.
+ */
+@Composable
+fun RelatedNotificationPreview(
+    notiDisplayUnit: NotiDisplayUnit,
+    showOpenButton: Boolean = false,
+    onOpen: (() -> Unit)? = null,
+) {
+    val notiUnit = notiDisplayUnit.notiUnit
+    val notiRecords = notiDisplayUnit.notiRecords.sortedBy { it.time }
+
+    val lastRecord = notiRecords.lastOrNull()
+    val notiOverallTitle = when {
+        lastRecord != null && lastRecord.extraConversationTitle != "null" -> lastRecord.extraConversationTitle
+        notiDisplayUnit.title != "null" -> notiDisplayUnit.title
+        lastRecord != null && lastRecord.extraSubText != "null" -> lastRecord.extraSubText
+        else -> ""
+    }
+    val notiSecondOverallTitle = when {
+        lastRecord != null && lastRecord.extraConversationTitle != "null" && notiDisplayUnit.title != "null" -> notiDisplayUnit.title
+        lastRecord != null && lastRecord.extraConversationTitle == "null" && notiDisplayUnit.title != "null" && lastRecord.extraSubText != "null" -> lastRecord.extraSubText
+        lastRecord != null && lastRecord.extraConversationTitle == "null" && notiDisplayUnit.title != "null" -> ""
+        else -> ""
+    }
+    val hasSecondTitle = notiSecondOverallTitle.isNotBlank() && notiSecondOverallTitle != notiOverallTitle
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+        color = MaterialTheme.colorScheme.surface,
+    ) {
+        Column {
+            val displayTitle = notiOverallTitle.ifBlank { notiUnit.appName }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                val bitmap = notiUnit.bitmap
+                if (bitmap != null) {
+                    Image(
+                        bitmap = bitmap.asImageBitmap(),
+                        contentDescription = "App icon",
+                        modifier = Modifier.size(28.dp),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                }
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = displayTitle,
+                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.ExtraBold),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        fontSize = 14.sp,
+                    )
+                    if (hasSecondTitle) {
+                        Text(
+                            text = notiSecondOverallTitle,
+                            style = MaterialTheme.typography.labelSmall.copy(fontStyle = FontStyle.Italic),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+
+                if (showOpenButton && onOpen != null) {
+                    IconButton(onClick = onOpen) {
+                        Icon(
+                            painterResource(R.drawable.external_access),
+                            contentDescription = "Open",
+                        )
+                    }
+                }
+            }
+
+            val recordsToShow = if (notiRecords.size > 30) notiRecords.takeLast(30) else notiRecords
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+            ) {
+                recordsToShow.forEachIndexed { idx, record ->
+                    val content = record.content
+                    if (content.isBlank() || content == "null") return@forEachIndexed
+                    if (idx != 0) Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = content,
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
+        }
+    }
+}

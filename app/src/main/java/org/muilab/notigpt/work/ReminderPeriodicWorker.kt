@@ -4,7 +4,7 @@ import android.content.Context
 import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
-import org.muilab.notigpt.database.room.AppDatabase
+import org.muilab.notigpt.data.local.room.AppDatabase
 import org.muilab.notigpt.data.remote.n8n.enqueueTaskExtraction
 import org.muilab.notigpt.data.remote.n8n.enqueueTaskScan
 

@@ -6,7 +6,7 @@ import androidx.work.ListenableWorker
 import com.google.gson.Gson
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
-import org.muilab.notigpt.data.remote.n8n.workers.handlers.utils.N8nWorkerContext
+import org.muilab.notigpt.data.remote.n8n.context.N8nWorkerContext
 import org.muilab.notigpt.model.features.ExtractionPreference
 
 /**

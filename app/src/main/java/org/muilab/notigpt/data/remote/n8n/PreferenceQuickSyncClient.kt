@@ -5,11 +5,11 @@ import com.google.gson.Gson
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.muilab.notigpt.BuildConfig
-import org.muilab.notigpt.model.features.ConflictDto
+import org.muilab.notigpt.data.remote.n8n.dto.N8nConflictDto
 import org.muilab.notigpt.model.features.ExtractionPreference
-import org.muilab.notigpt.model.features.QuickSyncRequest
-import org.muilab.notigpt.model.features.QuickSyncResponse
-import org.muilab.notigpt.model.features.PreferencePlain
+import org.muilab.notigpt.data.remote.n8n.dto.N8nQuickSyncRequestDto
+import org.muilab.notigpt.data.remote.n8n.dto.N8nQuickSyncResponseDto
+import org.muilab.notigpt.data.remote.n8n.dto.N8nPreferencePlainDto
 
 /**
  * Direct client for quick-syncing local preference selections to n8n.
@@ -21,7 +21,7 @@ object PreferenceQuickSyncClient {
 
     private const val TAG = "PrefQuickSyncClient"
 
-    suspend fun sync(request: QuickSyncRequest): QuickSyncResponse? {
+    suspend fun sync(request: N8nQuickSyncRequestDto): N8nQuickSyncResponseDto? {
         val gson = Gson()
         val json = gson.toJson(request)
         Log.d(TAG, "Request: $json")
@@ -57,7 +57,7 @@ object PreferenceQuickSyncClient {
             @Suppress("UNCHECKED_CAST")
             val prefsRaw = root["updatedPreferences"] as? List<Map<String, Any>> ?: emptyList()
             val prefs = prefsRaw.map { m ->
-                PreferencePlain(
+                N8nPreferencePlainDto(
                     id = m["id"]?.toString() ?: "",
                     statement = m["statement"]?.toString() ?: "",
                     type = m["type"]?.toString() ?: "",
@@ -69,14 +69,14 @@ object PreferenceQuickSyncClient {
             val conflicts = conflictsRaw.map { c ->
                 @Suppress("UNCHECKED_CAST")
                 val ids = (c["involvedPreferenceIds"] as? List<*>)?.mapNotNull { it?.toString() } ?: emptyList()
-                ConflictDto(
+                N8nConflictDto(
                     conflictId = c["conflictId"]?.toString() ?: "",
                     description = c["description"]?.toString() ?: "",
                     involvedPreferenceIds = ids,
                 )
             }
 
-            QuickSyncResponse(
+            N8nQuickSyncResponseDto(
                 status = status,
                 updatedPreferences = prefs,
                 toastMessage = toastMessage,

@@ -22,7 +22,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import org.muilab.notigpt.MainActivity
-import org.muilab.notigpt.database.room.AppDatabase
+import org.muilab.notigpt.data.local.room.AppDatabase
 
 /**
  * Helpers for the app's persistent foreground-style status notification.

@@ -18,13 +18,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import androidx.core.app.NotificationManagerCompat
-import org.muilab.notigpt.repository.NotiRepositoryProvider
+import org.muilab.notigpt.data.repository.notification.NotiRepositoryProvider
 import org.muilab.notigpt.service.NotiListenerService
 import org.muilab.notigpt.ui.theme.NotiTheme
 import org.muilab.notigpt.util.SharedPreferencesManager
-import org.muilab.notigpt.ui.component.AppScaffold
-import org.muilab.notigpt.ui.viewmodel.DrawerViewModel
-import org.muilab.notigpt.ui.viewmodel.DrawerViewModelFactory
+import org.muilab.notigpt.ui.common.component.AppScaffold
+import org.muilab.notigpt.ui.notification.viewmodel.DrawerViewModel
+import org.muilab.notigpt.ui.notification.viewmodel.DrawerViewModelFactory
 import org.muilab.notigpt.work.ReminderPeriodicWork
 
 /**

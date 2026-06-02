@@ -9,8 +9,8 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
-import org.muilab.notigpt.data.remote.n8n.workers.handlers.utils.N8nRecordFormatter
-import org.muilab.notigpt.data.remote.n8n.workers.handlers.utils.N8nWorkerContext
+import org.muilab.notigpt.data.remote.n8n.formatter.N8nRecordFormatter
+import org.muilab.notigpt.data.remote.n8n.context.N8nWorkerContext
 import org.muilab.notigpt.domain.reminder.ReminderSnapshotStatuses
 import org.muilab.notigpt.model.features.ReminderExtractionSnapshot
 import org.muilab.notigpt.model.features.ReminderUnit
