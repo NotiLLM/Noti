@@ -776,7 +776,7 @@ object AppDatabaseMigrations {
         override fun migrate(db: SupportSQLiteDatabase) {
             db.execSQL("ALTER TABLE saved_item ADD COLUMN state TEXT NOT NULL DEFAULT 'saved'")
             db.execSQL("UPDATE saved_item SET state = CASE WHEN itemType = 'task' AND isCompleted = 1 THEN 'completed' ELSE 'saved' END WHERE state = 'saved'")
-            db.execSQL("ALTER TABLE noti_record ADD COLUMN isNew INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE noti_record ADD COLUMN isNew INTEGER NOT NULL DEFAULT 1")
         }
     }
 
