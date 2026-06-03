@@ -6,19 +6,24 @@ import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.rememberDrawerState
+import androidx.compose.material3.DrawerValue
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Modifier
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.platform.LocalContext
@@ -32,6 +37,8 @@ import org.muilab.notigpt.ui.settings.SettingsScreen
 import org.muilab.notigpt.ui.preference.component.PreferenceLearningBottomSheet
 import org.muilab.notigpt.ui.preference.screen.PreferenceChatScreen
 import org.muilab.notigpt.ui.reminder.screen.RemindersScreen
+import org.muilab.notigpt.ui.common.navigation.AppMenuScreen
+import org.muilab.notigpt.ui.common.navigation.AppPrimaryTab
 import org.muilab.notigpt.ui.notification.viewmodel.DrawerViewModel
 import org.muilab.notigpt.ui.preference.viewmodel.PreferenceViewModel
 import org.muilab.notigpt.ui.reminder.viewmodel.ReminderViewModel
@@ -51,17 +58,19 @@ fun AppScaffold(
     Log.d("AppScaffold", "composed with DrawerViewModel hash=${drawerViewModel.hashCode()}")
 
     var isSearchExpanded by remember { mutableStateOf(false) }
-    var isSettingsShown by remember { mutableStateOf(false) }
+    var menuScreen by remember { mutableStateOf<AppMenuScreen?>(null) }
+    val drawerState = rememberDrawerState(DrawerValue.Closed)
+    val scope = rememberCoroutineScope()
 
     val context = LocalContext.current
 
-    var selectedTab by remember { mutableStateOf(org.muilab.notigpt.ui.common.appbar.Tab.Notifications) }
+    var selectedTab by remember { mutableStateOf(AppPrimaryTab.Notifications) }
 
     val reminderViewModel: ReminderViewModel = viewModel()
     val preferenceViewModel: PreferenceViewModel = viewModel()
 
     val unreadNotiCount by drawerViewModel.unreadActiveCount.collectAsState()
-    val reminderList by reminderViewModel.reminders.collectAsState()
+    val reminderList by reminderViewModel.allReminders.collectAsState()
     val pendingTaskCount = remember(reminderList) {
         reminderList.count { it.isTask && !it.isCompleted }
     }
@@ -111,7 +120,8 @@ fun AppScaffold(
     val navigateToChat by preferenceViewModel.navigateToChat.collectAsState()
     LaunchedEffect(navigateToChat) {
         if (navigateToChat) {
-            selectedTab = org.muilab.notigpt.ui.common.appbar.Tab.Preferences
+            menuScreen = AppMenuScreen.Preferences
+            isSearchExpanded = false
             preferenceViewModel.onChatNavigated()
         }
     }
@@ -152,58 +162,88 @@ fun AppScaffold(
     // Show BottomSheet for preference learning (only EDIT opens this directly now)
     PreferenceLearningBottomSheet(preferenceViewModel = preferenceViewModel)
 
-    Scaffold(
-        topBar = {
-            AppTopBar(
-                drawerViewModel = drawerViewModel,
-                isSearchExpanded = isSearchExpanded,
-                onSearchToggled = { isSearchExpanded = it },
-                isSettingsShown = isSettingsShown,
-                onSettingsShown = {
-                    // Leaving Notifications into Settings: persist read marks.
-                    if (selectedTab == org.muilab.notigpt.ui.common.appbar.Tab.Notifications && it) {
-                        drawerViewModel.persistReadStatus()
-                    }
-                    isSettingsShown = it
-                },
-                showNotificationActions = selectedTab == org.muilab.notigpt.ui.common.appbar.Tab.Notifications
+    val menuScreenTitle = when (menuScreen) {
+        AppMenuScreen.Preferences -> stringResource(R.string.tab_preferences)
+        AppMenuScreen.Settings -> stringResource(R.string.menu_settings)
+        null -> null
+    }
+
+    val openMenuScreen: (AppMenuScreen) -> Unit = { screen ->
+        // Leaving Notifications into a secondary screen: persist read marks.
+        if (selectedTab == AppPrimaryTab.Notifications) {
+            drawerViewModel.persistReadStatus()
+        }
+        menuScreen = screen
+        drawerViewModel.updateQueryString("")
+        isSearchExpanded = false
+        scope.launch { drawerState.close() }
+    }
+
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        gesturesEnabled = menuScreen == null,
+        drawerContent = {
+            AppDrawerContent(
+                unresolvedConflictCount = unresolvedConflicts.size,
+                onMenuScreenSelected = openMenuScreen,
             )
         },
-        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
-        bottomBar = {
-            if (!isSettingsShown) {
-                org.muilab.notigpt.ui.common.appbar.AppBottomBar(
-                    selectedTab = selectedTab,
-                    unreadNotificationCount = unreadNotiCount,
-                    pendingTaskCount = pendingTaskCount,
-                    unresolvedConflictCount = unresolvedConflicts.size,
-                    onTabSelected = { tab ->
-                        // Leaving Notifications: persist any pending read marks so border colors update.
-                        if (selectedTab == org.muilab.notigpt.ui.common.appbar.Tab.Notifications && tab != selectedTab) {
-                            drawerViewModel.persistReadStatus()
-                        }
-                        selectedTab = tab
-                        drawerViewModel.updateQueryString("")
-                        isSearchExpanded = false
-                    }
+    ) {
+        Scaffold(
+            topBar = {
+                AppTopBar(
+                    drawerViewModel = drawerViewModel,
+                    isSearchExpanded = isSearchExpanded,
+                    onSearchToggled = { isSearchExpanded = it },
+                    showMenuButton = menuScreen == null,
+                    onMenuClicked = { scope.launch { drawerState.open() } },
+                    menuScreenTitle = menuScreenTitle,
+                    onMenuScreenClosed = { menuScreen = null },
+                    showNotificationActions = menuScreen == null && selectedTab == AppPrimaryTab.Notifications
                 )
-            }
-        },
-        containerColor = MaterialTheme.colorScheme.surfaceDim
-    ) { paddingValues ->
-        Box(modifier = Modifier.padding(paddingValues)) {
-            if (isSettingsShown) {
-                SettingsScreen()
-            } else {
-                when (selectedTab) {
-                    org.muilab.notigpt.ui.common.appbar.Tab.Notifications -> HomeScreen(drawerViewModel = drawerViewModel)
-                    org.muilab.notigpt.ui.common.appbar.Tab.Reminders -> RemindersScreen(
-                        drawerViewModel = drawerViewModel,
+            },
+            snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
+            bottomBar = {
+                if (menuScreen == null) {
+                    org.muilab.notigpt.ui.common.appbar.AppBottomBar(
+                        selectedTab = selectedTab,
+                        unreadNotificationCount = unreadNotiCount,
+                        pendingTaskCount = pendingTaskCount,
+                        onTabSelected = { tab ->
+                            // Leaving Notifications: persist any pending read marks so border colors update.
+                            if (selectedTab == AppPrimaryTab.Notifications && tab != selectedTab) {
+                                drawerViewModel.persistReadStatus()
+                            }
+                            selectedTab = tab
+                            drawerViewModel.updateQueryString("")
+                            isSearchExpanded = false
+                        }
+                    )
+                }
+            },
+            containerColor = MaterialTheme.colorScheme.surfaceDim
+        ) { paddingValues ->
+            Box(modifier = Modifier.padding(paddingValues)) {
+                when (menuScreen) {
+                    AppMenuScreen.Preferences -> PreferenceChatScreen(
                         preferenceViewModel = preferenceViewModel,
                     )
-                    org.muilab.notigpt.ui.common.appbar.Tab.Preferences -> PreferenceChatScreen(
-                        preferenceViewModel = preferenceViewModel,
-                    )
+                    AppMenuScreen.Settings -> SettingsScreen()
+                    null -> when (selectedTab) {
+                        AppPrimaryTab.Notifications -> HomeScreen(drawerViewModel = drawerViewModel)
+                        AppPrimaryTab.Tasks -> RemindersScreen(
+                            drawerViewModel = drawerViewModel,
+                            reminderViewModel = reminderViewModel,
+                            preferenceViewModel = preferenceViewModel,
+                            listMode = ReminderViewModel.ListMode.Tasks,
+                        )
+                        AppPrimaryTab.Keep -> RemindersScreen(
+                            drawerViewModel = drawerViewModel,
+                            reminderViewModel = reminderViewModel,
+                            preferenceViewModel = preferenceViewModel,
+                            listMode = ReminderViewModel.ListMode.Keep,
+                        )
+                    }
                 }
             }
         }

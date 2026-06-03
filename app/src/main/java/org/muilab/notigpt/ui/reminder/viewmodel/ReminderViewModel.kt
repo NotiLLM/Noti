@@ -36,6 +36,7 @@ import java.util.UUID
 class ReminderViewModel(application: Application) : AndroidViewModel(application) {
 
     enum class FilterTab { All, Tasks, Memos, Completed }
+    enum class ListMode { All, Tasks, Keep }
 
     /**
      * Result of Google Tasks export operation.
@@ -68,6 +69,13 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
         _filter.value = tab
     }
 
+    private val _listMode = MutableStateFlow(ListMode.All)
+    val listMode: StateFlow<ListMode> = _listMode
+
+    fun setListMode(mode: ListMode) {
+        _listMode.value = mode
+    }
+
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery
 
@@ -80,30 +88,41 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
     private val memosFlow = repo.observeMemos()
     private val completedFlow = repo.observeCompletedTasks()
 
+    val allReminders: StateFlow<List<ReminderUnit>> = allFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
     /**
      * Filtered reminder list consumed by RemindersScreen.
      *
      * Search terms are split on '+', then AND-matched against title and content so users can narrow noisy reminder
      * lists without changing persisted reminder data.
      */
-    val reminders: StateFlow<List<ReminderUnit>> = combine(_filter, _searchQuery, allFlow, tasksFlow, memosFlow, completedFlow) { values ->
+    val reminders: StateFlow<List<ReminderUnit>> = combine(_filter, _searchQuery, _listMode, allFlow, tasksFlow, memosFlow, completedFlow) { values ->
         val f = values[0] as FilterTab
         @Suppress("UNCHECKED_CAST")
         val query = values[1] as String
+        val mode = values[2] as ListMode
         @Suppress("UNCHECKED_CAST")
-        val all = values[2] as List<ReminderUnit>
+        val all = values[3] as List<ReminderUnit>
         @Suppress("UNCHECKED_CAST")
-        val tasks = values[3] as List<ReminderUnit>
+        val tasks = values[4] as List<ReminderUnit>
         @Suppress("UNCHECKED_CAST")
-        val memos = values[4] as List<ReminderUnit>
+        val memos = values[5] as List<ReminderUnit>
         @Suppress("UNCHECKED_CAST")
-        val completed = values[5] as List<ReminderUnit>
+        val completed = values[6] as List<ReminderUnit>
+
+        val modeList = when (mode) {
+            ListMode.All -> all
+            ListMode.Tasks -> tasks
+            ListMode.Keep -> memos
+        }
+        val modeIds = modeList.mapTo(mutableSetOf()) { it.reminderId }
 
         val baseList = when (f) {
-            FilterTab.All -> all
-            FilterTab.Tasks -> tasks
-            FilterTab.Memos -> memos
-            FilterTab.Completed -> completed
+            FilterTab.All -> modeList
+            FilterTab.Tasks -> tasks.filter { it.reminderId in modeIds }
+            FilterTab.Memos -> memos.filter { it.reminderId in modeIds }
+            FilterTab.Completed -> completed.filter { it.reminderId in modeIds }
         }
 
         if (query.isBlank()) {

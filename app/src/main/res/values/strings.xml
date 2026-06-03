@@ -127,8 +127,10 @@
 
     <!-- Bottom bar tabs -->
     <string name="tab_notifications">Notifications</string>
-    <string name="tab_reminders">Reminders</string>
+    <string name="tab_tasks">Task</string>
+    <string name="tab_keep">Keep</string>
     <string name="tab_preferences">Preferences</string>
+    <string name="menu_settings">Settings</string>
 
     <string name="reminder_related_notifications">Related notifications (%1$d)</string>
     <string name="reminder_related_notifications_loading">Loading reminder &amp; notifications…</string>

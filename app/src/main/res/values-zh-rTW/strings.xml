@@ -107,8 +107,10 @@
 
     <!-- Bottom bar tabs -->
     <string name="tab_notifications">通知</string>
-    <string name="tab_reminders">提醒</string>
+    <string name="tab_tasks">任務</string>
+    <string name="tab_keep">Keep</string>
     <string name="tab_preferences">偏好</string>
+    <string name="menu_settings">設定</string>
     <string name="reminder_related_notifications">相關通知（%1$d）</string>
     <string name="reminder_related_notifications_loading">正在載入提醒與相關通知…</string>
     <string name="reminder_no_related_notifications">沒有相關通知。</string>

@@ -42,22 +42,38 @@ fun AppTopBar(
     drawerViewModel: DrawerViewModel,
     isSearchExpanded: Boolean,
     onSearchToggled: (Boolean) -> Unit,
-    isSettingsShown: Boolean,
-    onSettingsShown: (Boolean) -> Unit,
+    showMenuButton: Boolean,
+    onMenuClicked: () -> Unit,
+    menuScreenTitle: String? = null,
+    onMenuScreenClosed: () -> Unit,
     showNotificationActions: Boolean = true,
 ) {
 
     val isSortingMode = drawerViewModel.isSortingMode.collectAsState()
+    val isMenuScreenShown = menuScreenTitle != null
 
     TopAppBar(
         colors = TopAppBarDefaults.topAppBarColors(
             containerColor = MaterialTheme.colorScheme.surface,
         ),
+        navigationIcon = {
+            if (showMenuButton) {
+                IconButton(
+                    modifier = Modifier.minimumInteractiveComponentSize(),
+                    onClick = onMenuClicked,
+                ) {
+                    Icon(
+                        painter = painterResource(id = R.drawable.menu),
+                        contentDescription = "Menu",
+                    )
+                }
+            }
+        },
         title = {
 
-            if (isSettingsShown) {
+            if (isMenuScreenShown) {
                 Text(
-                    text = "Settings",
+                    text = menuScreenTitle.orEmpty(),
                     style = MaterialTheme.typography.titleLarge
                 )
             } else {
@@ -89,7 +105,7 @@ fun AppTopBar(
         },
         actions = {
             // Hide actions when search is expanded to make space
-            if (!isSettingsShown) {
+            if (!isMenuScreenShown) {
                 if (!isSearchExpanded) {
 
                     if (showNotificationActions) {
@@ -125,20 +141,11 @@ fun AppTopBar(
                         }
                     }
 
-                    IconButton(
-                        modifier = Modifier.minimumInteractiveComponentSize(),
-                        onClick = { onSettingsShown(true) }
-                    ) {
-                        Icon(
-                            painter = painterResource(id = R.drawable.settings),
-                            contentDescription = "Settings"
-                        )
-                    }
                 }
             } else {
                 IconButton(
                     modifier = Modifier.minimumInteractiveComponentSize(),
-                    onClick = { onSettingsShown(false) }
+                    onClick = onMenuScreenClosed
                 ) {
                     Icon(painterResource(R.drawable.close), contentDescription = "Close Settings")
                 }

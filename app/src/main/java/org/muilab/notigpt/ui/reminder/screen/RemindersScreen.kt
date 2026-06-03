@@ -120,9 +120,15 @@ fun RemindersScreen(
     drawerViewModel: DrawerViewModel,
     reminderViewModel: ReminderViewModel? = null,
     preferenceViewModel: PreferenceViewModel? = null,
+    listMode: ReminderViewModel.ListMode = ReminderViewModel.ListMode.All,
 ) {
     val vm: ReminderViewModel = reminderViewModel ?: viewModel()
     val prefVm: PreferenceViewModel = preferenceViewModel ?: viewModel()
+
+    LaunchedEffect(listMode) {
+        vm.setListMode(listMode)
+        vm.setFilter(ReminderViewModel.FilterTab.All)
+    }
 
     // Drawer VM is needed to reuse the same notification/app launching logic as NotiRecordContextCard.
     val context = LocalContext.current
@@ -300,10 +306,21 @@ fun RemindersScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                FilterChip(stringResource(R.string.ui_reminders_filter_all), filter == ReminderViewModel.FilterTab.All) { vm.setFilter(ReminderViewModel.FilterTab.All) }
-                FilterChip(stringResource(R.string.ui_reminders_filter_tasks), filter == ReminderViewModel.FilterTab.Tasks) { vm.setFilter(ReminderViewModel.FilterTab.Tasks) }
-                FilterChip(stringResource(R.string.ui_reminders_filter_memos), filter == ReminderViewModel.FilterTab.Memos) { vm.setFilter(ReminderViewModel.FilterTab.Memos) }
-                FilterChip(stringResource(R.string.ui_reminders_filter_completed), filter == ReminderViewModel.FilterTab.Completed) { vm.setFilter(ReminderViewModel.FilterTab.Completed) }
+                when (listMode) {
+                    ReminderViewModel.ListMode.All -> {
+                        FilterChip(stringResource(R.string.ui_reminders_filter_all), filter == ReminderViewModel.FilterTab.All) { vm.setFilter(ReminderViewModel.FilterTab.All) }
+                        FilterChip(stringResource(R.string.ui_reminders_filter_tasks), filter == ReminderViewModel.FilterTab.Tasks) { vm.setFilter(ReminderViewModel.FilterTab.Tasks) }
+                        FilterChip(stringResource(R.string.ui_reminders_filter_memos), filter == ReminderViewModel.FilterTab.Memos) { vm.setFilter(ReminderViewModel.FilterTab.Memos) }
+                        FilterChip(stringResource(R.string.ui_reminders_filter_completed), filter == ReminderViewModel.FilterTab.Completed) { vm.setFilter(ReminderViewModel.FilterTab.Completed) }
+                    }
+                    ReminderViewModel.ListMode.Tasks -> {
+                        FilterChip(stringResource(R.string.ui_reminders_filter_all), filter == ReminderViewModel.FilterTab.All) { vm.setFilter(ReminderViewModel.FilterTab.All) }
+                        FilterChip(stringResource(R.string.ui_reminders_filter_completed), filter == ReminderViewModel.FilterTab.Completed) { vm.setFilter(ReminderViewModel.FilterTab.Completed) }
+                    }
+                    ReminderViewModel.ListMode.Keep -> {
+                        FilterChip(stringResource(R.string.ui_reminders_filter_all), filter == ReminderViewModel.FilterTab.All) { vm.setFilter(ReminderViewModel.FilterTab.All) }
+                    }
+                }
 
                 Spacer(Modifier.weight(1f))
 

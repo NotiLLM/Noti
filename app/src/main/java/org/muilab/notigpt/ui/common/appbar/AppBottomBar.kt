@@ -12,6 +12,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import org.muilab.notigpt.R
+import org.muilab.notigpt.ui.common.navigation.AppPrimaryTab
 
 /**
  * Bottom navigation bar and tab model for the main app shell.
@@ -49,16 +50,15 @@ private fun BadgeIcon(
 
 @Composable
 fun AppBottomBar(
-    selectedTab: Tab,
-    onTabSelected: (Tab) -> Unit,
+    selectedTab: AppPrimaryTab,
+    onTabSelected: (AppPrimaryTab) -> Unit,
     unreadNotificationCount: Int,
     pendingTaskCount: Int,
-    unresolvedConflictCount: Int = 0,
 ) {
     NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer) {
         NavigationBarItem(
-            selected = selectedTab == Tab.Notifications,
-            onClick = { onTabSelected(Tab.Notifications) },
+            selected = selectedTab == AppPrimaryTab.Notifications,
+            onClick = { onTabSelected(AppPrimaryTab.Notifications) },
             icon = {
                 BadgeIcon(
                     iconRes = R.drawable.notifications,
@@ -71,38 +71,29 @@ fun AppBottomBar(
             label = { Text(stringResource(R.string.tab_notifications)) }
         )
         NavigationBarItem(
-            selected = selectedTab == Tab.Reminders,
-            onClick = { onTabSelected(Tab.Reminders) },
+            selected = selectedTab == AppPrimaryTab.Tasks,
+            onClick = { onTabSelected(AppPrimaryTab.Tasks) },
             icon = {
                 BadgeIcon(
                     iconRes = R.drawable.task_no,
-                    contentDescription = stringResource(R.string.tab_reminders),
+                    contentDescription = stringResource(R.string.tab_tasks),
                     badgeCount = pendingTaskCount,
                     badgeColor = MaterialTheme.colorScheme.primary,
                     badgeTextColor = MaterialTheme.colorScheme.onPrimary,
                 )
             },
-            label = { Text(stringResource(R.string.tab_reminders)) }
+            label = { Text(stringResource(R.string.tab_tasks)) }
         )
         NavigationBarItem(
-            selected = selectedTab == Tab.Preferences,
-            onClick = { onTabSelected(Tab.Preferences) },
+            selected = selectedTab == AppPrimaryTab.Keep,
+            onClick = { onTabSelected(AppPrimaryTab.Keep) },
             icon = {
-                BadgeIcon(
-                    iconRes = R.drawable.task_no,
-                    contentDescription = stringResource(R.string.tab_preferences),
-                    badgeCount = unresolvedConflictCount,
-                    badgeColor = MaterialTheme.colorScheme.error,
-                    badgeTextColor = MaterialTheme.colorScheme.onError,
+                Icon(
+                    painter = painterResource(R.drawable.keep),
+                    contentDescription = stringResource(R.string.tab_keep),
                 )
             },
-            label = { Text(stringResource(R.string.tab_preferences)) }
+            label = { Text(stringResource(R.string.tab_keep)) }
         )
     }
-}
-
-enum class Tab {
-    Notifications,
-    Reminders,
-    Preferences,
 }
