@@ -774,8 +774,54 @@ object AppDatabaseMigrations {
 
     val MIGRATION_37_38 = object : Migration(37, 38) {
         override fun migrate(db: SupportSQLiteDatabase) {
-            db.execSQL("ALTER TABLE saved_item ADD COLUMN state TEXT NOT NULL DEFAULT 'saved'")
-            db.execSQL("UPDATE saved_item SET state = CASE WHEN itemType = 'task' AND isCompleted = 1 THEN 'completed' ELSE 'saved' END WHERE state = 'saved'")
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `saved_item_new` (
+                    `savedItemId` TEXT NOT NULL,
+                    `title` TEXT NOT NULL,
+                    `content` TEXT NOT NULL,
+                    `itemType` TEXT NOT NULL DEFAULT 'task',
+                    `state` TEXT NOT NULL DEFAULT 'saved',
+                    `lastUpdateTimestamp` INTEGER NOT NULL,
+                    `deadlineAtMs` INTEGER NOT NULL,
+                    `startAtMs` INTEGER NOT NULL DEFAULT 0,
+                    `endAtMs` INTEGER NOT NULL DEFAULT 0,
+                    `estimatedCompletionTime` INTEGER NOT NULL,
+                    `associatedNotis` TEXT NOT NULL,
+                    `sourceExtractionSnapshotId` TEXT,
+                    `origin` TEXT NOT NULL,
+                    `humanEditCount` INTEGER NOT NULL,
+                    `deletedAtMs` INTEGER,
+                    `userEdited` INTEGER NOT NULL,
+                    `isVisible` INTEGER NOT NULL,
+                    `buttons` TEXT NOT NULL DEFAULT '[]',
+                    `isViewed` INTEGER NOT NULL DEFAULT 1,
+                    `isPinned` INTEGER NOT NULL DEFAULT 0,
+                    `sortScore` REAL NOT NULL DEFAULT 50.0,
+                    `reRankHistory` TEXT NOT NULL DEFAULT '[]',
+                    PRIMARY KEY(`savedItemId`)
+                )
+                """.trimIndent()
+            )
+            db.execSQL(
+                """
+                INSERT INTO `saved_item_new` (
+                    savedItemId, title, content, itemType, state, lastUpdateTimestamp,
+                    deadlineAtMs, startAtMs, endAtMs, estimatedCompletionTime, associatedNotis,
+                    sourceExtractionSnapshotId, origin, humanEditCount, deletedAtMs, userEdited,
+                    isVisible, buttons, isViewed, isPinned, sortScore, reRankHistory
+                )
+                SELECT
+                    savedItemId, title, content, itemType,
+                    CASE WHEN itemType = 'task' AND isCompleted = 1 THEN 'completed' ELSE 'saved' END,
+                    lastUpdateTimestamp, deadlineAtMs, startAtMs, endAtMs, estimatedCompletionTime,
+                    associatedNotis, sourceExtractionSnapshotId, origin, humanEditCount, deletedAtMs,
+                    userEdited, isVisible, buttons, isViewed, isPinned, sortScore, reRankHistory
+                FROM `saved_item`
+                """.trimIndent()
+            )
+            db.execSQL("DROP TABLE `saved_item`")
+            db.execSQL("ALTER TABLE `saved_item_new` RENAME TO `saved_item`")
             db.execSQL("ALTER TABLE noti_record ADD COLUMN isNew INTEGER NOT NULL DEFAULT 1")
         }
     }
