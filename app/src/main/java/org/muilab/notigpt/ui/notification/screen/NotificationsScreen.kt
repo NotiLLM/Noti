@@ -33,14 +33,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.muilab.notigpt.R
-import org.muilab.notigpt.model.notifications.NotiDrawerItem
-import org.muilab.notigpt.model.notifications.NotiGroupItem
-import org.muilab.notigpt.model.notifications.NotiItem
+import org.muilab.notigpt.model.notifications.NotiDisplayUnit
 import org.muilab.notigpt.model.notifications.NotiRecord
-import org.muilab.notigpt.ui.notification.state.DragState
-import org.muilab.notigpt.ui.notification.component.card.groupcard.GroupCard
 import org.muilab.notigpt.ui.notification.component.card.noticard.NotiCard
 import org.muilab.notigpt.ui.notification.component.card.notirecord.NotiRecordContextCard
+import org.muilab.notigpt.ui.notification.state.DragState
 import org.muilab.notigpt.ui.notification.viewmodel.DrawerViewModel
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
@@ -48,10 +45,10 @@ import sh.calvin.reorderable.rememberReorderableLazyListState
 private const val HISTORY_PAGE_SIZE = 20
 
 /**
- * Main screen for browsing, searching, grouping, and acting on captured notifications.
+ * Main screen for browsing, searching, sorting, and acting on captured notifications.
  *
- * This screen wires drawer ViewModel state into notification and group cards. Keep persistent mutations behind
- * DrawerViewModel callbacks and use screen-local state only for temporary UI concerns.
+ * This screen renders active NotiDisplayUnit rows directly. Persistent mutations stay behind DrawerViewModel
+ * callbacks and screen-local state is only for temporary UI concerns.
  */
 @RequiresApi(Build.VERSION_CODES.S)
 @OptIn(ExperimentalFoundationApi::class)
@@ -65,30 +62,21 @@ fun NotificationsScreen(
 
     var viewportBounds by remember { mutableStateOf<Rect?>(null) }
 
-    val activeItems by drawerViewModel.groupedNotifications.collectAsState()
+    val activeNotiUnits by drawerViewModel.activeNotiUnits.collectAsState()
     val activeCount by drawerViewModel.activeNotDismissedCount.collectAsState()
     val isSortingMode by drawerViewModel.isSortingMode.collectAsState()
 
-    // Drag state (loose items only)
     val dragState = remember { DragState() }
-
-    // Keep a local optimistic order for loose items while sorting.
-    // When not sorting, we just use activeItems as-is.
-    var looseOrder by remember { mutableStateOf<List<String>>(emptyList()) }
-
-    // Hold the last sorting order briefly when exiting sorting mode to prevent a one-frame reordering flash.
+    var activeOrder by remember { mutableStateOf<List<String>>(emptyList()) }
     var holdOrderOnExit by remember { mutableStateOf(false) }
 
-    // Start/refresh manual sort session when entering sorting mode.
     LaunchedEffect(isSortingMode) {
         if (isSortingMode) {
             holdOrderOnExit = false
             drawerViewModel.startManualSortSession()
-            looseOrder = activeItems.filterIsInstance<NotiItem>().map { it.displayUnit.notiKey }
+            activeOrder = activeNotiUnits.map { it.notiKey }
         } else {
-            // If we just exited sort mode, keep the last looseOrder for a short moment.
-            // This prevents LazyColumn from briefly re-rendering the DB order before it updates.
-            if (looseOrder.isNotEmpty()) {
+            if (activeOrder.isNotEmpty()) {
                 holdOrderOnExit = true
                 kotlinx.coroutines.delay(80)
                 holdOrderOnExit = false
@@ -97,20 +85,18 @@ fun NotificationsScreen(
         }
     }
 
-    // Keep local loose order in sync if data changes while sorting and we aren't dragging.
-    LaunchedEffect(activeItems, isSortingMode) {
+    LaunchedEffect(activeNotiUnits, isSortingMode) {
         if (!isSortingMode) return@LaunchedEffect
         if (dragState.draggingId != null) return@LaunchedEffect
-        val latestLoose = activeItems.filterIsInstance<NotiItem>().map { it.displayUnit.notiKey }
-        // Only refresh if keys changed (avoid jank).
-        if (latestLoose.toSet() != looseOrder.toSet()) {
-            looseOrder = latestLoose
+        val latestActiveOrder = activeNotiUnits.map { it.notiKey }
+        if (latestActiveOrder.toSet() != activeOrder.toSet()) {
+            activeOrder = latestActiveOrder
         }
     }
 
-    fun moveLooseOptimistically(key: String, from: Int, to: Int) {
+    fun moveActiveOptimistically(key: String, from: Int, to: Int) {
         if (from == to) return
-        val current = looseOrder
+        val current = activeOrder
         if (current.isEmpty()) return
         val fromClamped = from.coerceIn(0, current.lastIndex)
         val toClamped = to.coerceIn(0, current.lastIndex)
@@ -118,13 +104,13 @@ fun NotificationsScreen(
         if (current.getOrNull(fromClamped) != key) {
             val idx = current.indexOf(key)
             if (idx == -1) return
-            return moveLooseOptimistically(key, idx, toClamped)
+            return moveActiveOptimistically(key, idx, toClamped)
         }
 
-        looseOrder = current.toMutableList().apply {
+        activeOrder = current.toMutableList().apply {
             add(toClamped, removeAt(fromClamped))
         }
-        drawerViewModel.moveLooseItem(key, fromClamped, toClamped)
+        drawerViewModel.moveActiveNotiUnit(key, fromClamped, toClamped)
     }
 
     val history = remember { mutableStateListOf<NotiRecord>() }
@@ -163,7 +149,6 @@ fun NotificationsScreen(
         loadInitial()
     }
 
-    // Infinite scroll trigger
     LaunchedEffect(listState) {
         snapshotFlow { listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index }
             .collect { lastVisibleIndex ->
@@ -175,32 +160,26 @@ fun NotificationsScreen(
             }
     }
 
-    // Build a displayed list where loose items are reordered by looseOrder during sorting.
-    val displayedItems: List<NotiDrawerItem> = remember(activeItems, looseOrder, isSortingMode, holdOrderOnExit) {
-        if (!isSortingMode && !holdOrderOnExit) return@remember activeItems
+    val displayedNotiUnits: List<NotiDisplayUnit> = remember(activeNotiUnits, activeOrder, isSortingMode, holdOrderOnExit) {
+        if (!isSortingMode && !holdOrderOnExit) return@remember activeNotiUnits
 
-        val looseMap = activeItems.filterIsInstance<NotiItem>().associateBy { it.displayUnit.notiKey }
-        val orderedLoose = looseOrder.mapNotNull { looseMap[it] }
-        val inactiveLooseKeys = looseMap.keys - orderedLoose.map { it.displayUnit.notiKey }.toSet()
-        val fallbackLoose = inactiveLooseKeys.mapNotNull { looseMap[it] }
-
-        val groups = activeItems.filterIsInstance<NotiGroupItem>()
-        orderedLoose + fallbackLoose + groups
+        val unitByKey = activeNotiUnits.associateBy { it.notiKey }
+        val orderedUnits = activeOrder.mapNotNull { unitByKey[it] }
+        val inactiveKeys = unitByKey.keys - orderedUnits.map { it.notiKey }.toSet()
+        val fallbackUnits = inactiveKeys.mapNotNull { unitByKey[it] }
+        orderedUnits + fallbackUnits
     }
 
-    // --- Reorderable (loose items only) ---
     val reorderableState = rememberReorderableLazyListState(listState) { from, to ->
-        // Only allow reordering between loose items. Ignore if either side isn't a loose item.
         val fromKey = from.key as? String ?: return@rememberReorderableLazyListState
         val toKey = to.key as? String ?: return@rememberReorderableLazyListState
-        if (fromKey !in looseOrder || toKey !in looseOrder) return@rememberReorderableLazyListState
+        if (fromKey !in activeOrder || toKey !in activeOrder) return@rememberReorderableLazyListState
 
-        // Use current indices from the optimistic order (not LazyList indices, which include headers/groups).
-        val fromIdx = looseOrder.indexOf(fromKey)
-        val toIdx = looseOrder.indexOf(toKey)
+        val fromIdx = activeOrder.indexOf(fromKey)
+        val toIdx = activeOrder.indexOf(toKey)
         if (fromIdx == -1 || toIdx == -1 || fromIdx == toIdx) return@rememberReorderableLazyListState
 
-        moveLooseOptimistically(fromKey, fromIdx, toIdx)
+        moveActiveOptimistically(fromKey, fromIdx, toIdx)
     }
 
     Box(
@@ -226,60 +205,23 @@ fun NotificationsScreen(
                 )
             }
 
-            items(displayedItems, key = { it.id }) { item: NotiDrawerItem ->
-                when (item) {
-                    is NotiItem -> {
-                        val id = item.displayUnit.notiKey
-                        val isLoose = id in looseOrder
-
-                        // Only loose items participate in reorder.
-                        if (isLoose) {
-                            ReorderableItem(
-                                state = reorderableState,
-                                key = id,
-                                enabled = isSortingMode,
-                            ) { isDragging ->
-                                NotiCard(
-                                    context = context,
-                                    notiDisplayUnit = item.displayUnit,
-                                    isDragging = isDragging,
-                                    drawerViewModel = drawerViewModel,
-                                    isCardVisible = true,
-                                    parentViewport = viewportBounds,
-                                    isMergeTarget = false,
-                                    isInGroup = false,
-                                    swipeEnabled = true,
-                                    reorderEnabled = isSortingMode,
-                                    reorderScope = this,
-                                )
-                            }
-                        } else {
-                            // Non-loose (e.g., orphaned/filtered) items render normally.
-                            NotiCard(
-                                context = context,
-                                notiDisplayUnit = item.displayUnit,
-                                isDragging = false,
-                                drawerViewModel = drawerViewModel,
-                                isCardVisible = true,
-                                parentViewport = viewportBounds,
-                                isMergeTarget = false,
-                                isInGroup = false,
-                                swipeEnabled = true,
-                                reorderEnabled = false,
-                            )
-                        }
-                    }
-
-                    is NotiGroupItem -> {
-                        GroupCard(
-                            context = context,
-                            groupItem = item,
-                            drawerViewModel = drawerViewModel,
-                            isMergeTarget = false,
-                            isSortingMode = isSortingMode,
-                            parentViewport = viewportBounds,
-                        )
-                    }
+            items(displayedNotiUnits, key = { it.notiKey }) { displayUnit ->
+                ReorderableItem(
+                    state = reorderableState,
+                    key = displayUnit.notiKey,
+                    enabled = isSortingMode,
+                ) { isDragging ->
+                    NotiCard(
+                        context = context,
+                        notiDisplayUnit = displayUnit,
+                        isDragging = isDragging,
+                        drawerViewModel = drawerViewModel,
+                        isCardVisible = true,
+                        parentViewport = viewportBounds,
+                        swipeEnabled = true,
+                        reorderEnabled = isSortingMode,
+                        reorderScope = this,
+                    )
                 }
             }
 

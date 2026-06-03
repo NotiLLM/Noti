@@ -25,11 +25,10 @@ import org.muilab.notigpt.ui.notification.viewmodel.DrawerViewModel
 /**
  * Options dialog and transient dialog state for one notification card.
  *
- * Keep dialog-local visibility and text input here. Persisted actions such as grouping, renaming, or feedback
+ * Keep dialog-local visibility and text input here. Persisted actions such as pinning, extraction, or feedback
  * should continue flowing through callbacks owned by the screen/ViewModel.
  */
 data class NotiCardOptionsState(
-    val isInGroup: Boolean,
     val isPinned: Boolean,
 )
 
@@ -49,30 +48,6 @@ fun NotiCardOptionsDialog(
         title = { Text(stringResource(R.string.ui_noti_options_title)) },
         text = {
             Column {
-                if (state.isInGroup) {
-                    TextButton(
-                        onClick = {
-                            drawerViewModel.removeFromGroup(notiKey)
-                            onDismiss()
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Start,
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Icon(
-                                painter = painterResource(R.drawable.leave_group),
-                                contentDescription = stringResource(R.string.ui_noti_action_remove_from_group),
-                                modifier = Modifier.size(24.dp),
-                            )
-                            Spacer(Modifier.width(12.dp))
-                            Text(stringResource(R.string.ui_noti_action_remove_from_group))
-                        }
-                    }
-                }
-
                 TextButton(
                     onClick = {
                         drawerViewModel.actOnNoti(

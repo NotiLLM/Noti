@@ -26,7 +26,7 @@ import org.muilab.notigpt.util.SharedPreferencesManager
  * Repository slice for notification lifecycle actions, scan counters, extraction scheduling, and action logging.
  *
  * This class bridges captured Android notifications to Room state and n8n WorkManager jobs. Keep low-level DAO
- * writes here while grouping, export, and record-query concerns stay in their sibling repository slices.
+ * writes here while export and record-query concerns stay in their sibling repository slices.
  */
 class NotiActionsRepository(
     private val appContext: Context,

@@ -7,7 +7,6 @@ import android.service.notification.StatusBarNotification
 import androidx.annotation.RequiresApi
 import androidx.room.Embedded
 import androidx.room.Entity
-import androidx.room.Index
 import org.muilab.notigpt.model.notifications.components.NotiMetadata
 import org.muilab.notigpt.model.notifications.components.NotiDisplayState
 import org.muilab.notigpt.model.notifications.components.NotiReminderAttr
@@ -15,18 +14,15 @@ import org.muilab.notigpt.model.notifications.components.NotiReminderAttr
 /**
  * Room entity for the latest drawer state of one Android notification key.
  *
- * NotiUnit owns current display metadata, read/pin/dismiss state, grouping, and scan/extraction flags.
- * Detailed content history belongs to NotiRecord so repeated updates do not overwrite context. The groupId
- * index supports drawer grouping and membership lookups.
+ * NotiUnit owns current display metadata, read/pin/dismiss state, and scan/extraction flags.
+ * Detailed content history belongs to NotiRecord so repeated updates do not overwrite context.
  */
-@Entity(tableName = "noti_drawer", primaryKeys = ["notiKey"], indices = [Index(value = ["groupId"])])
+@Entity(tableName = "noti_drawer", primaryKeys = ["notiKey"])
 data class NotiUnit(
     val notiKey: String,
     @Embedded val metadata: NotiMetadata,
     @Embedded val displayState: NotiDisplayState = NotiDisplayState(),
     @Embedded val reminderAttr: NotiReminderAttr = NotiReminderAttr(),
-    // Link to a parent group
-    val groupId: String? = null
 ) {
     @RequiresApi(Build.VERSION_CODES.S)
     constructor(

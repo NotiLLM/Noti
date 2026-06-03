@@ -8,21 +8,15 @@ import kotlinx.coroutines.flow.Flow
 import org.json.JSONObject
 import org.muilab.notigpt.data.local.room.dao.NotiActionDao
 import org.muilab.notigpt.data.local.room.dao.NotiDrawerDao
-import org.muilab.notigpt.data.local.room.dao.NotiGroupDao
 import org.muilab.notigpt.data.local.room.dao.NotiRecordDao
 import org.muilab.notigpt.model.notifications.NotiAction
-import org.muilab.notigpt.model.notifications.NotiDrawerItem
+import org.muilab.notigpt.model.notifications.NotiDisplayUnit
 import org.muilab.notigpt.model.notifications.NotiRecord
 import org.muilab.notigpt.model.notifications.NotiUnit
-import org.muilab.notigpt.data.repository.notification.NotiActionsRepository
-import org.muilab.notigpt.data.repository.notification.NotiGroupingRepository
-import org.muilab.notigpt.data.repository.notification.NotiGroupRepository
 import org.muilab.notigpt.data.export.NotiExportRepository
-import org.muilab.notigpt.data.repository.notification.NotiMaintenanceRepository
-import org.muilab.notigpt.data.repository.notification.NotiRecordsRepository
 
 /**
- * Facade over notification drawer, record, action, group, export, and maintenance repositories.
+ * Facade over notification drawer, record, action, export, and maintenance repositories.
  *
  * The ViewModels and workers should depend on this class instead of individual DAOs. Keep new responsibilities
  * delegated to focused repository helpers so this facade stays a stable API surface.
@@ -32,13 +26,11 @@ class NotiRepository(
     private val notiDrawerDao: NotiDrawerDao,
     private val notiActionDao: NotiActionDao,
     private val notiRecordDao: NotiRecordDao,
-    private val notiGroupDao: NotiGroupDao
 ) {
 
-    private val groupingRepo = NotiGroupingRepository(
+    private val activeUnitsRepo = NotiActiveUnitsRepository(
         notiDrawerDao = notiDrawerDao,
         notiRecordDao = notiRecordDao,
-        notiGroupDao = notiGroupDao,
     )
 
     private val actionsRepo = NotiActionsRepository(
@@ -47,10 +39,6 @@ class NotiRepository(
         notiRecordDao = notiRecordDao,
     )
 
-    private val groupRepo = NotiGroupRepository(
-        notiDrawerDao = notiDrawerDao,
-        notiGroupDao = notiGroupDao,
-    )
 
     private val recordsRepo = NotiRecordsRepository(
         notiRecordDao = notiRecordDao,
@@ -72,38 +60,9 @@ class NotiRepository(
         actionsRepo.removeExpiredNotiRecords()
     }
 
-    /**
-     * Returns the drawer-ready stream after active filtering, grouping, and sort rules are applied.
-     *
-     * Consumers should render this output directly instead of regrouping notification rows in UI code.
-     */
-    fun getGroupedNotifications(): Flow<List<NotiDrawerItem>> {
-        return groupingRepo.getGroupedNotifications()
-    }
-
-    // --- Group operations (delegated) ---
-    suspend fun actOnGroup(groupId: String, action: String) {
-        groupRepo.actOnGroup(groupId, action)
-    }
-
-    suspend fun merge(dragId: String, targetId: String) {
-        groupRepo.merge(dragId, targetId)
-    }
-
-    suspend fun ungroup(groupId: String) {
-        groupRepo.ungroup(groupId)
-    }
-
-    suspend fun updateGroupExpansion(groupId: String, expanded: Boolean) {
-        groupRepo.updateGroupExpansion(groupId, expanded)
-    }
-
-    suspend fun updateGroupTitle(groupId: String, title: String) {
-        groupRepo.updateGroupTitle(groupId, title)
-    }
-
-    suspend fun removeFromGroup(notiKey: String) {
-        groupRepo.removeFromGroup(notiKey)
+    /** Returns flat active notification units after record joining and drawer sort rules are applied. */
+    fun getActiveNotiUnits(): Flow<List<NotiDisplayUnit>> {
+        return activeUnitsRepo.getActiveNotiUnits()
     }
 
     /**
@@ -251,7 +210,7 @@ class NotiRepository(
     }
 
     /**
-     * Move a loose notification into a manual ordering slot and shift existing manual items to avoid collisions.
+     * Move a notification into a manual ordering slot and shift existing manual items to avoid collisions.
      *
      * Semantics:
      * - Only notifications that were already manual (sortPosition != -1) are affected, plus the moved key.
@@ -259,12 +218,10 @@ class NotiRepository(
      *   the collided manual item (and any subsequent collisions) forward by 1.
      * - Non-manual items remain sortPosition = -1.
      */
-    suspend fun moveLooseManualSlot(notiKey: String, targetIndex: Int) {
-        notiDrawerDao.clearSortPositionsForGroupedItems()
-
-        // Read the authoritative set of *currently manual* loose items from DB.
+    suspend fun moveActiveManualSlot(notiKey: String, targetIndex: Int) {
+        // Read the authoritative set of *currently manual* active items from DB.
         // This ensures we only ever adjust items that already had manual positions.
-        val manualKeyPositions = notiDrawerDao.getActiveLooseManualKeyPositionsOrdered()
+        val manualKeyPositions = notiDrawerDao.getActiveManualKeyPositionsOrdered()
 
         val existingManual = manualKeyPositions
             .asSequence()
@@ -289,29 +246,24 @@ class NotiRepository(
             used.add(p)
         }
 
-        // Persist: clear only the currently-manual loose set, then write back result mapping.
-        notiDrawerDao.resetActiveLooseManualPositions()
+        // Persist: clear only the currently-manual active set, then write back result mapping.
+        notiDrawerDao.resetActiveManualPositions()
         result.forEach { (key, pos) ->
             notiDrawerDao.updateSortPosition(key, pos)
         }
     }
 
-    /** Persist manual sort position for a single loose item. */
+    /** Persist manual sort position for a single active item. */
     suspend fun setManualSortPosition(notiKey: String, newPosition: Int) {
-        // Defensive: groups should never have manual positions.
-        notiDrawerDao.clearSortPositionsForGroupedItems()
         notiDrawerDao.updateSortPosition(notiKey, newPosition)
     }
 
     /**
-     * Persists manual sort positions for every loose item in the supplied order.
+     * Persists manual sort positions for every active item in the supplied order.
      *
-     * Prefer targeted manual-key commits for drag flows; use this when the whole loose list order is authoritative.
+     * Prefer targeted manual-key commits for drag flows; use this when the whole active list order is authoritative.
      */
     suspend fun commitManualSortPositions(keysInOrder: List<String>) {
-        // Defensive: groups should never have manual positions.
-        notiDrawerDao.clearSortPositionsForGroupedItems()
-
         keysInOrder.forEachIndexed { index, key ->
             notiDrawerDao.updateSortPosition(key, index)
         }
@@ -322,23 +274,21 @@ class NotiRepository(
     }
 
     /**
-     * Commit manual sort positions for the provided [manualKeys] based on their final positions in [finalLooseOrder].
+     * Commit manual sort positions for the provided [manualKeys] based on their final positions in [finalActiveOrder].
      *
      * Rules:
      * - Only keys in [manualKeys] are assigned a sortPosition.
-     * - Keys not in [finalLooseOrder] are ignored (they may have been dismissed/grouped).
+     * - Keys not in [finalActiveOrder] are ignored (they may have been dismissed).
      * - Collisions are resolved by shifting forward to the next free slot.
      */
     suspend fun commitManualKeysFromFinalOrder(
         manualKeys: Set<String>,
-        finalLooseOrder: List<String>,
+        finalActiveOrder: List<String>,
     ) {
-        if (manualKeys.isEmpty() || finalLooseOrder.isEmpty()) return
-
-        notiDrawerDao.clearSortPositionsForGroupedItems()
+        if (manualKeys.isEmpty() || finalActiveOrder.isEmpty()) return
 
         // Determine desired positions for keys that still exist in the final order.
-        val desiredPairs = finalLooseOrder
+        val desiredPairs = finalActiveOrder
             .withIndex()
             .asSequence()
             .filter { (_, key) -> key in manualKeys }

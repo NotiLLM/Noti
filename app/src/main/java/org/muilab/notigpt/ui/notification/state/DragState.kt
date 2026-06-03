@@ -13,7 +13,7 @@ import androidx.compose.ui.unit.IntSize
 /**
  * Ephemeral drag state shared by drawer drag handles and drop targets.
  *
- * This class should stay UI-only and in-memory. Persisted ordering/grouping decisions belong to the drawer
+ * This class should stay UI-only and in-memory. Persisted ordering decisions belong to the drawer
  * ViewModel or database actions after a drag gesture is committed.
  */
 @Stable

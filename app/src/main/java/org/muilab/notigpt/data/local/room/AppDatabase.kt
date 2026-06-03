@@ -5,15 +5,12 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
-import androidx.room.migration.Migration
-import androidx.sqlite.db.SupportSQLiteDatabase
 import org.muilab.notigpt.model.features.ExtractionPreference
 import org.muilab.notigpt.model.features.PreferenceConflict
 import org.muilab.notigpt.model.features.ReminderUnit
 import org.muilab.notigpt.model.features.SubTask
 import org.muilab.notigpt.model.features.UserContext
 import org.muilab.notigpt.model.notifications.NotiAction
-import org.muilab.notigpt.model.notifications.NotiGroup
 import org.muilab.notigpt.model.notifications.NotiRecord
 import org.muilab.notigpt.model.notifications.NotiUnit
 import org.muilab.notigpt.model.notifications.VisibleNotiRecord
@@ -21,7 +18,6 @@ import org.muilab.notigpt.model.features.ReminderExtractionSnapshot
 import org.muilab.notigpt.data.local.room.dao.ExtractionPreferenceDao
 import org.muilab.notigpt.data.local.room.dao.NotiActionDao
 import org.muilab.notigpt.data.local.room.dao.NotiDrawerDao
-import org.muilab.notigpt.data.local.room.dao.NotiGroupDao
 import org.muilab.notigpt.data.local.room.dao.NotiRecordDao
 import org.muilab.notigpt.data.local.room.dao.PreferenceConflictDao
 import org.muilab.notigpt.data.local.room.dao.ReminderListDao
@@ -42,14 +38,13 @@ import org.muilab.notigpt.data.local.room.dao.UserContextDao
         NotiAction::class,
         ReminderUnit::class,
         SubTask::class,
-        NotiGroup::class,
         ReminderExtractionSnapshot::class,
         ExtractionPreference::class,
         PreferenceConflict::class,
         UserContext::class,
     ],
     views = [VisibleNotiRecord::class],
-    version = 35,
+    version = 36,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -60,7 +55,6 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun actionDao(): NotiActionDao
     abstract fun reminderListDao(): ReminderListDao
     abstract fun subTaskDao(): SubTaskDao
-    abstract fun groupDao(): NotiGroupDao
     abstract fun reminderSnapshotDao(): ReminderSnapshotDao
     abstract fun extractionPreferenceDao(): ExtractionPreferenceDao
     abstract fun preferenceConflictDao(): PreferenceConflictDao
@@ -112,6 +106,7 @@ abstract class AppDatabase : RoomDatabase() {
                 .addMigrations(AppDatabaseMigrations.MIGRATION_32_33)
                 .addMigrations(AppDatabaseMigrations.MIGRATION_33_34)
                 .addMigrations(AppDatabaseMigrations.MIGRATION_34_35)
+                .addMigrations(AppDatabaseMigrations.MIGRATION_35_36)
                 .setJournalMode(JournalMode.TRUNCATE)
                 .build()
         }

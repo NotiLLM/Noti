@@ -11,7 +11,7 @@ import org.muilab.notigpt.data.repository.notification.NotiRepository
 import org.muilab.notigpt.util.SharedPreferencesManager
 
 /**
- * Controller for applying user actions to individual notifications or groups.
+ * Controller for applying user actions to individual notifications.
  *
  * This layer translates UI intents into repository writes and Android notification operations. Keep action
  * tracking here so card components do not duplicate state-transition rules.
@@ -44,15 +44,4 @@ class DrawerActionsController(
         }
     }
 
-    suspend fun actOnGroup(groupId: String, action: NotiActionType) {
-        withContext(Dispatchers.IO) {
-            notiRepository.actOnGroup(groupId, action.wireValue)
-        }
-    }
-
-    suspend fun actOnGroupLegacy(groupId: String, action: String) {
-        withContext(Dispatchers.IO) {
-            notiRepository.actOnGroup(groupId, action)
-        }
-    }
 }

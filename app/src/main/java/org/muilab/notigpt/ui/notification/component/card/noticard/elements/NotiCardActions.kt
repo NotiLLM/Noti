@@ -34,7 +34,6 @@ fun NotiCardBackgroundActions(
     endActionsWidthPx: Float,
     horizontalOffsetX: Float,
     swipeDeleteLeft: Boolean,
-    isInGroup: Boolean,
     notiUnit: NotiUnit,
     drawerViewModel: DrawerViewModel,
     onCollapseActions: () -> Unit,
@@ -86,19 +85,6 @@ fun NotiCardBackgroundActions(
                     }
                 },
             )
-
-            if (isInGroup) {
-                NotiActionIconButton(
-                    R.drawable.leave_group,
-                    stringResource(R.string.ui_noti_action_remove_from_group),
-                    {
-                        if (canClickActions.value) {
-                            drawerViewModel.removeFromGroup(notiUnit.notiKey)
-                            onCollapseActions()
-                        }
-                    },
-                )
-            }
         }
     }
 }

@@ -9,7 +9,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 /**
  * Compose modifier that turns long-press movement into drawer drag state updates.
  *
- * Keep gesture recognition here and grouping/sorting decisions outside it. The modifier should report drag
+ * Keep gesture recognition here and sorting decisions outside it. The modifier should report drag
  * identity and position, not decide how the drawer data model changes.
  */
 @Composable

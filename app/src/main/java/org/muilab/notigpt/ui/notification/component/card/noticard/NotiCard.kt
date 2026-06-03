@@ -81,8 +81,6 @@ fun NotiCard(
     drawerViewModel: DrawerViewModel,
     isCardVisible: Boolean,
     parentViewport: Rect?,
-    isMergeTarget: Boolean = false,
-    isInGroup: Boolean = false,
     swipeEnabled: Boolean = true,
     // Reorder: handle-only (long-press) callbacks. No-op defaults keep API stable for other call sites.
     reorderEnabled: Boolean = false,
@@ -131,18 +129,14 @@ fun NotiCard(
     val summary = notiUnit.summary
     val hasSummary = summary.isNotEmpty()
 
-    val backgroundColor = when {
-        isMergeTarget -> MaterialTheme.colorScheme.primaryContainer
-        else -> MaterialTheme.colorScheme.surfaceBright
-    }
+    val backgroundColor = MaterialTheme.colorScheme.surfaceBright
 
     val borderColor = when {
-        isMergeTarget -> MaterialTheme.colorScheme.primary
         !isRead -> MaterialTheme.colorScheme.error
         else -> MaterialTheme.colorScheme.outline
     }
 
-    val borderWidth = if (notiUnit.sortPosition != -1 || isMergeTarget) 3.dp else 1.dp
+    val borderWidth = if (notiUnit.sortPosition != -1) 3.dp else 1.dp
 
     // Expand state
     val maxHeightDp = 200.dp
@@ -215,7 +209,7 @@ fun NotiCard(
 
     Box(
         modifier = Modifier
-            .padding(vertical = 1.dp, horizontal = if (isInGroup) 5.dp else 20.dp)
+            .padding(vertical = 1.dp, horizontal = 20.dp)
             .graphicsLayer {
                 scaleX = scaleValue
                 scaleY = scaleValue
@@ -248,7 +242,6 @@ fun NotiCard(
             endActionsWidthPx = endActionsWidth,
             horizontalOffsetX = horizontalOffsetX.value,
             swipeDeleteLeft = swipeDeleteLeft,
-            isInGroup = isInGroup,
             notiUnit = notiUnit,
             drawerViewModel = drawerViewModel,
             onCollapseActions = {
@@ -386,7 +379,6 @@ fun NotiCard(
         drawerViewModel = drawerViewModel,
         notiKey = notiKey,
         state = NotiCardOptionsState(
-            isInGroup = isInGroup,
             isPinned = isPinned,
         ),
     )

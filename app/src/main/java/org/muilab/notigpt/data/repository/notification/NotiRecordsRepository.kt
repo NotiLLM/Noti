@@ -12,7 +12,7 @@ import org.muilab.notigpt.model.notifications.NotiRecord
  * Repository slice for reading notification record history and search context.
  *
  * Keep record-query shapes here so ViewModels and cards do not call DAOs directly. Write-side lifecycle changes
- * belong to NotiActionsRepository or maintenance/grouping slices.
+ * belong to NotiActionsRepository or maintenance slices.
  */
 class NotiRecordsRepository(
     private val notiRecordDao: NotiRecordDao,

@@ -10,7 +10,7 @@ import org.muilab.notigpt.util.Constants.Companion.NOTI_CATEGORY_GENERAL
 /**
  * Mutable filter/search/sort state for the notification drawer ViewModel.
  *
- * Keep this as UI-query state only. Persisted notification ordering, grouping, and read state should stay in
+ * Keep this as UI-query state only. Persisted notification ordering and read state should stay in
  * their database-backed controllers instead of being hidden in filters.
  */
 @Immutable

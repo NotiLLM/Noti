@@ -33,7 +33,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.muilab.notigpt.domain.action.NotiActionType
-import org.muilab.notigpt.model.notifications.NotiDrawerItem
+import org.muilab.notigpt.model.notifications.NotiDisplayUnit
 import org.muilab.notigpt.model.notifications.NotiRecord
 import org.muilab.notigpt.model.notifications.NotiUnit
 import org.muilab.notigpt.data.repository.notification.NotiRepository
@@ -45,7 +45,6 @@ import org.muilab.notigpt.ui.common.feedback.UserToaster
 import org.muilab.notigpt.service.NotiListenerService
 import org.muilab.notigpt.ui.notification.controller.DrawerActionsController
 import org.muilab.notigpt.ui.notification.controller.DrawerFiltersState
-import org.muilab.notigpt.ui.notification.controller.DrawerGroupingActions
 import org.muilab.notigpt.ui.notification.controller.DrawerReadStateController
 import org.muilab.notigpt.ui.notification.controller.DrawerSearchController
 import org.muilab.notigpt.ui.notification.action.NotificationLauncher
@@ -53,7 +52,7 @@ import org.muilab.notigpt.ui.notification.controller.FullRecordsController
 import org.muilab.notigpt.ui.notification.controller.DrawerUnreadCounts
 
 /**
- * ViewModel for notification drawer state, filters, grouping, actions, and record context loading.
+ * ViewModel for notification drawer state, filters, actions, and record context loading.
  *
  * This class is the UI-facing coordinator over smaller drawer controllers. If a responsibility grows large,
  * prefer extracting another controller/repository method over adding more direct database logic here.
@@ -114,8 +113,8 @@ class DrawerViewModel(
     }
 
     // Main List State
-    private val _groupedNotifications = MutableStateFlow<List<NotiDrawerItem>>(emptyList())
-    val groupedNotifications: StateFlow<List<NotiDrawerItem>> = _groupedNotifications.asStateFlow()
+    private val _activeNotiUnits = MutableStateFlow<List<NotiDisplayUnit>>(emptyList())
+    val activeNotiUnits: StateFlow<List<NotiDisplayUnit>> = _activeNotiUnits.asStateFlow()
 
     @OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
     val queryEmbeddingString: Flow<String?> = _queryString
@@ -138,11 +137,6 @@ class DrawerViewModel(
     private val searchController = DrawerSearchController(notiRepository)
     private val readStateController = DrawerReadStateController(notiRepository)
     private val actionsController = DrawerActionsController(context, notiRepository)
-    private val groupingActions = DrawerGroupingActions(
-        scope = viewModelScope,
-        notiRepository = notiRepository,
-        actionsController = actionsController,
-    )
     private val fullRecordsController = FullRecordsController(
         scope = viewModelScope,
         notiRepository = notiRepository,
@@ -155,27 +149,17 @@ class DrawerViewModel(
     val unreadCountsByCategory: StateFlow<Map<String, Int>> = unreadCounts.unreadCountsByCategory
 
     /** Total unread notifications in the active drawer (not dismissed). */
-    val unreadActiveCount: StateFlow<Int> = groupedNotifications
-        .map { items ->
-            items.asSequence().flatMap { item ->
-                when (item) {
-                    is org.muilab.notigpt.model.notifications.NotiItem -> sequenceOf(item.displayUnit)
-                    is org.muilab.notigpt.model.notifications.NotiGroupItem -> item.children.asSequence()
-                }
-            }.count { du -> !du.notiUnit.isDismissed && !du.notiUnit.isRead }
+    val unreadActiveCount: StateFlow<Int> = activeNotiUnits
+        .map { units ->
+            units.count { du -> !du.notiUnit.isDismissed && !du.notiUnit.isRead }
         }
         .distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
     /** Total active (not dismissed) notifications currently in the drawer. */
-    val activeNotDismissedCount: StateFlow<Int> = groupedNotifications
-        .map { items ->
-            items.asSequence().flatMap { item ->
-                when (item) {
-                    is org.muilab.notigpt.model.notifications.NotiItem -> sequenceOf(item.displayUnit)
-                    is org.muilab.notigpt.model.notifications.NotiGroupItem -> item.children.asSequence()
-                }
-            }.count { du -> !du.notiUnit.isDismissed }
+    val activeNotDismissedCount: StateFlow<Int> = activeNotiUnits
+        .map { units ->
+            units.count { du -> !du.notiUnit.isDismissed }
         }
         .distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
@@ -185,20 +169,20 @@ class DrawerViewModel(
     val searchUnits: StateFlow<Map<String, NotiUnit>> = searchController.searchUnits
 
     init {
-        // Main subscription to the grouped data flow
-        notiRepository.getGroupedNotifications()
+        // Main subscription to active notification units
+        notiRepository.getActiveNotiUnits()
             .debounce(60)
             .onEach { newList ->
-                val prev = _groupedNotifications.value
+                val prev = _activeNotiUnits.value
                 if (prev.size != newList.size || prev != newList) {
-                    _groupedNotifications.value = newList
+                    _activeNotiUnits.value = newList
                 }
             }.launchIn(viewModelScope)
 
         // Loading state management
-        groupedNotifications.onEach { notifications ->
+        activeNotiUnits.onEach { notifications ->
             unreadCounts.refresh()
-            Log.d("DrawerViewModel", "groupedNotifications emitted: size=${notifications.size}, isTargetLoading=${isTargetLoading.value}")
+            Log.d("DrawerViewModel", "activeNotiUnits emitted: size=${notifications.size}, isTargetLoading=${isTargetLoading.value}")
 
             if (filters.shouldClearTargetLoading()) {
                 filters.clearTargetLoading()
@@ -407,34 +391,13 @@ class DrawerViewModel(
         }
     }
 
-    // Merge Actions (delegated)
-    fun onMerge(dragId: String, targetId: String) = groupingActions.onMerge(dragId, targetId)
-
-    fun onUngroup(groupId: String) = groupingActions.onUngroup(groupId)
-
-    fun toggleGroupExpansion(groupId: String, currentExpanded: Boolean) =
-        groupingActions.toggleGroupExpansion(groupId, currentExpanded)
-
-    fun renameGroup(groupId: String, newTitle: String) = groupingActions.renameGroup(groupId, newTitle)
-
-    fun actOnGroup(groupId: String, action: String) = groupingActions.actOnGroup(groupId, action)
-
-    fun actOnGroup(groupId: String, action: NotiActionType) = groupingActions.actOnGroup(groupId, action)
-
-    fun removeFromGroup(notiKey: String) = groupingActions.removeFromGroup(notiKey)
 
     /**
      * Called by list items when a card is fully visible.
      * We batch persistence via [persistReadStatus].
      */
     fun markNotificationAsRead(notiKey: String) {
-        val currentItems = _groupedNotifications.value
-        val foundUnit = currentItems.asSequence().flatMap { item ->
-            when (item) {
-                is org.muilab.notigpt.model.notifications.NotiItem -> sequenceOf(item.displayUnit)
-                is org.muilab.notigpt.model.notifications.NotiGroupItem -> item.children.asSequence()
-            }
-        }.firstOrNull { it.notiKey == notiKey }
+        val foundUnit = _activeNotiUnits.value.firstOrNull { it.notiKey == notiKey }
 
         if (foundUnit != null) {
             readStateController.markSeenIfUnread(notiKey, foundUnit.notiUnit.isRead)
@@ -500,7 +463,7 @@ class DrawerViewModel(
         }
     }
 
-    // --- Manual sort (loose items only) ---
+    // --- Manual sort (active notifications) ---
     private val manualSortKeys = MutableStateFlow<List<String>>(emptyList())
 
     // Snapshot of keys that were already manual when entering sort mode.
@@ -508,18 +471,15 @@ class DrawerViewModel(
     // Keys the user moved during the current session.
     private val manuallyTouchedKeysInSession = LinkedHashSet<String>()
 
-    /** Called by UI when entering sorting mode; captures current loose order and existing manual keys. */
+    /** Called by UI when entering sorting mode; captures current active notification order and existing manual keys. */
     fun startManualSortSession() {
-        val loose = _groupedNotifications.value
-            .asSequence()
-            .filterIsInstance<org.muilab.notigpt.model.notifications.NotiItem>()
-            .map { it.displayUnit.notiKey to it.displayUnit.notiUnit.sortPosition }
-            .toList()
+        val active = _activeNotiUnits.value
+            .map { it.notiKey to it.notiUnit.sortPosition }
 
-        manualSortKeys.value = loose.map { it.first }
+        manualSortKeys.value = active.map { it.first }
 
         // Snapshot all keys that were already manual (sortPosition != -1) at session start.
-        manualKeysAtSessionStart = loose.asSequence().filter { it.second != -1 }.map { it.first }.toSet()
+        manualKeysAtSessionStart = active.asSequence().filter { it.second != -1 }.map { it.first }.toSet()
         manuallyTouchedKeysInSession.clear()
     }
 
@@ -540,13 +500,13 @@ class DrawerViewModel(
     }
 
     /**
-     * Move a loose item within the in-memory order list.
+     * Move an active notification within the in-memory order list.
      * Persistence:
      * - We do NOT write to DB on every move.
      * - We record the moved key as "touched".
      * - Final sortPosition for touched + initially-manual keys is persisted on exit/pause.
      */
-    fun moveLooseItem(key: String, fromIndex: Int, toIndex: Int) {
+    fun moveActiveNotiUnit(key: String, fromIndex: Int, toIndex: Int) {
         val current = manualSortKeys.value
         if (current.isEmpty()) return
 
@@ -557,7 +517,7 @@ class DrawerViewModel(
         if (current.getOrNull(from) != key) {
             val actualFrom = current.indexOf(key)
             if (actualFrom == -1) return
-            return moveLooseItem(key, actualFrom, to)
+            return moveActiveNotiUnit(key, actualFrom, to)
         }
 
         manualSortKeys.value = current.toMutableList().apply {

@@ -594,4 +594,68 @@ object AppDatabaseMigrations {
             db.execSQL("DROP TABLE IF EXISTS `esm_instance`")
         }
     }
+
+    val MIGRATION_35_36 = object : Migration(35, 36) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("DROP INDEX IF EXISTS `index_noti_drawer_groupId`")
+            db.execSQL("DROP TABLE IF EXISTS `noti_group`")
+
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `noti_drawer_new` (
+                    `notiKey` TEXT NOT NULL,
+                    `pkgName` TEXT NOT NULL,
+                    `hashKey` INTEGER NOT NULL,
+                    `groupKey` TEXT NOT NULL,
+                    `isAppGroup` INTEGER NOT NULL,
+                    `isGroupChat` INTEGER NOT NULL,
+                    `sortKey` TEXT NOT NULL,
+                    `appName` TEXT NOT NULL,
+                    `lastUpdateTime` INTEGER NOT NULL,
+                    `lastSyncTime` INTEGER NOT NULL,
+                    `icon` TEXT NOT NULL,
+                    `largeIcon` TEXT NOT NULL,
+                    `isPeople` INTEGER NOT NULL,
+                    `isPinned` INTEGER NOT NULL,
+                    `isArchived` INTEGER NOT NULL,
+                    `isDismissed` INTEGER NOT NULL,
+                    `isRead` INTEGER NOT NULL,
+                    `isSetToTop` INTEGER NOT NULL,
+                    `setToTopTime` INTEGER NOT NULL,
+                    `sortPosition` INTEGER NOT NULL,
+                    `explanation` TEXT NOT NULL,
+                    `summary` TEXT NOT NULL,
+                    `sortScore` REAL NOT NULL,
+                    `shouldExtractReminder` INTEGER NOT NULL,
+                    `hasTask` INTEGER NOT NULL,
+                    `hasMemo` INTEGER NOT NULL,
+                    `hasEvent` INTEGER NOT NULL,
+                    PRIMARY KEY(`notiKey`)
+                )
+                """.trimIndent()
+            )
+
+            db.execSQL(
+                """
+                INSERT INTO `noti_drawer_new` (
+                    notiKey, pkgName, hashKey, groupKey, isAppGroup, isGroupChat, sortKey,
+                    appName, lastUpdateTime, lastSyncTime, icon, largeIcon, isPeople,
+                    isPinned, isArchived, isDismissed, isRead, isSetToTop, setToTopTime,
+                    sortPosition, explanation, summary, sortScore, shouldExtractReminder,
+                    hasTask, hasMemo, hasEvent
+                )
+                SELECT
+                    notiKey, pkgName, hashKey, groupKey, isAppGroup, isGroupChat, sortKey,
+                    appName, lastUpdateTime, lastSyncTime, icon, largeIcon, isPeople,
+                    isPinned, isArchived, isDismissed, isRead, isSetToTop, setToTopTime,
+                    sortPosition, explanation, summary, sortScore, shouldExtractReminder,
+                    hasTask, hasMemo, hasEvent
+                FROM `noti_drawer`
+                """.trimIndent()
+            )
+
+            db.execSQL("DROP TABLE `noti_drawer`")
+            db.execSQL("ALTER TABLE `noti_drawer_new` RENAME TO `noti_drawer`")
+        }
+    }
 }
