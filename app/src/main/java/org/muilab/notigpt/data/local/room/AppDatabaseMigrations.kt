@@ -822,6 +822,43 @@ object AppDatabaseMigrations {
             )
             db.execSQL("DROP TABLE `saved_item`")
             db.execSQL("ALTER TABLE `saved_item_new` RENAME TO `saved_item`")
+            val snapshotHasReminderId = db.query("PRAGMA table_info(`reminder_extraction_snapshot`)").use { cursor ->
+                var hasReminderId = false
+                while (cursor.moveToNext()) {
+                    val nameIndex = cursor.getColumnIndex("name")
+                    if (nameIndex >= 0 && cursor.getString(nameIndex) == "reminderId") {
+                        hasReminderId = true
+                    }
+                }
+                hasReminderId
+            }
+            if (snapshotHasReminderId) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `reminder_extraction_snapshot_new` (
+                        `snapshotId` TEXT NOT NULL,
+                        `status` TEXT NOT NULL,
+                        `savedItemId` TEXT,
+                        `payloadJson` TEXT NOT NULL,
+                        `createdAt` INTEGER NOT NULL,
+                        PRIMARY KEY(`snapshotId`)
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL(
+                    """
+                    INSERT OR REPLACE INTO `reminder_extraction_snapshot_new` (`snapshotId`,`status`,`savedItemId`,`payloadJson`,`createdAt`)
+                    SELECT `snapshotId`,`status`,`reminderId`,`payloadJson`,`createdAt` FROM `reminder_extraction_snapshot`
+                    """.trimIndent()
+                )
+                db.execSQL("DROP INDEX IF EXISTS `idx_reminder_snap_reminderId`")
+                db.execSQL("DROP INDEX IF EXISTS `idx_reminder_snap_savedItemId`")
+                db.execSQL("DROP INDEX IF EXISTS `idx_reminder_snap_status_time`")
+                db.execSQL("DROP TABLE `reminder_extraction_snapshot`")
+                db.execSQL("ALTER TABLE `reminder_extraction_snapshot_new` RENAME TO `reminder_extraction_snapshot`")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `idx_reminder_snap_status_time` ON `reminder_extraction_snapshot` (`status`, `createdAt`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `idx_reminder_snap_savedItemId` ON `reminder_extraction_snapshot` (`savedItemId`)")
+            }
             db.execSQL("ALTER TABLE noti_record ADD COLUMN isNew INTEGER NOT NULL DEFAULT 1")
         }
     }
