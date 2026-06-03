@@ -274,12 +274,31 @@ class DrawerViewModel(
 
     @RequiresApi(Build.VERSION_CODES.S)
     fun actOnNoti(notiKey: String, action: NotiActionType) {
+        applyOptimisticPinState(notiKey, action)
         viewModelScope.launch {
             actionsController.actOnNoti(notiKey, action)
             if (action.wireValue.contains("dismiss")) postOngoingNotification(context)
             // Emit event for preference learning (Flow 3: Manual Extract)
             if (action is NotiActionType.ExtractReminder) {
                 _manualExtractEvent.tryEmit(notiKey)
+            }
+        }
+    }
+
+    private fun applyOptimisticPinState(notiKey: String, action: NotiActionType) {
+        val pinned = when (action) {
+            NotiActionType.Pin -> true
+            NotiActionType.Unpin -> false
+            else -> return
+        }
+        _activeNotiUnits.value = _activeNotiUnits.value.map { displayUnit ->
+            if (displayUnit.notiKey != notiKey) {
+                displayUnit
+            } else {
+                val updatedUnit = displayUnit.notiUnit.copy(
+                    displayState = displayUnit.notiUnit.displayState.copy(isPinned = pinned),
+                )
+                NotiDisplayUnit(updatedUnit, displayUnit.notiRecords)
             }
         }
     }
@@ -471,6 +490,15 @@ class DrawerViewModel(
     suspend fun getRecordsAfterForHistory(pivotTime: Long, limit: Int): List<NotiRecord> {
         return withContext(Dispatchers.IO) {
             notiRepository.getRecordsAfter(pivotTime, limit.coerceAtLeast(1))
+        }
+    }
+
+    suspend fun searchRecordsForHistory(query: String): List<NotiRecord> {
+        return withContext(Dispatchers.IO) {
+            notiRepository.searchNotifications(query)
+                .values
+                .flatten()
+                .sortedByDescending { it.time }
         }
     }
 

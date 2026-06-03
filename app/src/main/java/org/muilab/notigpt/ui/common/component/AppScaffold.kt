@@ -204,7 +204,8 @@ fun AppScaffold(
                     onMenuClicked = { scope.launch { drawerState.open() } },
                     menuScreenTitle = menuScreenTitle,
                     onMenuScreenClosed = { menuScreen = null },
-                    showNotificationActions = menuScreen == null && selectedTab == AppPrimaryTab.New
+                    // New/Task/Keep use screen-local search; keep the old active-drawer actions out of the top bar.
+                    showNotificationActions = false
                 )
             },
             snackbarHost = { SnackbarHost(hostState = snackbarHostState) },

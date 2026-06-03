@@ -70,6 +70,7 @@ fun NewScreen(
     val newTasks = newItems.filter { it.itemType == SavedItemType.Task && it.matchesQuery() }
     val newKeep = newItems.filter { it.itemType == SavedItemType.Keep && it.matchesQuery() }
     val filteredUnits = newUnits.filter { it.matchesQuery() }
+    val hasAnyVisibleSection = newTasks.isNotEmpty() || newKeep.isNotEmpty() || filteredUnits.isNotEmpty()
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -87,17 +88,20 @@ fun NewScreen(
             )
         }
 
-        item {
-            NewSavedItemSectionHeader(
-                title = "New Tasks",
-                items = newTasks,
-                showBulkActions = normalizedQuery.isBlank(),
-                onSaveAll = {
-                    reminderViewModel.markSavedByIds(newTasks.map { it.savedItemId })
-                    Toast.makeText(context, "Moved to Tasks", Toast.LENGTH_SHORT).show()
-                },
-                onDeleteAll = { deleteTarget = "tasks" to newTasks },
-            )
+        if (newTasks.isNotEmpty()) {
+            item {
+                NewSavedItemSectionHeader(
+                    title = "New Tasks",
+                    count = newTasks.size,
+                    items = newTasks,
+                    showBulkActions = normalizedQuery.isBlank(),
+                    onSaveAll = {
+                        reminderViewModel.markSavedByIds(newTasks.map { it.savedItemId })
+                        Toast.makeText(context, "Moved to Tasks", Toast.LENGTH_SHORT).show()
+                    },
+                    onDeleteAll = { deleteTarget = "tasks" to newTasks },
+                )
+            }
         }
         items(newTasks, key = { it.savedItemId }) { item ->
             NewSavedItemCard(
@@ -109,19 +113,20 @@ fun NewScreen(
                 onDelete = { reminderViewModel.delete(item.savedItemId) },
             )
         }
-        if (newTasks.isEmpty()) item { EmptySectionText("No new tasks") }
-
-        item {
-            NewSavedItemSectionHeader(
-                title = "New Keep",
-                items = newKeep,
+        if (newKeep.isNotEmpty()) {
+            item {
+                NewSavedItemSectionHeader(
+                    title = "New Keep",
+                    count = newKeep.size,
+                    items = newKeep,
                 showBulkActions = normalizedQuery.isBlank(),
                 onSaveAll = {
                     reminderViewModel.markSavedByIds(newKeep.map { it.savedItemId })
                     Toast.makeText(context, "Moved to Keep", Toast.LENGTH_SHORT).show()
                 },
-                onDeleteAll = { deleteTarget = "keep" to newKeep },
-            )
+                    onDeleteAll = { deleteTarget = "keep" to newKeep },
+                )
+            }
         }
         items(newKeep, key = { it.savedItemId }) { item ->
             NewSavedItemCard(
@@ -133,24 +138,28 @@ fun NewScreen(
                 onDelete = { reminderViewModel.delete(item.savedItemId) },
             )
         }
-        if (newKeep.isEmpty()) item { EmptySectionText("No new keep") }
-
-        item { SectionTitle("New Notifications") }
+        if (filteredUnits.isNotEmpty()) {
+            item { SectionTitle("New Notifications", filteredUnits.size) }
+        }
         items(filteredUnits, key = { it.notiKey }) { displayUnit ->
-            val filteredRecords = newRecordsByKey[displayUnit.notiKey].orEmpty().filter { record ->
+            val newRecords = newRecordsByKey[displayUnit.notiKey].orEmpty()
+            val matchingRecords = newRecords.filter { record ->
                 normalizedQuery.isBlank() || listOf(record.title, record.content, record.person)
                     .any { it.lowercase().contains(normalizedQuery) }
             }
+            val recordsToShow = matchingRecords.ifEmpty { newRecords }
             NotiCard(
                 context = context,
-                notiDisplayUnit = NotiDisplayUnit(displayUnit.notiUnit, filteredRecords.ifEmpty { displayUnit.notiRecords }),
+                notiDisplayUnit = NotiDisplayUnit(displayUnit.notiUnit, recordsToShow),
                 isDragging = false,
                 drawerViewModel = drawerViewModel,
                 isCardVisible = true,
                 parentViewport = Rect.Zero,
             )
         }
-        if (filteredUnits.isEmpty()) item { EmptySectionText("No new notifications") }
+        if (!hasAnyVisibleSection) {
+            item { EmptySectionText(if (normalizedQuery.isBlank()) "No new items" else "No matching new items") }
+        }
     }
 
     val target = deleteTarget
@@ -174,13 +183,14 @@ fun NewScreen(
 @Composable
 private fun NewSavedItemSectionHeader(
     title: String,
+    count: Int,
     items: List<SavedItem>,
     showBulkActions: Boolean,
     onSaveAll: () -> Unit,
     onDeleteAll: () -> Unit,
 ) {
     Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-        Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Text("$title ($count)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         if (items.isNotEmpty() && showBulkActions) {
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -192,9 +202,9 @@ private fun NewSavedItemSectionHeader(
 }
 
 @Composable
-private fun SectionTitle(title: String) {
+private fun SectionTitle(title: String, count: Int) {
     Text(
-        text = title,
+        text = "$title ($count)",
         modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
         style = MaterialTheme.typography.titleMedium,
         fontWeight = FontWeight.Bold,

@@ -200,8 +200,8 @@ class NotiActionsRepository(
             }
             "to_top" -> notiDrawerDao.updateToTopStatus(notiKey, true, System.currentTimeMillis())
             "undo_to_top" -> notiDrawerDao.updateToTopStatus(notiKey, false, 0L)
-            "unpin" -> setPinnedState(notiKey)
-            "pin" -> setPinnedState(notiKey)
+            "unpin" -> setPinnedState(notiKey, false)
+            "pin" -> setPinnedState(notiKey, true)
             "mark_read" -> markNotiRead(notiKey)
             "extract_reminder" -> {
                 // Legacy path: still allows triggering extraction, but without explicit record IDs we
@@ -216,8 +216,9 @@ class NotiActionsRepository(
         }
     }
 
-    suspend fun setPinnedState(notiKey: String) {
-        notiDrawerDao.flipPin(notiKey)
+    suspend fun setPinnedState(notiKey: String, pinned: Boolean? = null) {
+        if (pinned == null) notiDrawerDao.flipPin(notiKey)
+        else notiDrawerDao.setPinned(notiKey, pinned)
     }
 
     suspend fun setHasTask(notiKey: String, hasTask: Boolean) {

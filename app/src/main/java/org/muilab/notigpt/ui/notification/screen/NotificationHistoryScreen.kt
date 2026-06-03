@@ -38,17 +38,18 @@ fun NotificationHistoryScreen(
     var mode by remember { mutableStateOf(HistoryMode.Grouped) }
     var records by remember { mutableStateOf<List<NotiRecord>>(emptyList()) }
 
-    LaunchedEffect(Unit) {
-        records = drawerViewModel.getLatestRecordsForHistory(500).filter { !it.isNew }
-    }
-
     val normalizedQuery = query.trim().lowercase()
-    val filtered = remember(records, normalizedQuery) {
-        if (normalizedQuery.isBlank()) records else records.filter { record ->
-            listOf(record.title, record.content, record.person, record.extraSubText)
-                .any { it.lowercase().contains(normalizedQuery) }
+
+    LaunchedEffect(normalizedQuery) {
+        records = if (normalizedQuery.isBlank()) {
+            drawerViewModel.getLatestRecordsForHistory(500)
+        } else {
+            // Search is DB-backed and scans all notification records, not just the currently loaded page.
+            drawerViewModel.searchRecordsForHistory(query)
         }
     }
+
+    val filtered = records
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -113,7 +114,7 @@ private fun HistoryGroupCard(
         Column(Modifier.padding(16.dp)) {
             val latest = records.maxByOrNull { it.time }
             Text(latest?.title?.ifBlank { "Notification" } ?: "Notification", fontWeight = FontWeight.Bold)
-            Text("${records.size} records", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("${records.size} records · ${latest?.let { if (it.isNew) "New" else "History" } ?: "History"}", color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (expanded) {
                 Spacer(Modifier.height(8.dp))
                 records.sortedByDescending { it.time }.forEach { record ->

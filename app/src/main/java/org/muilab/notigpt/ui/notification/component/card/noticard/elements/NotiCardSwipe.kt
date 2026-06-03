@@ -46,9 +46,10 @@ fun Modifier.notiCardSwipeHandler(
         val extraPx = with(density) { ACTIONS_REVEAL_EXTRA_DP.dp.toPx() }
         val maxActionsOffset = endActionsWidth + extraPx
 
-        // Restore thresholds
-        val horizontalBiasFactor = 0.4f
-        val minHorizontalPx = viewTouchSlop
+        // Horizontal swipe should only start when the drag is clearly horizontal.
+        // Vertical scrolling is handled by the parent list and should not be stolen by a small diagonal move.
+        val horizontalBiasFactor = 1.25f
+        val minHorizontalPx = viewTouchSlop * 1.5f
 
         awaitEachGesture {
             onSwipeActiveChanged(false)

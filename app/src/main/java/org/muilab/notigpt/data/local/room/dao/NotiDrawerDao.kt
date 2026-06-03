@@ -76,6 +76,9 @@ interface NotiDrawerDao {
     @Query("UPDATE noti_drawer SET isPinned = NOT isPinned WHERE notiKey = :notiKey")
     suspend fun flipPin(notiKey: String)
 
+    @Query("UPDATE noti_drawer SET isPinned = :pinned WHERE notiKey = :notiKey")
+    suspend fun setPinned(notiKey: String, pinned: Boolean)
+
     @Query("UPDATE noti_drawer SET sortScore = :newSortScore WHERE notiKey = :notiKey")
     fun updateSortScore(notiKey: String, newSortScore: Float)
 

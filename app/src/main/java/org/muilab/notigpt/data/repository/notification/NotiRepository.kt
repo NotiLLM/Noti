@@ -112,7 +112,7 @@ class NotiRepository(
     }
 
     suspend fun setPinnedState(notiKey: String, pinned: Boolean) {
-        actionsRepo.setPinnedState(notiKey)
+        actionsRepo.setPinnedState(notiKey, pinned)
     }
 
     /** Active (not dismissed) notification keys. */
