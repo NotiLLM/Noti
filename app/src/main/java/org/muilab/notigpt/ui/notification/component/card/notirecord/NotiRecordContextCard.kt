@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
@@ -190,7 +189,7 @@ fun NotiRecordContextCard(
                                     modifier = Modifier.fillMaxWidth(),
                                 ) {
                                     Icon(
-                                        painter = androidx.compose.ui.res.painterResource(R.drawable.task_yes),
+                                        painter = androidx.compose.ui.res.painterResource(R.drawable.task),
                                         contentDescription = stringResource(R.string.ui_action_extract_reminder),
                                         modifier = Modifier.size(22.dp),
                                     )

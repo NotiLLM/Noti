@@ -75,7 +75,7 @@ fun AppBottomBar(
             onClick = { onTabSelected(AppPrimaryTab.Tasks) },
             icon = {
                 BadgeIcon(
-                    iconRes = R.drawable.task_no,
+                    iconRes = R.drawable.task,
                     contentDescription = stringResource(R.string.tab_tasks),
                     badgeCount = pendingTaskCount,
                     badgeColor = MaterialTheme.colorScheme.primary,

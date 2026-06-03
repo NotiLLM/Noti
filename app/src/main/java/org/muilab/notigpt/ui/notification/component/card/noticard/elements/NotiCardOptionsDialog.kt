@@ -107,7 +107,7 @@ fun NotiCardOptionsDialog(
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Icon(
-                            painter = painterResource(R.drawable.task_yes),
+                            painter = painterResource(R.drawable.task),
                             contentDescription = stringResource(R.string.ui_action_extract_reminder),
                             modifier = Modifier.size(24.dp),
                         )

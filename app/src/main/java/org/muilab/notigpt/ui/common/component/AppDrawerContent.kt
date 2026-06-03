@@ -26,7 +26,7 @@ fun AppDrawerContent(
             label = { Text(stringResource(R.string.tab_preferences)) },
             icon = {
                 Icon(
-                    painter = painterResource(R.drawable.task_no),
+                    painter = painterResource(R.drawable.task),
                     contentDescription = null,
                 )
             },

@@ -76,7 +76,7 @@ fun NotiCardBackgroundActions(
             )
 
             NotiActionIconButton(
-                R.drawable.task_yes,
+                R.drawable.task,
                 stringResource(R.string.ui_action_extract_reminder),
                 {
                     if (canClickActions.value) {
