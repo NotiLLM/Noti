@@ -62,17 +62,17 @@ class DrawerSearchController(
         }
     }
 
-    suspend fun checkGapHasRecords(notiKey: String, startTime: Long, endTime: Long): Boolean {
+    suspend fun checkGapHasRecords(notiKey: String, startAtMs: Long, endAtMs: Long): Boolean {
         return withContext(Dispatchers.IO) {
-            notiRepository.hasRecordsInGap(notiKey, startTime, endTime)
+            notiRepository.hasRecordsInGap(notiKey, startAtMs, endAtMs)
         }
     }
 
-    suspend fun loadGapRecords(notiKey: String, startTime: Long, endTime: Long, fromStart: Boolean) {
+    suspend fun loadGapRecords(notiKey: String, startAtMs: Long, endAtMs: Long, fromStart: Boolean) {
         val currentList = _searchResults.value[notiKey] ?: return
 
         val gapRecords = withContext(Dispatchers.IO) {
-            notiRepository.getGapRecords(notiKey, startTime, endTime, 10, fromStart)
+            notiRepository.getGapRecords(notiKey, startAtMs, endAtMs, 10, fromStart)
         }
 
         if (gapRecords.isNotEmpty()) {

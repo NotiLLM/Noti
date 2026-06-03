@@ -23,7 +23,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import org.muilab.notigpt.R
-import org.muilab.notigpt.model.features.SubTask
+import org.muilab.notigpt.model.features.SavedSubItem
 
 /**
  * Inline sub-task list shown inside ReminderCard on the list screen.
@@ -32,15 +32,15 @@ import org.muilab.notigpt.model.features.SubTask
  * "N more" / "N completed" summary that expands to reveal hidden items.
  */
 @Composable
-fun SubTaskListInCard(
-    subTasks: List<SubTask>,
+fun SavedSubItemListInCard(
+    subTasks: List<SavedSubItem>,
     maxVisible: Int = 3,
     onToggleCompleted: (String, Boolean) -> Unit,
-    onSubTaskClick: (SubTask) -> Unit,
-    onSubTaskEdit: (SubTask) -> Unit,
-    onSubTaskDelete: (SubTask) -> Unit,
-    onSubTaskExportGoogleTasks: (SubTask) -> Unit,
-    onSubTaskExportGoogleCalendar: (SubTask) -> Unit,
+    onSavedSubItemClick: (SavedSubItem) -> Unit,
+    onSavedSubItemEdit: (SavedSubItem) -> Unit,
+    onSavedSubItemDelete: (SavedSubItem) -> Unit,
+    onSavedSubItemExportGoogleTasks: (SavedSubItem) -> Unit,
+    onSavedSubItemExportGoogleCalendar: (SavedSubItem) -> Unit,
 ) {
     if (subTasks.isEmpty()) return
 
@@ -69,14 +69,14 @@ fun SubTaskListInCard(
     Column(modifier = Modifier.weight(1f)) {
         // Always-visible incomplete sub-tasks
         visible.forEach { st ->
-            SubTaskRow(
+            SavedSubItemRow(
                 subTask = st,
-                onToggleCompleted = { checked -> onToggleCompleted(st.subTaskId, checked) },
-                onClick = { onSubTaskClick(st) },
-                onEdit = { onSubTaskEdit(st) },
-                onDelete = { onSubTaskDelete(st) },
-                onExportGoogleTasks = { onSubTaskExportGoogleTasks(st) },
-                onExportGoogleCalendar = { onSubTaskExportGoogleCalendar(st) },
+                onToggleCompleted = { checked -> onToggleCompleted(st.savedSubItemId, checked) },
+                onClick = { onSavedSubItemClick(st) },
+                onEdit = { onSavedSubItemEdit(st) },
+                onDelete = { onSavedSubItemDelete(st) },
+                onExportGoogleTasks = { onSavedSubItemExportGoogleTasks(st) },
+                onExportGoogleCalendar = { onSavedSubItemExportGoogleCalendar(st) },
             )
         }
 
@@ -89,14 +89,14 @@ fun SubTaskListInCard(
             ) {
                 Column {
                     hiddenIncomplete.forEach { st ->
-                        SubTaskRow(
+                        SavedSubItemRow(
                             subTask = st,
-                            onToggleCompleted = { checked -> onToggleCompleted(st.subTaskId, checked) },
-                            onClick = { onSubTaskClick(st) },
-                            onEdit = { onSubTaskEdit(st) },
-                            onDelete = { onSubTaskDelete(st) },
-                            onExportGoogleTasks = { onSubTaskExportGoogleTasks(st) },
-                            onExportGoogleCalendar = { onSubTaskExportGoogleCalendar(st) },
+                            onToggleCompleted = { checked -> onToggleCompleted(st.savedSubItemId, checked) },
+                            onClick = { onSavedSubItemClick(st) },
+                            onEdit = { onSavedSubItemEdit(st) },
+                            onDelete = { onSavedSubItemDelete(st) },
+                            onExportGoogleTasks = { onSavedSubItemExportGoogleTasks(st) },
+                            onExportGoogleCalendar = { onSavedSubItemExportGoogleCalendar(st) },
                         )
                     }
                 }
@@ -125,14 +125,14 @@ fun SubTaskListInCard(
             ) {
                 Column {
                     completed.forEach { st ->
-                        SubTaskRow(
+                        SavedSubItemRow(
                             subTask = st,
-                            onToggleCompleted = { checked -> onToggleCompleted(st.subTaskId, checked) },
-                            onClick = { onSubTaskClick(st) },
-                            onEdit = { onSubTaskEdit(st) },
-                            onDelete = { onSubTaskDelete(st) },
-                            onExportGoogleTasks = { onSubTaskExportGoogleTasks(st) },
-                            onExportGoogleCalendar = { onSubTaskExportGoogleCalendar(st) },
+                            onToggleCompleted = { checked -> onToggleCompleted(st.savedSubItemId, checked) },
+                            onClick = { onSavedSubItemClick(st) },
+                            onEdit = { onSavedSubItemEdit(st) },
+                            onDelete = { onSavedSubItemDelete(st) },
+                            onExportGoogleTasks = { onSavedSubItemExportGoogleTasks(st) },
+                            onExportGoogleCalendar = { onSavedSubItemExportGoogleCalendar(st) },
                         )
                     }
                 }

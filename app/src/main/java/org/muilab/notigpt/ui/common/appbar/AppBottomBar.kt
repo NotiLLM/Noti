@@ -57,18 +57,18 @@ fun AppBottomBar(
 ) {
     NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer) {
         NavigationBarItem(
-            selected = selectedTab == AppPrimaryTab.Notifications,
-            onClick = { onTabSelected(AppPrimaryTab.Notifications) },
+            selected = selectedTab == AppPrimaryTab.New,
+            onClick = { onTabSelected(AppPrimaryTab.New) },
             icon = {
                 BadgeIcon(
                     iconRes = R.drawable.notifications,
-                    contentDescription = stringResource(R.string.tab_notifications),
+                    contentDescription = "New",
                     badgeCount = unreadNotificationCount,
                     badgeColor = MaterialTheme.colorScheme.error,
                     badgeTextColor = MaterialTheme.colorScheme.onError,
                 )
             },
-            label = { Text(stringResource(R.string.tab_notifications)) }
+            label = { Text("New") }
         )
         NavigationBarItem(
             selected = selectedTab == AppPrimaryTab.Tasks,

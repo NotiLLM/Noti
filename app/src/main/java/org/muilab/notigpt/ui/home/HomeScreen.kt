@@ -21,6 +21,7 @@ import org.muilab.notigpt.ui.notification.component.card.notirecord.NotiRecordCo
 import org.muilab.notigpt.ui.notification.screen.NotificationsScreen
 import org.muilab.notigpt.ui.common.lifecycle.LifecycleObserver
 import org.muilab.notigpt.ui.notification.viewmodel.DrawerViewModel
+import org.muilab.notigpt.ui.reminder.viewmodel.ScheduledReminderViewModel
 
 /**
  * Home route that hosts the notification drawer experience.
@@ -31,7 +32,10 @@ import org.muilab.notigpt.ui.notification.viewmodel.DrawerViewModel
 @RequiresApi(Build.VERSION_CODES.S)
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun HomeScreen(drawerViewModel: DrawerViewModel) {
+fun HomeScreen(
+    drawerViewModel: DrawerViewModel,
+    scheduledReminderViewModel: ScheduledReminderViewModel? = null,
+) {
     val queryString by drawerViewModel.queryString.collectAsState()
 
     val isSearching = queryString.isNotBlank()
@@ -65,7 +69,10 @@ fun HomeScreen(drawerViewModel: DrawerViewModel) {
                 }
             }
         } else {
-            NotificationsScreen(drawerViewModel = drawerViewModel)
+            NotificationsScreen(
+                drawerViewModel = drawerViewModel,
+                scheduledReminderViewModel = scheduledReminderViewModel,
+            )
         }
 
         val isLoading by drawerViewModel.isTargetLoading.collectAsState()

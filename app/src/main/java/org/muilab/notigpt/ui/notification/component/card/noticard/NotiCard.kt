@@ -49,6 +49,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import kotlinx.coroutines.launch
 import org.muilab.notigpt.model.notifications.NotiDisplayUnit
+import org.muilab.notigpt.model.notifications.NotiRecord
 import org.muilab.notigpt.ui.notification.component.card.noticard.elements.NOTI_CARD_COLLAPSE_THRESHOLD_PX_DEFAULT
 import org.muilab.notigpt.ui.notification.component.card.noticard.elements.NotiCardBackgroundActions
 import org.muilab.notigpt.ui.notification.component.card.noticard.elements.NotiCardExpandedRecords
@@ -89,6 +90,7 @@ fun NotiCard(
     onStartReorderDrag: (Offset) -> Unit = {},
     onReorderDrag: (Offset) -> Unit = {},
     onStopReorderDrag: () -> Unit = {},
+    onCreateReminder: ((String, List<NotiRecord>) -> Unit)? = null,
 ) {
     // These are part of the shared NotiCard API even if not used in this implementation yet.
     @Suppress("UNUSED_VARIABLE")
@@ -107,7 +109,6 @@ fun NotiCard(
     val notiKey = notiUnit.notiKey
 
     val isPinned = notiUnit.isPinned
-    val isRead = notiUnit.isRead
 
     val lastRecord = notiRecords.lastOrNull()
     val notiOverallTitle = when {
@@ -131,10 +132,7 @@ fun NotiCard(
 
     val backgroundColor = MaterialTheme.colorScheme.surfaceBright
 
-    val borderColor = when {
-        !isRead -> MaterialTheme.colorScheme.error
-        else -> MaterialTheme.colorScheme.outline
-    }
+    val borderColor = MaterialTheme.colorScheme.outline
 
     val borderWidth = if (notiUnit.sortPosition != -1) 3.dp else 1.dp
 
@@ -194,7 +192,7 @@ fun NotiCard(
         swipeDeleteLeft = swipeDeleteLeft,
         overlayBoundsRelativeToSurface = overlayBoundsRelativeToSurface,
         horizontalOffsetX = horizontalOffsetX,
-        onDismiss = { drawerViewModel.actOnNoti(notiKey, "dismiss_swipe") },
+        onDismiss = { drawerViewModel.archiveNewNotificationCard(notiKey) },
         scope = coroutineScope,
         onSwipeActiveChanged = { isSwipeActive = it },
     )
@@ -219,18 +217,7 @@ fun NotiCard(
                 // by the swipe handler via `cardWidth` state updates.
                 cardWidth = it.width.toFloat()
             }
-            .clip(MaterialTheme.shapes.large)
-            .onGloballyPositioned { coordinates ->
-                if (!isRead && parentViewport != null) {
-                    val cardBounds = coordinates.boundsInWindow()
-                    val tolerance = 1f
-                    val isTopVisible = cardBounds.top >= (parentViewport.top - tolerance)
-                    val isBottomVisible = cardBounds.bottom <= (parentViewport.bottom + tolerance)
-                    if (isTopVisible && isBottomVisible) {
-                        drawerViewModel.markNotificationAsRead(notiKey)
-                    }
-                }
-            },
+            .clip(MaterialTheme.shapes.large),
     ) {
         // Background Actions
         NotiCardBackgroundActions(
@@ -381,5 +368,8 @@ fun NotiCard(
         state = NotiCardOptionsState(
             isPinned = isPinned,
         ),
+        onCreateReminder = onCreateReminder?.let { callback ->
+            { callback(notiOverallTitle, notiRecords) }
+        },
     )
 }

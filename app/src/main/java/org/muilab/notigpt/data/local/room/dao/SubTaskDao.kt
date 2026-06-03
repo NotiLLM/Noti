@@ -4,7 +4,7 @@ import androidx.room.Dao
 import androidx.room.Query
 import androidx.room.Upsert
 import kotlinx.coroutines.flow.Flow
-import org.muilab.notigpt.model.features.SubTask
+import org.muilab.notigpt.model.features.SavedSubItem
 
 /**
  * Local access layer for subtasks nested under reminders.
@@ -13,33 +13,33 @@ import org.muilab.notigpt.model.features.SubTask
  * gain their own lifecycle or sync rules, consider a dedicated repository boundary before expanding this DAO.
  */
 @Dao
-interface SubTaskDao {
+interface SavedSubItemDao {
 
     @Upsert
-    suspend fun upsert(subTask: SubTask)
+    suspend fun upsert(subTask: SavedSubItem)
 
     @Upsert
-    suspend fun upsertAll(subTasks: List<SubTask>)
+    suspend fun upsertAll(subTasks: List<SavedSubItem>)
 
-    @Query("SELECT * FROM sub_tasks WHERE parentReminderId = :reminderId AND isVisible = 1 ORDER BY sortOrder ASC, createdAt ASC")
-    fun observeByReminderId(reminderId: String): Flow<List<SubTask>>
+    @Query("SELECT * FROM saved_sub_item WHERE parentSavedItemId = :savedItemId AND isVisible = 1 ORDER BY sortOrder ASC, createdAt ASC")
+    fun observeByReminderId(savedItemId: String): Flow<List<SavedSubItem>>
 
-    @Query("SELECT * FROM sub_tasks WHERE isVisible = 1 ORDER BY sortOrder ASC, createdAt ASC")
-    fun observeAllVisible(): Flow<List<SubTask>>
+    @Query("SELECT * FROM saved_sub_item WHERE isVisible = 1 ORDER BY sortOrder ASC, createdAt ASC")
+    fun observeAllVisible(): Flow<List<SavedSubItem>>
 
-    @Query("SELECT * FROM sub_tasks WHERE parentReminderId = :reminderId AND isVisible = 1 ORDER BY sortOrder ASC, createdAt ASC")
-    suspend fun getByReminderId(reminderId: String): List<SubTask>
+    @Query("SELECT * FROM saved_sub_item WHERE parentSavedItemId = :savedItemId AND isVisible = 1 ORDER BY sortOrder ASC, createdAt ASC")
+    suspend fun getByReminderId(savedItemId: String): List<SavedSubItem>
 
-    @Query("SELECT * FROM sub_tasks WHERE subTaskId = :subTaskId")
-    suspend fun getById(subTaskId: String): SubTask?
+    @Query("SELECT * FROM saved_sub_item WHERE savedSubItemId = :savedSubItemId")
+    suspend fun getById(savedSubItemId: String): SavedSubItem?
 
-    @Query("UPDATE sub_tasks SET isCompleted = :completed, lastUpdateTimestamp = :ts WHERE subTaskId = :subTaskId")
-    suspend fun setCompleted(subTaskId: String, completed: Boolean, ts: Long)
+    @Query("UPDATE saved_sub_item SET isCompleted = :completed, lastUpdateTimestamp = :ts WHERE savedSubItemId = :savedSubItemId")
+    suspend fun setCompleted(savedSubItemId: String, completed: Boolean, ts: Long)
 
-    @Query("UPDATE sub_tasks SET isVisible = 0, lastUpdateTimestamp = :ts WHERE subTaskId = :subTaskId")
-    suspend fun softDeleteById(subTaskId: String, ts: Long)
+    @Query("UPDATE saved_sub_item SET isVisible = 0, lastUpdateTimestamp = :ts WHERE savedSubItemId = :savedSubItemId")
+    suspend fun softDeleteById(savedSubItemId: String, ts: Long)
 
     /** Cascade soft-delete all sub-tasks of a parent reminder. */
-    @Query("UPDATE sub_tasks SET isVisible = 0, lastUpdateTimestamp = :ts WHERE parentReminderId = :reminderId")
-    suspend fun softDeleteByParentId(reminderId: String, ts: Long)
+    @Query("UPDATE saved_sub_item SET isVisible = 0, lastUpdateTimestamp = :ts WHERE parentSavedItemId = :savedItemId")
+    suspend fun softDeleteByParentId(savedItemId: String, ts: Long)
 }

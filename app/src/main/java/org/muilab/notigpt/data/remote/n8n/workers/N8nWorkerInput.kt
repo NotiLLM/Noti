@@ -50,7 +50,7 @@ sealed interface N8nWorkerInput {
     /** Regenerate a single reminder. */
     data class RegenerateOne(
         override val webhookPath: String,
-        val reminderId: String,
+        val savedItemId: String,
     ) : N8nWorkerInput
 
     /** Regenerate all visible reminders. */
@@ -61,7 +61,7 @@ sealed interface N8nWorkerInput {
     /** Rerank a single reminder (triggered by user feedback, etc.). */
     data class Rerank(
         override val webhookPath: String,
-        val reminderId: String,
+        val savedItemId: String,
         val trigger: String,
     ) : N8nWorkerInput
 
@@ -101,7 +101,7 @@ sealed interface N8nWorkerInput {
 
                 N8N_REGENERATE_ONE -> RegenerateOne(
                     webhookPath = webhookPath,
-                    reminderId = input.getString("reminder_id") ?: return null,
+                    savedItemId = input.getString("reminder_id") ?: return null,
                 )
 
                 N8N_REGENERATE_ALL -> RegenerateAll(
@@ -110,7 +110,7 @@ sealed interface N8nWorkerInput {
 
                 N8N_RERANK -> Rerank(
                     webhookPath = webhookPath,
-                    reminderId = input.getString("reminder_id") ?: return null,
+                    savedItemId = input.getString("reminder_id") ?: return null,
                     trigger = input.getString("trigger") ?: return null,
                 )
 

@@ -10,7 +10,9 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.muilab.notigpt.data.remote.n8n.formatter.N8nRecordFormatter
 import org.muilab.notigpt.data.remote.n8n.context.N8nWorkerContext
-import org.muilab.notigpt.model.features.ReminderUnit
+import org.muilab.notigpt.model.features.SavedItem
+import org.muilab.notigpt.model.features.SavedItemType
+import org.muilab.notigpt.model.features.SavedItemState
 import org.muilab.notigpt.util.SharedPreferencesManager
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -37,20 +39,20 @@ internal object ReminderRegenerationHandler {
             Log.e(TAG, "No webhook_path for regenerate_one")
             return ctx.failure()
         }
-        val reminderId = inputData.getString("reminder_id") ?: run {
+        val savedItemId = inputData.getString("reminder_id") ?: run {
             Log.e(TAG, "No reminder_id for regenerate_one")
             return ctx.failure()
         }
 
-        val reminder = ctx.reminderRepository.getById(reminderId) ?: run {
-            Log.w(TAG, "Reminder $reminderId not found")
+        val reminder = ctx.reminderRepository.getById(savedItemId) ?: run {
+            Log.w(TAG, "Reminder $savedItemId not found")
             return ctx.success()
         }
 
         val notiContext = buildNotiContextForReminder(ctx, reminder)
         val payload = buildPayload(
             reminders = listOf(reminder),
-            notiContextMap = mapOf(reminderId to notiContext),
+            notiContextMap = mapOf(savedItemId to notiContext),
             trigger = "REGENERATE_ONE",
             extractionPreferences = ctx.getExtractionPreferencesPayload(),
             userContexts = ctx.getUserContextsPayload(),
@@ -79,7 +81,7 @@ internal object ReminderRegenerationHandler {
 
         val notiContextMap = mutableMapOf<String, List<Map<String, Any>>>()
         for (r in allReminders) {
-            notiContextMap[r.reminderId] = buildNotiContextForReminder(ctx, r)
+            notiContextMap[r.savedItemId] = buildNotiContextForReminder(ctx, r)
         }
 
         val payload = buildPayload(
@@ -101,9 +103,9 @@ internal object ReminderRegenerationHandler {
      */
     private suspend fun buildNotiContextForReminder(
         ctx: N8nWorkerContext,
-        reminder: ReminderUnit,
+        reminder: SavedItem,
     ): List<Map<String, Any>> {
-        if (reminder.associatedNotiRecords.isEmpty()) return emptyList()
+        if (reminder.sourceNotiRecordIds.isEmpty()) return emptyList()
 
         val db = ctx.database
         val wantedKeys = reminder.associatedNotiKeys.toList()
@@ -129,7 +131,7 @@ internal object ReminderRegenerationHandler {
     }
 
     private fun buildPayload(
-        reminders: List<ReminderUnit>,
+        reminders: List<SavedItem>,
         notiContextMap: Map<String, List<Map<String, Any>>>,
         trigger: String,
         extractionPreferences: List<Map<String, String>>,
@@ -138,27 +140,27 @@ internal object ReminderRegenerationHandler {
         val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.getDefault())
 
         val remindersPayload = reminders.map { r ->
-            val deadlineIso = if (r.deadlineTimestamp > 0L) sdf.format(Date(r.deadlineTimestamp)) else -1L
-            val startTimeIso = if (r.startTime > 0L) sdf.format(Date(r.startTime)) else -1L
-            val endTimeIso = if (r.endTime > 0L) sdf.format(Date(r.endTime)) else -1L
+            val deadlineIso = if (r.deadlineAtMs > 0L) sdf.format(Date(r.deadlineAtMs)) else -1L
+            val startAtMsIso = if (r.startAtMs > 0L) sdf.format(Date(r.startAtMs)) else -1L
+            val endAtMsIso = if (r.endAtMs > 0L) sdf.format(Date(r.endAtMs)) else -1L
             mapOf(
-                "reminderId" to r.reminderId,
-                "reminderTitle" to r.reminderTitle,
-                "reminderContent" to r.reminderContent,
+                "savedItemId" to r.savedItemId,
+                "title" to r.title,
+                "content" to r.content,
                 "isTask" to r.isTask,
                 "isEvent" to r.isEvent,
                 "isCompleted" to r.isCompleted,
                 "deadlineTimeString" to deadlineIso,
-                "startTimeString" to startTimeIso,
-                "endTimeString" to endTimeIso,
+                "startAtMsString" to startAtMsIso,
+                "endAtMsString" to endAtMsIso,
                 "estimatedCompletionMinutes" to r.estimatedCompletionTime,
-                "associatedNotiRecords" to r.associatedNotiRecords.toList(),
+                "sourceNotiRecordIds" to r.sourceNotiRecordIds.toList(),
                 "userEdited" to r.userEdited,
                 "buttons" to r.buttons,
                 "sortScore" to r.sortScore,
                 "isPinned" to r.isPinned,
                 "reRankHistory" to r.reRankHistory,
-                "notiContext" to (notiContextMap[r.reminderId] ?: emptyList<Any>()),
+                "notiContext" to (notiContextMap[r.savedItemId] ?: emptyList<Any>()),
             )
         }
 
@@ -207,18 +209,18 @@ internal object ReminderRegenerationHandler {
             val arr = JSONArray(bodyStr)
             for (i in 0 until arr.length()) {
                 val obj = arr.getJSONObject(i)
-                val reminderId = obj.optString("reminderId", obj.optString("taskId"))
-                if (reminderId.isBlank()) continue
+                val savedItemId = obj.optString("savedItemId", obj.optString("taskId"))
+                if (savedItemId.isBlank()) continue
 
-                val existing = ctx.reminderRepository.getById(reminderId)
+                val existing = ctx.reminderRepository.getById(savedItemId)
 
-                val reminderTitle = obj.optString("reminderTitle", existing?.reminderTitle ?: "")
-                val reminderContent = obj.optString("reminderContent", existing?.reminderContent ?: "")
+                val title = obj.optString("title", existing?.title ?: "")
+                val content = obj.optString("content", existing?.content ?: "")
                 val isTask = obj.optBoolean("isTask", existing?.isTask ?: true)
                 val isEvent = obj.optBoolean("isEvent", existing?.isEvent ?: false)
                 val deadlineMs = ReminderExtractionHandler.isoToUnixMillis(obj.optString("deadlineTimeString", "-1"))
-                val startTimeMs = ReminderExtractionHandler.isoToUnixMillis(obj.optString("startTimeString", "-1")).let { v -> if (v == -1L) 0L else v }
-                val endTimeMs = ReminderExtractionHandler.isoToUnixMillis(obj.optString("endTimeString", "-1")).let { v -> if (v == -1L) 0L else v }
+                val startAtMsMs = ReminderExtractionHandler.isoToUnixMillis(obj.optString("startAtMsString", "-1")).let { v -> if (v == -1L) 0L else v }
+                val endAtMsMs = ReminderExtractionHandler.isoToUnixMillis(obj.optString("endAtMsString", "-1")).let { v -> if (v == -1L) 0L else v }
                 val estimate = obj.optLong("estimatedCompletionTime", obj.optLong("estimatedCompletionMinutes", existing?.estimatedCompletionTime ?: 0L))
                 val isCompleted = obj.optBoolean("isCompleted", existing?.isCompleted ?: false)
 
@@ -248,30 +250,29 @@ internal object ReminderRegenerationHandler {
                     })
                 }
 
-                // Preserve associatedNotiRecords from existing
+                // Preserve sourceNotiRecordIds from existing
                 val assocIds = mutableSetOf<String>()
-                val assoc = obj.optJSONArray("associatedNotiRecords") ?: obj.optJSONArray("associatedNotis")
+                val assoc = obj.optJSONArray("sourceNotiRecordIds") ?: obj.optJSONArray("associatedNotis")
                 if (assoc != null) {
                     for (j in 0 until assoc.length()) assocIds.add(assoc.optString(j))
                 }
                 if (assocIds.isEmpty() && existing != null) {
-                    assocIds.addAll(existing.associatedNotiRecords)
+                    assocIds.addAll(existing.sourceNotiRecordIds)
                 }
 
-                val unit = ReminderUnit(
-                    reminderId = reminderId,
-                    reminderTitle = reminderTitle,
-                    reminderContent = reminderContent,
-                    isTask = isTask,
-                    isEvent = isEvent,
-                    isCompleted = isCompleted,
+                val unit = SavedItem(
+                    savedItemId = savedItemId,
+                    title = title,
+                    content = content,
+                    itemType = if (isTask) SavedItemType.Task else SavedItemType.Keep,
+                    state = if (existing == null) SavedItemState.New else SavedItemState.Updated,
                     lastUpdateTimestamp = System.currentTimeMillis(),
-                    deadlineTimestamp = deadlineMs,
-                    startTime = startTimeMs,
-                    endTime = endTimeMs,
+                    deadlineAtMs = deadlineMs,
+                    startAtMs = startAtMsMs,
+                    endAtMs = endAtMsMs,
                     estimatedCompletionTime = estimate,
-                    associatedNotiRecords = assocIds.toSet(),
-                    extractionSnapshotId = existing?.extractionSnapshotId,
+                    sourceNotiRecordIds = assocIds.toSet(),
+                    sourceExtractionSnapshotId = existing?.sourceExtractionSnapshotId,
                     origin = existing?.origin ?: "llm_auto_extraction",
                     humanEditCount = existing?.humanEditCount ?: 0,
                     deletedAtMs = null,

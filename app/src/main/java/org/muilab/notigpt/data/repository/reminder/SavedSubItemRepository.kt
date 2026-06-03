@@ -1,0 +1,38 @@
+package org.muilab.notigpt.data.repository.reminder
+
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
+import org.muilab.notigpt.data.local.room.dao.SavedSubItemDao
+import org.muilab.notigpt.model.features.SavedSubItem
+
+/**
+ * Repository for reminder sub-task persistence and grouped observation.
+ *
+ * Keep sub-task writes here so ReminderViewModel can coordinate parent reminders without knowing DAO details or
+ * soft-delete mechanics.
+ */
+class SavedSubItemRepository(private val subTaskDao: SavedSubItemDao) {
+
+    /** All visible sub-tasks grouped by their parent reminder ID. */
+    fun observeAllByReminder(): Flow<Map<String, List<SavedSubItem>>> =
+        subTaskDao.observeAllVisible().map { list ->
+            list.groupBy { it.parentSavedItemId }
+        }
+
+    suspend fun upsert(subTask: SavedSubItem) = subTaskDao.upsert(subTask)
+
+    suspend fun upsertAll(subTasks: List<SavedSubItem>) = subTaskDao.upsertAll(subTasks)
+
+    suspend fun setCompleted(savedSubItemId: String, completed: Boolean, ts: Long) =
+        subTaskDao.setCompleted(savedSubItemId, completed, ts)
+
+    suspend fun softDeleteById(savedSubItemId: String, ts: Long) =
+        subTaskDao.softDeleteById(savedSubItemId, ts)
+
+    /** Cascade soft-delete when parent reminder is deleted. */
+    suspend fun softDeleteByParentId(savedItemId: String, ts: Long) =
+        subTaskDao.softDeleteByParentId(savedItemId, ts)
+
+    suspend fun getById(savedSubItemId: String): SavedSubItem? = subTaskDao.getById(savedSubItemId)
+}
+

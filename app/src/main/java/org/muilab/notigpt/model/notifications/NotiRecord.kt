@@ -45,6 +45,10 @@ data class NotiRecord (
     val extraSubText: String = "",
 
     // STATUS
+    /** True while this record belongs in the New notifications inbox. */
+    @ColumnInfo(defaultValue = "1")
+    var isNew: Boolean = true,
+
     /** True when this record should be hidden from active drawer context queries. */
     var isDismissed: Boolean = false,
 

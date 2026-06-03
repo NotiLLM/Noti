@@ -1,5 +1,6 @@
 package org.muilab.notigpt.ui.reminder.component
 
+import org.muilab.notigpt.model.features.SavedItemType
 import android.app.TimePickerDialog
 import android.content.Intent
 import android.net.Uri
@@ -56,7 +57,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.muilab.notigpt.R
-import org.muilab.notigpt.model.features.SubTask
+import org.muilab.notigpt.model.features.SavedSubItem
 import org.muilab.notigpt.ui.common.clipboard.AndroidClipboardController
 import org.muilab.notigpt.util.time.getAbsoluteTimeStr
 import org.muilab.notigpt.util.time.getRelativeTimeStr
@@ -68,35 +69,34 @@ import java.util.Calendar
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-fun SubTaskDetailScreen(
-    initial: SubTask,
-    onBack: (SubTask?) -> Unit,
+fun SavedSubItemDetailScreen(
+    initial: SavedSubItem,
+    onBack: (SavedSubItem?) -> Unit,
     onDelete: (String) -> Unit,
-    onSave: (SubTask) -> Unit,
-    onExportGoogleTasks: (SubTask) -> Unit = {},
-    onExportGoogleCalendar: (SubTask) -> Unit = {},
+    onSave: (SavedSubItem) -> Unit,
+    onExportGoogleTasks: (SavedSubItem) -> Unit = {},
+    onExportGoogleCalendar: (SavedSubItem) -> Unit = {},
 ) {
     val context = LocalContext.current
 
-    var title by remember(initial.subTaskId) { mutableStateOf(initial.title) }
-    var description by remember(initial.subTaskId) { mutableStateOf(initial.description) }
-    var isTask by remember(initial.subTaskId) { mutableStateOf(initial.isTask) }
-    var isEvent by remember(initial.subTaskId) { mutableStateOf(initial.isEvent) }
-    var isCompleted by remember(initial.subTaskId) { mutableStateOf(initial.isCompleted) }
-    var deadlineTimestamp by remember(initial.subTaskId) { mutableStateOf(initial.deadlineTimestamp) }
-    var startTime by remember(initial.subTaskId) { mutableStateOf(initial.startTime) }
-    var endTime by remember(initial.subTaskId) { mutableStateOf(initial.endTime) }
+    var title by remember(initial.savedSubItemId) { mutableStateOf(initial.title) }
+    var description by remember(initial.savedSubItemId) { mutableStateOf(initial.description) }
+    var isTask by remember(initial.savedSubItemId) { mutableStateOf(initial.isTask) }
+    var isEvent by remember(initial.savedSubItemId) { mutableStateOf(initial.isEvent) }
+    var isCompleted by remember(initial.savedSubItemId) { mutableStateOf(initial.isCompleted) }
+    var deadlineAtMs by remember(initial.savedSubItemId) { mutableStateOf(initial.deadlineAtMs) }
+    var startAtMs by remember(initial.savedSubItemId) { mutableStateOf(initial.startAtMs) }
+    var endAtMs by remember(initial.savedSubItemId) { mutableStateOf(initial.endAtMs) }
 
-    fun buildUpdated(): SubTask {
+    fun buildUpdated(): SavedSubItem {
         return initial.copy(
             title = title,
             description = description,
-            isTask = isTask,
-            isEvent = isEvent,
+            itemType = if (isTask) SavedItemType.Task else SavedItemType.Keep,
             isCompleted = if (isTask) isCompleted else false,
-            deadlineTimestamp = if (isTask) deadlineTimestamp else 0L,
-            startTime = if (isEvent) startTime else 0L,
-            endTime = if (isEvent) endTime else 0L,
+            deadlineAtMs = if (isTask) deadlineAtMs else 0L,
+            startAtMs = if (isEvent) startAtMs else 0L,
+            endAtMs = if (isEvent) endAtMs else 0L,
         )
     }
 
@@ -137,7 +137,7 @@ fun SubTaskDetailScreen(
                 }
             },
             actions = {
-                IconButton(onClick = { onDelete(initial.subTaskId) }) {
+                IconButton(onClick = { onDelete(initial.savedSubItemId) }) {
                     Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.a11y_delete))
                 }
                 TextButton(onClick = { onSave(buildUpdated()) }) {
@@ -167,14 +167,14 @@ fun SubTaskDetailScreen(
                 }
 
                 // Deadline
-                val deadlineColor = if (deadlineTimestamp > 0L && deadlineTimestamp < System.currentTimeMillis()) {
+                val deadlineColor = if (deadlineAtMs > 0L && deadlineAtMs < System.currentTimeMillis()) {
                     MaterialTheme.colorScheme.error
                 } else {
                     MaterialTheme.colorScheme.primary
                 }
-                val deadlineDateStr = if (deadlineTimestamp > 0L) getAbsoluteTimeStr(deadlineTimestamp, context) else stringResource(R.string.reminder_no_date)
-                val deadlineTimeStr = if (deadlineTimestamp > 0L) {
-                    java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date(deadlineTimestamp))
+                val deadlineDateStr = if (deadlineAtMs > 0L) getAbsoluteTimeStr(deadlineAtMs, context) else stringResource(R.string.reminder_no_date)
+                val deadlineTimeStr = if (deadlineAtMs > 0L) {
+                    java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date(deadlineAtMs))
                 } else stringResource(R.string.reminder_no_time)
 
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -195,8 +195,8 @@ fun SubTaskDetailScreen(
 
             if (isEvent) {
                 val sdf = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
-                val startLabel = if (startTime > 0L) sdf.format(java.util.Date(startTime)) else stringResource(R.string.reminder_no_date)
-                val endLabel = if (endTime > 0L) sdf.format(java.util.Date(endTime)) else stringResource(R.string.reminder_no_date)
+                val startLabel = if (startAtMs > 0L) sdf.format(java.util.Date(startAtMs)) else stringResource(R.string.reminder_no_date)
+                val endLabel = if (endAtMs > 0L) sdf.format(java.util.Date(endAtMs)) else stringResource(R.string.reminder_no_date)
 
                 Text("Start", style = MaterialTheme.typography.labelMedium)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -338,9 +338,9 @@ fun SubTaskDetailScreen(
     // Date picker
     if (showDatePicker && pickingField != null) {
         val currentMs = when (pickingField) {
-            "deadline" -> deadlineTimestamp
-            "start" -> startTime
-            "end" -> endTime
+            "deadline" -> deadlineAtMs
+            "start" -> startAtMs
+            "end" -> endAtMs
             else -> 0L
         }
         val initialMs = if (currentMs > 0L) currentMs else System.currentTimeMillis()
@@ -354,9 +354,9 @@ fun SubTaskDetailScreen(
                     val selectedDate = datePickerState.selectedDateMillis
                     if (selectedDate != null) {
                         val existingMs = when (currentField) {
-                            "deadline" -> deadlineTimestamp
-                            "start" -> startTime
-                            "end" -> endTime
+                            "deadline" -> deadlineAtMs
+                            "start" -> startAtMs
+                            "end" -> endAtMs
                             else -> 0L
                         }
                         val existingCal = Calendar.getInstance().apply {
@@ -370,9 +370,9 @@ fun SubTaskDetailScreen(
                             set(Calendar.MILLISECOND, 0)
                         }
                         when (currentField) {
-                            "deadline" -> deadlineTimestamp = newCal.timeInMillis
-                            "start" -> startTime = newCal.timeInMillis
-                            "end" -> endTime = newCal.timeInMillis
+                            "deadline" -> deadlineAtMs = newCal.timeInMillis
+                            "start" -> startAtMs = newCal.timeInMillis
+                            "end" -> endAtMs = newCal.timeInMillis
                         }
                     }
                     showDatePicker = false
@@ -394,9 +394,9 @@ fun SubTaskDetailScreen(
         val currentField = pickingField
         LaunchedEffect(showTimePicker, pickingField) {
             val existingMs = when (currentField) {
-                "deadline" -> deadlineTimestamp
-                "start" -> startTime
-                "end" -> endTime
+                "deadline" -> deadlineAtMs
+                "start" -> startAtMs
+                "end" -> endAtMs
                 else -> 0L
             }
             val cal = Calendar.getInstance().apply {
@@ -414,9 +414,9 @@ fun SubTaskDetailScreen(
                             set(Calendar.MILLISECOND, 0)
                         }
                         when (currentField) {
-                            "deadline" -> deadlineTimestamp = c.timeInMillis
-                            "start" -> startTime = c.timeInMillis
-                            "end" -> endTime = c.timeInMillis
+                            "deadline" -> deadlineAtMs = c.timeInMillis
+                            "start" -> startAtMs = c.timeInMillis
+                            "end" -> endAtMs = c.timeInMillis
                         }
                         showTimePicker = false
                         pickingField = null

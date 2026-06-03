@@ -35,7 +35,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.muilab.notigpt.R
-import org.muilab.notigpt.model.features.SubTask
+import org.muilab.notigpt.model.features.SavedSubItem
 
 /**
  * A single sub-task row used in both ReminderCard (list) and ReminderDetailScreen.
@@ -46,8 +46,8 @@ import org.muilab.notigpt.model.features.SubTask
  * The MoreVert dropdown offers: Edit, Export to Google Tasks, Export to Google Calendar, Delete.
  */
 @Composable
-fun SubTaskRow(
-    subTask: SubTask,
+fun SavedSubItemRow(
+    subTask: SavedSubItem,
     onToggleCompleted: (Boolean) -> Unit,
     onClick: () -> Unit,
     onEdit: () -> Unit,

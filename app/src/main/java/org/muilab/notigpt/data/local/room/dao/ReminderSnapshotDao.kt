@@ -21,11 +21,11 @@ interface ReminderSnapshotDao {
     @Query("SELECT * FROM reminder_extraction_snapshot WHERE snapshotId = :snapshotId LIMIT 1")
     suspend fun getSnapshot(snapshotId: String): ReminderExtractionSnapshot?
 
-    @Query("SELECT * FROM reminder_extraction_snapshot WHERE reminderId = :reminderId AND status = 'KEPT' ORDER BY createdAt DESC LIMIT 1")
-    suspend fun getLatestKeptSnapshotForReminder(reminderId: String): ReminderExtractionSnapshot?
+    @Query("SELECT * FROM reminder_extraction_snapshot WHERE savedItemId = :savedItemId AND status = 'KEPT' ORDER BY createdAt DESC LIMIT 1")
+    suspend fun getLatestKeptSnapshotForReminder(savedItemId: String): ReminderExtractionSnapshot?
 
-    @Query("UPDATE reminder_extraction_snapshot SET status = :status, reminderId = :reminderId WHERE snapshotId = :snapshotId")
-    suspend fun updateSnapshotStatusAndReminderId(snapshotId: String, status: String, reminderId: String?)
+    @Query("UPDATE reminder_extraction_snapshot SET status = :status, savedItemId = :savedItemId WHERE snapshotId = :snapshotId")
+    suspend fun updateSnapshotStatusAndReminderId(snapshotId: String, status: String, savedItemId: String?)
 
     @Query("DELETE FROM reminder_extraction_snapshot WHERE snapshotId = :snapshotId")
     suspend fun deleteSnapshot(snapshotId: String)

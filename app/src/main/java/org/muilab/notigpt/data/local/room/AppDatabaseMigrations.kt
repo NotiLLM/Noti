@@ -66,7 +66,7 @@ object AppDatabaseMigrations {
                         `isCompleted` INTEGER NOT NULL,
                         `isVisible` INTEGER NOT NULL,
                         `taskDescription` TEXT NOT NULL,
-                        `deadlineTimestamp` INTEGER NOT NULL,
+                        `deadlineAtMs` INTEGER NOT NULL,
                         `estimatedCompletionTime` INTEGER NOT NULL,
                         `associatedNotis` TEXT NOT NULL,
                         `userEdited` INTEGER NOT NULL DEFAULT 0,
@@ -426,7 +426,7 @@ object AppDatabaseMigrations {
                 CREATE TABLE IF NOT EXISTS `esm_extraction_snapshot` (
                     `snapshotId` TEXT NOT NULL,
                     `status` TEXT NOT NULL,
-                    `reminderId` TEXT,
+                    `savedItemId` TEXT,
                     `payloadJson` TEXT NOT NULL,
                     `createdAt` INTEGER NOT NULL,
                     PRIMARY KEY(`snapshotId`)
@@ -434,14 +434,14 @@ object AppDatabaseMigrations {
                 """.trimIndent()
             )
             db.execSQL("CREATE INDEX IF NOT EXISTS `idx_esm_snap_status_time` ON `esm_extraction_snapshot` (`status`, `createdAt`)")
-            db.execSQL("CREATE INDEX IF NOT EXISTS `idx_esm_snap_reminderId` ON `esm_extraction_snapshot` (`reminderId`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `idx_esm_snap_savedItemId` ON `esm_extraction_snapshot` (`savedItemId`)")
         }
     }
 
     val MIGRATION_24_25 = object : Migration(24, 25) {
         override fun migrate(db: SupportSQLiteDatabase) {
             // Link extracted reminders to the snapshot captured at extraction time.
-            db.execSQL("ALTER TABLE reminder_list ADD COLUMN extractionSnapshotId TEXT")
+            db.execSQL("ALTER TABLE saved_item ADD COLUMN sourceExtractionSnapshotId TEXT")
         }
     }
 
@@ -455,7 +455,7 @@ object AppDatabaseMigrations {
                 CREATE TABLE IF NOT EXISTS `reminder_extraction_snapshot` (
                     `snapshotId` TEXT NOT NULL,
                     `status` TEXT NOT NULL,
-                    `reminderId` TEXT,
+                    `savedItemId` TEXT,
                     `payloadJson` TEXT NOT NULL,
                     `createdAt` INTEGER NOT NULL,
                     PRIMARY KEY(`snapshotId`)
@@ -467,33 +467,33 @@ object AppDatabaseMigrations {
             // SQLite doesn't have IF EXISTS for INSERT FROM, so we rely on the table existing in v25.
             db.execSQL(
                 """
-                INSERT OR REPLACE INTO `reminder_extraction_snapshot` (`snapshotId`,`status`,`reminderId`,`payloadJson`,`createdAt`)
-                SELECT `snapshotId`,`status`,`reminderId`,`payloadJson`,`createdAt` FROM `esm_extraction_snapshot`
+                INSERT OR REPLACE INTO `reminder_extraction_snapshot` (`snapshotId`,`status`,`savedItemId`,`payloadJson`,`createdAt`)
+                SELECT `snapshotId`,`status`,`savedItemId`,`payloadJson`,`createdAt` FROM `esm_extraction_snapshot`
                 """.trimIndent()
             )
 
             // 3) Drop old indexes/table.
             db.execSQL("DROP INDEX IF EXISTS `idx_esm_snap_status_time`")
-            db.execSQL("DROP INDEX IF EXISTS `idx_esm_snap_reminderId`")
+            db.execSQL("DROP INDEX IF EXISTS `idx_esm_snap_savedItemId`")
             db.execSQL("DROP TABLE IF EXISTS `esm_extraction_snapshot`")
 
             // 4) Create new indexes.
             db.execSQL("CREATE INDEX IF NOT EXISTS `idx_reminder_snap_status_time` ON `reminder_extraction_snapshot` (`status`, `createdAt`)")
-            db.execSQL("CREATE INDEX IF NOT EXISTS `idx_reminder_snap_reminderId` ON `reminder_extraction_snapshot` (`reminderId`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `idx_reminder_snap_savedItemId` ON `reminder_extraction_snapshot` (`savedItemId`)")
         }
     }
 
     val MIGRATION_26_27 = object : Migration(26, 27) {
         override fun migrate(db: SupportSQLiteDatabase) {
-            db.execSQL("ALTER TABLE reminder_list ADD COLUMN isVisible INTEGER NOT NULL DEFAULT 1")
+            db.execSQL("ALTER TABLE saved_item ADD COLUMN isVisible INTEGER NOT NULL DEFAULT 1")
         }
     }
 
     val MIGRATION_27_28 = object : Migration(27, 28) {
         override fun migrate(db: SupportSQLiteDatabase) {
-            db.execSQL("ALTER TABLE reminder_list ADD COLUMN origin TEXT NOT NULL DEFAULT 'manual'")
-            db.execSQL("ALTER TABLE reminder_list ADD COLUMN humanEditCount INTEGER NOT NULL DEFAULT 0")
-            db.execSQL("ALTER TABLE reminder_list ADD COLUMN deletedAtMs INTEGER")
+            db.execSQL("ALTER TABLE saved_item ADD COLUMN origin TEXT NOT NULL DEFAULT 'manual'")
+            db.execSQL("ALTER TABLE saved_item ADD COLUMN humanEditCount INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE saved_item ADD COLUMN deletedAtMs INTEGER")
         }
     }
 
@@ -527,20 +527,20 @@ object AppDatabaseMigrations {
 
     val MIGRATION_30_31 = object : Migration(30, 31) {
         override fun migrate(db: SupportSQLiteDatabase) {
-            db.execSQL("ALTER TABLE reminder_list ADD COLUMN isEvent INTEGER NOT NULL DEFAULT 0")
-            db.execSQL("ALTER TABLE reminder_list ADD COLUMN startTime INTEGER NOT NULL DEFAULT 0")
-            db.execSQL("ALTER TABLE reminder_list ADD COLUMN endTime INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE saved_item ADD COLUMN isEvent INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE saved_item ADD COLUMN startAtMs INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE saved_item ADD COLUMN endAtMs INTEGER NOT NULL DEFAULT 0")
             db.execSQL("ALTER TABLE noti_drawer ADD COLUMN hasEvent INTEGER NOT NULL DEFAULT 0")
         }
     }
 
     val MIGRATION_31_32 = object : Migration(31, 32) {
         override fun migrate(db: SupportSQLiteDatabase) {
-            db.execSQL("ALTER TABLE reminder_list ADD COLUMN buttons TEXT NOT NULL DEFAULT '[]'")
-            db.execSQL("ALTER TABLE reminder_list ADD COLUMN isViewed INTEGER NOT NULL DEFAULT 1")
-            db.execSQL("ALTER TABLE reminder_list ADD COLUMN isPinned INTEGER NOT NULL DEFAULT 0")
-            db.execSQL("ALTER TABLE reminder_list ADD COLUMN sortScore REAL NOT NULL DEFAULT 50.0")
-            db.execSQL("ALTER TABLE reminder_list ADD COLUMN reRankHistory TEXT NOT NULL DEFAULT '[]'")
+            db.execSQL("ALTER TABLE saved_item ADD COLUMN buttons TEXT NOT NULL DEFAULT '[]'")
+            db.execSQL("ALTER TABLE saved_item ADD COLUMN isViewed INTEGER NOT NULL DEFAULT 1")
+            db.execSQL("ALTER TABLE saved_item ADD COLUMN isPinned INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE saved_item ADD COLUMN sortScore REAL NOT NULL DEFAULT 50.0")
+            db.execSQL("ALTER TABLE saved_item ADD COLUMN reRankHistory TEXT NOT NULL DEFAULT '[]'")
         }
     }
 
@@ -561,26 +561,26 @@ object AppDatabaseMigrations {
     val MIGRATION_33_34 = object : Migration(33, 34) {
         override fun migrate(db: SupportSQLiteDatabase) {
             db.execSQL(
-                """CREATE TABLE IF NOT EXISTS sub_tasks (
-                        subTaskId TEXT NOT NULL PRIMARY KEY,
-                        parentReminderId TEXT NOT NULL,
+                """CREATE TABLE IF NOT EXISTS saved_sub_item (
+                        savedSubItemId TEXT NOT NULL PRIMARY KEY,
+                        parentSavedItemId TEXT NOT NULL,
                         title TEXT NOT NULL DEFAULT '',
                         description TEXT NOT NULL DEFAULT '',
                         isTask INTEGER NOT NULL DEFAULT 1,
                         isEvent INTEGER NOT NULL DEFAULT 0,
                         isCompleted INTEGER NOT NULL DEFAULT 0,
-                        deadlineTimestamp INTEGER NOT NULL DEFAULT 0,
-                        startTime INTEGER NOT NULL DEFAULT 0,
-                        endTime INTEGER NOT NULL DEFAULT 0,
+                        deadlineAtMs INTEGER NOT NULL DEFAULT 0,
+                        startAtMs INTEGER NOT NULL DEFAULT 0,
+                        endAtMs INTEGER NOT NULL DEFAULT 0,
                         buttons TEXT NOT NULL DEFAULT '[]',
                         sortOrder INTEGER NOT NULL DEFAULT 0,
                         createdAt INTEGER NOT NULL,
                         lastUpdateTimestamp INTEGER NOT NULL,
                         isVisible INTEGER NOT NULL DEFAULT 1,
-                        FOREIGN KEY(parentReminderId) REFERENCES reminder_list(reminderId) ON DELETE NO ACTION
+                        FOREIGN KEY(parentSavedItemId) REFERENCES saved_item(savedItemId) ON DELETE NO ACTION
                     )"""
             )
-            db.execSQL("CREATE INDEX IF NOT EXISTS idx_subtask_parent ON sub_tasks (parentReminderId)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS idx_subtask_parent ON saved_sub_item (parentSavedItemId)")
         }
     }
 
@@ -588,7 +588,7 @@ object AppDatabaseMigrations {
         override fun migrate(db: SupportSQLiteDatabase) {
             db.execSQL("DROP INDEX IF EXISTS `idx_esm_status_available`")
             db.execSQL("DROP INDEX IF EXISTS `idx_esm_status_expires`")
-            db.execSQL("DROP INDEX IF EXISTS `idx_esm_reminderId`")
+            db.execSQL("DROP INDEX IF EXISTS `idx_esm_savedItemId`")
             db.execSQL("DROP INDEX IF EXISTS `idx_esm_answer_instance`")
             db.execSQL("DROP TABLE IF EXISTS `esm_answer_event`")
             db.execSQL("DROP TABLE IF EXISTS `esm_instance`")
@@ -658,4 +658,126 @@ object AppDatabaseMigrations {
             db.execSQL("ALTER TABLE `noti_drawer_new` RENAME TO `noti_drawer`")
         }
     }
+
+    val MIGRATION_36_37 = object : Migration(36, 37) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `saved_item` (
+                    `savedItemId` TEXT NOT NULL,
+                    `title` TEXT NOT NULL,
+                    `content` TEXT NOT NULL,
+                    `itemType` TEXT NOT NULL DEFAULT 'task',
+                    `isCompleted` INTEGER NOT NULL,
+                    `lastUpdateTimestamp` INTEGER NOT NULL,
+                    `deadlineAtMs` INTEGER NOT NULL,
+                    `startAtMs` INTEGER NOT NULL DEFAULT 0,
+                    `endAtMs` INTEGER NOT NULL DEFAULT 0,
+                    `estimatedCompletionTime` INTEGER NOT NULL,
+                    `associatedNotis` TEXT NOT NULL,
+                    `sourceExtractionSnapshotId` TEXT,
+                    `origin` TEXT NOT NULL,
+                    `humanEditCount` INTEGER NOT NULL,
+                    `deletedAtMs` INTEGER,
+                    `userEdited` INTEGER NOT NULL,
+                    `isVisible` INTEGER NOT NULL,
+                    `buttons` TEXT NOT NULL DEFAULT '[]',
+                    `isViewed` INTEGER NOT NULL DEFAULT 1,
+                    `isPinned` INTEGER NOT NULL DEFAULT 0,
+                    `sortScore` REAL NOT NULL DEFAULT 50.0,
+                    `reRankHistory` TEXT NOT NULL DEFAULT '[]',
+                    PRIMARY KEY(`savedItemId`)
+                )
+                """.trimIndent()
+            )
+            db.execSQL(
+                """
+                INSERT INTO `saved_item` (
+                    savedItemId, title, content, itemType, isCompleted, lastUpdateTimestamp,
+                    deadlineAtMs, startAtMs, endAtMs, estimatedCompletionTime, associatedNotis,
+                    sourceExtractionSnapshotId, origin, humanEditCount, deletedAtMs, userEdited,
+                    isVisible, buttons, isViewed, isPinned, sortScore, reRankHistory
+                )
+                SELECT
+                    reminderId, reminderTitle, reminderContent,
+                    CASE WHEN isTask = 1 THEN 'task' ELSE 'keep' END,
+                    isCompleted, lastUpdateTimestamp, deadlineTimestamp, startTime, endTime,
+                    estimatedCompletionTime, associatedNotis, extractionSnapshotId, origin,
+                    humanEditCount, deletedAtMs, userEdited, isVisible, buttons, isViewed,
+                    isPinned, sortScore, reRankHistory
+                FROM `reminder_list`
+                """.trimIndent()
+            )
+            db.execSQL("DROP TABLE IF EXISTS `reminder_list`")
+
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `saved_sub_item` (
+                    `savedSubItemId` TEXT NOT NULL,
+                    `parentSavedItemId` TEXT NOT NULL,
+                    `title` TEXT NOT NULL,
+                    `description` TEXT NOT NULL,
+                    `itemType` TEXT NOT NULL DEFAULT 'task',
+                    `isCompleted` INTEGER NOT NULL DEFAULT 0,
+                    `deadlineAtMs` INTEGER NOT NULL,
+                    `startAtMs` INTEGER NOT NULL DEFAULT 0,
+                    `endAtMs` INTEGER NOT NULL DEFAULT 0,
+                    `buttons` TEXT NOT NULL DEFAULT '[]',
+                    `sortOrder` INTEGER NOT NULL DEFAULT 0,
+                    `createdAt` INTEGER NOT NULL,
+                    `lastUpdateTimestamp` INTEGER NOT NULL,
+                    `isVisible` INTEGER NOT NULL DEFAULT 1,
+                    PRIMARY KEY(`savedSubItemId`),
+                    FOREIGN KEY(`parentSavedItemId`) REFERENCES `saved_item`(`savedItemId`) ON UPDATE NO ACTION ON DELETE NO ACTION
+                )
+                """.trimIndent()
+            )
+            db.execSQL(
+                """
+                INSERT INTO `saved_sub_item` (
+                    savedSubItemId, parentSavedItemId, title, description, itemType, isCompleted,
+                    deadlineAtMs, startAtMs, endAtMs, buttons, sortOrder, createdAt,
+                    lastUpdateTimestamp, isVisible
+                )
+                SELECT
+                    subTaskId, parentReminderId, title, description,
+                    CASE WHEN isTask = 1 THEN 'task' ELSE 'keep' END,
+                    isCompleted, deadlineTimestamp, startTime, endTime, buttons, sortOrder,
+                    createdAt, lastUpdateTimestamp, isVisible
+                FROM `sub_tasks`
+                """.trimIndent()
+            )
+            db.execSQL("DROP TABLE IF EXISTS `sub_tasks`")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `idx_saved_sub_item_parent` ON `saved_sub_item` (`parentSavedItemId`)")
+
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `reminder` (
+                    `reminderId` TEXT NOT NULL,
+                    `remindAtMs` INTEGER NOT NULL,
+                    `title` TEXT NOT NULL,
+                    `content` TEXT NOT NULL,
+                    `status` TEXT NOT NULL DEFAULT 'scheduled',
+                    `sourceType` TEXT NOT NULL DEFAULT 'saved_item',
+                    `createdAtMs` INTEGER NOT NULL,
+                    `updatedAtMs` INTEGER NOT NULL,
+                    `seenAtMs` INTEGER,
+                    `cancelledAtMs` INTEGER,
+                    PRIMARY KEY(`reminderId`)
+                )
+                """.trimIndent()
+            )
+            db.execSQL("CREATE TABLE IF NOT EXISTS `reminder_saved_item_ref` (`reminderId` TEXT NOT NULL, `savedItemId` TEXT NOT NULL, PRIMARY KEY(`reminderId`, `savedItemId`))")
+            db.execSQL("CREATE TABLE IF NOT EXISTS `reminder_noti_record_ref` (`reminderId` TEXT NOT NULL, `notiRecordId` TEXT NOT NULL, PRIMARY KEY(`reminderId`, `notiRecordId`))")
+        }
+    }
+
+    val MIGRATION_37_38 = object : Migration(37, 38) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE saved_item ADD COLUMN state TEXT NOT NULL DEFAULT 'saved'")
+            db.execSQL("UPDATE saved_item SET state = CASE WHEN itemType = 'task' AND isCompleted = 1 THEN 'completed' ELSE 'saved' END WHERE state = 'saved'")
+            db.execSQL("ALTER TABLE noti_record ADD COLUMN isNew INTEGER NOT NULL DEFAULT 0")
+        }
+    }
+
 }

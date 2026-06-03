@@ -32,16 +32,19 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import org.muilab.notigpt.R
 import org.muilab.notigpt.ui.preference.model.PreferenceEntryPoint
 import org.muilab.notigpt.ui.common.appbar.AppTopBar
-import org.muilab.notigpt.ui.home.HomeScreen
+import org.muilab.notigpt.ui.home.NewScreen
 import org.muilab.notigpt.ui.settings.SettingsScreen
 import org.muilab.notigpt.ui.preference.component.PreferenceLearningBottomSheet
 import org.muilab.notigpt.ui.preference.screen.PreferenceChatScreen
 import org.muilab.notigpt.ui.reminder.screen.RemindersScreen
+import org.muilab.notigpt.ui.reminder.screen.ScheduledRemindersScreen
 import org.muilab.notigpt.ui.common.navigation.AppMenuScreen
 import org.muilab.notigpt.ui.common.navigation.AppPrimaryTab
+import org.muilab.notigpt.ui.notification.screen.NotificationHistoryScreen
 import org.muilab.notigpt.ui.notification.viewmodel.DrawerViewModel
 import org.muilab.notigpt.ui.preference.viewmodel.PreferenceViewModel
 import org.muilab.notigpt.ui.reminder.viewmodel.ReminderViewModel
+import org.muilab.notigpt.ui.reminder.viewmodel.ScheduledReminderViewModel
 
 /**
  * Top-level Compose scaffold that places app bars, navigation, and the selected screen content.
@@ -64,18 +67,21 @@ fun AppScaffold(
 
     val context = LocalContext.current
 
-    var selectedTab by remember { mutableStateOf(AppPrimaryTab.Notifications) }
+    var selectedTab by remember { mutableStateOf(AppPrimaryTab.New) }
 
     val reminderViewModel: ReminderViewModel = viewModel()
+    val scheduledReminderViewModel: ScheduledReminderViewModel = viewModel()
     val preferenceViewModel: PreferenceViewModel = viewModel()
 
-    val unreadNotiCount by drawerViewModel.unreadActiveCount.collectAsState()
+    val newNotiRecords by drawerViewModel.newNotificationRecords.collectAsState()
+    val unreadNotiCount = remember(newNotiRecords) { newNotiRecords.values.sumOf { it.size } }
     val reminderList by reminderViewModel.allReminders.collectAsState()
     val pendingTaskCount = remember(reminderList) {
-        reminderList.count { it.isTask && !it.isCompleted }
+        reminderList.count { it.isTask && !it.isCompleted && !it.isNewLike }
     }
 
     val unresolvedConflicts by preferenceViewModel.unresolvedConflicts.collectAsState()
+    val dueUnseenReminderCount by scheduledReminderViewModel.dueUnseenCount.collectAsState()
 
     // ── Snackbar for delete / manual-extract preference prompt ───
     val snackbarHostState = remember { SnackbarHostState() }
@@ -163,16 +169,14 @@ fun AppScaffold(
     PreferenceLearningBottomSheet(preferenceViewModel = preferenceViewModel)
 
     val menuScreenTitle = when (menuScreen) {
+        AppMenuScreen.Reminders -> "Reminders"
         AppMenuScreen.Preferences -> stringResource(R.string.tab_preferences)
+        AppMenuScreen.History -> "History"
         AppMenuScreen.Settings -> stringResource(R.string.menu_settings)
         null -> null
     }
 
     val openMenuScreen: (AppMenuScreen) -> Unit = { screen ->
-        // Leaving Notifications into a secondary screen: persist read marks.
-        if (selectedTab == AppPrimaryTab.Notifications) {
-            drawerViewModel.persistReadStatus()
-        }
         menuScreen = screen
         drawerViewModel.updateQueryString("")
         isSearchExpanded = false
@@ -185,6 +189,7 @@ fun AppScaffold(
         drawerContent = {
             AppDrawerContent(
                 unresolvedConflictCount = unresolvedConflicts.size,
+                dueUnseenReminderCount = dueUnseenReminderCount,
                 onMenuScreenSelected = openMenuScreen,
             )
         },
@@ -199,7 +204,7 @@ fun AppScaffold(
                     onMenuClicked = { scope.launch { drawerState.open() } },
                     menuScreenTitle = menuScreenTitle,
                     onMenuScreenClosed = { menuScreen = null },
-                    showNotificationActions = menuScreen == null && selectedTab == AppPrimaryTab.Notifications
+                    showNotificationActions = menuScreen == null && selectedTab == AppPrimaryTab.New
                 )
             },
             snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
@@ -210,10 +215,6 @@ fun AppScaffold(
                         unreadNotificationCount = unreadNotiCount,
                         pendingTaskCount = pendingTaskCount,
                         onTabSelected = { tab ->
-                            // Leaving Notifications: persist any pending read marks so border colors update.
-                            if (selectedTab == AppPrimaryTab.Notifications && tab != selectedTab) {
-                                drawerViewModel.persistReadStatus()
-                            }
                             selectedTab = tab
                             drawerViewModel.updateQueryString("")
                             isSearchExpanded = false
@@ -225,21 +226,32 @@ fun AppScaffold(
         ) { paddingValues ->
             Box(modifier = Modifier.padding(paddingValues)) {
                 when (menuScreen) {
+                    AppMenuScreen.Reminders -> ScheduledRemindersScreen(
+                        viewModel = scheduledReminderViewModel,
+                    )
                     AppMenuScreen.Preferences -> PreferenceChatScreen(
                         preferenceViewModel = preferenceViewModel,
                     )
+                    AppMenuScreen.History -> NotificationHistoryScreen(
+                        drawerViewModel = drawerViewModel,
+                    )
                     AppMenuScreen.Settings -> SettingsScreen()
                     null -> when (selectedTab) {
-                        AppPrimaryTab.Notifications -> HomeScreen(drawerViewModel = drawerViewModel)
+                        AppPrimaryTab.New -> NewScreen(
+                            drawerViewModel = drawerViewModel,
+                            reminderViewModel = reminderViewModel,
+                        )
                         AppPrimaryTab.Tasks -> RemindersScreen(
                             drawerViewModel = drawerViewModel,
                             reminderViewModel = reminderViewModel,
+                            scheduledReminderViewModel = scheduledReminderViewModel,
                             preferenceViewModel = preferenceViewModel,
                             listMode = ReminderViewModel.ListMode.Tasks,
                         )
                         AppPrimaryTab.Keep -> RemindersScreen(
                             drawerViewModel = drawerViewModel,
                             reminderViewModel = reminderViewModel,
+                            scheduledReminderViewModel = scheduledReminderViewModel,
                             preferenceViewModel = preferenceViewModel,
                             listMode = ReminderViewModel.ListMode.Keep,
                         )

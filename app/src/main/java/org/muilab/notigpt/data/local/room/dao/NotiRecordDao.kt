@@ -35,6 +35,15 @@ interface NotiRecordDao {
     @Query("SELECT * FROM noti_record WHERE notiKey = :notiKey AND isDismissed = 0")
     fun getActiveRecordsByKey(notiKey: String): List<NotiRecord>
 
+    @Query("SELECT * FROM noti_record WHERE notiKey = :notiKey AND isNew = 1 ORDER BY whenTime ASC")
+    fun getNewRecordsByKey(notiKey: String): List<NotiRecord>
+
+    @Query("UPDATE noti_record SET isNew = 0 WHERE notiKey = :notiKey AND isNew = 1")
+    suspend fun markNewRecordsArchivedByKey(notiKey: String)
+
+    @Query("SELECT * FROM noti_record WHERE isNew = 1 ORDER BY whenTime DESC")
+    fun getNewRecords(): List<NotiRecord>
+
     @Query("SELECT * FROM noti_record WHERE isDismissed = 0 AND notiKey IN ( :notiKeys )")
     fun getActiveRecordsByKeys(notiKeys: List<String>): List<NotiRecord>
 
@@ -174,10 +183,10 @@ interface NotiRecordDao {
     @Query("""
         SELECT * FROM noti_record 
         WHERE notiKey = :notiKey 
-        AND whenTime > :startTime AND whenTime < :endTime
+        AND whenTime > :startAtMs AND whenTime < :endAtMs
         ORDER BY whenTime ASC
     """)
-    suspend fun getRecordsBetween(notiKey: String, startTime: Long, endTime: Long): List<NotiRecord>
+    suspend fun getRecordsBetween(notiKey: String, startAtMs: Long, endAtMs: Long): List<NotiRecord>
 
     @Query("""
         SELECT * FROM noti_record 

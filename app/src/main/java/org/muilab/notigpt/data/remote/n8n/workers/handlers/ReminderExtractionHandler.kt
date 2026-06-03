@@ -13,7 +13,9 @@ import org.muilab.notigpt.data.remote.n8n.formatter.N8nRecordFormatter
 import org.muilab.notigpt.data.remote.n8n.context.N8nWorkerContext
 import org.muilab.notigpt.domain.reminder.ReminderSnapshotStatuses
 import org.muilab.notigpt.model.features.ReminderExtractionSnapshot
-import org.muilab.notigpt.model.features.ReminderUnit
+import org.muilab.notigpt.model.features.SavedItem
+import org.muilab.notigpt.model.features.SavedItemType
+import org.muilab.notigpt.model.features.SavedItemState
 import org.muilab.notigpt.domain.reminder.ReminderAssociationMerger
 import org.muilab.notigpt.model.notifications.NotiRecord
 import org.muilab.notigpt.util.SharedPreferencesManager
@@ -146,7 +148,7 @@ internal object ReminderExtractionHandler {
                 ReminderExtractionSnapshot(
                     snapshotId = snapshotId,
                     status = ReminderSnapshotStatuses.STAGED,
-                    reminderId = null,
+                    savedItemId = null,
                     payloadJson = snapshotPayload,
                     createdAt = snapNow,
                 )
@@ -190,28 +192,28 @@ internal object ReminderExtractionHandler {
                 )
             )
 
-            val currentReminders: List<ReminderUnit> = try {
+            val currentReminders: List<SavedItem> = try {
                 reminderRepository.observeAll().first()
             } catch (_: Exception) {
-                emptyList<ReminderUnit>()
+                emptyList<SavedItem>()
             }
 
             val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.getDefault())
             val remindersForPayload = currentReminders.map { r ->
-                val deadlineIso = if (r.deadlineTimestamp > 0L) sdf.format(Date(r.deadlineTimestamp)) else -1L
-                val startTimeIso = if (r.startTime > 0L) sdf.format(Date(r.startTime)) else -1L
-                val endTimeIso = if (r.endTime > 0L) sdf.format(Date(r.endTime)) else -1L
+                val deadlineIso = if (r.deadlineAtMs > 0L) sdf.format(Date(r.deadlineAtMs)) else -1L
+                val startAtMsIso = if (r.startAtMs > 0L) sdf.format(Date(r.startAtMs)) else -1L
+                val endAtMsIso = if (r.endAtMs > 0L) sdf.format(Date(r.endAtMs)) else -1L
                 mapOf(
-                    "reminderId" to r.reminderId,
-                    "reminderTitle" to r.reminderTitle,
-                    "reminderContent" to r.reminderContent,
+                    "savedItemId" to r.savedItemId,
+                    "title" to r.title,
+                    "content" to r.content,
                     "isTask" to r.isTask,
                     "isEvent" to r.isEvent,
                     "deadlineTimeString" to deadlineIso,
-                    "startTimeString" to startTimeIso,
-                    "endTimeString" to endTimeIso,
+                    "startAtMsString" to startAtMsIso,
+                    "endAtMsString" to endAtMsIso,
                     "estimatedCompletionMinutes" to r.estimatedCompletionTime,
-                    "associatedNotiRecords" to r.associatedNotiRecords.toList(),
+                    "sourceNotiRecordIds" to r.sourceNotiRecordIds.toList(),
                     "userEdited" to r.userEdited,
                     "isCompleted" to r.isCompleted,
                     "buttons" to r.buttons,
@@ -266,17 +268,17 @@ internal object ReminderExtractionHandler {
                 } else {
                     for (i in 0 until arr.length()) {
                         val it = arr.getJSONObject(i)
-                        val reminderId = it.optString("reminderId", it.optString("taskId"))
-                        val reminderTitle = it.optString("reminderTitle", "")
-                        val reminderContent = it.optString("reminderContent", it.optString("taskDescription"))
+                        val savedItemId = it.optString("savedItemId", it.optString("taskId"))
+                        val title = it.optString("title", "")
+                        val content = it.optString("content", it.optString("taskDescription"))
                         val isTask = it.optBoolean("isTask", true)
                         val isEvent = it.optBoolean("isEvent", false)
                         val deadlineMs = isoToUnixMillis(it.optString("deadlineTimeString", "-1"))
-                        val startTimeMs = isoToUnixMillis(it.optString("startTimeString", "-1")).let { v -> if (v == -1L) 0L else v }
-                        val endTimeMs = isoToUnixMillis(it.optString("endTimeString", "-1")).let { v -> if (v == -1L) 0L else v }
+                        val startAtMsMs = isoToUnixMillis(it.optString("startAtMsString", "-1")).let { v -> if (v == -1L) 0L else v }
+                        val endAtMsMs = isoToUnixMillis(it.optString("endAtMsString", "-1")).let { v -> if (v == -1L) 0L else v }
                         val estimate = it.optLong("estimatedCompletionTime", it.optLong("estimatedCompletionMinutes", 0L))
                         val responseAssocIds = ReminderAssociationMerger.associationIdsFrom(it)
-                        val existing = if (reminderId.isNotBlank()) reminderRepository.getById(reminderId) else null
+                        val existing = if (savedItemId.isNotBlank()) reminderRepository.getById(savedItemId) else null
                         val assocIds = ReminderAssociationMerger.merge(
                             existing = existing,
                             responseAssociationIds = responseAssocIds,
@@ -307,10 +309,10 @@ internal object ReminderExtractionHandler {
                         // If we're overwriting an existing reminder, merge relevant records from its old snapshot
                         // into this extraction snapshot (so downstream sync/UI have the full context).
                         try {
-                            val oldSnapshotId = existing?.extractionSnapshotId
+                            val oldSnapshotId = existing?.sourceExtractionSnapshotId
                             if (!oldSnapshotId.isNullOrBlank() && assocIds.isNotEmpty()) {
                                 val oldSnap = snapshotDao.getSnapshot(oldSnapshotId)
-                                    ?: snapshotDao.getLatestKeptSnapshotForReminder(reminderId)
+                                    ?: snapshotDao.getLatestKeptSnapshotForReminder(savedItemId)
                                 if (oldSnap != null) {
                                     val merged = mergedSnapshotPayloadJson(snapshotPayload, oldSnap, assocIds.toSet())
                                     if (merged != snapshotPayload) {
@@ -318,7 +320,7 @@ internal object ReminderExtractionHandler {
                                             ReminderExtractionSnapshot(
                                                 snapshotId = snapshotId,
                                                 status = ReminderSnapshotStatuses.STAGED,
-                                                reminderId = null,
+                                                savedItemId = null,
                                                 payloadJson = merged,
                                                 createdAt = snapNow,
                                             )
@@ -327,23 +329,22 @@ internal object ReminderExtractionHandler {
                                 }
                             }
                         } catch (e: Exception) {
-                            Log.w("N8nWebhook", "Snapshot merge skipped for reminderId=$reminderId", e)
+                            Log.w("N8nWebhook", "Snapshot merge skipped for savedItemId=$savedItemId", e)
                         }
 
-                        val newUnit = ReminderUnit(
-                            reminderId = reminderId,
-                            reminderTitle = reminderTitle,
-                            reminderContent = reminderContent,
-                            isTask = isTask,
-                            isEvent = isEvent,
-                            isCompleted = isCompleted,
+                        val newUnit = SavedItem(
+                            savedItemId = savedItemId,
+                            title = title,
+                            content = content,
+                            itemType = if (isTask) SavedItemType.Task else SavedItemType.Keep,
+                            state = if (isCompleted) SavedItemState.Completed else SavedItemState.New,
                             lastUpdateTimestamp = System.currentTimeMillis(),
-                            deadlineTimestamp = deadlineMs,
-                            startTime = startTimeMs,
-                            endTime = endTimeMs,
+                            deadlineAtMs = deadlineMs,
+                            startAtMs = startAtMsMs,
+                            endAtMs = endAtMsMs,
                             estimatedCompletionTime = estimate,
-                            associatedNotiRecords = assocIds,
-                            extractionSnapshotId = snapshotId,
+                            sourceNotiRecordIds = assocIds,
+                            sourceExtractionSnapshotId = snapshotId,
                             origin = "llm_manual_extraction",
                             humanEditCount = 0,
                             deletedAtMs = null,
@@ -358,9 +359,9 @@ internal object ReminderExtractionHandler {
                         reminderRepository.upsert(newUnit)
                     }
 
-                    // Mark snapshot kept and link to (first) reminderId.
+                    // Mark snapshot kept and link to (first) savedItemId.
                     val firstObj = arr.optJSONObject(0)
-                    val firstReminderId = firstObj?.optString("reminderId").takeIf { !it.isNullOrBlank() }
+                    val firstReminderId = firstObj?.optString("savedItemId").takeIf { !it.isNullOrBlank() }
                         ?: firstObj?.optString("taskId")
                     snapshotDao.updateSnapshotStatusAndReminderId(snapshotId, ReminderSnapshotStatuses.KEPT, firstReminderId)
 
@@ -458,7 +459,7 @@ internal object ReminderExtractionHandler {
             ReminderExtractionSnapshot(
                 snapshotId = snapshotId,
                 status = ReminderSnapshotStatuses.STAGED,
-                reminderId = null,
+                savedItemId = null,
                 payloadJson = snapshotPayload,
                 createdAt = snapNow,
             )
@@ -518,28 +519,28 @@ internal object ReminderExtractionHandler {
         }
 
         // Include current reminders (tasks + memos) as context for extraction.
-        val currentReminders: List<ReminderUnit> = try {
+        val currentReminders: List<SavedItem> = try {
             reminderRepository.observeAll().first()
         } catch (_: Exception) {
-            emptyList<ReminderUnit>()
+            emptyList<SavedItem>()
         }
 
         val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.getDefault())
         val remindersForPayload = currentReminders.map { r ->
-            val deadlineIso = if (r.deadlineTimestamp > 0L) sdf.format(Date(r.deadlineTimestamp)) else -1L
-            val startTimeIso = if (r.startTime > 0L) sdf.format(Date(r.startTime)) else -1L
-            val endTimeIso = if (r.endTime > 0L) sdf.format(Date(r.endTime)) else -1L
+            val deadlineIso = if (r.deadlineAtMs > 0L) sdf.format(Date(r.deadlineAtMs)) else -1L
+            val startAtMsIso = if (r.startAtMs > 0L) sdf.format(Date(r.startAtMs)) else -1L
+            val endAtMsIso = if (r.endAtMs > 0L) sdf.format(Date(r.endAtMs)) else -1L
             mapOf(
-                "reminderId" to r.reminderId,
-                "reminderTitle" to r.reminderTitle,
-                "reminderContent" to r.reminderContent,
+                "savedItemId" to r.savedItemId,
+                "title" to r.title,
+                "content" to r.content,
                 "isTask" to r.isTask,
                 "isEvent" to r.isEvent,
                 "deadlineTimeString" to deadlineIso,
-                "startTimeString" to startTimeIso,
-                "endTimeString" to endTimeIso,
+                "startAtMsString" to startAtMsIso,
+                "endAtMsString" to endAtMsIso,
                 "estimatedCompletionMinutes" to r.estimatedCompletionTime,
-                "associatedNotiRecords" to r.associatedNotiRecords.toList(),
+                "sourceNotiRecordIds" to r.sourceNotiRecordIds.toList(),
                 "userEdited" to r.userEdited,
                 "isCompleted" to r.isCompleted,
                 "buttons" to r.buttons,
@@ -597,17 +598,17 @@ internal object ReminderExtractionHandler {
 
                 for (i in 0 until arr.length()) {
                     val it = arr.getJSONObject(i)
-                    val reminderId = it.optString("reminderId", it.optString("taskId"))
-                    val reminderTitle = it.optString("reminderTitle", "")
-                    val reminderContent = it.optString("reminderContent", it.optString("taskDescription"))
+                    val savedItemId = it.optString("savedItemId", it.optString("taskId"))
+                    val title = it.optString("title", "")
+                    val content = it.optString("content", it.optString("taskDescription"))
                     val isTask = it.optBoolean("isTask", true)
                     val isEvent = it.optBoolean("isEvent", false)
                     val deadlineMs = isoToUnixMillis(it.optString("deadlineTimeString", "-1"))
-                    val startTimeMs = isoToUnixMillis(it.optString("startTimeString", "-1")).let { v -> if (v == -1L) 0L else v }
-                    val endTimeMs = isoToUnixMillis(it.optString("endTimeString", "-1")).let { v -> if (v == -1L) 0L else v }
+                    val startAtMsMs = isoToUnixMillis(it.optString("startAtMsString", "-1")).let { v -> if (v == -1L) 0L else v }
+                    val endAtMsMs = isoToUnixMillis(it.optString("endAtMsString", "-1")).let { v -> if (v == -1L) 0L else v }
                     val estimate = it.optLong("estimatedCompletionTime", it.optLong("estimatedCompletionMinutes", 0L))
                     val responseAssocIds = ReminderAssociationMerger.associationIdsFrom(it)
-                    val existing = if (reminderId.isNotBlank()) reminderRepository.getById(reminderId) else null
+                    val existing = if (savedItemId.isNotBlank()) reminderRepository.getById(savedItemId) else null
                     val assocIds = ReminderAssociationMerger.merge(
                         existing = existing,
                         responseAssociationIds = responseAssocIds,
@@ -635,12 +636,12 @@ internal object ReminderExtractionHandler {
                         }
                     }.toString()
 
-                    // Merge old snapshot context if this reminderId already exists.
+                    // Merge old snapshot context if this savedItemId already exists.
                     try {
-                        val oldSnapshotId = existing?.extractionSnapshotId
+                        val oldSnapshotId = existing?.sourceExtractionSnapshotId
                         if (!oldSnapshotId.isNullOrBlank() && assocIds.isNotEmpty()) {
                             val oldSnap = snapshotDao.getSnapshot(oldSnapshotId)
-                                ?: snapshotDao.getLatestKeptSnapshotForReminder(reminderId)
+                                ?: snapshotDao.getLatestKeptSnapshotForReminder(savedItemId)
                             if (oldSnap != null) {
                                 val merged = mergedSnapshotPayloadJson(snapshotPayload, oldSnap, assocIds.toSet())
                                 if (merged != snapshotPayload) {
@@ -648,7 +649,7 @@ internal object ReminderExtractionHandler {
                                         ReminderExtractionSnapshot(
                                             snapshotId = snapshotId,
                                             status = ReminderSnapshotStatuses.STAGED,
-                                            reminderId = null,
+                                            savedItemId = null,
                                             payloadJson = merged,
                                             createdAt = snapNow,
                                         )
@@ -657,23 +658,22 @@ internal object ReminderExtractionHandler {
                             }
                         }
                     } catch (e: Exception) {
-                        Log.w("N8nWebhook", "Snapshot merge skipped for reminderId=$reminderId", e)
+                        Log.w("N8nWebhook", "Snapshot merge skipped for savedItemId=$savedItemId", e)
                     }
 
-                    val unit = ReminderUnit(
-                        reminderId = reminderId,
-                        reminderTitle = reminderTitle,
-                        reminderContent = reminderContent,
-                        isTask = isTask,
-                        isEvent = isEvent,
-                        isCompleted = isCompleted,
+                    val unit = SavedItem(
+                        savedItemId = savedItemId,
+                        title = title,
+                        content = content,
+                        itemType = if (isTask) SavedItemType.Task else SavedItemType.Keep,
+                        state = if (isCompleted) SavedItemState.Completed else SavedItemState.New,
                         lastUpdateTimestamp = System.currentTimeMillis(),
-                        deadlineTimestamp = deadlineMs,
-                        startTime = startTimeMs,
-                        endTime = endTimeMs,
+                        deadlineAtMs = deadlineMs,
+                        startAtMs = startAtMsMs,
+                        endAtMs = endAtMsMs,
                         estimatedCompletionTime = estimate,
-                        associatedNotiRecords = assocIds,
-                        extractionSnapshotId = snapshotId,
+                        sourceNotiRecordIds = assocIds,
+                        sourceExtractionSnapshotId = snapshotId,
                         origin = "llm_auto_extraction",
                         humanEditCount = 0,
                         deletedAtMs = null,
@@ -691,7 +691,7 @@ internal object ReminderExtractionHandler {
                 drawerDao.setShouldExtractReminderByKeys(keysToProcess, false)
 
                 val firstObj = arr.optJSONObject(0)
-                val firstReminderId = firstObj?.optString("reminderId").takeIf { !it.isNullOrBlank() }
+                val firstReminderId = firstObj?.optString("savedItemId").takeIf { !it.isNullOrBlank() }
                     ?: firstObj?.optString("taskId")
                 snapshotDao.updateSnapshotStatusAndReminderId(snapshotId, ReminderSnapshotStatuses.KEPT, firstReminderId)
             }

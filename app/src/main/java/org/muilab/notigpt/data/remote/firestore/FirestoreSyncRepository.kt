@@ -10,7 +10,7 @@ import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import org.muilab.notigpt.data.local.room.AppDatabase
 import org.muilab.notigpt.domain.reminder.ReminderSnapshotPayload
-import org.muilab.notigpt.model.features.ReminderUnit
+import org.muilab.notigpt.model.features.SavedItem
 import org.muilab.notigpt.model.notifications.NotiRecord
 import org.muilab.notigpt.model.notifications.NotiUnit
 import org.muilab.notigpt.util.SharedPreferencesManager
@@ -22,7 +22,7 @@ import java.util.TimeZone
  * Firestore analytics sync.
  *
  * Storage (as requested):
- * - reminders/{userId}/reminders/{reminderId}
+ * - reminders/{userId}/reminders/{savedItemId}
  *   - notis/{notiKey}
  * - users/{userId}
  */
@@ -43,14 +43,14 @@ class FirestoreSyncRepository(
         .collection(FirestorePaths.COLLECTION_USERS)
         .document(userId())
 
-    private fun reminderDoc(reminderId: String) = firestore
+    private fun reminderDoc(savedItemId: String) = firestore
         .collection(FirestorePaths.COLLECTION_REMINDERS_ROOT)
         .document(userId())
         .collection(FirestorePaths.SUBCOLLECTION_REMINDERS)
-        .document(reminderId)
+        .document(savedItemId)
 
-    private fun reminderNotiDoc(reminderId: String, notiKey: String) =
-        reminderDoc(reminderId).collection(FirestorePaths.SUBCOLLECTION_NOTIS).document(notiKey)
+    private fun reminderNotiDoc(savedItemId: String, notiKey: String) =
+        reminderDoc(savedItemId).collection(FirestorePaths.SUBCOLLECTION_NOTIS).document(notiKey)
 
     suspend fun incrementNotiRecordCount() = withContext(Dispatchers.IO) {
         try {
@@ -90,27 +90,27 @@ class FirestoreSyncRepository(
         }
     }
 
-    suspend fun syncReminder(reminder: ReminderUnit) = withContext(Dispatchers.IO) {
+    suspend fun syncReminder(reminder: SavedItem) = withContext(Dispatchers.IO) {
         ensureUserDoc()
 
         val now = System.currentTimeMillis()
         val payload: Map<String, Any?> = mapOf(
-            "reminderId" to reminder.reminderId,
-            "reminderTitle" to reminder.reminderTitle,
-            "reminderContent" to reminder.reminderContent,
+            "savedItemId" to reminder.savedItemId,
+            "title" to reminder.title,
+            "content" to reminder.content,
             "origin" to reminder.origin,
             "humanEditCount" to reminder.humanEditCount,
             "userEdited" to reminder.userEdited,
             "isTask" to reminder.isTask,
             "isEvent" to reminder.isEvent,
             "isCompleted" to reminder.isCompleted,
-            "deadlineTimestamp" to (if (reminder.deadlineTimestamp > 0L) TimeFormatters.toLocalIso(reminder.deadlineTimestamp, zoneId) else ""),
-            "startTime" to (if (reminder.startTime > 0L) TimeFormatters.toLocalIso(reminder.startTime, zoneId) else ""),
-            "endTime" to (if (reminder.endTime > 0L) TimeFormatters.toLocalIso(reminder.endTime, zoneId) else ""),
+            "deadlineAtMs" to (if (reminder.deadlineAtMs > 0L) TimeFormatters.toLocalIso(reminder.deadlineAtMs, zoneId) else ""),
+            "startAtMs" to (if (reminder.startAtMs > 0L) TimeFormatters.toLocalIso(reminder.startAtMs, zoneId) else ""),
+            "endAtMs" to (if (reminder.endAtMs > 0L) TimeFormatters.toLocalIso(reminder.endAtMs, zoneId) else ""),
             "estimatedCompletionTime" to reminder.estimatedCompletionTime,
-            "associatedNotiRecords" to reminder.associatedNotiRecords.toList(),
-            "associatedNotiRecordsCount" to reminder.associatedNotiRecords.size,
-            "extractionSnapshotId" to reminder.extractionSnapshotId,
+            "sourceNotiRecordIds" to reminder.sourceNotiRecordIds.toList(),
+            "sourceNotiRecordIdsCount" to reminder.sourceNotiRecordIds.size,
+            "sourceExtractionSnapshotId" to reminder.sourceExtractionSnapshotId,
             "isVisible" to reminder.isVisible,
             "deletedAt" to (reminder.deletedAtMs?.let { TimeFormatters.toLocalIso(it, zoneId) } ?: ""),
             "lastUpdateTimestamp" to TimeFormatters.toLocalIso(reminder.lastUpdateTimestamp, zoneId),
@@ -124,15 +124,15 @@ class FirestoreSyncRepository(
         )
 
         try {
-            reminderDoc(reminder.reminderId).set(payload, SetOptions.merge()).await()
+            reminderDoc(reminder.savedItemId).set(payload, SetOptions.merge()).await()
         } catch (t: Throwable) {
-            Log.w(tag, "syncReminder failed reminderId=${reminder.reminderId}", t)
+            Log.w(tag, "syncReminder failed savedItemId=${reminder.savedItemId}", t)
             return@withContext
         }
 
         // === Notis subcollection: ONLY upload records referenced by the reminder snapshot ===
-        val snapshotId = reminder.extractionSnapshotId
-        if (snapshotId.isNullOrBlank() || reminder.associatedNotiRecords.isEmpty()) return@withContext
+        val snapshotId = reminder.sourceExtractionSnapshotId
+        if (snapshotId.isNullOrBlank() || reminder.sourceNotiRecordIds.isEmpty()) return@withContext
 
         try {
             val snap = db.reminderSnapshotDao().getSnapshot(snapshotId) ?: return@withContext
@@ -185,11 +185,11 @@ class FirestoreSyncRepository(
                     "schemaVersion" to 2,
                 )
 
-                reminderNotiDoc(reminder.reminderId, key).set(notiPayload, SetOptions.merge()).await()
+                reminderNotiDoc(reminder.savedItemId, key).set(notiPayload, SetOptions.merge()).await()
             }
 
         } catch (t: Throwable) {
-            Log.w(tag, "syncReminder notis(snapshot-only) failed reminderId=${reminder.reminderId}", t)
+            Log.w(tag, "syncReminder notis(snapshot-only) failed savedItemId=${reminder.savedItemId}", t)
         }
     }
 }

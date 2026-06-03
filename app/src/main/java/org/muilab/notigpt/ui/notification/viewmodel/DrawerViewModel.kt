@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
@@ -164,6 +165,21 @@ class DrawerViewModel(
         .distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
+    private val _newNotificationRecords = MutableStateFlow<Map<String, List<NotiRecord>>>(emptyMap())
+    val newNotificationRecords: StateFlow<Map<String, List<NotiRecord>>> = _newNotificationRecords.asStateFlow()
+
+    val newNotificationUnits: StateFlow<List<NotiDisplayUnit>> = combine(activeNotiUnits, _newNotificationRecords) { units, recordsByKey ->
+        units.mapNotNull { unit ->
+            val newRecords = recordsByKey[unit.notiKey].orEmpty()
+            if (newRecords.isEmpty()) null else NotiDisplayUnit(unit.notiUnit, newRecords)
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    private suspend fun refreshNewNotificationRecords() {
+        val records = withContext(Dispatchers.IO) { notiRepository.getNewRecords() }
+        _newNotificationRecords.value = records.groupBy { it.notiKey }
+    }
+
     // Search state (delegated)
     val searchResults: StateFlow<Map<String, List<NotiRecord>>> = searchController.searchResults
     val searchUnits: StateFlow<Map<String, NotiUnit>> = searchController.searchUnits
@@ -177,6 +193,7 @@ class DrawerViewModel(
                 if (prev.size != newList.size || prev != newList) {
                     _activeNotiUnits.value = newList
                 }
+                refreshNewNotificationRecords()
             }.launchIn(viewModelScope)
 
         // Loading state management
@@ -385,6 +402,14 @@ class DrawerViewModel(
         }
     }
 
+    fun archiveNewNotificationCard(notiKey: String) {
+        viewModelScope.launch {
+            notiRepository.archiveNewRecordsForKey(notiKey)
+            refreshNewNotificationRecords()
+            notifier.showShort("Moved to History")
+        }
+    }
+
     fun removeExpiredRecords() {
         viewModelScope.launch {
             notiRepository.removeExpiredNotiRecords()
@@ -408,12 +433,12 @@ class DrawerViewModel(
         viewModelScope.launch { searchController.loadSearchContext(notiKey, isOlder) }
     }
 
-    suspend fun checkGapHasRecords(notiKey: String, startTime: Long, endTime: Long): Boolean {
-        return searchController.checkGapHasRecords(notiKey, startTime, endTime)
+    suspend fun checkGapHasRecords(notiKey: String, startAtMs: Long, endAtMs: Long): Boolean {
+        return searchController.checkGapHasRecords(notiKey, startAtMs, endAtMs)
     }
 
-    fun loadGapRecords(notiKey: String, startTime: Long, endTime: Long, fromStart: Boolean) {
-        viewModelScope.launch { searchController.loadGapRecords(notiKey, startTime, endTime, fromStart) }
+    fun loadGapRecords(notiKey: String, startAtMs: Long, endAtMs: Long, fromStart: Boolean) {
+        viewModelScope.launch { searchController.loadGapRecords(notiKey, startAtMs, endAtMs, fromStart) }
     }
 
     /**

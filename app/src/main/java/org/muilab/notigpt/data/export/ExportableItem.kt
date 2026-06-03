@@ -1,7 +1,7 @@
 package org.muilab.notigpt.data.export
 
-import org.muilab.notigpt.model.features.ReminderUnit
-import org.muilab.notigpt.model.features.SubTask
+import org.muilab.notigpt.model.features.SavedItem
+import org.muilab.notigpt.model.features.SavedSubItem
 
 /**
  * Small adapter interface for exporting reminders and subtasks through one formatting path.
@@ -18,22 +18,22 @@ interface ExportableItem {
     val exportIsCompleted: Boolean
 }
 
-/** Adapt a [ReminderUnit] to [ExportableItem]. */
-fun ReminderUnit.asExportable(): ExportableItem = object : ExportableItem {
-    override val exportTitle = reminderTitle
-    override val exportDescription = reminderContent
-    override val exportDeadlineTimestamp = deadlineTimestamp
-    override val exportStartTime = startTime
-    override val exportEndTime = endTime
+/** Adapt a [SavedItem] to [ExportableItem]. */
+fun SavedItem.asExportable(): ExportableItem = object : ExportableItem {
+    override val exportTitle = title
+    override val exportDescription = content
+    override val exportDeadlineTimestamp = deadlineAtMs
+    override val exportStartTime = startAtMs
+    override val exportEndTime = endAtMs
     override val exportIsCompleted = isCompleted
 }
 
-/** Adapt a [SubTask] to [ExportableItem]. */
-fun SubTask.asExportable(): ExportableItem = object : ExportableItem {
+/** Adapt a [SavedSubItem] to [ExportableItem]. */
+fun SavedSubItem.asExportable(): ExportableItem = object : ExportableItem {
     override val exportTitle = title
     override val exportDescription = description
-    override val exportDeadlineTimestamp = deadlineTimestamp
-    override val exportStartTime = startTime
-    override val exportEndTime = endTime
+    override val exportDeadlineTimestamp = deadlineAtMs
+    override val exportStartTime = startAtMs
+    override val exportEndTime = endAtMs
     override val exportIsCompleted = isCompleted
 }

@@ -18,12 +18,14 @@ import org.muilab.notigpt.data.remote.n8n.enqueueRegenerateAll
 import org.muilab.notigpt.data.remote.n8n.enqueueRegenerateOne
 import org.muilab.notigpt.data.remote.n8n.enqueueRerank
 import org.muilab.notigpt.data.export.ExportableItem
-import org.muilab.notigpt.model.features.ReminderUnit
-import org.muilab.notigpt.model.features.SubTask
+import org.muilab.notigpt.model.features.SavedItem
+import org.muilab.notigpt.model.features.SavedItemState
+import org.muilab.notigpt.model.features.SavedItemType
+import org.muilab.notigpt.model.features.SavedSubItem
 import org.muilab.notigpt.data.remote.googletasks.GoogleTasksRepository
-import org.muilab.notigpt.data.repository.reminder.ReminderRepository
+import org.muilab.notigpt.data.repository.reminder.SavedItemRepository
 import org.muilab.notigpt.data.repository.reminder.ReminderRelatedNotificationsRepository
-import org.muilab.notigpt.data.repository.reminder.SubTaskRepository
+import org.muilab.notigpt.data.repository.reminder.SavedSubItemRepository
 import org.muilab.notigpt.data.remote.googletasks.GoogleTasksAuthManager
 import java.util.UUID
 
@@ -49,15 +51,15 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
         object NotSignedIn : GoogleTasksExportResult()
     }
 
-    private val repo: ReminderRepository
-    private val subTaskRepo: SubTaskRepository
+    private val repo: SavedItemRepository
+    private val subTaskRepo: SavedSubItemRepository
     private val googleTasksRepo: GoogleTasksRepository
     private val relatedNotificationsRepo: ReminderRelatedNotificationsRepository
 
     init {
         val db = AppDatabase.getInstance(application.applicationContext)
-        repo = ReminderRepository(db.reminderListDao(), application.applicationContext)
-        subTaskRepo = SubTaskRepository(db.subTaskDao())
+        repo = SavedItemRepository(db.reminderListDao(), application.applicationContext)
+        subTaskRepo = SavedSubItemRepository(db.subTaskDao())
         googleTasksRepo = GoogleTasksRepository(application.applicationContext)
         relatedNotificationsRepo = ReminderRelatedNotificationsRepository(application.applicationContext)
     }
@@ -87,8 +89,12 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
     private val tasksFlow = repo.observeTasks()
     private val memosFlow = repo.observeMemos()
     private val completedFlow = repo.observeCompletedTasks()
+    private val newItemsFlow = repo.observeNewItems()
 
-    val allReminders: StateFlow<List<ReminderUnit>> = allFlow
+    val allReminders: StateFlow<List<SavedItem>> = allFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    val newSavedItems: StateFlow<List<SavedItem>> = newItemsFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /**
@@ -97,32 +103,32 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
      * Search terms are split on '+', then AND-matched against title and content so users can narrow noisy reminder
      * lists without changing persisted reminder data.
      */
-    val reminders: StateFlow<List<ReminderUnit>> = combine(_filter, _searchQuery, _listMode, allFlow, tasksFlow, memosFlow, completedFlow) { values ->
+    val reminders: StateFlow<List<SavedItem>> = combine(_filter, _searchQuery, _listMode, allFlow, tasksFlow, memosFlow, completedFlow) { values ->
         val f = values[0] as FilterTab
         @Suppress("UNCHECKED_CAST")
         val query = values[1] as String
         val mode = values[2] as ListMode
         @Suppress("UNCHECKED_CAST")
-        val all = values[3] as List<ReminderUnit>
+        val all = values[3] as List<SavedItem>
         @Suppress("UNCHECKED_CAST")
-        val tasks = values[4] as List<ReminderUnit>
+        val tasks = values[4] as List<SavedItem>
         @Suppress("UNCHECKED_CAST")
-        val memos = values[5] as List<ReminderUnit>
+        val memos = values[5] as List<SavedItem>
         @Suppress("UNCHECKED_CAST")
-        val completed = values[6] as List<ReminderUnit>
+        val completed = values[6] as List<SavedItem>
 
         val modeList = when (mode) {
             ListMode.All -> all
             ListMode.Tasks -> tasks
             ListMode.Keep -> memos
         }
-        val modeIds = modeList.mapTo(mutableSetOf()) { it.reminderId }
+        val modeIds = modeList.mapTo(mutableSetOf()) { it.savedItemId }
 
         val baseList = when (f) {
             FilterTab.All -> modeList
-            FilterTab.Tasks -> tasks.filter { it.reminderId in modeIds }
-            FilterTab.Memos -> memos.filter { it.reminderId in modeIds }
-            FilterTab.Completed -> completed.filter { it.reminderId in modeIds }
+            FilterTab.Tasks -> tasks.filter { it.savedItemId in modeIds }
+            FilterTab.Memos -> memos.filter { it.savedItemId in modeIds }
+            FilterTab.Completed -> completed.filter { it.savedItemId in modeIds }
         }
 
         if (query.isBlank()) {
@@ -133,7 +139,7 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
                 baseList
             } else {
                 baseList.filter { reminder ->
-                    val searchable = "${reminder.reminderTitle} ${reminder.reminderContent}".lowercase()
+                    val searchable = "${reminder.title} ${reminder.content}".lowercase()
                     terms.all { term -> searchable.contains(term) }
                 }
             }
@@ -141,25 +147,51 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /** Sub-tasks grouped by parent reminder ID. */
-    val allSubTasksByReminder: StateFlow<Map<String, List<SubTask>>> =
+    val allSavedSubItemsByReminder: StateFlow<Map<String, List<SavedSubItem>>> =
         subTaskRepo.observeAllByReminder()
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
 
-    fun toggleCompleted(reminder: ReminderUnit, completed: Boolean) {
+    fun toggleCompleted(reminder: SavedItem, completed: Boolean) {
         viewModelScope.launch {
-            repo.setCompleted(reminder.reminderId, completed, System.currentTimeMillis())
+            repo.setCompleted(reminder.savedItemId, completed, System.currentTimeMillis())
         }
     }
 
-    fun delete(reminderId: String) {
+    fun archiveKeep(savedItemId: String) {
+        viewModelScope.launch {
+            repo.setState(savedItemId, SavedItemState.Archived, System.currentTimeMillis())
+        }
+    }
+
+    fun markSaved(savedItemId: String) {
+        viewModelScope.launch {
+            repo.setState(savedItemId, SavedItemState.Saved, System.currentTimeMillis())
+        }
+    }
+
+    fun markSavedByIds(savedItemIds: List<String>) {
+        viewModelScope.launch {
+            repo.markSavedByIds(savedItemIds, System.currentTimeMillis())
+        }
+    }
+
+    fun deleteByIds(savedItemIds: List<String>) {
         viewModelScope.launch {
             val ts = System.currentTimeMillis()
-            subTaskRepo.softDeleteByParentId(reminderId, ts)
-            repo.deleteById(reminderId, ts)
+            savedItemIds.forEach { subTaskRepo.softDeleteByParentId(it, ts) }
+            repo.deleteByIds(savedItemIds, ts)
         }
     }
 
-    fun upsert(reminder: ReminderUnit) {
+    fun delete(savedItemId: String) {
+        viewModelScope.launch {
+            val ts = System.currentTimeMillis()
+            subTaskRepo.softDeleteByParentId(savedItemId, ts)
+            repo.deleteById(savedItemId, ts)
+        }
+    }
+
+    fun upsert(reminder: SavedItem) {
         viewModelScope.launch {
             repo.upsert(reminder.copy(lastUpdateTimestamp = System.currentTimeMillis()))
         }
@@ -169,17 +201,17 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
     fun addNew(isTask: Boolean) {
         val id = "r_" + UUID.randomUUID().toString().take(8)
         val now = System.currentTimeMillis()
-        val reminder = ReminderUnit(
-            reminderId = id,
-            reminderTitle = "",
-            reminderContent = "",
-            isTask = isTask,
-            isCompleted = false,
+        val reminder = SavedItem(
+            savedItemId = id,
+            title = "",
+            content = "",
+            itemType = if (isTask) SavedItemType.Task else SavedItemType.Keep,
+            state = SavedItemState.Saved,
             lastUpdateTimestamp = now,
-            deadlineTimestamp = 0L,
+            deadlineAtMs = 0L,
             estimatedCompletionTime = 0L,
-            associatedNotiRecords = emptySet(),
-            extractionSnapshotId = null,
+            sourceNotiRecordIds = emptySet(),
+            sourceExtractionSnapshotId = null,
             origin = "manual",
             humanEditCount = 0,
             deletedAtMs = null,
@@ -190,7 +222,7 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
 
 
     data class RelatedNotificationsState(
-        val reminderId: String? = null,
+        val savedItemId: String? = null,
         val isLoading: Boolean = false,
         val related: ReminderRelatedNotificationsRepository.RelatedNotifications = ReminderRelatedNotificationsRepository.RelatedNotifications.Empty,
     )
@@ -203,13 +235,13 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
      *
      * This is read-only reminder context; edits to reminders or notifications should use their own repository paths.
      */
-    fun loadRelatedNotifications(reminder: ReminderUnit) {
+    fun loadRelatedNotifications(reminder: SavedItem) {
         val current = _relatedNotificationsState.value
-        if (current.reminderId == reminder.reminderId && current.isLoading) return
+        if (current.savedItemId == reminder.savedItemId && current.isLoading) return
 
         viewModelScope.launch {
             _relatedNotificationsState.value = RelatedNotificationsState(
-                reminderId = reminder.reminderId,
+                savedItemId = reminder.savedItemId,
                 isLoading = true,
             )
 
@@ -221,7 +253,7 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
             }
 
             _relatedNotificationsState.value = RelatedNotificationsState(
-                reminderId = reminder.reminderId,
+                savedItemId = reminder.savedItemId,
                 isLoading = false,
                 related = related,
             )
@@ -230,58 +262,58 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
 
     // ========== Sub-task CRUD ==========
 
-    fun addSubTask(parentReminderId: String) {
+    fun addSavedSubItem(parentSavedItemId: String) {
         val id = "st_" + UUID.randomUUID().toString().take(8)
         val now = System.currentTimeMillis()
-        val subTask = SubTask(
-            subTaskId = id,
-            parentReminderId = parentReminderId,
+        val subTask = SavedSubItem(
+            savedSubItemId = id,
+            parentSavedItemId = parentSavedItemId,
             title = "",
-            isTask = true,
+            itemType = SavedItemType.Task,
             createdAt = now,
             lastUpdateTimestamp = now,
         )
         viewModelScope.launch { subTaskRepo.upsert(subTask) }
     }
 
-    fun upsertSubTask(subTask: SubTask) {
+    fun upsertSavedSubItem(subTask: SavedSubItem) {
         viewModelScope.launch {
             subTaskRepo.upsert(subTask.copy(lastUpdateTimestamp = System.currentTimeMillis()))
         }
     }
 
-    fun deleteSubTask(subTaskId: String) {
+    fun deleteSavedSubItem(savedSubItemId: String) {
         viewModelScope.launch {
-            subTaskRepo.softDeleteById(subTaskId, System.currentTimeMillis())
+            subTaskRepo.softDeleteById(savedSubItemId, System.currentTimeMillis())
         }
     }
 
-    fun toggleSubTaskCompleted(subTaskId: String, completed: Boolean) {
+    fun toggleSavedSubItemCompleted(savedSubItemId: String, completed: Boolean) {
         viewModelScope.launch {
-            subTaskRepo.setCompleted(subTaskId, completed, System.currentTimeMillis())
+            subTaskRepo.setCompleted(savedSubItemId, completed, System.currentTimeMillis())
         }
     }
 
     // ========== Sorting / Ranking ==========
 
-    fun togglePinned(reminderId: String) {
+    fun togglePinned(savedItemId: String) {
         viewModelScope.launch {
-            val existing = repo.getById(reminderId) ?: return@launch
-            repo.setPinned(reminderId, !existing.isPinned)
+            val existing = repo.getById(savedItemId) ?: return@launch
+            repo.setPinned(savedItemId, !existing.isPinned)
         }
     }
 
-    fun markViewed(reminderId: String) {
+    fun markViewed(savedItemId: String) {
         viewModelScope.launch {
-            repo.setViewed(reminderId)
+            repo.setViewed(savedItemId)
         }
     }
 
     /** Batch-mark multiple reminders as viewed (called when leaving the screen). */
-    fun markViewedBatch(reminderIds: Set<String>) {
-        if (reminderIds.isEmpty()) return
+    fun markViewedBatch(savedItemIds: Set<String>) {
+        if (savedItemIds.isEmpty()) return
         viewModelScope.launch {
-            reminderIds.forEach { repo.setViewed(it) }
+            savedItemIds.forEach { repo.setViewed(it) }
         }
     }
 
@@ -290,7 +322,7 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
      * [scoreAbove] and [scoreBelow] are the sort scores of the neighbors,
      * or null if at the top/bottom of the scored section.
      */
-    fun onDragDrop(reminderId: String, scoreAbove: Float?, scoreBelow: Float?) {
+    fun onDragDrop(savedItemId: String, scoreAbove: Float?, scoreBelow: Float?) {
         viewModelScope.launch {
             val epsilon = 0.01f
             val newScore = when {
@@ -300,7 +332,7 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
                 else -> 50f
             }
 
-            val existing = repo.getById(reminderId) ?: return@launch
+            val existing = repo.getById(savedItemId) ?: return@launch
             val history = try {
                 JSONArray(existing.reRankHistory)
             } catch (_: Exception) {
@@ -313,16 +345,16 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
                 put("scoreExplanation", "User manually reordered reminder via drag")
             })
 
-            repo.updateSortScoreAndHistory(reminderId, newScore, history.toString())
+            repo.updateSortScoreAndHistory(savedItemId, newScore, history.toString())
 
             // Score normalization check
             normalizeScoresIfNeeded()
         }
     }
 
-    fun submitFeedback(reminderId: String, trigger: String) {
+    fun submitFeedback(savedItemId: String, trigger: String) {
         viewModelScope.launch {
-            enqueueRerank(getApplication(), reminderId, trigger)
+            enqueueRerank(getApplication(), savedItemId, trigger)
         }
     }
 
@@ -346,14 +378,14 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
         for ((idx, reminder) in scored.withIndex()) {
             val newScore = 100f - (step * idx)
             // Do NOT append reRankHistory for normalization
-            repo.updateSortScoreAndHistory(reminder.reminderId, newScore, reminder.reRankHistory)
+            repo.updateSortScoreAndHistory(reminder.savedItemId, newScore, reminder.reRankHistory)
         }
     }
 
     // ========== Regeneration ==========
 
-    fun regenerateOne(reminderId: String) {
-        enqueueRegenerateOne(getApplication(), reminderId)
+    fun regenerateOne(savedItemId: String) {
+        enqueueRegenerateOne(getApplication(), savedItemId)
     }
 
     fun regenerateAll() {
@@ -365,9 +397,9 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
     /**
      * Add a copy button to a reminder's button list.
      */
-    fun addCopyButton(reminderId: String, text: String) {
+    fun addCopyButton(savedItemId: String, text: String) {
         viewModelScope.launch {
-            val existing = repo.getById(reminderId) ?: return@launch
+            val existing = repo.getById(savedItemId) ?: return@launch
             val arr = try {
                 JSONArray(existing.buttons)
             } catch (_: Exception) {
@@ -383,7 +415,7 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
                 put("intent", text)
                 put("type", "copy")
             })
-            repo.updateButtons(reminderId, arr.toString())
+            repo.updateButtons(savedItemId, arr.toString())
         }
     }
 
@@ -400,7 +432,7 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
     }
 
 
-    fun handleGoogleTasksSignInResult(data: Intent?, pendingReminder: ReminderUnit?) {
+    fun handleGoogleTasksSignInResult(data: Intent?, pendingReminder: SavedItem?) {
         viewModelScope.launch {
             val account = GoogleTasksAuthManager.handleSignInResult(data)
             if (account != null && pendingReminder != null) {
@@ -414,7 +446,7 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
     /**
      * Export a reminder to Google Tasks.
      */
-    fun exportToGoogleTasks(reminder: ReminderUnit) {
+    fun exportToGoogleTasks(reminder: SavedItem) {
         viewModelScope.launch {
             _googleTasksExportResult.value = GoogleTasksExportResult.Loading
             val result = googleTasksRepo.createTaskFromReminder(reminder)
@@ -427,7 +459,7 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
     }
 
     /**
-     * Export any [ExportableItem] (including SubTask) to Google Tasks.
+     * Export any [ExportableItem] (including SavedSubItem) to Google Tasks.
      */
     fun exportToGoogleTasks(item: ExportableItem) {
         viewModelScope.launch {

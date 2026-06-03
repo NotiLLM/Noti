@@ -98,6 +98,13 @@ class NotiRepository(
         actionsRepo.markNotiRead(notiKey)
     }
 
+    suspend fun archiveNewRecordsForKey(notiKey: String) {
+        notiRecordDao.markNewRecordsArchivedByKey(notiKey)
+        logAction(notiKey, "archive_new_records")
+    }
+
+    fun getNewRecords(): List<NotiRecord> = notiRecordDao.getNewRecords()
+
     suspend fun setScanStates(notiKey: String, hasTask: Boolean, hasMemo: Boolean, hasEvent: Boolean) {
         actionsRepo.setHasTask(notiKey, hasTask)
         actionsRepo.setHasMemo(notiKey, hasMemo)

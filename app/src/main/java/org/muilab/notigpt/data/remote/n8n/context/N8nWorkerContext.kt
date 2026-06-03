@@ -6,7 +6,7 @@ import org.muilab.notigpt.data.local.room.AppDatabase
 import org.muilab.notigpt.data.remote.n8n.N8nAPIClient
 import org.muilab.notigpt.data.repository.notification.NotiRepository
 import org.muilab.notigpt.data.repository.notification.NotiRepositoryProvider
-import org.muilab.notigpt.data.repository.reminder.ReminderRepository
+import org.muilab.notigpt.data.repository.reminder.SavedItemRepository
 import org.muilab.notigpt.util.SharedPreferencesManager
 
 /**
@@ -22,8 +22,8 @@ internal class N8nWorkerContext(
         NotiRepositoryProvider.provideNotiRepository(appContext)
     }
 
-    val reminderRepository: ReminderRepository by lazy {
-        ReminderRepository(database.reminderListDao(), appContext)
+    val reminderRepository: SavedItemRepository by lazy {
+        SavedItemRepository(database.reminderListDao(), appContext)
     }
 
 /**

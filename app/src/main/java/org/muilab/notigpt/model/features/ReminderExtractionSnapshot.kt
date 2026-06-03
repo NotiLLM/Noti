@@ -15,7 +15,7 @@ import androidx.room.Index
     primaryKeys = ["snapshotId"],
     indices = [
         Index(value = ["status", "createdAt"], name = "idx_reminder_snap_status_time"),
-        Index(value = ["reminderId"], name = "idx_reminder_snap_reminderId"),
+        Index(value = ["savedItemId"], name = "idx_reminder_snap_savedItemId"),
     ]
 )
 data class ReminderExtractionSnapshot(
@@ -25,7 +25,7 @@ data class ReminderExtractionSnapshot(
     val status: String,
 
     /** Optional once linked. */
-    val reminderId: String? = null,
+    val savedItemId: String? = null,
 
     /** JSON payload of the full LLM input context and mapping. */
     val payloadJson: String,

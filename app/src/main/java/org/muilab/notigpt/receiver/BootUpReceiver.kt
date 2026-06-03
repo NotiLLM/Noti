@@ -4,6 +4,11 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.util.Log
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import org.muilab.notigpt.data.local.room.AppDatabase
+import org.muilab.notigpt.data.repository.reminder.ScheduledReminderRepository
 import org.muilab.notigpt.work.ReminderPeriodicWork
 
 /**
@@ -22,6 +27,17 @@ class BootUpReceiver : BroadcastReceiver() {
 
             // Ensure periodic scan/extract restarts after reboot.
             ReminderPeriodicWork.enqueue(context.applicationContext)
+
+            val pendingResult = goAsync()
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    val db = AppDatabase.getInstance(context.applicationContext)
+                    ScheduledReminderRepository(context.applicationContext, db.reminderDao())
+                        .scheduleExistingFutureReminders()
+                } finally {
+                    pendingResult.finish()
+                }
+            }
         }
     }
 }

@@ -7,8 +7,11 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import org.muilab.notigpt.model.features.ExtractionPreference
 import org.muilab.notigpt.model.features.PreferenceConflict
-import org.muilab.notigpt.model.features.ReminderUnit
-import org.muilab.notigpt.model.features.SubTask
+import org.muilab.notigpt.model.features.Reminder
+import org.muilab.notigpt.model.features.ReminderNotiRecordRef
+import org.muilab.notigpt.model.features.ReminderSavedItemRef
+import org.muilab.notigpt.model.features.SavedItem
+import org.muilab.notigpt.model.features.SavedSubItem
 import org.muilab.notigpt.model.features.UserContext
 import org.muilab.notigpt.model.notifications.NotiAction
 import org.muilab.notigpt.model.notifications.NotiRecord
@@ -20,9 +23,10 @@ import org.muilab.notigpt.data.local.room.dao.NotiActionDao
 import org.muilab.notigpt.data.local.room.dao.NotiDrawerDao
 import org.muilab.notigpt.data.local.room.dao.NotiRecordDao
 import org.muilab.notigpt.data.local.room.dao.PreferenceConflictDao
-import org.muilab.notigpt.data.local.room.dao.ReminderListDao
+import org.muilab.notigpt.data.local.room.dao.ReminderDao
+import org.muilab.notigpt.data.local.room.dao.SavedItemDao
 import org.muilab.notigpt.data.local.room.dao.ReminderSnapshotDao
-import org.muilab.notigpt.data.local.room.dao.SubTaskDao
+import org.muilab.notigpt.data.local.room.dao.SavedSubItemDao
 import org.muilab.notigpt.data.local.room.dao.UserContextDao
 
 /**
@@ -36,15 +40,18 @@ import org.muilab.notigpt.data.local.room.dao.UserContextDao
         NotiUnit::class,
         NotiRecord::class,
         NotiAction::class,
-        ReminderUnit::class,
-        SubTask::class,
+        SavedItem::class,
+        SavedSubItem::class,
+        Reminder::class,
+        ReminderSavedItemRef::class,
+        ReminderNotiRecordRef::class,
         ReminderExtractionSnapshot::class,
         ExtractionPreference::class,
         PreferenceConflict::class,
         UserContext::class,
     ],
     views = [VisibleNotiRecord::class],
-    version = 36,
+    version = 38,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -53,8 +60,9 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun drawerDao(): NotiDrawerDao
     abstract fun recordDao(): NotiRecordDao
     abstract fun actionDao(): NotiActionDao
-    abstract fun reminderListDao(): ReminderListDao
-    abstract fun subTaskDao(): SubTaskDao
+    abstract fun reminderListDao(): SavedItemDao
+    abstract fun subTaskDao(): SavedSubItemDao
+    abstract fun reminderDao(): ReminderDao
     abstract fun reminderSnapshotDao(): ReminderSnapshotDao
     abstract fun extractionPreferenceDao(): ExtractionPreferenceDao
     abstract fun preferenceConflictDao(): PreferenceConflictDao
@@ -107,6 +115,8 @@ abstract class AppDatabase : RoomDatabase() {
                 .addMigrations(AppDatabaseMigrations.MIGRATION_33_34)
                 .addMigrations(AppDatabaseMigrations.MIGRATION_34_35)
                 .addMigrations(AppDatabaseMigrations.MIGRATION_35_36)
+                .addMigrations(AppDatabaseMigrations.MIGRATION_36_37)
+                .addMigrations(AppDatabaseMigrations.MIGRATION_37_38)
                 .setJournalMode(JournalMode.TRUNCATE)
                 .build()
         }

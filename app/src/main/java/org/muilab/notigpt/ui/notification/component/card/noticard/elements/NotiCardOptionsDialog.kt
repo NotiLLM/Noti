@@ -40,6 +40,7 @@ fun NotiCardOptionsDialog(
     drawerViewModel: DrawerViewModel,
     notiKey: String,
     state: NotiCardOptionsState,
+    onCreateReminder: (() -> Unit)? = null,
 ) {
     if (!show) return
 
@@ -113,6 +114,30 @@ fun NotiCardOptionsDialog(
                         )
                         Spacer(Modifier.width(12.dp))
                         Text(stringResource(R.string.ui_action_extract_reminder))
+                    }
+                }
+
+                if (onCreateReminder != null) {
+                    TextButton(
+                        onClick = {
+                            onCreateReminder()
+                            onDismiss()
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Start,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.schedule),
+                                contentDescription = stringResource(R.string.ui_reminders_create_button),
+                                modifier = Modifier.size(24.dp),
+                            )
+                            Spacer(Modifier.width(12.dp))
+                            Text(stringResource(R.string.ui_reminders_create_button))
+                        }
                     }
                 }
             }

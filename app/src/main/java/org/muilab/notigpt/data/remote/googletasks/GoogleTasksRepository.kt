@@ -12,7 +12,7 @@ import com.google.api.services.tasks.model.Task
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.muilab.notigpt.data.export.ExportableItem
-import org.muilab.notigpt.model.features.ReminderUnit
+import org.muilab.notigpt.model.features.SavedItem
 import org.muilab.notigpt.data.export.asExportable
 import org.muilab.notigpt.data.remote.googletasks.GoogleTasksAuthManager
 import java.text.SimpleDateFormat
@@ -64,7 +64,7 @@ class GoogleTasksRepository(
 
     /**
      * Create a task in the user's default task list from any [ExportableItem]
-     * (works for both [ReminderUnit] and [SubTask]).
+     * (works for both [SavedItem] and [SavedSubItem]).
      */
     suspend fun createTaskFromExportable(item: ExportableItem): TaskResult = withContext(Dispatchers.IO) {
         val account = GoogleTasksAuthManager.getAccount(appContext)
@@ -94,9 +94,9 @@ class GoogleTasksRepository(
     }
 
     /**
-     * Create a task in the user's default task list from a ReminderUnit.
+     * Create a task in the user's default task list from a SavedItem.
      */
-    suspend fun createTaskFromReminder(reminder: ReminderUnit): TaskResult =
+    suspend fun createTaskFromReminder(reminder: SavedItem): TaskResult =
         createTaskFromExportable(reminder.asExportable())
 
     /**

@@ -5,14 +5,20 @@ import androidx.annotation.RequiresApi
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -29,6 +35,7 @@ import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -39,6 +46,8 @@ import org.muilab.notigpt.ui.notification.component.card.noticard.NotiCard
 import org.muilab.notigpt.ui.notification.component.card.notirecord.NotiRecordContextCard
 import org.muilab.notigpt.ui.notification.state.DragState
 import org.muilab.notigpt.ui.notification.viewmodel.DrawerViewModel
+import org.muilab.notigpt.ui.reminder.screen.ReminderDateTimeDialog
+import org.muilab.notigpt.ui.reminder.viewmodel.ScheduledReminderViewModel
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 
@@ -55,7 +64,9 @@ private const val HISTORY_PAGE_SIZE = 20
 @Composable
 fun NotificationsScreen(
     drawerViewModel: DrawerViewModel,
+    scheduledReminderViewModel: ScheduledReminderViewModel? = null,
 ) {
+    val scheduledVm: ScheduledReminderViewModel = scheduledReminderViewModel ?: viewModel()
     val context = androidx.compose.ui.platform.LocalContext.current
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
@@ -69,6 +80,11 @@ fun NotificationsScreen(
     val dragState = remember { DragState() }
     var activeOrder by remember { mutableStateOf<List<String>>(emptyList()) }
     var holdOrderOnExit by remember { mutableStateOf(false) }
+    var reminderTargetTitle by remember { mutableStateOf<String?>(null) }
+    var reminderTargetRecords by remember { mutableStateOf<List<NotiRecord>>(emptyList()) }
+    var selectedRecordIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var showRecordPicker by remember { mutableStateOf(false) }
+    var showReminderTimePicker by remember { mutableStateOf(false) }
 
     LaunchedEffect(isSortingMode) {
         if (isSortingMode) {
@@ -221,6 +237,12 @@ fun NotificationsScreen(
                         swipeEnabled = true,
                         reorderEnabled = isSortingMode,
                         reorderScope = this,
+                        onCreateReminder = { title, records ->
+                            reminderTargetTitle = title.ifBlank { records.firstOrNull()?.title.orEmpty() }
+                            reminderTargetRecords = records
+                            selectedRecordIds = records.map { it.notiRecordId }.toSet()
+                            showRecordPicker = true
+                        },
                     )
                 }
             }
@@ -240,6 +262,62 @@ fun NotificationsScreen(
                     drawerViewModel = drawerViewModel,
                 )
             }
+        }
+
+        if (showRecordPicker) {
+            AlertDialog(
+                onDismissRequest = { showRecordPicker = false },
+                title = { Text(stringResource(R.string.ui_reminders_create_button)) },
+                text = {
+                    LazyColumn {
+                        items(reminderTargetRecords, key = { it.notiRecordId }) { record ->
+                            val checked = record.notiRecordId in selectedRecordIds
+                            Row(modifier = Modifier.fillMaxWidth()) {
+                                Checkbox(
+                                    checked = checked,
+                                    onCheckedChange = { isChecked ->
+                                        selectedRecordIds = if (isChecked) selectedRecordIds + record.notiRecordId else selectedRecordIds - record.notiRecordId
+                                    },
+                                )
+                                Column(Modifier.weight(1f)) {
+                                    Text(record.title.ifBlank { reminderTargetTitle.orEmpty() }, style = MaterialTheme.typography.bodyMedium)
+                                    Text(record.content, style = MaterialTheme.typography.bodySmall)
+                                }
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        enabled = selectedRecordIds.isNotEmpty(),
+                        onClick = {
+                            showRecordPicker = false
+                            showReminderTimePicker = true
+                        },
+                    ) { Text(stringResource(R.string.ui_action_next)) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showRecordPicker = false }) { Text(stringResource(R.string.ui_action_cancel)) }
+                },
+            )
+        }
+
+        if (showReminderTimePicker) {
+            ReminderDateTimeDialog(
+                title = stringResource(R.string.ui_reminders_create_button),
+                initialAtMs = System.currentTimeMillis(),
+                onDismiss = { showReminderTimePicker = false },
+                onConfirm = { remindAtMs ->
+                    val selected = reminderTargetRecords.filter { it.notiRecordId in selectedRecordIds }
+                    scheduledVm.createForNotiRecords(
+                        title = reminderTargetTitle.orEmpty(),
+                        content = selected.joinToString("\n") { it.content },
+                        notiRecordIds = selected.map { it.notiRecordId },
+                        remindAtMs = remindAtMs,
+                    )
+                    showReminderTimePicker = false
+                },
+            )
         }
     }
 }

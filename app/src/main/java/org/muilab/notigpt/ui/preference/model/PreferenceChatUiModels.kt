@@ -17,8 +17,8 @@ enum class PreferenceEntryPoint(val wire: String) {
  */
 data class ChatFlowContext(
     val entryPoint: PreferenceEntryPoint,
-    val reminderTitle: String? = null,
-    val reminderContent: String? = null,
+    val title: String? = null,
+    val content: String? = null,
     val reminderBeforeTitle: String? = null,
     val reminderBeforeContent: String? = null,
     val notiKey: String? = null,

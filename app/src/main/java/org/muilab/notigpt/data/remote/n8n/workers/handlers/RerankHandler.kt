@@ -31,7 +31,7 @@ internal object RerankHandler {
             Log.e(TAG, "No webhook_path for rerank")
             return ctx.failure()
         }
-        val reminderId = inputData.getString("reminder_id") ?: run {
+        val savedItemId = inputData.getString("reminder_id") ?: run {
             Log.e(TAG, "No reminder_id for rerank")
             return ctx.failure()
         }
@@ -40,8 +40,8 @@ internal object RerankHandler {
             return ctx.failure()
         }
 
-        val reminder = ctx.reminderRepository.getById(reminderId) ?: run {
-            Log.w(TAG, "Reminder $reminderId not found")
+        val reminder = ctx.reminderRepository.getById(savedItemId) ?: run {
+            Log.w(TAG, "Reminder $savedItemId not found")
             return ctx.success()
         }
 
@@ -49,7 +49,7 @@ internal object RerankHandler {
         val notiContext = buildNotiContext(ctx, reminder)
 
         val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.getDefault())
-        val deadlineIso = if (reminder.deadlineTimestamp > 0L) sdf.format(Date(reminder.deadlineTimestamp)) else ""
+        val deadlineIso = if (reminder.deadlineAtMs > 0L) sdf.format(Date(reminder.deadlineAtMs)) else ""
 
         val payload = mapOf(
             "userId" to SharedPreferencesManager.userId,
@@ -59,9 +59,9 @@ internal object RerankHandler {
             "targetExtractionLanguage" to SharedPreferencesManager.targetExtractionLanguage,
             "trigger" to trigger,
             "reminder" to mapOf(
-                "reminderId" to reminder.reminderId,
-                "reminderTitle" to reminder.reminderTitle,
-                "reminderContent" to reminder.reminderContent,
+                "savedItemId" to reminder.savedItemId,
+                "title" to reminder.title,
+                "content" to reminder.content,
                 "isTask" to reminder.isTask,
                 "isEvent" to reminder.isEvent,
                 "isCompleted" to reminder.isCompleted,
@@ -121,7 +121,7 @@ internal object RerankHandler {
             }
 
             ctx.reminderRepository.updateSortScoreAndHistory(
-                reminderId = reminderId,
+                savedItemId = savedItemId,
                 sortScore = newSortScore,
                 reRankHistory = history.toString(),
             )
@@ -134,9 +134,9 @@ internal object RerankHandler {
 
     private suspend fun buildNotiContext(
         ctx: N8nWorkerContext,
-        reminder: org.muilab.notigpt.model.features.ReminderUnit,
+        reminder: org.muilab.notigpt.model.features.SavedItem,
     ): List<Map<String, Any>> {
-        if (reminder.associatedNotiRecords.isEmpty()) return emptyList()
+        if (reminder.sourceNotiRecordIds.isEmpty()) return emptyList()
 
         val db = ctx.database
         val wantedKeys = reminder.associatedNotiKeys.toList()

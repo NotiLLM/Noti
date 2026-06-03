@@ -745,12 +745,12 @@ private fun ChatFlowContextCard(flowContext: ChatFlowContext) {
             }
 
             // Show the reminder title/content
-            if (!flowContext.reminderTitle.isNullOrBlank()) {
-                Text(flowContext.reminderTitle, style = MaterialTheme.typography.bodySmall)
+            if (!flowContext.title.isNullOrBlank()) {
+                Text(flowContext.title, style = MaterialTheme.typography.bodySmall)
             }
-            if (!flowContext.reminderContent.isNullOrBlank()) {
+            if (!flowContext.content.isNullOrBlank()) {
                 Text(
-                    flowContext.reminderContent,
+                    flowContext.content,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f),
                     maxLines = 3,

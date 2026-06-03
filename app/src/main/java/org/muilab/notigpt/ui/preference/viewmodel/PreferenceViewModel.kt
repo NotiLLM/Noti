@@ -17,7 +17,7 @@ import org.muilab.notigpt.data.local.room.AppDatabase
 import org.muilab.notigpt.data.local.room.dao.ExtractionPreferenceDao
 import org.muilab.notigpt.data.local.room.dao.NotiDrawerDao
 import org.muilab.notigpt.data.local.room.dao.PreferenceConflictDao
-import org.muilab.notigpt.data.local.room.dao.ReminderListDao
+import org.muilab.notigpt.data.local.room.dao.SavedItemDao
 import org.muilab.notigpt.data.local.room.dao.UserContextDao
 import org.muilab.notigpt.data.remote.n8n.PreferenceChatClient
 import org.muilab.notigpt.data.remote.n8n.PreferenceContextDiscoverClient
@@ -33,7 +33,7 @@ import org.muilab.notigpt.ui.preference.model.PreferenceEntryPoint
 import org.muilab.notigpt.ui.preference.model.ProposedAction
 import org.muilab.notigpt.ui.preference.model.ProposedActionType
 import org.muilab.notigpt.data.remote.n8n.dto.N8nQuickSyncRequestDto
-import org.muilab.notigpt.model.features.ReminderUnit
+import org.muilab.notigpt.model.features.SavedItem
 import org.muilab.notigpt.model.features.UserContext
 import org.muilab.notigpt.data.remote.n8n.dto.N8nUserSelectionsDto
 import org.muilab.notigpt.util.SharedPreferencesManager
@@ -64,7 +64,7 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
     private val drawerDao: NotiDrawerDao =
         AppDatabase.getInstance(application).drawerDao()
 
-    private val reminderListDao: ReminderListDao =
+    private val reminderListDao: SavedItemDao =
         AppDatabase.getInstance(application).reminderListDao()
 
     companion object {
@@ -119,8 +119,8 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
 
     data class SnackbarEvent(
         val entryPoint: PreferenceEntryPoint,
-        val reminder: ReminderUnit?,
-        val reminderBefore: ReminderUnit?,
+        val reminder: SavedItem?,
+        val reminderBefore: SavedItem?,
         val contextData: Map<String, Any?>,
     )
 
@@ -164,39 +164,39 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
     val bottomSheetStep: StateFlow<BottomSheetStep> = _bottomSheetStep
 
     // context for the current reminder being operated on
-    private var _currentReminder: ReminderUnit? = null
-    private var _currentReminderBefore: ReminderUnit? = null
+    private var _currentReminder: SavedItem? = null
+    private var _currentReminderBefore: SavedItem? = null
 
     /**
-     * Build rich contextData from a [ReminderUnit] so that n8n always receives
+     * Build rich contextData from a [SavedItem] so that n8n always receives
      * semantic content (title, description, flags) — not just metadata.
      *
      * Callers may pass extra entries via [extraContext]; they are merged in but
      * never override the reminder-derived keys.
      */
     private fun buildContextData(
-        reminder: ReminderUnit?,
-        reminderBefore: ReminderUnit? = null,
+        reminder: SavedItem?,
+        reminderBefore: SavedItem? = null,
         extraContext: Map<String, Any?> = emptyMap(),
     ): Map<String, Any?> {
         val ctx = extraContext.toMutableMap()
         reminder?.let { r ->
             ctx["reminder"] = mapOf(
-                "reminderId" to r.reminderId,
-                "title" to r.reminderTitle,
-                "content" to r.reminderContent,
+                "savedItemId" to r.savedItemId,
+                "title" to r.title,
+                "content" to r.content,
                 "isTask" to r.isTask,
                 "isEvent" to r.isEvent,
                 "isCompleted" to r.isCompleted,
                 "origin" to r.origin,
-                "associatedNotiRecords" to r.associatedNotiRecords.toList(),
+                "sourceNotiRecordIds" to r.sourceNotiRecordIds.toList(),
             )
         }
         reminderBefore?.let { r ->
             ctx["reminderBefore"] = mapOf(
-                "reminderId" to r.reminderId,
-                "title" to r.reminderTitle,
-                "content" to r.reminderContent,
+                "savedItemId" to r.savedItemId,
+                "title" to r.title,
+                "content" to r.content,
                 "isTask" to r.isTask,
                 "isEvent" to r.isEvent,
                 "isCompleted" to r.isCompleted,
@@ -217,8 +217,8 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
      */
     fun startFlow(
         entryPoint: PreferenceEntryPoint,
-        reminder: ReminderUnit?,
-        reminderBefore: ReminderUnit? = null,
+        reminder: SavedItem?,
+        reminderBefore: SavedItem? = null,
         contextData: Map<String, Any?> = emptyMap(),
     ) {
         val enriched = buildContextData(reminder, reminderBefore, contextData)
@@ -438,10 +438,10 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
         // Build a ChatFlowContext from the current reminder state
         val flowCtx = ChatFlowContext(
             entryPoint = entryPoint,
-            reminderTitle = _currentReminder?.reminderTitle,
-            reminderContent = _currentReminder?.reminderContent,
-            reminderBeforeTitle = _currentReminderBefore?.reminderTitle,
-            reminderBeforeContent = _currentReminderBefore?.reminderContent,
+            title = _currentReminder?.title,
+            content = _currentReminder?.content,
+            reminderBeforeTitle = _currentReminderBefore?.title,
+            reminderBeforeContent = _currentReminderBefore?.content,
             notiKey = contextData["notiKey"] as? String,
         )
         _chatFlowContext.value = flowCtx
@@ -710,8 +710,8 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
                 val reminders = reminderListDao.getAllVisible()
                 val remindersPayload = reminders.map { r ->
                     mapOf(
-                        "title" to r.reminderTitle,
-                        "content" to r.reminderContent,
+                        "title" to r.title,
+                        "content" to r.content,
                         "isTask" to r.isTask.toString(),
                     )
                 }

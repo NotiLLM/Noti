@@ -2,7 +2,7 @@ package org.muilab.notigpt.domain.reminder
 
 import org.json.JSONArray
 import org.json.JSONObject
-import org.muilab.notigpt.model.features.ReminderUnit
+import org.muilab.notigpt.model.features.SavedItem
 
 /**
  * Pure merge helper for reminder-to-notification-record associations.
@@ -12,7 +12,7 @@ import org.muilab.notigpt.model.features.ReminderUnit
  */
 object ReminderAssociationMerger {
     fun associationIdsFrom(response: JSONObject): Set<String> {
-        val arr: JSONArray = response.optJSONArray("associatedNotiRecords")
+        val arr: JSONArray = response.optJSONArray("sourceNotiRecordIds")
             ?: response.optJSONArray("associatedNotis")
             ?: return emptySet()
 
@@ -25,11 +25,11 @@ object ReminderAssociationMerger {
     }
 
     fun merge(
-        existing: ReminderUnit?,
+        existing: SavedItem?,
         responseAssociationIds: Set<String>,
         requestRecordIds: Set<String> = emptySet(),
     ): Set<String> = buildSet {
-        existing?.associatedNotiRecords?.let(::addAll)
+        existing?.sourceNotiRecordIds?.let(::addAll)
         addAll(requestRecordIds.filter { it.isNotBlank() })
         addAll(responseAssociationIds.filter { it.isNotBlank() })
     }

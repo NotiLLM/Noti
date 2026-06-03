@@ -6,7 +6,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import org.muilab.notigpt.data.local.room.AppDatabase
-import org.muilab.notigpt.model.features.ReminderUnit
+import org.muilab.notigpt.model.features.SavedItem
 import org.muilab.notigpt.model.notifications.NotiRecord
 import org.muilab.notigpt.model.notifications.NotiUnit
 
@@ -28,12 +28,12 @@ class ReminderRelatedNotificationsRepository(context: Context) {
         }
     }
 
-    suspend fun getRelatedNotifications(reminder: ReminderUnit): RelatedNotifications = withContext(Dispatchers.IO) {
-        if (reminder.associatedNotiRecords.isEmpty()) {
+    suspend fun getRelatedNotifications(reminder: SavedItem): RelatedNotifications = withContext(Dispatchers.IO) {
+        if (reminder.sourceNotiRecordIds.isEmpty()) {
             return@withContext RelatedNotifications.Empty
         }
 
-        val directRecordIds = reminder.associatedNotiRecords.filter { it.isNotBlank() }.distinct()
+        val directRecordIds = reminder.sourceNotiRecordIds.filter { it.isNotBlank() }.distinct()
         val wantedKeys = reminder.associatedNotiKeys.toList()
         val snapshotRecordIds = resolveRecordIdsFromSnapshot(reminder, wantedKeys)
         val recordIds = (directRecordIds + snapshotRecordIds).distinct()
@@ -57,8 +57,8 @@ class ReminderRelatedNotificationsRepository(context: Context) {
         )
     }
 
-    private suspend fun resolveRecordIdsFromSnapshot(reminder: ReminderUnit, wantedKeys: List<String>): List<String> {
-        val snapshotId = reminder.extractionSnapshotId ?: return emptyList()
+    private suspend fun resolveRecordIdsFromSnapshot(reminder: SavedItem, wantedKeys: List<String>): List<String> {
+        val snapshotId = reminder.sourceExtractionSnapshotId ?: return emptyList()
         if (snapshotId.isBlank()) return emptyList()
 
         return try {

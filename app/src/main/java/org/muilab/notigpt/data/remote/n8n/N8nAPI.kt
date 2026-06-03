@@ -174,12 +174,12 @@ fun enqueueDelayedTaskExtraction(context: Context, delaySeconds: Long, userTrigg
  }
 
 /** Queues regeneration for one reminder from its stored notification context. */
-fun enqueueRegenerateOne(context: Context, reminderId: String) {
-    Log.d("N8nAPI", "enqueueRegenerateOne: reminderId=$reminderId")
+fun enqueueRegenerateOne(context: Context, savedItemId: String) {
+    Log.d("N8nAPI", "enqueueRegenerateOne: savedItemId=$savedItemId")
     val inputData = Data.Builder()
         .putString("api_type", N8N_REGENERATE_ONE)
         .putString("webhook_path", BuildConfig.N8N_REGENERATE_ONE_PATH)
-        .putString("reminder_id", reminderId)
+        .putString("reminder_id", savedItemId)
         .build()
 
     val constraints = Constraints.Builder()
@@ -192,7 +192,7 @@ fun enqueueRegenerateOne(context: Context, reminderId: String) {
         .setInputData(inputData)
         .build()
 
-    val uniqueName = "n8n_regenerate_one_$reminderId"
+    val uniqueName = "n8n_regenerate_one_$savedItemId"
     WorkManager.getInstance(context).enqueueUniqueWork(uniqueName, ExistingWorkPolicy.REPLACE, workerRequest)
  }
 
@@ -219,12 +219,12 @@ fun enqueueRegenerateAll(context: Context) {
  }
 
 /** Queues reminder reranking for one feedback-triggered reminder update. */
-fun enqueueRerank(context: Context, reminderId: String, trigger: String) {
-    Log.d("N8nAPI", "enqueueRerank: reminderId=$reminderId trigger=$trigger")
+fun enqueueRerank(context: Context, savedItemId: String, trigger: String) {
+    Log.d("N8nAPI", "enqueueRerank: savedItemId=$savedItemId trigger=$trigger")
     val inputData = Data.Builder()
         .putString("api_type", N8N_RERANK)
         .putString("webhook_path", BuildConfig.N8N_RERANK_PATH)
-        .putString("reminder_id", reminderId)
+        .putString("reminder_id", savedItemId)
         .putString("trigger", trigger)
         .build()
 
@@ -238,7 +238,7 @@ fun enqueueRerank(context: Context, reminderId: String, trigger: String) {
         .setInputData(inputData)
         .build()
 
-    val uniqueName = "n8n_rerank_${reminderId}_$trigger"
+    val uniqueName = "n8n_rerank_${savedItemId}_$trigger"
     WorkManager.getInstance(context).enqueueUniqueWork(uniqueName, ExistingWorkPolicy.REPLACE, workerRequest)
  }
 
