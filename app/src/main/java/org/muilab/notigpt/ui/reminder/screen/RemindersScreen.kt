@@ -856,7 +856,7 @@ private fun ReminderCardSplitActions(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ReminderCard(
+fun ReminderCard(
     reminder: SavedItem,
     subTasks: List<SavedSubItem> = emptyList(),
     onDelete: () -> Unit,
@@ -1064,7 +1064,7 @@ private fun ReminderActionChip(
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-private fun ReminderDetailScreen(
+fun ReminderDetailScreen(
     initial: SavedItem,
     drawerViewModel: DrawerViewModel,
     onBack: (SavedItem?) -> Unit,
@@ -1507,7 +1507,7 @@ private fun ReminderDetailScreen(
 }
 
 /** Which external app the export dialog targets. */
-private enum class ExportType { GOOGLE_TASKS, GOOGLE_CALENDAR }
+enum class ExportType { GOOGLE_TASKS, GOOGLE_CALENDAR }
 
 /**
  * Data holder for the export confirmation dialog – remembers the reminder being exported

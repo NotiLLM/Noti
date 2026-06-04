@@ -1,23 +1,24 @@
 package org.muilab.notigpt.ui.home
 
+import android.content.Intent
 import android.os.Build
+import android.provider.CalendarContract
 import android.widget.Toast
 import androidx.annotation.RequiresApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -30,27 +31,47 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import org.muilab.notigpt.R
+import org.muilab.notigpt.data.export.asExportable
 import org.muilab.notigpt.model.features.SavedItem
+import org.muilab.notigpt.model.features.SavedItemState
 import org.muilab.notigpt.model.features.SavedItemType
+import org.muilab.notigpt.model.features.SavedSubItem
 import org.muilab.notigpt.model.notifications.NotiDisplayUnit
 import org.muilab.notigpt.ui.notification.component.card.noticard.NotiCard
 import org.muilab.notigpt.ui.notification.viewmodel.DrawerViewModel
+import org.muilab.notigpt.ui.reminder.component.SavedSubItemDetailScreen
+import org.muilab.notigpt.ui.reminder.screen.ReminderCard
+import org.muilab.notigpt.ui.reminder.screen.ReminderDateTimeDialog
+import org.muilab.notigpt.ui.reminder.screen.ReminderDetailScreen
 import org.muilab.notigpt.ui.reminder.viewmodel.ReminderViewModel
+import org.muilab.notigpt.ui.reminder.viewmodel.ScheduledReminderViewModel
 
 @RequiresApi(Build.VERSION_CODES.S)
 @Composable
 fun NewScreen(
     drawerViewModel: DrawerViewModel,
     reminderViewModel: ReminderViewModel,
+    scheduledReminderViewModel: ScheduledReminderViewModel? = null,
     searchQuery: String = "",
 ) {
     val context = LocalContext.current
     val newItems by reminderViewModel.newSavedItems.collectAsState()
     val newUnits by drawerViewModel.newNotificationUnits.collectAsState()
     val newRecordsByKey by drawerViewModel.newNotificationRecords.collectAsState()
+    val allSavedSubItemsByReminder by reminderViewModel.allSavedSubItemsByReminder.collectAsState()
+    val relatedNotificationsState by reminderViewModel.relatedNotificationsState.collectAsState()
+    val googleTasksExportResult by reminderViewModel.googleTasksExportResult.collectAsState()
+
     var deleteTarget by remember { mutableStateOf<Pair<String, List<SavedItem>>?>(null) }
+    var editing by remember { mutableStateOf<SavedItem?>(null) }
+    var editingInitialSnapshot by remember { mutableStateOf<SavedItem?>(null) }
+    var editingSavedSubItem by remember { mutableStateOf<SavedSubItem?>(null) }
+    var editingSavedSubItemInitial by remember { mutableStateOf<SavedSubItem?>(null) }
+    var reminderDialogSavedItem by remember { mutableStateOf<SavedItem?>(null) }
 
     val normalizedQuery = searchQuery.trim().lowercase()
     fun SavedItem.matchesQuery(): Boolean {
@@ -64,6 +85,54 @@ fun NewScreen(
         return records.any { record ->
             listOf(record.title, record.content, record.person).any { it.lowercase().contains(normalizedQuery) }
         } || notiUnit.appName.lowercase().contains(normalizedQuery)
+    }
+
+    fun openEditor(item: SavedItem) {
+        editing = item
+        editingInitialSnapshot = item
+    }
+
+    fun persistEditedItem(updated: SavedItem, base: SavedItem?, persistUnchanged: Boolean = true) {
+        val emptyNow = updated.title.isBlank() && updated.content.isBlank()
+        if (emptyNow) {
+            reminderViewModel.delete(updated.savedItemId)
+            return
+        }
+
+        val contentChanged = base != null && (base.title != updated.title || base.content != updated.content)
+        val changed = base == null ||
+            base.title != updated.title ||
+            base.content != updated.content ||
+            base.isTask != updated.isTask ||
+            base.isCompleted != updated.isCompleted ||
+            base.deadlineAtMs != updated.deadlineAtMs ||
+            base.estimatedCompletionTime != updated.estimatedCompletionTime
+
+        if (!changed && !persistUnchanged) return
+
+        reminderViewModel.upsert(
+            updated.copy(
+                state = if (updated.isTask && updated.isCompleted) SavedItemState.Completed else SavedItemState.Saved,
+                userEdited = updated.userEdited || changed,
+                humanEditCount = if (contentChanged) updated.humanEditCount + 1 else updated.humanEditCount,
+                lastUpdateTimestamp = System.currentTimeMillis(),
+            )
+        )
+    }
+
+    fun exportSubItemToCalendar(st: SavedSubItem) {
+        val calIntent = Intent(Intent.ACTION_INSERT).apply {
+            data = CalendarContract.Events.CONTENT_URI
+            putExtra(CalendarContract.Events.TITLE, st.title)
+            putExtra(CalendarContract.Events.DESCRIPTION, st.description)
+            if (st.startAtMs > 0L) putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, st.startAtMs)
+            if (st.endAtMs > 0L) putExtra(CalendarContract.EXTRA_EVENT_END_TIME, st.endAtMs)
+        }
+        try {
+            context.startActivity(calIntent)
+        } catch (_: Exception) {
+            Toast.makeText(context, context.getString(R.string.google_calendar_no_app), Toast.LENGTH_SHORT).show()
+        }
     }
 
     val newTasks = newItems.filter { it.itemType == SavedItemType.Task && it.matchesQuery() }
@@ -91,13 +160,29 @@ fun NewScreen(
             }
         }
         items(newTasks, key = { it.savedItemId }) { item ->
-            NewSavedItemCard(
-                item = item,
-                onSave = {
-                    reminderViewModel.markSaved(item.savedItemId)
-                    Toast.makeText(context, "Moved to Tasks", Toast.LENGTH_SHORT).show()
-                },
+            ReminderCard(
+                reminder = item,
+                subTasks = allSavedSubItemsByReminder[item.savedItemId] ?: emptyList(),
                 onDelete = { reminderViewModel.delete(item.savedItemId) },
+                onToggleCompleted = { completed -> reminderViewModel.toggleCompleted(item, completed) },
+                onEdit = { openEditor(item) },
+                onCreateReminder = scheduledReminderViewModel?.let { { reminderDialogSavedItem = item } },
+                onQuickExportTasks = { reminderViewModel.exportToGoogleTasks(item) },
+                onTogglePinned = { reminderViewModel.togglePinned(item.savedItemId) },
+                onSavedSubItemToggle = { stId, checked -> reminderViewModel.toggleSavedSubItemCompleted(stId, checked) },
+                onSavedSubItemClick = { st ->
+                    openEditor(item)
+                    editingSavedSubItem = st
+                    editingSavedSubItemInitial = st
+                },
+                onSavedSubItemEdit = { st ->
+                    openEditor(item)
+                    editingSavedSubItem = st
+                    editingSavedSubItemInitial = st
+                },
+                onSavedSubItemDelete = { st -> reminderViewModel.deleteSavedSubItem(st.savedSubItemId) },
+                onSavedSubItemExportGoogleTasks = { st -> reminderViewModel.exportToGoogleTasks(st.asExportable()) },
+                onSavedSubItemExportGoogleCalendar = { st -> exportSubItemToCalendar(st) },
             )
         }
         if (newKeep.isNotEmpty()) {
@@ -106,23 +191,38 @@ fun NewScreen(
                     title = "New Keep",
                     count = newKeep.size,
                     items = newKeep,
-                showBulkActions = normalizedQuery.isBlank(),
-                onSaveAll = {
-                    reminderViewModel.markSavedByIds(newKeep.map { it.savedItemId })
-                    Toast.makeText(context, "Moved to Keep", Toast.LENGTH_SHORT).show()
-                },
+                    showBulkActions = normalizedQuery.isBlank(),
+                    onSaveAll = {
+                        reminderViewModel.markSavedByIds(newKeep.map { it.savedItemId })
+                        Toast.makeText(context, "Moved to Keep", Toast.LENGTH_SHORT).show()
+                    },
                     onDeleteAll = { deleteTarget = "keep" to newKeep },
                 )
             }
         }
         items(newKeep, key = { it.savedItemId }) { item ->
-            NewSavedItemCard(
-                item = item,
-                onSave = {
-                    reminderViewModel.markSaved(item.savedItemId)
-                    Toast.makeText(context, "Moved to Keep", Toast.LENGTH_SHORT).show()
-                },
+            ReminderCard(
+                reminder = item,
+                subTasks = allSavedSubItemsByReminder[item.savedItemId] ?: emptyList(),
                 onDelete = { reminderViewModel.delete(item.savedItemId) },
+                onToggleCompleted = { completed -> reminderViewModel.toggleCompleted(item, completed) },
+                onEdit = { openEditor(item) },
+                onCreateReminder = scheduledReminderViewModel?.let { { reminderDialogSavedItem = item } },
+                onTogglePinned = { reminderViewModel.togglePinned(item.savedItemId) },
+                onSavedSubItemToggle = { stId, checked -> reminderViewModel.toggleSavedSubItemCompleted(stId, checked) },
+                onSavedSubItemClick = { st ->
+                    openEditor(item)
+                    editingSavedSubItem = st
+                    editingSavedSubItemInitial = st
+                },
+                onSavedSubItemEdit = { st ->
+                    openEditor(item)
+                    editingSavedSubItem = st
+                    editingSavedSubItemInitial = st
+                },
+                onSavedSubItemDelete = { st -> reminderViewModel.deleteSavedSubItem(st.savedSubItemId) },
+                onSavedSubItemExportGoogleTasks = { st -> reminderViewModel.exportToGoogleTasks(st.asExportable()) },
+                onSavedSubItemExportGoogleCalendar = { st -> exportSubItemToCalendar(st) },
             )
         }
         if (filteredUnits.isNotEmpty()) {
@@ -146,6 +246,129 @@ fun NewScreen(
         }
         if (!hasAnyVisibleSection) {
             item { EmptySectionText(if (normalizedQuery.isBlank()) "No new items" else "No matching new items") }
+        }
+    }
+
+    reminderDialogSavedItem?.let { target ->
+        ReminderDateTimeDialog(
+            title = stringResource(R.string.ui_reminders_create_button),
+            initialAtMs = System.currentTimeMillis(),
+            onDismiss = { reminderDialogSavedItem = null },
+            onConfirm = { remindAtMs ->
+                scheduledReminderViewModel?.createForSavedItem(target, remindAtMs)
+                reminderDialogSavedItem = null
+            },
+        )
+    }
+
+    editing?.let { current ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+                .clickable(
+                    indication = null,
+                    interactionSource = remember { MutableInteractionSource() },
+                    onClick = { /* consume */ },
+                )
+        ) {
+            ReminderDetailScreen(
+                initial = current,
+                drawerViewModel = drawerViewModel,
+                onBack = { updatedOrNull ->
+                    if (updatedOrNull != null) {
+                        persistEditedItem(
+                            updated = updatedOrNull,
+                            base = editingInitialSnapshot,
+                            persistUnchanged = false,
+                        )
+                    }
+                    editing = null
+                    editingInitialSnapshot = null
+                    editingSavedSubItem = null
+                    editingSavedSubItemInitial = null
+                },
+                onDelete = { id ->
+                    reminderViewModel.delete(id)
+                    editing = null
+                    editingInitialSnapshot = null
+                    editingSavedSubItem = null
+                    editingSavedSubItemInitial = null
+                },
+                onSave = { updated ->
+                    persistEditedItem(updated, editingInitialSnapshot)
+                    editing = null
+                    editingInitialSnapshot = null
+                    editingSavedSubItem = null
+                    editingSavedSubItemInitial = null
+                },
+                onExportToGoogleTasks = { reminder -> reminderViewModel.exportToGoogleTasks(reminder) },
+                isGoogleTasksExporting = googleTasksExportResult is ReminderViewModel.GoogleTasksExportResult.Loading,
+                onRegenerate = { reminderViewModel.regenerateOne(current.savedItemId) },
+                relatedNotificationsState = relatedNotificationsState,
+                onLoadRelatedNotifications = { reminder -> reminderViewModel.loadRelatedNotifications(reminder) },
+                subTasks = allSavedSubItemsByReminder[current.savedItemId] ?: emptyList(),
+                onAddSavedSubItem = { reminderViewModel.addSavedSubItem(current.savedItemId) },
+                onSavedSubItemToggle = { stId, checked -> reminderViewModel.toggleSavedSubItemCompleted(stId, checked) },
+                onSavedSubItemClick = { st ->
+                    editingSavedSubItem = st
+                    editingSavedSubItemInitial = st
+                },
+                onSavedSubItemEdit = { st ->
+                    editingSavedSubItem = st
+                    editingSavedSubItemInitial = st
+                },
+                onSavedSubItemDelete = { st -> reminderViewModel.deleteSavedSubItem(st.savedSubItemId) },
+                onSavedSubItemExportGoogleTasks = { st -> reminderViewModel.exportToGoogleTasks(st.asExportable()) },
+                onSavedSubItemExportGoogleCalendar = { st -> exportSubItemToCalendar(st) },
+            )
+
+            editingSavedSubItem?.let { stCurrent ->
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.background)
+                        .clickable(
+                            indication = null,
+                            interactionSource = remember { MutableInteractionSource() },
+                            onClick = { /* consume */ },
+                        )
+                ) {
+                    SavedSubItemDetailScreen(
+                        initial = stCurrent,
+                        onBack = { updatedOrNull ->
+                            if (updatedOrNull != null) {
+                                val base = editingSavedSubItemInitial
+                                val changed = base != null && (
+                                    base.title != updatedOrNull.title ||
+                                        base.description != updatedOrNull.description ||
+                                        base.isTask != updatedOrNull.isTask ||
+                                        base.isEvent != updatedOrNull.isEvent ||
+                                        base.isCompleted != updatedOrNull.isCompleted ||
+                                        base.deadlineAtMs != updatedOrNull.deadlineAtMs ||
+                                        base.startAtMs != updatedOrNull.startAtMs ||
+                                        base.endAtMs != updatedOrNull.endAtMs
+                                )
+                                if (changed) reminderViewModel.upsertSavedSubItem(updatedOrNull)
+                            }
+                            editingSavedSubItem = null
+                            editingSavedSubItemInitial = null
+                        },
+                        onDelete = { stId ->
+                            reminderViewModel.deleteSavedSubItem(stId)
+                            editingSavedSubItem = null
+                            editingSavedSubItemInitial = null
+                        },
+                        onSave = { updated ->
+                            reminderViewModel.upsertSavedSubItem(updated)
+                            editingSavedSubItem = null
+                            editingSavedSubItemInitial = null
+                        },
+                        onExportGoogleTasks = { st -> reminderViewModel.exportToGoogleTasks(st.asExportable()) },
+                        onExportGoogleCalendar = { st -> exportSubItemToCalendar(st) },
+                    )
+                }
+            }
         }
     }
 
@@ -179,7 +402,6 @@ private fun NewSavedItemSectionHeader(
     Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
         Text("$title ($count)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         if (items.isNotEmpty() && showBulkActions) {
-            Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = onSaveAll) { Text("Looks good, save all") }
                 TextButton(onClick = onDeleteAll) { Text("Delete all") }
@@ -205,30 +427,4 @@ private fun EmptySectionText(text: String) {
         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
-}
-
-@Composable
-private fun NewSavedItemCard(
-    item: SavedItem,
-    onSave: () -> Unit,
-    onDelete: () -> Unit,
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 6.dp),
-    ) {
-        Column(Modifier.padding(16.dp)) {
-            Text(item.title.ifBlank { "Untitled" }, style = MaterialTheme.typography.titleSmall)
-            if (item.content.isNotBlank()) {
-                Spacer(Modifier.height(4.dp))
-                Text(item.content, style = MaterialTheme.typography.bodyMedium)
-            }
-            Spacer(Modifier.height(10.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = onSave) { Text("Looks good") }
-                TextButton(onClick = onDelete) { Text("Delete") }
-            }
-        }
-    }
 }
