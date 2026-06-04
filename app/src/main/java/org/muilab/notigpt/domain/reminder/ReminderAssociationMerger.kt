@@ -13,6 +13,7 @@ import org.muilab.notigpt.model.features.SavedItem
 object ReminderAssociationMerger {
     fun associationIdsFrom(response: JSONObject): Set<String> {
         val arr: JSONArray = response.optJSONArray("sourceNotiRecordIds")
+            ?: response.optJSONArray("associatedNotiRecords")
             ?: response.optJSONArray("associatedNotis")
             ?: return emptySet()
 

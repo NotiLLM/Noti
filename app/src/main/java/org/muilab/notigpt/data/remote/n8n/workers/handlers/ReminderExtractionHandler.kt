@@ -14,6 +14,7 @@ import org.muilab.notigpt.data.remote.n8n.context.N8nWorkerContext
 import org.muilab.notigpt.domain.reminder.ReminderSnapshotStatuses
 import org.muilab.notigpt.model.features.ReminderExtractionSnapshot
 import org.muilab.notigpt.model.features.SavedItem
+import org.muilab.notigpt.model.features.SavedSubItem
 import org.muilab.notigpt.model.features.SavedItemType
 import org.muilab.notigpt.model.features.SavedItemState
 import org.muilab.notigpt.domain.reminder.ReminderAssociationMerger
@@ -268,14 +269,14 @@ internal object ReminderExtractionHandler {
                 } else {
                     for (i in 0 until arr.length()) {
                         val it = arr.getJSONObject(i)
-                        val savedItemId = it.optString("savedItemId", it.optString("taskId"))
-                        val title = it.optString("title", "")
-                        val content = it.optString("content", it.optString("taskDescription"))
+                        val savedItemId = savedItemIdFrom(it)
+                        val title = titleFrom(it)
+                        val content = contentFrom(it)
                         val isTask = it.optBoolean("isTask", true)
                         val isEvent = it.optBoolean("isEvent", false)
                         val deadlineMs = isoToUnixMillis(it.optString("deadlineTimeString", "-1"))
-                        val startAtMsMs = isoToUnixMillis(it.optString("startAtMsString", "-1")).let { v -> if (v == -1L) 0L else v }
-                        val endAtMsMs = isoToUnixMillis(it.optString("endAtMsString", "-1")).let { v -> if (v == -1L) 0L else v }
+                        val startAtMsMs = startAtMsFrom(it)
+                        val endAtMsMs = endAtMsFrom(it)
                         val estimate = it.optLong("estimatedCompletionTime", it.optLong("estimatedCompletionMinutes", 0L))
                         val responseAssocIds = ReminderAssociationMerger.associationIdsFrom(it)
                         val existing = if (savedItemId.isNotBlank()) reminderRepository.getById(savedItemId) else null
@@ -357,12 +358,12 @@ internal object ReminderExtractionHandler {
                         )
 
                         reminderRepository.upsert(newUnit)
+                        persistReturnedSubTasks(ctx, savedItemId, it, System.currentTimeMillis())
                     }
 
                     // Mark snapshot kept and link to (first) savedItemId.
                     val firstObj = arr.optJSONObject(0)
-                    val firstReminderId = firstObj?.optString("savedItemId").takeIf { !it.isNullOrBlank() }
-                        ?: firstObj?.optString("taskId")
+                    val firstReminderId = firstObj?.let { savedItemIdFrom(it) }
                     snapshotDao.updateSnapshotStatusAndReminderId(snapshotId, ReminderSnapshotStatuses.KEPT, firstReminderId)
 
                 }
@@ -598,14 +599,14 @@ internal object ReminderExtractionHandler {
 
                 for (i in 0 until arr.length()) {
                     val it = arr.getJSONObject(i)
-                    val savedItemId = it.optString("savedItemId", it.optString("taskId"))
-                    val title = it.optString("title", "")
-                    val content = it.optString("content", it.optString("taskDescription"))
+                    val savedItemId = savedItemIdFrom(it)
+                    val title = titleFrom(it)
+                    val content = contentFrom(it)
                     val isTask = it.optBoolean("isTask", true)
                     val isEvent = it.optBoolean("isEvent", false)
                     val deadlineMs = isoToUnixMillis(it.optString("deadlineTimeString", "-1"))
-                    val startAtMsMs = isoToUnixMillis(it.optString("startAtMsString", "-1")).let { v -> if (v == -1L) 0L else v }
-                    val endAtMsMs = isoToUnixMillis(it.optString("endAtMsString", "-1")).let { v -> if (v == -1L) 0L else v }
+                    val startAtMsMs = startAtMsFrom(it)
+                    val endAtMsMs = endAtMsFrom(it)
                     val estimate = it.optLong("estimatedCompletionTime", it.optLong("estimatedCompletionMinutes", 0L))
                     val responseAssocIds = ReminderAssociationMerger.associationIdsFrom(it)
                     val existing = if (savedItemId.isNotBlank()) reminderRepository.getById(savedItemId) else null
@@ -686,13 +687,13 @@ internal object ReminderExtractionHandler {
                     )
 
                     reminderRepository.upsert(unit)
+                    persistReturnedSubTasks(ctx, savedItemId, it, System.currentTimeMillis())
                 }
 
                 drawerDao.setShouldExtractReminderByKeys(keysToProcess, false)
 
                 val firstObj = arr.optJSONObject(0)
-                val firstReminderId = firstObj?.optString("savedItemId").takeIf { !it.isNullOrBlank() }
-                    ?: firstObj?.optString("taskId")
+                val firstReminderId = firstObj?.let { savedItemIdFrom(it) }
                 snapshotDao.updateSnapshotStatusAndReminderId(snapshotId, ReminderSnapshotStatuses.KEPT, firstReminderId)
             }
 
@@ -703,6 +704,68 @@ internal object ReminderExtractionHandler {
         }
 
         return ctx.success()
+    }
+
+    /** Reads reminder IDs from both the current app schema and the still-deployed n8n schema. */
+    fun savedItemIdFrom(obj: JSONObject): String = obj.optString(
+        "savedItemId",
+        obj.optString("reminderId", obj.optString("taskId")),
+    )
+
+    fun titleFrom(obj: JSONObject, fallback: String = ""): String = obj.optString(
+        "title",
+        obj.optString("reminderTitle", fallback),
+    )
+
+    fun contentFrom(obj: JSONObject, fallback: String = ""): String = obj.optString(
+        "content",
+        obj.optString("reminderContent", obj.optString("taskDescription", fallback)),
+    )
+
+    fun startAtMsFrom(obj: JSONObject): Long = isoToUnixMillis(
+        obj.optString("startAtMsString", obj.optString("startTimeString", "-1")),
+    ).let { v -> if (v == -1L) 0L else v }
+
+    fun endAtMsFrom(obj: JSONObject): Long = isoToUnixMillis(
+        obj.optString("endAtMsString", obj.optString("endTimeString", "-1")),
+    ).let { v -> if (v == -1L) 0L else v }
+
+    /**
+     * Persists child items from the current n8n `subTasks` response shape.
+     *
+     * The array is treated as the complete visible child list for that parent. Existing omitted children are
+     * soft-deleted by the repository; if the field is absent, older workflows are left untouched.
+     */
+    suspend fun persistReturnedSubTasks(ctx: N8nWorkerContext, parentSavedItemId: String, obj: JSONObject, ts: Long) {
+        if (!obj.has("subTasks")) return
+        val arr = obj.optJSONArray("subTasks") ?: JSONArray()
+        val subTasks = buildList {
+            for (i in 0 until arr.length()) {
+                val sub = arr.optJSONObject(i) ?: continue
+                val id = sub.optString("savedSubItemId", sub.optString("subTaskId"))
+                if (id.isBlank()) continue
+                val deadlineMs = isoToUnixMillis(sub.optString("deadlineTimeString", "-1"))
+                add(
+                    SavedSubItem(
+                        savedSubItemId = id,
+                        parentSavedItemId = parentSavedItemId,
+                        title = sub.optString("title", ""),
+                        description = sub.optString("description", sub.optString("content", "")),
+                        itemType = if (sub.optBoolean("isTask", true)) SavedItemType.Task else SavedItemType.Keep,
+                        isCompleted = sub.optBoolean("isCompleted", false),
+                        deadlineAtMs = deadlineMs,
+                        startAtMs = startAtMsFrom(sub),
+                        endAtMs = endAtMsFrom(sub),
+                        buttons = sub.optJSONArray("buttons")?.toString() ?: "[]",
+                        sortOrder = sub.optInt("sortOrder", i),
+                        createdAt = ts,
+                        lastUpdateTimestamp = ts,
+                        isVisible = true,
+                    )
+                )
+            }
+        }
+        ctx.savedSubItemRepository.replaceVisibleForParent(parentSavedItemId, subTasks, ts)
     }
 
     /**

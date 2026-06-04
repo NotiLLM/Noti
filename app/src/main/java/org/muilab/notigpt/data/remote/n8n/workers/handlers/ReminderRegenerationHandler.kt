@@ -209,18 +209,18 @@ internal object ReminderRegenerationHandler {
             val arr = JSONArray(bodyStr)
             for (i in 0 until arr.length()) {
                 val obj = arr.getJSONObject(i)
-                val savedItemId = obj.optString("savedItemId", obj.optString("taskId"))
+                val savedItemId = ReminderExtractionHandler.savedItemIdFrom(obj)
                 if (savedItemId.isBlank()) continue
 
                 val existing = ctx.reminderRepository.getById(savedItemId)
 
-                val title = obj.optString("title", existing?.title ?: "")
-                val content = obj.optString("content", existing?.content ?: "")
+                val title = ReminderExtractionHandler.titleFrom(obj, existing?.title ?: "")
+                val content = ReminderExtractionHandler.contentFrom(obj, existing?.content ?: "")
                 val isTask = obj.optBoolean("isTask", existing?.isTask ?: true)
                 val isEvent = obj.optBoolean("isEvent", existing?.isEvent ?: false)
                 val deadlineMs = ReminderExtractionHandler.isoToUnixMillis(obj.optString("deadlineTimeString", "-1"))
-                val startAtMsMs = ReminderExtractionHandler.isoToUnixMillis(obj.optString("startAtMsString", "-1")).let { v -> if (v == -1L) 0L else v }
-                val endAtMsMs = ReminderExtractionHandler.isoToUnixMillis(obj.optString("endAtMsString", "-1")).let { v -> if (v == -1L) 0L else v }
+                val startAtMsMs = ReminderExtractionHandler.startAtMsFrom(obj)
+                val endAtMsMs = ReminderExtractionHandler.endAtMsFrom(obj)
                 val estimate = obj.optLong("estimatedCompletionTime", obj.optLong("estimatedCompletionMinutes", existing?.estimatedCompletionTime ?: 0L))
                 val isCompleted = obj.optBoolean("isCompleted", existing?.isCompleted ?: false)
 
@@ -252,7 +252,7 @@ internal object ReminderRegenerationHandler {
 
                 // Preserve sourceNotiRecordIds from existing
                 val assocIds = mutableSetOf<String>()
-                val assoc = obj.optJSONArray("sourceNotiRecordIds") ?: obj.optJSONArray("associatedNotis")
+                val assoc = obj.optJSONArray("sourceNotiRecordIds") ?: obj.optJSONArray("associatedNotiRecords") ?: obj.optJSONArray("associatedNotis")
                 if (assoc != null) {
                     for (j in 0 until assoc.length()) assocIds.add(assoc.optString(j))
                 }
@@ -286,6 +286,7 @@ internal object ReminderRegenerationHandler {
                 )
 
                 ctx.reminderRepository.upsert(unit)
+                ReminderExtractionHandler.persistReturnedSubTasks(ctx, savedItemId, obj, System.currentTimeMillis())
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error parsing response ($trigger)", e)

@@ -29,6 +29,21 @@ class SavedSubItemRepository(private val subTaskDao: SavedSubItemDao) {
         subTaskDao.upsertAll(subTasks)
     }
 
+    /**
+     * Replaces the visible generated sub-task set for a parent reminder.
+     *
+     * n8n returns `subTasks` as a complete child list for the saved item, so omitted existing rows should no longer
+     * appear. Rows are soft-deleted instead of removed to preserve local audit/debug history.
+     */
+    suspend fun replaceVisibleForParent(savedItemId: String, subTasks: List<SavedSubItem>, ts: Long) = withContext(Dispatchers.IO) {
+        if (subTasks.isEmpty()) {
+            subTaskDao.softDeleteByParentId(savedItemId, ts)
+        } else {
+            subTaskDao.upsertAll(subTasks)
+            subTaskDao.softDeleteByParentIdExcept(savedItemId, subTasks.map { it.savedSubItemId }, ts)
+        }
+    }
+
     suspend fun setCompleted(savedSubItemId: String, completed: Boolean, ts: Long) = withContext(Dispatchers.IO) {
         subTaskDao.setCompleted(savedSubItemId, completed, ts)
     }

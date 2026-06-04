@@ -7,6 +7,7 @@ import org.muilab.notigpt.data.remote.n8n.N8nAPIClient
 import org.muilab.notigpt.data.repository.notification.NotiRepository
 import org.muilab.notigpt.data.repository.notification.NotiRepositoryProvider
 import org.muilab.notigpt.data.repository.reminder.SavedItemRepository
+import org.muilab.notigpt.data.repository.reminder.SavedSubItemRepository
 import org.muilab.notigpt.util.SharedPreferencesManager
 
 /**
@@ -24,6 +25,10 @@ internal class N8nWorkerContext(
 
     val reminderRepository: SavedItemRepository by lazy {
         SavedItemRepository(database.reminderListDao(), appContext)
+    }
+
+    val savedSubItemRepository: SavedSubItemRepository by lazy {
+        SavedSubItemRepository(database.subTaskDao())
     }
 
 /**
