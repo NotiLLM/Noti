@@ -55,6 +55,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.SplitButtonDefaults
+import androidx.compose.material3.SplitButtonLayout
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -133,7 +135,13 @@ fun RemindersScreen(
 
     LaunchedEffect(listMode) {
         vm.setListMode(listMode)
-        vm.setFilter(ReminderViewModel.FilterTab.All)
+        vm.setFilter(
+            if (listMode == ReminderViewModel.ListMode.Tasks) {
+                ReminderViewModel.FilterTab.Pending
+            } else {
+                ReminderViewModel.FilterTab.All
+            }
+        )
     }
 
     // Drawer VM is needed to reuse the same notification/app launching logic as NotiRecordContextCard.
@@ -263,6 +271,7 @@ fun RemindersScreen(
                         FilterChip(stringResource(R.string.ui_reminders_filter_completed), filter == ReminderViewModel.FilterTab.Completed) { vm.setFilter(ReminderViewModel.FilterTab.Completed) }
                     }
                     ReminderViewModel.ListMode.Tasks -> {
+                        FilterChip(stringResource(R.string.ui_reminders_filter_pending), filter == ReminderViewModel.FilterTab.Pending) { vm.setFilter(ReminderViewModel.FilterTab.Pending) }
                         FilterChip(stringResource(R.string.ui_reminders_filter_all), filter == ReminderViewModel.FilterTab.All) { vm.setFilter(ReminderViewModel.FilterTab.All) }
                         FilterChip(stringResource(R.string.ui_reminders_filter_completed), filter == ReminderViewModel.FilterTab.Completed) { vm.setFilter(ReminderViewModel.FilterTab.Completed) }
                     }
@@ -784,54 +793,63 @@ private fun ReminderCardSplitActions(
     if (onCreateReminder == null && !hasOverflow) return
 
     var expanded by remember { mutableStateOf(false) }
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(1.dp),
-        modifier = Modifier.clip(RoundedCornerShape(18.dp)),
-    ) {
-        if (onCreateReminder != null) {
-            OutlinedButton(
-                onClick = onCreateReminder,
-                modifier = Modifier.height(36.dp),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp),
-                shape = RoundedCornerShape(topStart = 18.dp, bottomStart = 18.dp, topEnd = if (hasOverflow) 4.dp else 18.dp, bottomEnd = if (hasOverflow) 4.dp else 18.dp),
-            ) {
-                Icon(Icons.Default.Notifications, contentDescription = stringResource(R.string.ui_reminders_create_button), modifier = Modifier.size(18.dp))
+    val menuContent: @Composable () -> Unit = {
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            if (onQuickExportTasks != null) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.a11y_quick_export_tasks)) },
+                    leadingIcon = { Icon(painterResource(R.drawable.task_add), contentDescription = null, modifier = Modifier.size(20.dp)) },
+                    onClick = {
+                        expanded = false
+                        onQuickExportTasks()
+                    },
+                )
+            }
+            if (onQuickExportCalendar != null) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.a11y_quick_export_calendar)) },
+                    leadingIcon = { Icon(painterResource(R.drawable.calendar_add), contentDescription = null, modifier = Modifier.size(20.dp)) },
+                    onClick = {
+                        expanded = false
+                        onQuickExportCalendar()
+                    },
+                )
             }
         }
-        if (hasOverflow) {
-            Box {
-                OutlinedButton(
-                    onClick = { expanded = true },
-                    modifier = Modifier.height(36.dp),
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp),
-                    shape = RoundedCornerShape(topStart = if (onCreateReminder != null) 4.dp else 18.dp, bottomStart = if (onCreateReminder != null) 4.dp else 18.dp, topEnd = 18.dp, bottomEnd = 18.dp),
-                ) {
-                    Icon(Icons.Default.KeyboardArrowDown, contentDescription = "More reminder actions", modifier = Modifier.size(18.dp))
+    }
+
+    if (onCreateReminder != null && hasOverflow) {
+        SplitButtonLayout(
+            leadingButton = {
+                SplitButtonDefaults.OutlinedLeadingButton(onClick = onCreateReminder) {
+                    Icon(Icons.Default.Notifications, contentDescription = stringResource(R.string.ui_reminders_create_button), modifier = Modifier.size(SplitButtonDefaults.LeadingIconSize))
                 }
-                DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                    if (onQuickExportTasks != null) {
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.a11y_quick_export_tasks)) },
-                            leadingIcon = { Icon(painterResource(R.drawable.task_add), contentDescription = null, modifier = Modifier.size(20.dp)) },
-                            onClick = {
-                                expanded = false
-                                onQuickExportTasks()
-                            },
-                        )
+            },
+            trailingButton = {
+                Box {
+                    SplitButtonDefaults.OutlinedTrailingButton(
+                        checked = expanded,
+                        onCheckedChange = { expanded = it },
+                    ) {
+                        Icon(Icons.Default.KeyboardArrowDown, contentDescription = "More reminder actions", modifier = Modifier.size(SplitButtonDefaults.TrailingIconSize))
                     }
-                    if (onQuickExportCalendar != null) {
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.a11y_quick_export_calendar)) },
-                            leadingIcon = { Icon(painterResource(R.drawable.calendar_add), contentDescription = null, modifier = Modifier.size(20.dp)) },
-                            onClick = {
-                                expanded = false
-                                onQuickExportCalendar()
-                            },
-                        )
-                    }
+                    menuContent()
                 }
+            },
+        )
+    } else if (onCreateReminder != null) {
+        SplitButtonDefaults.OutlinedLeadingButton(onClick = onCreateReminder) {
+            Icon(Icons.Default.Notifications, contentDescription = stringResource(R.string.ui_reminders_create_button), modifier = Modifier.size(SplitButtonDefaults.LeadingIconSize))
+        }
+    } else if (hasOverflow) {
+        Box {
+            SplitButtonDefaults.OutlinedTrailingButton(
+                checked = expanded,
+                onCheckedChange = { expanded = it },
+            ) {
+                Icon(Icons.Default.KeyboardArrowDown, contentDescription = "More reminder actions", modifier = Modifier.size(SplitButtonDefaults.TrailingIconSize))
             }
+            menuContent()
         }
     }
 }

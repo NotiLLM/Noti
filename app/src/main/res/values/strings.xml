@@ -42,6 +42,7 @@
 
     <!-- Reminders -->
     <string name="ui_reminders_filter_all">All</string>
+    <string name="ui_reminders_filter_pending">Pending</string>
     <string name="ui_reminders_filter_tasks">Tasks</string>
     <string name="ui_reminders_filter_memos">Memos</string>
     <string name="ui_reminders_filter_completed">Completed</string>

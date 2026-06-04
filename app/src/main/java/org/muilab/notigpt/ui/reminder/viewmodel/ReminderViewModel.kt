@@ -37,7 +37,7 @@ import java.util.UUID
  */
 class ReminderViewModel(application: Application) : AndroidViewModel(application) {
 
-    enum class FilterTab { All, Tasks, Memos, Completed }
+    enum class FilterTab { All, Pending, Tasks, Memos, Completed }
     enum class ListMode { All, Tasks, Keep }
 
     /**
@@ -126,6 +126,7 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
 
         val baseList = when (f) {
             FilterTab.All -> modeList
+            FilterTab.Pending -> modeList.filter { !it.isCompleted }
             FilterTab.Tasks -> tasks.filter { it.savedItemId in modeIds }
             FilterTab.Memos -> memos.filter { it.savedItemId in modeIds }
             FilterTab.Completed -> completed.filter { it.savedItemId in modeIds }

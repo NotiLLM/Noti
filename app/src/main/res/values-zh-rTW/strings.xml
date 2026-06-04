@@ -23,6 +23,7 @@
 
     <!-- Reminders -->
     <string name="ui_reminders_filter_all">全部</string>
+    <string name="ui_reminders_filter_pending">待辦</string>
     <string name="ui_reminders_filter_tasks">任務</string>
     <string name="ui_reminders_filter_memos">備忘</string>
     <string name="ui_reminders_filter_completed">已完成</string>
