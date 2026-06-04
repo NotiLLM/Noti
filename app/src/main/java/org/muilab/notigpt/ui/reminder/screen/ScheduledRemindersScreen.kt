@@ -44,11 +44,11 @@ import java.util.Calendar
 @Composable
 fun ScheduledRemindersScreen(
     viewModel: ScheduledReminderViewModel = viewModel(),
+    searchQuery: String = "",
 ) {
     LaunchedEffect(Unit) { viewModel.refreshDueStates() }
 
     val reminders by viewModel.reminders.collectAsState()
-    var searchQuery by remember { mutableStateOf("") }
     var rescheduleTarget by remember { mutableStateOf<Reminder?>(null) }
     val filteredReminders = remember(reminders, searchQuery) {
         val q = searchQuery.trim().lowercase()
@@ -64,14 +64,6 @@ fun ScheduledRemindersScreen(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 4.dp, bottom = 12.dp),
-        )
-
-        OutlinedTextField(
-            value = searchQuery,
-            onValueChange = { searchQuery = it },
-            modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
-            singleLine = true,
-            label = { Text("Search Reminders") },
         )
 
         if (filteredReminders.isEmpty()) {

@@ -55,7 +55,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -68,6 +67,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
@@ -100,6 +100,7 @@ import java.util.Calendar
 import org.muilab.notigpt.ui.common.clipboard.AndroidClipboardController
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.snapshotFlow
@@ -144,7 +145,6 @@ fun RemindersScreen(
 
     val reminders by vm.reminders.collectAsState()
     val filter by vm.filter.collectAsState()
-    val searchQuery by vm.searchQuery.collectAsState()
 
     // Local mutable copy for live drag reordering visual feedback
     val localReminders = remember { androidx.compose.runtime.mutableStateListOf<SavedItem>() }
@@ -281,46 +281,6 @@ fun RemindersScreen(
                     )
                 }
             }
-
-            // Search bar
-            val keyboardController = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
-            val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
-
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = { vm.updateSearchQuery(it) },
-                placeholder = { Text(stringResource(R.string.ui_reminders_search_placeholder)) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 4.dp),
-                shape = androidx.compose.foundation.shape.RoundedCornerShape(percent = 100),
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Filled.Search,
-                        contentDescription = null,
-                    )
-                },
-                trailingIcon = {
-                    if (searchQuery.isNotBlank()) {
-                        IconButton(onClick = { vm.updateSearchQuery("") }) {
-                            Icon(
-                                imageVector = Icons.Default.Close,
-                                contentDescription = stringResource(R.string.a11y_close_search),
-                            )
-                        }
-                    }
-                },
-                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                    imeAction = androidx.compose.ui.text.input.ImeAction.Done,
-                ),
-                keyboardActions = androidx.compose.foundation.text.KeyboardActions(
-                    onDone = {
-                        keyboardController?.hide()
-                        focusManager.clearFocus()
-                    }
-                ),
-                singleLine = true,
-            )
 
             val reorderableState = rememberReorderableLazyListState(lazyListState = listState) { from, to ->
                 val fromReminder = localReminders.getOrNull(from.index)
@@ -814,6 +774,68 @@ private fun FilterChip(text: String, selected: Boolean, onClick: () -> Unit) {
     }
 }
 
+@Composable
+private fun ReminderCardSplitActions(
+    onCreateReminder: (() -> Unit)?,
+    onQuickExportTasks: (() -> Unit)?,
+    onQuickExportCalendar: (() -> Unit)?,
+) {
+    val hasOverflow = onQuickExportTasks != null || onQuickExportCalendar != null
+    if (onCreateReminder == null && !hasOverflow) return
+
+    var expanded by remember { mutableStateOf(false) }
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(1.dp),
+        modifier = Modifier.clip(RoundedCornerShape(18.dp)),
+    ) {
+        if (onCreateReminder != null) {
+            OutlinedButton(
+                onClick = onCreateReminder,
+                modifier = Modifier.height(36.dp),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp),
+                shape = RoundedCornerShape(topStart = 18.dp, bottomStart = 18.dp, topEnd = if (hasOverflow) 4.dp else 18.dp, bottomEnd = if (hasOverflow) 4.dp else 18.dp),
+            ) {
+                Icon(Icons.Default.Notifications, contentDescription = stringResource(R.string.ui_reminders_create_button), modifier = Modifier.size(18.dp))
+            }
+        }
+        if (hasOverflow) {
+            Box {
+                OutlinedButton(
+                    onClick = { expanded = true },
+                    modifier = Modifier.height(36.dp),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp),
+                    shape = RoundedCornerShape(topStart = if (onCreateReminder != null) 4.dp else 18.dp, bottomStart = if (onCreateReminder != null) 4.dp else 18.dp, topEnd = 18.dp, bottomEnd = 18.dp),
+                ) {
+                    Icon(Icons.Default.KeyboardArrowDown, contentDescription = "More reminder actions", modifier = Modifier.size(18.dp))
+                }
+                DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                    if (onQuickExportTasks != null) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.a11y_quick_export_tasks)) },
+                            leadingIcon = { Icon(painterResource(R.drawable.task_add), contentDescription = null, modifier = Modifier.size(20.dp)) },
+                            onClick = {
+                                expanded = false
+                                onQuickExportTasks()
+                            },
+                        )
+                    }
+                    if (onQuickExportCalendar != null) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.a11y_quick_export_calendar)) },
+                            leadingIcon = { Icon(painterResource(R.drawable.calendar_add), contentDescription = null, modifier = Modifier.size(20.dp)) },
+                            onClick = {
+                                expanded = false
+                                onQuickExportCalendar()
+                            },
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ReminderCard(
@@ -913,22 +935,12 @@ private fun ReminderCard(
                         modifier = Modifier.weight(1f)
                     )
 
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(0.dp)) {
-                        if (onQuickExportTasks != null) {
-                            IconButton(onClick = onQuickExportTasks, modifier = Modifier.size(36.dp)) {
-                                Icon(painter = painterResource(R.drawable.task_add), contentDescription = stringResource(R.string.a11y_quick_export_tasks), modifier = Modifier.size(20.dp))
-                            }
-                        }
-                        if (onQuickExportCalendar != null) {
-                            IconButton(onClick = onQuickExportCalendar, modifier = Modifier.size(36.dp)) {
-                                Icon(painter = painterResource(R.drawable.calendar_add), contentDescription = stringResource(R.string.a11y_quick_export_calendar), modifier = Modifier.size(20.dp))
-                            }
-                        }
-                        if (onCreateReminder != null) {
-                            IconButton(onClick = onCreateReminder, modifier = Modifier.size(36.dp)) {
-                                Icon(Icons.Default.Notifications, contentDescription = stringResource(R.string.ui_reminders_create_button), modifier = Modifier.size(20.dp))
-                            }
-                        }
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        ReminderCardSplitActions(
+                            onCreateReminder = onCreateReminder,
+                            onQuickExportTasks = onQuickExportTasks,
+                            onQuickExportCalendar = onQuickExportCalendar,
+                        )
                         IconButton(onClick = onTogglePinned, modifier = Modifier.size(36.dp)) {
                             Icon(
                                 painter = painterResource(if (reminder.isPinned) R.drawable.pin_yes else R.drawable.pin_no),
@@ -1087,15 +1099,23 @@ private fun ReminderDetailScreen(
     var showTimePicker by remember { mutableStateOf(false) }
 
     Column(Modifier.fillMaxSize()) {
-        TopAppBar(
-            title = {
+        Surface(color = MaterialTheme.colorScheme.surface) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                IconButton(onClick = { onBack(buildUpdated()) }) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.a11y_back))
+                }
                 BasicTextField(
                     value = title,
                     onValueChange = { title = it },
                     singleLine = true,
                     textStyle = MaterialTheme.typography.titleLarge.copy(color = MaterialTheme.colorScheme.onSurface),
                     cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.weight(1f),
                     decorationBox = { innerTextField ->
                         if (title.isBlank()) {
                             Text(
@@ -1107,13 +1127,6 @@ private fun ReminderDetailScreen(
                         innerTextField()
                     }
                 )
-            },
-            navigationIcon = {
-                IconButton(onClick = { onBack(buildUpdated()) }) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.a11y_back))
-                }
-            },
-            actions = {
                 IconButton(onClick = onRegenerate) {
                     Icon(painter = painterResource(R.drawable.refresh), contentDescription = stringResource(R.string.a11y_regenerate), modifier = Modifier.size(20.dp))
                 }
@@ -1124,7 +1137,7 @@ private fun ReminderDetailScreen(
                     Icon(painter = painterResource(R.drawable.save), contentDescription = stringResource(R.string.ui_action_save))
                 }
             }
-        )
+        }
 
         // Make the content scrollable so related notifications are reachable.
         val scrollState = rememberScrollState()

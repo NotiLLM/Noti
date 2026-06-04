@@ -33,19 +33,19 @@ private enum class HistoryMode { Grouped, Timeline }
 @Composable
 fun NotificationHistoryScreen(
     drawerViewModel: DrawerViewModel,
+    searchQuery: String = "",
 ) {
-    var query by remember { mutableStateOf("") }
     var mode by remember { mutableStateOf(HistoryMode.Grouped) }
     var records by remember { mutableStateOf<List<NotiRecord>>(emptyList()) }
 
-    val normalizedQuery = query.trim().lowercase()
+    val normalizedQuery = searchQuery.trim().lowercase()
 
     LaunchedEffect(normalizedQuery) {
         records = if (normalizedQuery.isBlank()) {
             drawerViewModel.getLatestRecordsForHistory(500)
         } else {
             // Search is DB-backed and scans all notification records, not just the currently loaded page.
-            drawerViewModel.searchRecordsForHistory(query)
+            drawerViewModel.searchRecordsForHistory(searchQuery)
         }
     }
 
@@ -57,14 +57,6 @@ fun NotificationHistoryScreen(
     ) {
         item {
             Column(Modifier.padding(16.dp)) {
-                OutlinedTextField(
-                    value = query,
-                    onValueChange = { query = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    label = { Text("Search History") },
-                )
-                Spacer(Modifier.height(8.dp))
                 Row {
                     FilterChip(
                         selected = mode == HistoryMode.Grouped,
@@ -114,7 +106,7 @@ private fun HistoryGroupCard(
         Column(Modifier.padding(16.dp)) {
             val latest = records.maxByOrNull { it.time }
             Text(latest?.title?.ifBlank { "Notification" } ?: "Notification", fontWeight = FontWeight.Bold)
-            Text("${records.size} records · ${latest?.let { if (it.isNew) "New" else "History" } ?: "History"}", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("${records.size} records · ${latest?.let { if (it.isDismissed) "History" else "New" } ?: "History"}", color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (expanded) {
                 Spacer(Modifier.height(8.dp))
                 records.sortedByDescending { it.time }.forEach { record ->
@@ -144,7 +136,7 @@ private fun HistoryRecordContent(record: NotiRecord) {
         Text(record.content, style = MaterialTheme.typography.bodyMedium)
     }
     Text(
-        text = if (record.isNew) "New" else "History",
+        text = if (record.isDismissed) "History" else "New",
         style = MaterialTheme.typography.labelSmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )

@@ -73,6 +73,7 @@ fun AppScaffold(
     val scheduledReminderViewModel: ScheduledReminderViewModel = viewModel()
     val preferenceViewModel: PreferenceViewModel = viewModel()
 
+    val appSearchQuery by drawerViewModel.queryString.collectAsState()
     val newNotiRecords by drawerViewModel.newNotificationRecords.collectAsState()
     val unreadNotiCount = remember(newNotiRecords) { newNotiRecords.values.sumOf { it.size } }
     val reminderList by reminderViewModel.allReminders.collectAsState()
@@ -122,6 +123,12 @@ fun AppScaffold(
         }
     }
 
+    LaunchedEffect(appSearchQuery, selectedTab, menuScreen) {
+        if (menuScreen == null && (selectedTab == AppPrimaryTab.Tasks || selectedTab == AppPrimaryTab.Keep)) {
+            reminderViewModel.updateSearchQuery(appSearchQuery)
+        }
+    }
+
     // Navigate to Chat tab when preference flow redirects there
     val navigateToChat by preferenceViewModel.navigateToChat.collectAsState()
     LaunchedEffect(navigateToChat) {
@@ -168,14 +175,6 @@ fun AppScaffold(
     // Show BottomSheet for preference learning (only EDIT opens this directly now)
     PreferenceLearningBottomSheet(preferenceViewModel = preferenceViewModel)
 
-    val menuScreenTitle = when (menuScreen) {
-        AppMenuScreen.Reminders -> "Reminders"
-        AppMenuScreen.Preferences -> stringResource(R.string.tab_preferences)
-        AppMenuScreen.History -> "History"
-        AppMenuScreen.Settings -> stringResource(R.string.menu_settings)
-        null -> null
-    }
-
     val openMenuScreen: (AppMenuScreen) -> Unit = { screen ->
         menuScreen = screen
         drawerViewModel.updateQueryString("")
@@ -183,13 +182,23 @@ fun AppScaffold(
         scope.launch { drawerState.close() }
     }
 
+    val openPrimaryTab: (AppPrimaryTab) -> Unit = { tab ->
+        selectedTab = tab
+        menuScreen = null
+        drawerViewModel.updateQueryString("")
+        isSearchExpanded = false
+        scope.launch { drawerState.close() }
+    }
+
     ModalNavigationDrawer(
         drawerState = drawerState,
-        gesturesEnabled = menuScreen == null,
+        gesturesEnabled = true,
         drawerContent = {
             AppDrawerContent(
+                selectedPrimaryTab = if (menuScreen == null) selectedTab else null,
                 unresolvedConflictCount = unresolvedConflicts.size,
                 dueUnseenReminderCount = dueUnseenReminderCount,
+                onPrimaryTabSelected = openPrimaryTab,
                 onMenuScreenSelected = openMenuScreen,
             )
         },
@@ -200,12 +209,14 @@ fun AppScaffold(
                     drawerViewModel = drawerViewModel,
                     isSearchExpanded = isSearchExpanded,
                     onSearchToggled = { isSearchExpanded = it },
-                    showMenuButton = menuScreen == null,
+                    showMenuButton = true,
                     onMenuClicked = { scope.launch { drawerState.open() } },
-                    menuScreenTitle = menuScreenTitle,
+                    menuScreenTitle = null,
                     onMenuScreenClosed = { menuScreen = null },
-                    // New/Task/Keep use screen-local search; keep the old active-drawer actions out of the top bar.
-                    showNotificationActions = false
+                    // Search lives in this shared top bar for every screen.
+                    showNotificationActions = false,
+                    searchQuery = appSearchQuery,
+                    onSearchQueryChange = drawerViewModel::updateQueryString,
                 )
             },
             snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
@@ -229,18 +240,21 @@ fun AppScaffold(
                 when (menuScreen) {
                     AppMenuScreen.Reminders -> ScheduledRemindersScreen(
                         viewModel = scheduledReminderViewModel,
+                        searchQuery = appSearchQuery,
                     )
                     AppMenuScreen.Preferences -> PreferenceChatScreen(
                         preferenceViewModel = preferenceViewModel,
                     )
                     AppMenuScreen.History -> NotificationHistoryScreen(
                         drawerViewModel = drawerViewModel,
+                        searchQuery = appSearchQuery,
                     )
                     AppMenuScreen.Settings -> SettingsScreen()
                     null -> when (selectedTab) {
                         AppPrimaryTab.New -> NewScreen(
                             drawerViewModel = drawerViewModel,
                             reminderViewModel = reminderViewModel,
+                            searchQuery = appSearchQuery,
                         )
                         AppPrimaryTab.Tasks -> RemindersScreen(
                             drawerViewModel = drawerViewModel,

@@ -32,19 +32,16 @@ interface NotiRecordDao {
     @Query("SELECT * FROM noti_record WHERE notiKey IN ( :notiKeys )")
     fun getRecordsByKeys(notiKeys: List<String>): List<NotiRecord>
 
-    @Query("SELECT * FROM noti_record WHERE notiKey = :notiKey AND isDismissed = 0")
+    @Query("SELECT * FROM noti_record WHERE notiKey = :notiKey AND isDismissed = 0 ORDER BY CASE WHEN whenTime != 0 THEN whenTime ELSE postTime END ASC")
     fun getActiveRecordsByKey(notiKey: String): List<NotiRecord>
 
-    @Query("SELECT * FROM noti_record WHERE notiKey = :notiKey AND isNew = 1 ORDER BY whenTime ASC")
+    @Query("SELECT * FROM noti_record WHERE notiKey = :notiKey AND isDismissed = 0 ORDER BY CASE WHEN whenTime != 0 THEN whenTime ELSE postTime END ASC")
     fun getNewRecordsByKey(notiKey: String): List<NotiRecord>
 
-    @Query("UPDATE noti_record SET isNew = 0 WHERE notiKey = :notiKey AND isNew = 1")
-    suspend fun markNewRecordsArchivedByKey(notiKey: String)
-
-    @Query("SELECT * FROM noti_record WHERE isNew = 1 ORDER BY whenTime DESC")
+    @Query("SELECT * FROM noti_record WHERE isDismissed = 0 ORDER BY CASE WHEN whenTime != 0 THEN whenTime ELSE postTime END DESC")
     fun getNewRecords(): List<NotiRecord>
 
-    @Query("SELECT * FROM noti_record WHERE isDismissed = 0 AND notiKey IN ( :notiKeys )")
+    @Query("SELECT * FROM noti_record WHERE isDismissed = 0 AND notiKey IN ( :notiKeys ) ORDER BY notiKey ASC, CASE WHEN whenTime != 0 THEN whenTime ELSE postTime END ASC")
     fun getActiveRecordsByKeys(notiKeys: List<String>): List<NotiRecord>
 
     // Fetch the latest active record per notiKey using a join against a grouped subquery (MAX(whenTime)).
@@ -66,7 +63,7 @@ interface NotiRecordDao {
     @Query("UPDATE noti_record SET isDismissed = 1 WHERE notiKey IN ( :notiKeys)")
     fun dismissRecordsByKeys(notiKeys: List<String>)
 
-    @Query("SELECT * FROM noti_record WHERE isDismissed = 0 AND notiKey IN ( :notiKeys )")
+    @Query("SELECT * FROM noti_record WHERE isDismissed = 0 AND notiKey IN ( :notiKeys ) ORDER BY notiKey ASC, CASE WHEN whenTime != 0 THEN whenTime ELSE postTime END ASC")
     fun getActiveRecordsFlowByKeys(notiKeys: List<String>): Flow<List<NotiRecord>>
 
     @Query("SELECT * FROM noti_record WHERE isDismissed = 0 AND notiKey = :notiKey ORDER BY whenTime ASC")

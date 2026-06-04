@@ -423,7 +423,7 @@ class DrawerViewModel(
 
     fun archiveNewNotificationCard(notiKey: String) {
         viewModelScope.launch {
-            notiRepository.archiveNewRecordsForKey(notiKey)
+            notiRepository.removeNotiUnit(notiKey)
             refreshNewNotificationRecords()
             notifier.showShort("Moved to History")
         }

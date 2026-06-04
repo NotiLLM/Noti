@@ -19,7 +19,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -45,15 +44,15 @@ import org.muilab.notigpt.ui.reminder.viewmodel.ReminderViewModel
 fun NewScreen(
     drawerViewModel: DrawerViewModel,
     reminderViewModel: ReminderViewModel,
+    searchQuery: String = "",
 ) {
     val context = LocalContext.current
-    val query = remember { mutableStateOf("") }
     val newItems by reminderViewModel.newSavedItems.collectAsState()
     val newUnits by drawerViewModel.newNotificationUnits.collectAsState()
     val newRecordsByKey by drawerViewModel.newNotificationRecords.collectAsState()
     var deleteTarget by remember { mutableStateOf<Pair<String, List<SavedItem>>?>(null) }
 
-    val normalizedQuery = query.value.trim().lowercase()
+    val normalizedQuery = searchQuery.trim().lowercase()
     fun SavedItem.matchesQuery(): Boolean {
         if (normalizedQuery.isBlank()) return true
         return listOf(title, content, itemType, state).any { it.lowercase().contains(normalizedQuery) }
@@ -76,18 +75,6 @@ fun NewScreen(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = 88.dp),
     ) {
-        item {
-            OutlinedTextField(
-                value = query.value,
-                onValueChange = { query.value = it },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                singleLine = true,
-                label = { Text("Search New") },
-            )
-        }
-
         if (newTasks.isNotEmpty()) {
             item {
                 NewSavedItemSectionHeader(

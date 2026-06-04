@@ -36,7 +36,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -110,15 +109,23 @@ fun SavedSubItemDetailScreen(
     var pickingField by remember { mutableStateOf<String?>(null) } // "deadline", "start", "end"
 
     Column(Modifier.fillMaxSize()) {
-        TopAppBar(
-            title = {
+        Surface(color = MaterialTheme.colorScheme.surface) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                IconButton(onClick = { onBack(buildUpdated()) }) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.a11y_back))
+                }
                 BasicTextField(
                     value = title,
                     onValueChange = { title = it },
                     singleLine = true,
                     textStyle = MaterialTheme.typography.titleLarge.copy(color = MaterialTheme.colorScheme.onSurface),
                     cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.weight(1f),
                     decorationBox = { innerTextField ->
                         if (title.isBlank()) {
                             Text(
@@ -130,21 +137,14 @@ fun SavedSubItemDetailScreen(
                         innerTextField()
                     },
                 )
-            },
-            navigationIcon = {
-                IconButton(onClick = { onBack(buildUpdated()) }) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.a11y_back))
-                }
-            },
-            actions = {
                 IconButton(onClick = { onDelete(initial.savedSubItemId) }) {
                     Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.a11y_delete))
                 }
                 TextButton(onClick = { onSave(buildUpdated()) }) {
                     Icon(painter = painterResource(R.drawable.save), contentDescription = stringResource(R.string.ui_action_save))
                 }
-            },
-        )
+            }
+        }
 
         val scrollState = rememberScrollState()
         Column(

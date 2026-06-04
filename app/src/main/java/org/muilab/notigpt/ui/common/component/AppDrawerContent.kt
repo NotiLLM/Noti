@@ -10,15 +10,36 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import org.muilab.notigpt.R
 import org.muilab.notigpt.ui.common.navigation.AppMenuScreen
+import org.muilab.notigpt.ui.common.navigation.AppPrimaryTab
 
 /** Hamburger drawer content for secondary app sections. */
 @Composable
 fun AppDrawerContent(
+    selectedPrimaryTab: AppPrimaryTab?,
     unresolvedConflictCount: Int,
     dueUnseenReminderCount: Int,
+    onPrimaryTabSelected: (AppPrimaryTab) -> Unit,
     onMenuScreenSelected: (AppMenuScreen) -> Unit,
 ) {
     ModalDrawerSheet {
+        NavigationDrawerItem(
+            label = { Text("New") },
+            icon = { Icon(painter = painterResource(R.drawable.notifications), contentDescription = null) },
+            selected = selectedPrimaryTab == AppPrimaryTab.New,
+            onClick = { onPrimaryTabSelected(AppPrimaryTab.New) },
+        )
+        NavigationDrawerItem(
+            label = { Text("Tasks") },
+            icon = { Icon(painter = painterResource(R.drawable.task), contentDescription = null) },
+            selected = selectedPrimaryTab == AppPrimaryTab.Tasks,
+            onClick = { onPrimaryTabSelected(AppPrimaryTab.Tasks) },
+        )
+        NavigationDrawerItem(
+            label = { Text("Keep") },
+            icon = { Icon(painter = painterResource(R.drawable.keep), contentDescription = null) },
+            selected = selectedPrimaryTab == AppPrimaryTab.Keep,
+            onClick = { onPrimaryTabSelected(AppPrimaryTab.Keep) },
+        )
         NavigationDrawerItem(
             label = { Text("Reminders") },
             icon = { Icon(painter = painterResource(R.drawable.task), contentDescription = null) },

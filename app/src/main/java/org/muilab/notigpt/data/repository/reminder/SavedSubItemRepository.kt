@@ -1,7 +1,9 @@
 package org.muilab.notigpt.data.repository.reminder
 
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
 import org.muilab.notigpt.data.local.room.dao.SavedSubItemDao
 import org.muilab.notigpt.model.features.SavedSubItem
 
@@ -19,20 +21,29 @@ class SavedSubItemRepository(private val subTaskDao: SavedSubItemDao) {
             list.groupBy { it.parentSavedItemId }
         }
 
-    suspend fun upsert(subTask: SavedSubItem) = subTaskDao.upsert(subTask)
+    suspend fun upsert(subTask: SavedSubItem) = withContext(Dispatchers.IO) {
+        subTaskDao.upsert(subTask)
+    }
 
-    suspend fun upsertAll(subTasks: List<SavedSubItem>) = subTaskDao.upsertAll(subTasks)
+    suspend fun upsertAll(subTasks: List<SavedSubItem>) = withContext(Dispatchers.IO) {
+        subTaskDao.upsertAll(subTasks)
+    }
 
-    suspend fun setCompleted(savedSubItemId: String, completed: Boolean, ts: Long) =
+    suspend fun setCompleted(savedSubItemId: String, completed: Boolean, ts: Long) = withContext(Dispatchers.IO) {
         subTaskDao.setCompleted(savedSubItemId, completed, ts)
+    }
 
-    suspend fun softDeleteById(savedSubItemId: String, ts: Long) =
+    suspend fun softDeleteById(savedSubItemId: String, ts: Long) = withContext(Dispatchers.IO) {
         subTaskDao.softDeleteById(savedSubItemId, ts)
+    }
 
     /** Cascade soft-delete when parent reminder is deleted. */
-    suspend fun softDeleteByParentId(savedItemId: String, ts: Long) =
+    suspend fun softDeleteByParentId(savedItemId: String, ts: Long) = withContext(Dispatchers.IO) {
         subTaskDao.softDeleteByParentId(savedItemId, ts)
+    }
 
-    suspend fun getById(savedSubItemId: String): SavedSubItem? = subTaskDao.getById(savedSubItemId)
+    suspend fun getById(savedSubItemId: String): SavedSubItem? = withContext(Dispatchers.IO) {
+        subTaskDao.getById(savedSubItemId)
+    }
 }
 

@@ -51,7 +51,7 @@ import org.muilab.notigpt.data.local.room.dao.UserContextDao
         UserContext::class,
     ],
     views = [VisibleNotiRecord::class],
-    version = 38,
+    version = 39,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -117,6 +117,7 @@ abstract class AppDatabase : RoomDatabase() {
                 .addMigrations(AppDatabaseMigrations.MIGRATION_35_36)
                 .addMigrations(AppDatabaseMigrations.MIGRATION_36_37)
                 .addMigrations(AppDatabaseMigrations.MIGRATION_37_38)
+                .addMigrations(AppDatabaseMigrations.MIGRATION_38_39)
                 .setJournalMode(JournalMode.TRUNCATE)
                 .build()
         }

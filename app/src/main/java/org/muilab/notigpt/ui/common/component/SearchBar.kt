@@ -39,9 +39,13 @@ import org.muilab.notigpt.ui.notification.viewmodel.DrawerViewModel
 @Composable
 fun SearchBar(
     drawerViewModel: DrawerViewModel,
-    onSearchToggled: (Boolean) -> Unit
+    onSearchToggled: (Boolean) -> Unit,
+    queryStringOverride: String? = null,
+    onQueryStringChange: ((String) -> Unit)? = null,
 ) {
-    val queryString by drawerViewModel.queryString.collectAsState()
+    val drawerQueryString by drawerViewModel.queryString.collectAsState()
+    val queryString = queryStringOverride ?: drawerQueryString
+    val updateQueryString = onQueryStringChange ?: drawerViewModel::updateQueryString
 
     val keyboardController = LocalSoftwareKeyboardController.current
     val currentFocus = LocalFocusManager.current
@@ -54,7 +58,7 @@ fun SearchBar(
         ) {
             OutlinedTextField(
                 value = queryString,
-                onValueChange = { drawerViewModel.updateQueryString(it) },
+                onValueChange = { updateQueryString(it) },
                 placeholder = { Text(stringResource(R.string.ui_search_placeholder)) },
                 modifier = Modifier.fillMaxWidth().minimumInteractiveComponentSize(),
                 shape = RoundedCornerShape(percent = 100),
@@ -62,7 +66,7 @@ fun SearchBar(
                 trailingIcon = {
                     IconButton(
                         onClick = {
-                            drawerViewModel.updateQueryString("")
+                            updateQueryString("")
                             onSearchToggled(false)
                         }
                     ) {

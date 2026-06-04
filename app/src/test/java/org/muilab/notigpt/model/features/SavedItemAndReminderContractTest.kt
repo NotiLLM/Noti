@@ -47,7 +47,7 @@ class SavedItemAndReminderContractTest {
     }
 
     @Test
-    fun notiRecord_defaultsToNewForInbox() {
+    fun notiRecord_defaultsToActiveForInbox() {
         val record = NotiRecord(
             notiRecordId = "key_1",
             notiKey = "key",
@@ -55,6 +55,6 @@ class SavedItemAndReminderContractTest {
             postTime = 1L,
         )
 
-        assertTrue(record.isNew)
+        assertFalse(record.isDismissed)
     }
 }

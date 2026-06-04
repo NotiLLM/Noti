@@ -863,4 +863,61 @@ object AppDatabaseMigrations {
         }
     }
 
+
+
+    val MIGRATION_38_39 = object : Migration(38, 39) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("DROP VIEW IF EXISTS `VisibleNotiRecord`")
+            db.execSQL("DROP INDEX IF EXISTS `idx_record_notiKey_whenTime`")
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `noti_record_new` (
+                    `notiRecordId` TEXT NOT NULL,
+                    `notiKey` TEXT NOT NULL,
+                    `whenTime` INTEGER NOT NULL,
+                    `postTime` INTEGER NOT NULL,
+                    `person` TEXT NOT NULL,
+                    `extraTitle` TEXT NOT NULL,
+                    `extraBigTitle` TEXT NOT NULL,
+                    `extraConversationTitle` TEXT NOT NULL,
+                    `extraBigText` TEXT NOT NULL,
+                    `extraText` TEXT NOT NULL,
+                    `extraTextLines` TEXT NOT NULL,
+                    `extraSummaryText` TEXT NOT NULL,
+                    `extraInfoText` TEXT NOT NULL,
+                    `extraSubText` TEXT NOT NULL,
+                    `isDismissed` INTEGER NOT NULL DEFAULT 0,
+                    `taskScanned` INTEGER NOT NULL DEFAULT 0,
+                    `taskExtracted` INTEGER NOT NULL DEFAULT 0,
+                    `taskExtractionClaimed` INTEGER NOT NULL DEFAULT 0,
+                    `taskExtractionClaimedAt` INTEGER NOT NULL DEFAULT 0,
+                    PRIMARY KEY(`notiRecordId`)
+                )
+                """.trimIndent()
+            )
+            db.execSQL(
+                """
+                INSERT INTO `noti_record_new` (
+                    notiRecordId, notiKey, whenTime, postTime, person,
+                    extraTitle, extraBigTitle, extraConversationTitle,
+                    extraBigText, extraText, extraTextLines, extraSummaryText,
+                    extraInfoText, extraSubText, isDismissed,
+                    taskScanned, taskExtracted, taskExtractionClaimed, taskExtractionClaimedAt
+                )
+                SELECT
+                    notiRecordId, notiKey, whenTime, postTime, person,
+                    extraTitle, extraBigTitle, extraConversationTitle,
+                    extraBigText, extraText, extraTextLines, extraSummaryText,
+                    extraInfoText, extraSubText, isDismissed,
+                    taskScanned, taskExtracted, taskExtractionClaimed, taskExtractionClaimedAt
+                FROM `noti_record`
+                """.trimIndent()
+            )
+            db.execSQL("DROP TABLE `noti_record`")
+            db.execSQL("ALTER TABLE `noti_record_new` RENAME TO `noti_record`")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `idx_record_notiKey_whenTime` ON `noti_record` (`notiKey`, `whenTime`)")
+            db.execSQL("CREATE VIEW IF NOT EXISTS `VisibleNotiRecord` AS SELECT * FROM noti_record WHERE isDismissed = 0")
+        }
+    }
+
 }

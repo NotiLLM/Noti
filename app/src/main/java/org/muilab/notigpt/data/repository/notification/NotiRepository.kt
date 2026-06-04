@@ -4,7 +4,9 @@ import android.content.Context
 import android.os.Build
 import android.service.notification.StatusBarNotification
 import androidx.annotation.RequiresApi
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import org.muilab.notigpt.data.local.room.dao.NotiActionDao
 import org.muilab.notigpt.data.local.room.dao.NotiDrawerDao
@@ -80,7 +82,7 @@ class NotiRepository(
         actionsRepo.updateNotiUnit(notiUnit)
     }
 
-    suspend fun removeNotiUnit(notiKey: String) {
+    suspend fun removeNotiUnit(notiKey: String) = withContext(Dispatchers.IO) {
         actionsRepo.removeNotiUnit(notiKey)
     }
 
@@ -90,28 +92,23 @@ class NotiRepository(
      * Call this alongside NotiUnit upserts when the timeline needs to preserve repeated updates for the same key.
      */
     @RequiresApi(Build.VERSION_CODES.S)
-    suspend fun insertNotiRecord(sbn: StatusBarNotification) {
+    suspend fun insertNotiRecord(sbn: StatusBarNotification) = withContext(Dispatchers.IO) {
         actionsRepo.insertNotiRecord(sbn)
     }
 
-    suspend fun markNotiRead(notiKey: String) {
+    suspend fun markNotiRead(notiKey: String) = withContext(Dispatchers.IO) {
         actionsRepo.markNotiRead(notiKey)
-    }
-
-    suspend fun archiveNewRecordsForKey(notiKey: String) {
-        notiRecordDao.markNewRecordsArchivedByKey(notiKey)
-        logAction(notiKey, "archive_new_records")
     }
 
     fun getNewRecords(): List<NotiRecord> = notiRecordDao.getNewRecords()
 
-    suspend fun setScanStates(notiKey: String, hasTask: Boolean, hasMemo: Boolean, hasEvent: Boolean) {
+    suspend fun setScanStates(notiKey: String, hasTask: Boolean, hasMemo: Boolean, hasEvent: Boolean) = withContext(Dispatchers.IO) {
         actionsRepo.setHasTask(notiKey, hasTask)
         actionsRepo.setHasMemo(notiKey, hasMemo)
         actionsRepo.setHasEvent(notiKey, hasEvent)
     }
 
-    suspend fun setPinnedState(notiKey: String, pinned: Boolean) {
+    suspend fun setPinnedState(notiKey: String, pinned: Boolean) = withContext(Dispatchers.IO) {
         actionsRepo.setPinnedState(notiKey, pinned)
     }
 
@@ -184,12 +181,12 @@ class NotiRepository(
         maintenanceRepo.logAction(notiKey, action, metadata, actionTime)
     }
 
-    suspend fun deleteAllNotis() {
-        maintenanceRepo.deleteAllNotis { k, a -> logAction(k, a) }
+    suspend fun deleteAllNotis() = withContext(Dispatchers.IO) {
+        maintenanceRepo.deleteAllNotis { k, a -> maintenanceRepo.logAction(k, a) }
     }
 
-    suspend fun markAllNotisRead() {
-        maintenanceRepo.markAllNotisRead { k, a -> logAction(k, a) }
+    suspend fun markAllNotisRead() = withContext(Dispatchers.IO) {
+        maintenanceRepo.markAllNotisRead { k, a -> maintenanceRepo.logAction(k, a) }
     }
 
     fun updateSeenNotifications(seenNotis: Set<String>) {
@@ -225,7 +222,7 @@ class NotiRepository(
      *   the collided manual item (and any subsequent collisions) forward by 1.
      * - Non-manual items remain sortPosition = -1.
      */
-    suspend fun moveActiveManualSlot(notiKey: String, targetIndex: Int) {
+    suspend fun moveActiveManualSlot(notiKey: String, targetIndex: Int) = withContext(Dispatchers.IO) {
         // Read the authoritative set of *currently manual* active items from DB.
         // This ensures we only ever adjust items that already had manual positions.
         val manualKeyPositions = notiDrawerDao.getActiveManualKeyPositionsOrdered()
@@ -261,7 +258,7 @@ class NotiRepository(
     }
 
     /** Persist manual sort position for a single active item. */
-    suspend fun setManualSortPosition(notiKey: String, newPosition: Int) {
+    suspend fun setManualSortPosition(notiKey: String, newPosition: Int) = withContext(Dispatchers.IO) {
         notiDrawerDao.updateSortPosition(notiKey, newPosition)
     }
 
@@ -270,13 +267,13 @@ class NotiRepository(
      *
      * Prefer targeted manual-key commits for drag flows; use this when the whole active list order is authoritative.
      */
-    suspend fun commitManualSortPositions(keysInOrder: List<String>) {
+    suspend fun commitManualSortPositions(keysInOrder: List<String>) = withContext(Dispatchers.IO) {
         keysInOrder.forEachIndexed { index, key ->
             notiDrawerDao.updateSortPosition(key, index)
         }
     }
 
-    suspend fun resetAllManualSortPositions() {
+    suspend fun resetAllManualSortPositions() = withContext(Dispatchers.IO) {
         notiDrawerDao.resetAllSortPositions()
     }
 
@@ -291,8 +288,8 @@ class NotiRepository(
     suspend fun commitManualKeysFromFinalOrder(
         manualKeys: Set<String>,
         finalActiveOrder: List<String>,
-    ) {
-        if (manualKeys.isEmpty() || finalActiveOrder.isEmpty()) return
+    ) = withContext(Dispatchers.IO) {
+        if (manualKeys.isEmpty() || finalActiveOrder.isEmpty()) return@withContext
 
         // Determine desired positions for keys that still exist in the final order.
         val desiredPairs = finalActiveOrder
@@ -302,7 +299,7 @@ class NotiRepository(
             .map { (idx, key) -> key to idx }
             .toList()
 
-        if (desiredPairs.isEmpty()) return
+        if (desiredPairs.isEmpty()) return@withContext
 
         // Resolve collisions by shifting forward.
         val used = HashSet<Int>()

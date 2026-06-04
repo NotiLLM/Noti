@@ -27,7 +27,7 @@ class SavedItemRepository(
     fun observeCompletedTasks(): Flow<List<SavedItem>> = reminderListDao.observeCompletedTasks()
     fun observeNewItems(): Flow<List<SavedItem>> = reminderListDao.observeNewItems()
 
-    suspend fun getAllVisible(): List<SavedItem> = reminderListDao.getAllVisible()
+    suspend fun getAllVisible(): List<SavedItem> = withContext(Dispatchers.IO) { reminderListDao.getAllVisible() }
 
     /**
      * Upserts a reminder locally and mirrors the resulting row to Firestore.
@@ -35,79 +35,69 @@ class SavedItemRepository(
      * Callers should set edit timestamps and user-edit flags before calling this method so local and remote
      * copies share the same reminder semantics.
      */
-    suspend fun upsert(reminder: SavedItem) {
+    suspend fun upsert(reminder: SavedItem) = withContext(Dispatchers.IO) {
         reminderListDao.upsert(reminder)
         // Best-effort; never block core UX.
-        withContext(Dispatchers.IO) {
-            firestoreSync.syncReminder(reminder)
-        }
+        firestoreSync.syncReminder(reminder)
     }
 
-    suspend fun deleteById(savedItemId: String, ts: Long) {
+    suspend fun deleteById(savedItemId: String, ts: Long) = withContext(Dispatchers.IO) {
         // Persist deletedAtMs before flipping visibility.
         reminderListDao.setDeletedAt(savedItemId, ts)
         reminderListDao.softDeleteById(savedItemId, ts)
 
-        val updated = reminderListDao.getById(savedItemId) ?: return
-        withContext(Dispatchers.IO) {
-            firestoreSync.syncReminder(updated)
-        }
+        val updated = reminderListDao.getById(savedItemId) ?: return@withContext
+        firestoreSync.syncReminder(updated)
     }
 
-    suspend fun setCompleted(savedItemId: String, completed: Boolean, ts: Long) {
+    suspend fun setCompleted(savedItemId: String, completed: Boolean, ts: Long) = withContext(Dispatchers.IO) {
         reminderListDao.setCompleted(savedItemId, completed, ts)
 
-        val updated = reminderListDao.getById(savedItemId) ?: return
-        withContext(Dispatchers.IO) {
-            firestoreSync.syncReminder(updated)
-        }
+        val updated = reminderListDao.getById(savedItemId) ?: return@withContext
+        firestoreSync.syncReminder(updated)
     }
 
-    suspend fun setState(savedItemId: String, state: String, ts: Long) {
+    suspend fun setState(savedItemId: String, state: String, ts: Long) = withContext(Dispatchers.IO) {
         reminderListDao.setState(savedItemId, state, ts)
-        val updated = reminderListDao.getById(savedItemId) ?: return
-        withContext(Dispatchers.IO) { firestoreSync.syncReminder(updated) }
+        val updated = reminderListDao.getById(savedItemId) ?: return@withContext
+        firestoreSync.syncReminder(updated)
     }
 
-    suspend fun markSavedByIds(savedItemIds: List<String>, ts: Long) {
-        if (savedItemIds.isEmpty()) return
+    suspend fun markSavedByIds(savedItemIds: List<String>, ts: Long) = withContext(Dispatchers.IO) {
+        if (savedItemIds.isEmpty()) return@withContext
         reminderListDao.markSavedByIds(savedItemIds, ts)
-        withContext(Dispatchers.IO) {
-            savedItemIds.mapNotNull { reminderListDao.getById(it) }.forEach { firestoreSync.syncReminder(it) }
-        }
+        savedItemIds.mapNotNull { reminderListDao.getById(it) }.forEach { firestoreSync.syncReminder(it) }
     }
 
-    suspend fun deleteByIds(savedItemIds: List<String>, ts: Long) {
-        if (savedItemIds.isEmpty()) return
+    suspend fun deleteByIds(savedItemIds: List<String>, ts: Long) = withContext(Dispatchers.IO) {
+        if (savedItemIds.isEmpty()) return@withContext
         reminderListDao.softDeleteByIds(savedItemIds, ts)
-        withContext(Dispatchers.IO) {
-            savedItemIds.mapNotNull { reminderListDao.getById(it) }.forEach { firestoreSync.syncReminder(it) }
-        }
+        savedItemIds.mapNotNull { reminderListDao.getById(it) }.forEach { firestoreSync.syncReminder(it) }
     }
 
-    suspend fun getById(savedItemId: String): SavedItem? = reminderListDao.getById(savedItemId)
+    suspend fun getById(savedItemId: String): SavedItem? = withContext(Dispatchers.IO) { reminderListDao.getById(savedItemId) }
 
-    suspend fun setViewed(savedItemId: String) {
+    suspend fun setViewed(savedItemId: String) = withContext(Dispatchers.IO) {
         reminderListDao.setViewed(savedItemId)
-        val updated = reminderListDao.getById(savedItemId) ?: return
-        withContext(Dispatchers.IO) { firestoreSync.syncReminder(updated) }
+        val updated = reminderListDao.getById(savedItemId) ?: return@withContext
+        firestoreSync.syncReminder(updated)
     }
 
-    suspend fun setPinned(savedItemId: String, pinned: Boolean) {
+    suspend fun setPinned(savedItemId: String, pinned: Boolean) = withContext(Dispatchers.IO) {
         reminderListDao.setPinned(savedItemId, pinned)
-        val updated = reminderListDao.getById(savedItemId) ?: return
-        withContext(Dispatchers.IO) { firestoreSync.syncReminder(updated) }
+        val updated = reminderListDao.getById(savedItemId) ?: return@withContext
+        firestoreSync.syncReminder(updated)
     }
 
-    suspend fun updateSortScoreAndHistory(savedItemId: String, sortScore: Float, reRankHistory: String) {
+    suspend fun updateSortScoreAndHistory(savedItemId: String, sortScore: Float, reRankHistory: String) = withContext(Dispatchers.IO) {
         reminderListDao.updateSortScoreAndHistory(savedItemId, sortScore, reRankHistory)
-        val updated = reminderListDao.getById(savedItemId) ?: return
-        withContext(Dispatchers.IO) { firestoreSync.syncReminder(updated) }
+        val updated = reminderListDao.getById(savedItemId) ?: return@withContext
+        firestoreSync.syncReminder(updated)
     }
 
-    suspend fun updateButtons(savedItemId: String, buttons: String) {
+    suspend fun updateButtons(savedItemId: String, buttons: String) = withContext(Dispatchers.IO) {
         reminderListDao.updateButtons(savedItemId, buttons)
-        val updated = reminderListDao.getById(savedItemId) ?: return
-        withContext(Dispatchers.IO) { firestoreSync.syncReminder(updated) }
+        val updated = reminderListDao.getById(savedItemId) ?: return@withContext
+        firestoreSync.syncReminder(updated)
     }
 }

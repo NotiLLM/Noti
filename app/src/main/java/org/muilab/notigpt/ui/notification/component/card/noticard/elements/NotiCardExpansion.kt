@@ -98,7 +98,7 @@ fun NotiCardExpandedRecords(
     val fullRecordsFlow = drawerViewModel.getFullRecordsFlow(notiKey)
     val fullRecords by fullRecordsFlow.collectAsState()
 
-    val showingRecords: List<NotiRecord> = fullRecords
+    val showingRecords: List<NotiRecord> = remember(fullRecords) { fullRecords.sortedBy { it.time } }
 
     val density = LocalDensity.current
 

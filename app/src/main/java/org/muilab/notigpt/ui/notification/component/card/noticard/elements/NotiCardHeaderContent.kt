@@ -48,7 +48,7 @@ fun NotiCardHeaderContent(
     isExpandedOffset: Float
 ) {
     val notiUnit = notiDisplayUnit.notiUnit
-    val notiRecords = notiDisplayUnit.notiRecords
+    val notiRecords = remember(notiDisplayUnit.notiRecords) { notiDisplayUnit.notiRecords.sortedBy { it.time } }
     val appName = notiUnit.appName
     val bitmap = notiUnit.bitmap
     val largeBitmap = notiUnit.largeBitmap

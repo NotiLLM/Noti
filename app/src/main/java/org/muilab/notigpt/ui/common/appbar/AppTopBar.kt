@@ -47,10 +47,11 @@ fun AppTopBar(
     menuScreenTitle: String? = null,
     onMenuScreenClosed: () -> Unit,
     showNotificationActions: Boolean = true,
+    searchQuery: String? = null,
+    onSearchQueryChange: ((String) -> Unit)? = null,
 ) {
 
     val isSortingMode = drawerViewModel.isSortingMode.collectAsState()
-    val isMenuScreenShown = menuScreenTitle != null
 
     TopAppBar(
         colors = TopAppBarDefaults.topAppBarColors(
@@ -70,84 +71,64 @@ fun AppTopBar(
             }
         },
         title = {
-
-            if (isMenuScreenShown) {
-                Text(
-                    text = menuScreenTitle.orEmpty(),
-                    style = MaterialTheme.typography.titleLarge
-                )
-            } else {
-                AnimatedContent(
-                    targetState = isSearchExpanded,
-                    transitionSpec = {
-                        fadeIn(animationSpec = tween(200)).togetherWith(
-                            fadeOut(
-                                animationSpec = tween(
-                                    200
-                                )
-                            )
-                        )
-                    },
-                    label = "Search Bar Animation"
-                ) { expanded ->
-                    if (expanded) {
-                        // Your existing SearchBar fits here perfectly
-                        SearchBar(drawerViewModel, onSearchToggled)
-                    } else {
-                        // The standard title text
-                        Text(
-                            text = stringResource(R.string.app_name),
-                            style = MaterialTheme.typography.titleLarge
-                        )
-                    }
+            AnimatedContent(
+                targetState = isSearchExpanded,
+                transitionSpec = {
+                    fadeIn(animationSpec = tween(200)).togetherWith(
+                        fadeOut(animationSpec = tween(200))
+                    )
+                },
+                label = "Search Bar Animation"
+            ) { expanded ->
+                if (expanded) {
+                    SearchBar(
+                        drawerViewModel = drawerViewModel,
+                        onSearchToggled = onSearchToggled,
+                        queryStringOverride = searchQuery,
+                        onQueryStringChange = onSearchQueryChange,
+                    )
+                } else {
+                    Text(
+                        text = stringResource(R.string.app_name),
+                        style = MaterialTheme.typography.titleLarge
+                    )
                 }
             }
         },
         actions = {
-            // Hide actions when search is expanded to make space
-            if (!isMenuScreenShown) {
-                if (!isSearchExpanded) {
-
-                    if (showNotificationActions) {
-                        IconButton(
-                            modifier = Modifier.minimumInteractiveComponentSize(),
-                            onClick = { onSearchToggled(true) }
-                        ) {
-                            Icon(Icons.Default.Search, contentDescription = "Search")
-                        }
-                        IconButton(
-                            modifier = Modifier.minimumInteractiveComponentSize(),
-                            onClick = { drawerViewModel.deleteAllNotis() }
-                        ) {
-                            Icon(
-                                painter = painterResource(id = R.drawable.sweep),
-                                contentDescription = "Sweep"
-                            )
-                        }
-
-                        // Reorder / Sorting mode toggle
-                        IconButton(
-                            modifier = Modifier.minimumInteractiveComponentSize(),
-                            colors = IconButtonDefaults.iconButtonColors(
-                                containerColor = if (isSortingMode.value) MaterialTheme.colorScheme.primary else Color.Transparent,
-                                contentColor = if (isSortingMode.value) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
-                            ),
-                            onClick = { drawerViewModel.toggleSortingMode() }
-                        ) {
-                            Icon(
-                                painter = painterResource(id = R.drawable.reorder),
-                                contentDescription = "Reorder"
-                            )
-                        }
-                    }
-
-                }
-            } else {
+            // Hide actions when search is expanded to make space.
+            if (!isSearchExpanded) {
                 IconButton(
                     modifier = Modifier.minimumInteractiveComponentSize(),
-                    onClick = onMenuScreenClosed
+                    onClick = { onSearchToggled(true) }
                 ) {
-                    Icon(painterResource(R.drawable.close), contentDescription = "Close Settings")
+                    Icon(Icons.Default.Search, contentDescription = "Search")
+                }
+                if (showNotificationActions) {
+                    IconButton(
+                        modifier = Modifier.minimumInteractiveComponentSize(),
+                        onClick = { drawerViewModel.deleteAllNotis() }
+                    ) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.sweep),
+                            contentDescription = "Sweep"
+                        )
+                    }
+
+                    // Reorder / Sorting mode toggle
+                    IconButton(
+                        modifier = Modifier.minimumInteractiveComponentSize(),
+                        colors = IconButtonDefaults.iconButtonColors(
+                            containerColor = if (isSortingMode.value) MaterialTheme.colorScheme.primary else Color.Transparent,
+                            contentColor = if (isSortingMode.value) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+                        ),
+                        onClick = { drawerViewModel.toggleSortingMode() }
+                    ) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.reorder),
+                            contentDescription = "Reorder"
+                        )
+                    }
                 }
             }
         }

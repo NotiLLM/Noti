@@ -46,10 +46,10 @@ fun Modifier.notiCardSwipeHandler(
         val extraPx = with(density) { ACTIONS_REVEAL_EXTRA_DP.dp.toPx() }
         val maxActionsOffset = endActionsWidth + extraPx
 
-        // Horizontal swipe should only start when the drag is clearly horizontal.
-        // Vertical scrolling is handled by the parent list and should not be stolen by a small diagonal move.
-        val horizontalBiasFactor = 1.25f
-        val minHorizontalPx = viewTouchSlop * 1.5f
+        // Horizontal swipe should start with a lighter horizontal intent.
+        // Keep the actual dismiss distance unchanged so removal is not easier to trigger accidentally.
+        val horizontalBiasFactor = 1.05f
+        val minHorizontalPx = viewTouchSlop * 0.8f
 
         awaitEachGesture {
             onSwipeActiveChanged(false)

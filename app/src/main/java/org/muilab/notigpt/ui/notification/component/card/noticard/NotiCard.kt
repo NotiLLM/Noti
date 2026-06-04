@@ -105,7 +105,7 @@ fun NotiCard(
     var showOptionsDialog by remember { mutableStateOf(false) }
 
     val notiUnit = notiDisplayUnit.notiUnit
-    val notiRecords = notiDisplayUnit.notiRecords
+    val notiRecords = remember(notiDisplayUnit.notiRecords) { notiDisplayUnit.notiRecords.sortedBy { it.time } }
     val notiKey = notiUnit.notiKey
 
     val isPinned = notiUnit.isPinned
@@ -280,7 +280,7 @@ fun NotiCard(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             NotiCardHeaderContent(
                                 modifier = Modifier.weight(1f),
-                                notiDisplayUnit = notiDisplayUnit,
+                                notiDisplayUnit = NotiDisplayUnit(notiUnit, notiRecords),
                                 notiOverallTitle = notiOverallTitle,
                                 notiSecondOverallTitle = notiSecondOverallTitle,
                                 hasSecondTitle = hasSecondTitle,

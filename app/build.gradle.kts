@@ -11,7 +11,7 @@ plugins {
 
 android {
     namespace = "org.muilab.notigpt"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "org.muilab.notigpt"
