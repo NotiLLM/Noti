@@ -4,6 +4,7 @@ import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -16,6 +17,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -29,10 +32,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -40,6 +45,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.muilab.notigpt.R
+import org.muilab.notigpt.domain.notification.countClearableActiveNotifications
 import org.muilab.notigpt.model.notifications.NotiDisplayUnit
 import org.muilab.notigpt.model.notifications.NotiRecord
 import org.muilab.notigpt.ui.notification.component.card.noticard.NotiCard
@@ -186,6 +192,10 @@ fun NotificationsScreen(
         orderedUnits + fallbackUnits
     }
 
+    val clearableActiveCount = remember(displayedNotiUnits) {
+        countClearableActiveNotifications(displayedNotiUnits)
+    }
+
     val reorderableState = rememberReorderableLazyListState(listState) { from, to ->
         val fromKey = from.key as? String ?: return@rememberReorderableLazyListState
         val toKey = to.key as? String ?: return@rememberReorderableLazyListState
@@ -214,11 +224,28 @@ fun NotificationsScreen(
             contentPadding = PaddingValues(bottom = 80.dp)
         ) {
             item {
-                Text(
-                    text = stringResource(R.string.ui_notifications_new, activeCount),
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = stringResource(R.string.ui_notifications_new, activeCount),
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.weight(1f),
+                    )
+                    IconButton(
+                        enabled = clearableActiveCount > 0,
+                        onClick = { drawerViewModel.deleteAllNotis() },
+                    ) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.sweep),
+                            contentDescription = stringResource(R.string.ui_action_clear_unpinned_notifications),
+                        )
+                    }
+                }
             }
 
             items(displayedNotiUnits, key = { it.notiKey }) { displayUnit ->

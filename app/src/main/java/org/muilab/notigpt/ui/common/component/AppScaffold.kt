@@ -255,6 +255,7 @@ fun AppScaffold(
                             drawerViewModel = drawerViewModel,
                             reminderViewModel = reminderViewModel,
                             scheduledReminderViewModel = scheduledReminderViewModel,
+                            preferenceViewModel = preferenceViewModel,
                             searchQuery = appSearchQuery,
                         )
                         AppPrimaryTab.Tasks -> RemindersScreen(

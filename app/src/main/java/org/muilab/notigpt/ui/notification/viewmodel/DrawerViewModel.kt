@@ -423,9 +423,11 @@ class DrawerViewModel(
 
     fun archiveNewNotificationCard(notiKey: String) {
         viewModelScope.launch {
+            val activeUnit = _activeNotiUnits.value.firstOrNull { it.notiKey == notiKey }?.notiUnit
+            if (activeUnit?.isPinned == true) return@launch
+
             notiRepository.removeNotiUnit(notiKey)
             refreshNewNotificationRecords()
-            notifier.showShort("Moved to History")
         }
     }
 

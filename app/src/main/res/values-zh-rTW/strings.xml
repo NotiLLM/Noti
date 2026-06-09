@@ -92,6 +92,7 @@
 
     <!-- Notifications screen (UI chrome only; not notification content) -->
     <string name="ui_notifications_new">新通知（%1$d）</string>
+    <string name="ui_action_clear_unpinned_notifications">清除未釘選通知</string>
     <string name="ui_notifications_all">所有通知</string>
 
     <!-- Noti record context (history expand/collapse) -->

@@ -14,11 +14,14 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -28,14 +31,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import org.muilab.notigpt.R
 import org.muilab.notigpt.data.export.asExportable
+import org.muilab.notigpt.domain.notification.countClearableActiveNotifications
 import org.muilab.notigpt.model.features.SavedItem
 import org.muilab.notigpt.model.features.SavedItemState
 import org.muilab.notigpt.model.features.SavedItemType
@@ -43,6 +49,8 @@ import org.muilab.notigpt.model.features.SavedSubItem
 import org.muilab.notigpt.model.notifications.NotiDisplayUnit
 import org.muilab.notigpt.ui.notification.component.card.noticard.NotiCard
 import org.muilab.notigpt.ui.notification.viewmodel.DrawerViewModel
+import org.muilab.notigpt.ui.preference.model.PreferenceEntryPoint
+import org.muilab.notigpt.ui.preference.viewmodel.PreferenceViewModel
 import org.muilab.notigpt.ui.reminder.component.SavedSubItemDetailScreen
 import org.muilab.notigpt.ui.reminder.screen.ReminderCard
 import org.muilab.notigpt.ui.reminder.screen.ReminderDateTimeDialog
@@ -56,6 +64,7 @@ fun NewScreen(
     drawerViewModel: DrawerViewModel,
     reminderViewModel: ReminderViewModel,
     scheduledReminderViewModel: ScheduledReminderViewModel? = null,
+    preferenceViewModel: PreferenceViewModel,
     searchQuery: String = "",
 ) {
     val context = LocalContext.current
@@ -118,6 +127,13 @@ fun NewScreen(
                 lastUpdateTimestamp = System.currentTimeMillis(),
             )
         )
+        if (changed && base != null && base.origin.contains("llm")) {
+            preferenceViewModel.startFlow(
+                entryPoint = PreferenceEntryPoint.EDIT,
+                reminder = updated,
+                reminderBefore = base,
+            )
+        }
     }
 
     fun exportSubItemToCalendar(st: SavedSubItem) {
@@ -163,7 +179,15 @@ fun NewScreen(
             ReminderCard(
                 reminder = item,
                 subTasks = allSavedSubItemsByReminder[item.savedItemId] ?: emptyList(),
-                onDelete = { reminderViewModel.delete(item.savedItemId) },
+                onDelete = {
+                    reminderViewModel.delete(item.savedItemId)
+                    if (item.origin.contains("llm")) {
+                        preferenceViewModel.startFlow(
+                            entryPoint = PreferenceEntryPoint.DELETE,
+                            reminder = item,
+                        )
+                    }
+                },
                 onToggleCompleted = { completed -> reminderViewModel.toggleCompleted(item, completed) },
                 onEdit = { openEditor(item) },
                 onCreateReminder = scheduledReminderViewModel?.let { { reminderDialogSavedItem = item } },
@@ -204,7 +228,15 @@ fun NewScreen(
             ReminderCard(
                 reminder = item,
                 subTasks = allSavedSubItemsByReminder[item.savedItemId] ?: emptyList(),
-                onDelete = { reminderViewModel.delete(item.savedItemId) },
+                onDelete = {
+                    reminderViewModel.delete(item.savedItemId)
+                    if (item.origin.contains("llm")) {
+                        preferenceViewModel.startFlow(
+                            entryPoint = PreferenceEntryPoint.DELETE,
+                            reminder = item,
+                        )
+                    }
+                },
                 onToggleCompleted = { completed -> reminderViewModel.toggleCompleted(item, completed) },
                 onEdit = { openEditor(item) },
                 onCreateReminder = scheduledReminderViewModel?.let { { reminderDialogSavedItem = item } },
@@ -226,7 +258,13 @@ fun NewScreen(
             )
         }
         if (filteredUnits.isNotEmpty()) {
-            item { SectionTitle("New Notifications", filteredUnits.size) }
+            item {
+                NewNotificationsSectionHeader(
+                    count = filteredUnits.size,
+                    clearableCount = countClearableActiveNotifications(filteredUnits),
+                    onClearAll = { drawerViewModel.deleteAllNotis() },
+                )
+            }
         }
         items(filteredUnits, key = { it.notiKey }) { displayUnit ->
             val newRecords = newRecordsByKey[displayUnit.notiKey].orEmpty()
@@ -289,11 +327,18 @@ fun NewScreen(
                     editingSavedSubItemInitial = null
                 },
                 onDelete = { id ->
+                    val deletedItem = editingInitialSnapshot
                     reminderViewModel.delete(id)
                     editing = null
                     editingInitialSnapshot = null
                     editingSavedSubItem = null
                     editingSavedSubItemInitial = null
+                    if (deletedItem != null && deletedItem.origin.contains("llm")) {
+                        preferenceViewModel.startFlow(
+                            entryPoint = PreferenceEntryPoint.DELETE,
+                            reminder = deletedItem,
+                        )
+                    }
                 },
                 onSave = { updated ->
                     persistEditedItem(updated, editingInitialSnapshot)
@@ -406,6 +451,37 @@ private fun NewSavedItemSectionHeader(
                 Button(onClick = onSaveAll) { Text("Looks good, save all") }
                 TextButton(onClick = onDeleteAll) { Text("Delete all") }
             }
+        }
+    }
+}
+
+@Composable
+private fun NewNotificationsSectionHeader(
+    count: Int,
+    clearableCount: Int,
+    onClearAll: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = stringResource(R.string.ui_notifications_new, count),
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+        )
+        IconButton(
+            enabled = clearableCount > 0,
+            onClick = onClearAll,
+        ) {
+            Icon(
+                painter = painterResource(id = R.drawable.sweep),
+                contentDescription = stringResource(R.string.ui_action_clear_unpinned_notifications),
+            )
         }
     }
 }
