@@ -1,5 +1,6 @@
 package org.muilab.notigpt.ui.settings
 
+import android.app.Activity
 import android.app.Application
 import android.os.Build
 import androidx.annotation.RequiresApi
@@ -16,6 +17,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -60,6 +62,36 @@ fun SettingsScreen() {
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
     ) {
+        // --- Dynamic color (Material You) toggle ---
+        var useDynamicColor by remember { mutableStateOf(SharedPreferencesManager.useDynamicColor) }
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                Text(
+                    stringResource(R.string.ui_settings_dynamic_color),
+                    style = androidx.compose.material3.MaterialTheme.typography.titleMedium,
+                )
+                Text(
+                    stringResource(R.string.ui_settings_dynamic_color_desc),
+                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Switch(
+                checked = useDynamicColor,
+                onCheckedChange = {
+                    useDynamicColor = it
+                    SharedPreferencesManager.useDynamicColor = it
+                    // Re-run onCreate so NotiTheme re-reads the preference and re-applies the scheme.
+                    (context as? Activity)?.recreate()
+                },
+            )
+        }
+
+        Spacer(modifier = Modifier.size(12.dp))
+
         var isLeftSwipe by remember { mutableStateOf(SharedPreferencesManager.swipeDeleteLeft) }
 
         // Simple radio row to choose swipe-delete direction

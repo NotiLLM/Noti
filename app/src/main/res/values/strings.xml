@@ -25,6 +25,8 @@
     <string name="ui_action_save">Save</string>
 
     <!-- Settings -->
+    <string name="ui_settings_dynamic_color">Use system colors</string>
+    <string name="ui_settings_dynamic_color_desc">Tint neutral surfaces from your wallpaper (Material You). Section and urgency colors stay fixed.</string>
     <string name="ui_settings_delete_on_swipe">Delete on swipe:</string>
     <string name="ui_settings_left">Left</string>
     <string name="ui_settings_right">Right</string>
