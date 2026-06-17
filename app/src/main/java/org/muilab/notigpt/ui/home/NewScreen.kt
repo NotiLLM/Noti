@@ -33,6 +33,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -57,6 +61,7 @@ import org.muilab.notigpt.ui.reminder.screen.ReminderDateTimeDialog
 import org.muilab.notigpt.ui.reminder.screen.ReminderDetailScreen
 import org.muilab.notigpt.ui.reminder.viewmodel.ReminderViewModel
 import org.muilab.notigpt.ui.reminder.viewmodel.ScheduledReminderViewModel
+import org.muilab.notigpt.ui.theme.NotiTheme
 
 @RequiresApi(Build.VERSION_CODES.S)
 @Composable
@@ -164,6 +169,7 @@ fun NewScreen(
             item {
                 NewSavedItemSectionHeader(
                     title = "New Tasks",
+                    accent = NotiTheme.semantic.taskAccent,
                     count = newTasks.size,
                     items = newTasks,
                     showBulkActions = normalizedQuery.isBlank(),
@@ -193,6 +199,7 @@ fun NewScreen(
                 onCreateReminder = scheduledReminderViewModel?.let { { reminderDialogSavedItem = item } },
                 onQuickExportTasks = { reminderViewModel.exportToGoogleTasks(item) },
                 showDeleteButton = true,
+                sectionAccent = NotiTheme.semantic.taskAccent,
                 onArchive = { reminderViewModel.archiveKeep(item.savedItemId) },
                 onSavedSubItemToggle = { stId, checked -> reminderViewModel.toggleSavedSubItemCompleted(stId, checked) },
                 onSavedSubItemClick = { st ->
@@ -214,6 +221,7 @@ fun NewScreen(
             item {
                 NewSavedItemSectionHeader(
                     title = "New Keep",
+                    accent = NotiTheme.semantic.keepAccent,
                     count = newKeep.size,
                     items = newKeep,
                     showBulkActions = normalizedQuery.isBlank(),
@@ -242,6 +250,7 @@ fun NewScreen(
                 onEdit = { openEditor(item) },
                 onCreateReminder = scheduledReminderViewModel?.let { { reminderDialogSavedItem = item } },
                 showDeleteButton = true,
+                sectionAccent = NotiTheme.semantic.keepAccent,
                 onArchive = { reminderViewModel.archiveKeep(item.savedItemId) },
                 onSavedSubItemToggle = { stId, checked -> reminderViewModel.toggleSavedSubItemCompleted(stId, checked) },
                 onSavedSubItemClick = { st ->
@@ -443,11 +452,25 @@ private fun NewSavedItemSectionHeader(
     count: Int,
     items: List<SavedItem>,
     showBulkActions: Boolean,
+    accent: Color,
     onSaveAll: () -> Unit,
     onDeleteAll: () -> Unit,
 ) {
     Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-        Text("$title ($count)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier
+                    .size(8.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(accent)
+            )
+            Text(
+                "$title ($count)",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(start = 8.dp),
+            )
+        }
         if (items.isNotEmpty() && showBulkActions) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = onSaveAll) { Text("Looks good, save all") }
