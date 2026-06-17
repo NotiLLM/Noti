@@ -273,7 +273,7 @@ fun RemindersScreen(
                         ReminderFilterChip(stringResource(R.string.ui_reminders_filter_all), filter == ReminderViewModel.FilterTab.All, { vm.setFilter(ReminderViewModel.FilterTab.All) })
                     }
                     ReminderViewModel.ListMode.Keep -> {
-                        ReminderFilterChip(stringResource(R.string.ui_reminders_filter_keep), filter == ReminderViewModel.FilterTab.Keep, { vm.setFilter(ReminderViewModel.FilterTab.Keep) })
+                        ReminderFilterChip(stringResource(R.string.ui_reminders_filter_keep), filter == ReminderViewModel.FilterTab.Keep, { vm.setFilter(ReminderViewModel.FilterTab.Keep) }, leadingIconRes = R.drawable.bookmark)
                         ReminderFilterChip(stringResource(R.string.ui_reminders_filter_archived), filter == ReminderViewModel.FilterTab.Archived, { vm.setFilter(ReminderViewModel.FilterTab.Archived) }, leadingIconRes = R.drawable.archive_yes)
                         ReminderFilterChip(stringResource(R.string.ui_reminders_filter_all), filter == ReminderViewModel.FilterTab.All, { vm.setFilter(ReminderViewModel.FilterTab.All) })
                     }
@@ -319,12 +319,9 @@ fun RemindersScreen(
                         // Task/Keep pages: no inline delete (delete lives in the detail editor).
                         showDeleteButton = false,
                         onArchive = { vm.archiveKeep(reminder.savedItemId) },
-                        onQuickExportTasks = if (reminder.isTask) {
-                            { openExportDialog(reminder, ExportType.GOOGLE_TASKS) }
-                        } else null,
-                        onQuickExportCalendar = if (reminder.isEvent) {
-                            { openExportDialog(reminder, ExportType.GOOGLE_CALENDAR) }
-                        } else null,
+                        // Export is available on both task and keep cards (users may push kept info to Tasks/Calendar).
+                        onQuickExportTasks = { openExportDialog(reminder, ExportType.GOOGLE_TASKS) },
+                        onQuickExportCalendar = { openExportDialog(reminder, ExportType.GOOGLE_CALENDAR) },
                         onSavedSubItemToggle = { stId, checked -> vm.toggleSavedSubItemCompleted(stId, checked) },
                         onSavedSubItemClick = { st ->
                             // Open parent reminder detail first, then navigate to sub-task detail
