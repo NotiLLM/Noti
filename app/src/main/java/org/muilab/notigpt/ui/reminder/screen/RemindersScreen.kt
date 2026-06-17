@@ -916,6 +916,10 @@ fun ReminderCard(
     showDeleteButton: Boolean = true,
     /** Optional left-edge accent identifying the section (e.g. Tasks/Keep on the New screen). Null = no accent. */
     sectionAccent: Color? = null,
+    // Multi-select (New screen triage). When selectionMode, the card toggles selection instead of opening.
+    selectionMode: Boolean = false,
+    selected: Boolean = false,
+    onSelectedChange: ((Boolean) -> Unit)? = null,
     // Sub-task callbacks
     onSavedSubItemToggle: (String, Boolean) -> Unit = { _, _ -> },
     onSavedSubItemClick: (SavedSubItem) -> Unit = {},
@@ -944,13 +948,17 @@ fun ReminderCard(
         } catch (_: Exception) { emptyList() }
     }
 
+    val selectedBorder = sectionAccent ?: MaterialTheme.colorScheme.primary
     Surface(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 6.dp),
         shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
+        color = if (selectionMode && selected) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.surfaceContainerLow,
+        border = BorderStroke(
+            if (selectionMode && selected) 1.5.dp else 0.5.dp,
+            if (selectionMode && selected) selectedBorder else MaterialTheme.colorScheme.outlineVariant,
+        ),
     ) {
       Row(modifier = Modifier.height(IntrinsicSize.Min)) {
         if (sectionAccent != null) {
@@ -964,16 +972,25 @@ fun ReminderCard(
         Column(
             modifier = Modifier
                 .weight(1f)
-                .combinedClickable(onClick = onEdit, onLongClick = onLongPress)
+                .combinedClickable(
+                    onClick = { if (selectionMode && onSelectedChange != null) onSelectedChange(!selected) else onEdit() },
+                    onLongClick = { if (!selectionMode) onLongPress() },
+                )
                 .padding(horizontal = 12.dp, vertical = 10.dp)
         ) {
         Row(modifier = Modifier.fillMaxWidth()) {
-            // Left gutter: tasks get a completion checkbox; keeps get an archive toggle.
+            // Left gutter: selection checkbox in select mode; otherwise task completion / keep archive.
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier.padding(end = 4.dp),
             ) {
-                if (reminder.isTask) {
+                if (selectionMode) {
+                    Checkbox(
+                        checked = selected,
+                        onCheckedChange = { onSelectedChange?.invoke(it) },
+                        colors = CheckboxDefaults.colors(checkedColor = selectedBorder),
+                    )
+                } else if (reminder.isTask) {
                     Checkbox(
                         checked = reminder.isCompleted,
                         onCheckedChange = { onToggleCompleted(it) },
