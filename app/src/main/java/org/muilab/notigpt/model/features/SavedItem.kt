@@ -56,16 +56,6 @@ data class SavedItem(
     val estimatedCompletionTime: Long,
 
     /**
-     * Associated notification record IDs (notiRecordId format: "notiKey_postTime").
-     * Room column name remains "associatedNotis" so migrated databases keep reading the same field.
-     */
-    @ColumnInfo(name = "associatedNotis")
-    val sourceNotiRecordIds: Set<String> = emptySet(),
-
-    /** Snapshot ID captured at the moment this saved item was extracted. */
-    val sourceExtractionSnapshotId: String? = null,
-
-    /**
      * Analytics provenance label.
      * - "manual": user created from empty template
      * - "llm_manual_extraction": user explicitly requested extraction from a notification
@@ -93,10 +83,6 @@ data class SavedItem(
     @ColumnInfo(defaultValue = "1")
     val isViewed: Boolean = true,
 
-    /** Whether the saved item is pinned by the user. */
-    @ColumnInfo(defaultValue = "0")
-    val isPinned: Boolean = false,
-
     /** Sort score (0f–100f). Higher = higher position within the scored section. */
     @ColumnInfo(defaultValue = "50.0")
     val sortScore: Float = 50f,
@@ -119,8 +105,4 @@ data class SavedItem(
 
     val isEvent: Boolean
         @Ignore get() = false
-
-    @get:Ignore
-    val associatedNotiKeys: Set<String>
-        get() = sourceNotiRecordIds.mapTo(mutableSetOf()) { it.substringBeforeLast("_") }
 }

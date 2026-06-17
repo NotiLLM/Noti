@@ -46,6 +46,8 @@
     <string name="ui_reminders_filter_tasks">Tasks</string>
     <string name="ui_reminders_filter_memos">Memos</string>
     <string name="ui_reminders_filter_completed">Completed</string>
+    <string name="ui_reminders_filter_keep">Keep</string>
+    <string name="ui_reminders_filter_archived">Archived</string>
     <string name="ui_reminders_search_placeholder">Search reminders (use + for AND)</string>
     <string name="ui_reminders_add_dialog_title">Add</string>
     <string name="ui_reminders_add_dialog_body">Create a Task or a Memo</string>
@@ -108,6 +110,10 @@
     <string name="ui_debug_enter_value">Enter value</string>
     <string name="ui_debug_invalid_integer">Invalid integer!</string>
     <string name="ui_debug_invalid_ip">Invalid IP!</string>
+
+    <!-- Ongoing status / generation notifications -->
+    <string name="ongoing_status_idle">No new items</string>
+    <string name="generating_saved_items">Generating saved items…</string>
 
     <!-- Notifications screen (UI chrome only; not notification content) -->
     <string name="ui_notifications_new">New Notifications (%1$d)</string>
@@ -355,6 +361,7 @@
     <string name="a11y_regenerate">Regenerate reminder</string>
     <string name="a11y_pin">Pin reminder</string>
     <string name="a11y_unpin">Unpin reminder</string>
+    <string name="a11y_archive">Archive</string>
     <string name="a11y_drag_handle">Drag to reorder</string>
 
     <!-- Separate date/time pickers -->

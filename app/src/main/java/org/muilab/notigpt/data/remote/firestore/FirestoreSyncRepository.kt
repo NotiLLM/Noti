@@ -9,7 +9,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import org.muilab.notigpt.data.local.room.AppDatabase
-import org.muilab.notigpt.domain.reminder.ReminderSnapshotPayload
 import org.muilab.notigpt.model.features.SavedItem
 import org.muilab.notigpt.model.notifications.NotiRecord
 import org.muilab.notigpt.model.notifications.NotiUnit
@@ -93,6 +92,10 @@ class FirestoreSyncRepository(
     suspend fun syncReminder(reminder: SavedItem) = withContext(Dispatchers.IO) {
         ensureUserDoc()
 
+        // Resolve provenance from the noti<->saved-item link table (single source of truth).
+        val links = db.notiSavedItemLinkDao().getBySavedItemId(reminder.savedItemId)
+        val linkedRecordIds = links.map { it.notiRecordId }.filter { it.isNotBlank() }.distinct()
+
         val now = System.currentTimeMillis()
         val payload: Map<String, Any?> = mapOf(
             "savedItemId" to reminder.savedItemId,
@@ -108,19 +111,17 @@ class FirestoreSyncRepository(
             "startAtMs" to (if (reminder.startAtMs > 0L) TimeFormatters.toLocalIso(reminder.startAtMs, zoneId) else ""),
             "endAtMs" to (if (reminder.endAtMs > 0L) TimeFormatters.toLocalIso(reminder.endAtMs, zoneId) else ""),
             "estimatedCompletionTime" to reminder.estimatedCompletionTime,
-            "sourceNotiRecordIds" to reminder.sourceNotiRecordIds.toList(),
-            "sourceNotiRecordIdsCount" to reminder.sourceNotiRecordIds.size,
-            "sourceExtractionSnapshotId" to reminder.sourceExtractionSnapshotId,
+            "sourceNotiRecordIds" to linkedRecordIds,
+            "sourceNotiRecordIdsCount" to linkedRecordIds.size,
             "isVisible" to reminder.isVisible,
             "deletedAt" to (reminder.deletedAtMs?.let { TimeFormatters.toLocalIso(it, zoneId) } ?: ""),
             "lastUpdateTimestamp" to TimeFormatters.toLocalIso(reminder.lastUpdateTimestamp, zoneId),
             "buttons" to reminder.buttons,
             "isViewed" to reminder.isViewed,
-            "isPinned" to reminder.isPinned,
             "sortScore" to reminder.sortScore,
             "reRankHistory" to reminder.reRankHistory,
             "syncedAt" to TimeFormatters.toLocalIso(now, zoneId),
-            "schemaVersion" to 3,
+            "schemaVersion" to 4,
         )
 
         try {
@@ -130,22 +131,18 @@ class FirestoreSyncRepository(
             return@withContext
         }
 
-        // === Notis subcollection: ONLY upload records referenced by the reminder snapshot ===
-        val snapshotId = reminder.sourceExtractionSnapshotId
-        if (snapshotId.isNullOrBlank() || reminder.sourceNotiRecordIds.isEmpty()) return@withContext
+        // === Notis subcollection: upload records referenced by the reminder's links ===
+        if (linkedRecordIds.isEmpty()) return@withContext
 
         try {
-            val snap = db.reminderSnapshotDao().getSnapshot(snapshotId) ?: return@withContext
-            val grouping = ReminderSnapshotPayload.parseRecordIdGrouping(snap.payloadJson) ?: return@withContext
-
-            val mapping = grouping.notiKeyToRecordIds
+            // notiKey -> record ids, derived from the link rows.
+            val mapping: Map<String, List<String>> = links
+                .groupBy { it.notiKey }
+                .mapValues { (_, group) -> group.map { it.notiRecordId }.distinct() }
             if (mapping.isEmpty()) return@withContext
 
-            val wantedKeys = reminder.associatedNotiKeys.toList().filter { it in mapping.keys }
-            if (wantedKeys.isEmpty()) return@withContext
-
-            val wantedRecordIds: Set<String> = wantedKeys.flatMap { mapping[it].orEmpty() }.toSet()
-            if (wantedRecordIds.isEmpty()) return@withContext
+            val wantedKeys = mapping.keys.toList()
+            val wantedRecordIds: Set<String> = linkedRecordIds.toSet()
 
             val records = db.recordDao().getRecordsByIds(wantedRecordIds.toList())
             val recordsByKey = records.groupBy { it.notiKey }

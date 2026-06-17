@@ -192,7 +192,8 @@ fun NewScreen(
                 onEdit = { openEditor(item) },
                 onCreateReminder = scheduledReminderViewModel?.let { { reminderDialogSavedItem = item } },
                 onQuickExportTasks = { reminderViewModel.exportToGoogleTasks(item) },
-                onTogglePinned = { reminderViewModel.togglePinned(item.savedItemId) },
+                showDeleteButton = true,
+                onArchive = { reminderViewModel.archiveKeep(item.savedItemId) },
                 onSavedSubItemToggle = { stId, checked -> reminderViewModel.toggleSavedSubItemCompleted(stId, checked) },
                 onSavedSubItemClick = { st ->
                     openEditor(item)
@@ -240,7 +241,8 @@ fun NewScreen(
                 onToggleCompleted = { completed -> reminderViewModel.toggleCompleted(item, completed) },
                 onEdit = { openEditor(item) },
                 onCreateReminder = scheduledReminderViewModel?.let { { reminderDialogSavedItem = item } },
-                onTogglePinned = { reminderViewModel.togglePinned(item.savedItemId) },
+                showDeleteButton = true,
+                onArchive = { reminderViewModel.archiveKeep(item.savedItemId) },
                 onSavedSubItemToggle = { stId, checked -> reminderViewModel.toggleSavedSubItemCompleted(stId, checked) },
                 onSavedSubItemClick = { st ->
                     openEditor(item)

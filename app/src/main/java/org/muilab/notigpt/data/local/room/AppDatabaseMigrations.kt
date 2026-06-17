@@ -2,6 +2,7 @@ package org.muilab.notigpt.data.local.room
 
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import org.json.JSONArray
 
 /**
  * Ordered Room schema migrations for installed app databases.
@@ -917,6 +918,119 @@ object AppDatabaseMigrations {
             db.execSQL("ALTER TABLE `noti_record_new` RENAME TO `noti_record`")
             db.execSQL("CREATE INDEX IF NOT EXISTS `idx_record_notiKey_whenTime` ON `noti_record` (`notiKey`, `whenTime`)")
             db.execSQL("CREATE VIEW IF NOT EXISTS `VisibleNotiRecord` AS SELECT * FROM noti_record WHERE isDismissed = 0")
+        }
+    }
+
+    /**
+     * v39 -> v40: Replace the reminder extraction snapshot mechanism with a normalized
+     * noti-to-saved-item join table as the single source of truth for provenance.
+     *
+     * Steps:
+     *  1. Create `noti_saved_item_link` (matches the Room-generated schema for [NotiSavedItemLink]).
+     *  2. Backfill links from each saved_item's `associatedNotis` set (split "{notiKey}_{postTime}" to
+     *     recover notiKey; type mirrors the row's itemType).
+     *  3. Recreate `saved_item` without the now-removed `associatedNotis`, `sourceExtractionSnapshotId`,
+     *     and `isPinned` columns.
+     *  4. Drop the obsolete `reminder_extraction_snapshot` table and its indices.
+     */
+    val MIGRATION_39_40 = object : Migration(39, 40) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            // 1. Create the join table + indices (must match Room's generated schema exactly).
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `noti_saved_item_link` (
+                    `notiKey` TEXT NOT NULL,
+                    `notiRecordId` TEXT NOT NULL,
+                    `type` TEXT NOT NULL,
+                    `savedItemId` TEXT NOT NULL,
+                    `createdAt` INTEGER NOT NULL,
+                    PRIMARY KEY(`notiRecordId`, `savedItemId`),
+                    FOREIGN KEY(`savedItemId`) REFERENCES `saved_item`(`savedItemId`) ON UPDATE NO ACTION ON DELETE CASCADE
+                )
+                """.trimIndent()
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_noti_saved_item_link_savedItemId` ON `noti_saved_item_link` (`savedItemId`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_noti_saved_item_link_notiKey` ON `noti_saved_item_link` (`notiKey`)")
+
+            // 2. Backfill from the existing associatedNotis JSON set. Parse in Kotlin since SQLite
+            //    json_each is not reliably available at minSdk 29.
+            val now = System.currentTimeMillis()
+            db.query("SELECT `savedItemId`, `itemType`, `associatedNotis` FROM `saved_item`").use { cursor ->
+                val idIdx = cursor.getColumnIndex("savedItemId")
+                val typeIdx = cursor.getColumnIndex("itemType")
+                val notisIdx = cursor.getColumnIndex("associatedNotis")
+                while (cursor.moveToNext()) {
+                    val savedItemId = if (idIdx >= 0) cursor.getString(idIdx) else null
+                    if (savedItemId.isNullOrBlank()) continue
+                    val itemType = if (typeIdx >= 0 && !cursor.isNull(typeIdx)) cursor.getString(typeIdx) else "task"
+                    val notisJson = if (notisIdx >= 0 && !cursor.isNull(notisIdx)) cursor.getString(notisIdx) else "[]"
+                    val recordIds = try {
+                        val arr = JSONArray(notisJson)
+                        (0 until arr.length()).map { arr.optString(it) }
+                    } catch (_: Exception) {
+                        emptyList()
+                    }
+                    for (recordId in recordIds) {
+                        if (recordId.isNullOrBlank()) continue
+                        val notiKey = recordId.substringBeforeLast("_")
+                        db.execSQL(
+                            "INSERT OR IGNORE INTO `noti_saved_item_link` (`notiKey`,`notiRecordId`,`type`,`savedItemId`,`createdAt`) VALUES (?,?,?,?,?)",
+                            arrayOf(notiKey, recordId, itemType, savedItemId, now)
+                        )
+                    }
+                }
+            }
+
+            // 3. Recreate saved_item without associatedNotis / sourceExtractionSnapshotId / isPinned.
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `saved_item_new` (
+                    `savedItemId` TEXT NOT NULL,
+                    `title` TEXT NOT NULL,
+                    `content` TEXT NOT NULL,
+                    `itemType` TEXT NOT NULL DEFAULT 'task',
+                    `state` TEXT NOT NULL DEFAULT 'saved',
+                    `lastUpdateTimestamp` INTEGER NOT NULL,
+                    `deadlineAtMs` INTEGER NOT NULL,
+                    `startAtMs` INTEGER NOT NULL DEFAULT 0,
+                    `endAtMs` INTEGER NOT NULL DEFAULT 0,
+                    `estimatedCompletionTime` INTEGER NOT NULL,
+                    `origin` TEXT NOT NULL,
+                    `humanEditCount` INTEGER NOT NULL,
+                    `deletedAtMs` INTEGER,
+                    `userEdited` INTEGER NOT NULL,
+                    `isVisible` INTEGER NOT NULL,
+                    `buttons` TEXT NOT NULL DEFAULT '[]',
+                    `isViewed` INTEGER NOT NULL DEFAULT 1,
+                    `sortScore` REAL NOT NULL DEFAULT 50.0,
+                    `reRankHistory` TEXT NOT NULL DEFAULT '[]',
+                    PRIMARY KEY(`savedItemId`)
+                )
+                """.trimIndent()
+            )
+            db.execSQL(
+                """
+                INSERT INTO `saved_item_new` (
+                    savedItemId, title, content, itemType, state, lastUpdateTimestamp,
+                    deadlineAtMs, startAtMs, endAtMs, estimatedCompletionTime, origin,
+                    humanEditCount, deletedAtMs, userEdited, isVisible, buttons, isViewed,
+                    sortScore, reRankHistory
+                )
+                SELECT
+                    savedItemId, title, content, itemType, state, lastUpdateTimestamp,
+                    deadlineAtMs, startAtMs, endAtMs, estimatedCompletionTime, origin,
+                    humanEditCount, deletedAtMs, userEdited, isVisible, buttons, isViewed,
+                    sortScore, reRankHistory
+                FROM `saved_item`
+                """.trimIndent()
+            )
+            db.execSQL("DROP TABLE `saved_item`")
+            db.execSQL("ALTER TABLE `saved_item_new` RENAME TO `saved_item`")
+
+            // 4. Drop the obsolete snapshot table.
+            db.execSQL("DROP INDEX IF EXISTS `idx_reminder_snap_status_time`")
+            db.execSQL("DROP INDEX IF EXISTS `idx_reminder_snap_savedItemId`")
+            db.execSQL("DROP TABLE IF EXISTS `reminder_extraction_snapshot`")
         }
     }
 

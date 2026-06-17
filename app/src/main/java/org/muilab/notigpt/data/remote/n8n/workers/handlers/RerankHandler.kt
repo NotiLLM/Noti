@@ -68,7 +68,6 @@ internal object RerankHandler {
                 "deadlineTimeString" to deadlineIso,
                 "sortScore" to reminder.sortScore,
                 "isViewed" to reminder.isViewed,
-                "isPinned" to reminder.isPinned,
                 "reRankHistory" to reminder.reRankHistory,
             ),
             "notiContext" to notiContext,
@@ -136,10 +135,8 @@ internal object RerankHandler {
         ctx: N8nWorkerContext,
         reminder: org.muilab.notigpt.model.features.SavedItem,
     ): List<Map<String, Any>> {
-        if (reminder.sourceNotiRecordIds.isEmpty()) return emptyList()
-
         val db = ctx.database
-        val wantedKeys = reminder.associatedNotiKeys.toList()
+        val wantedKeys = ctx.reminderRepository.getLinkedKeys(reminder.savedItemId)
         if (wantedKeys.isEmpty()) return emptyList()
 
         val records = try {

@@ -4,7 +4,9 @@ import android.content.Context
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
+import org.muilab.notigpt.data.local.room.AppDatabase
 import org.muilab.notigpt.data.local.room.dao.SavedItemDao
+import org.muilab.notigpt.model.features.NotiSavedItemLink
 import org.muilab.notigpt.model.features.SavedItem
 import org.muilab.notigpt.data.remote.firestore.FirestoreSyncRepository
 
@@ -19,11 +21,14 @@ class SavedItemRepository(
     private val appContext: Context,
 ) {
     private val firestoreSync by lazy { FirestoreSyncRepository(appContext.applicationContext) }
+    private val linkDao by lazy { AppDatabase.getInstance(appContext.applicationContext).notiSavedItemLinkDao() }
 
     /** Returns visible reminders in the canonical list order used by the reminders screen. */
     fun observeAll(): Flow<List<SavedItem>> = reminderListDao.observeAll()
     fun observeTasks(): Flow<List<SavedItem>> = reminderListDao.observeTasks()
     fun observeMemos(): Flow<List<SavedItem>> = reminderListDao.observeMemos()
+    fun observeActiveKeeps(): Flow<List<SavedItem>> = reminderListDao.observeActiveKeeps()
+    fun observeArchivedKeeps(): Flow<List<SavedItem>> = reminderListDao.observeArchivedKeeps()
     fun observeCompletedTasks(): Flow<List<SavedItem>> = reminderListDao.observeCompletedTasks()
     fun observeNewItems(): Flow<List<SavedItem>> = reminderListDao.observeNewItems()
 
@@ -83,10 +88,48 @@ class SavedItemRepository(
         firestoreSync.syncReminder(updated)
     }
 
-    suspend fun setPinned(savedItemId: String, pinned: Boolean) = withContext(Dispatchers.IO) {
-        reminderListDao.setPinned(savedItemId, pinned)
-        val updated = reminderListDao.getById(savedItemId) ?: return@withContext
-        firestoreSync.syncReminder(updated)
+    // ========== Noti <-> saved-item links ==========
+
+    /**
+     * Replaces all links for [savedItemId] with one row per record id in [recordIds].
+     *
+     * [type] mirrors the owning saved item's itemType ("task"/"keep"). Existing links are cleared first so
+     * the link set always reflects the latest extraction/regeneration result.
+     */
+    suspend fun replaceLinks(savedItemId: String, recordIds: Collection<String>, type: String) = withContext(Dispatchers.IO) {
+        linkDao.deleteBySavedItemId(savedItemId)
+        val now = System.currentTimeMillis()
+        val links = recordIds
+            .filter { it.isNotBlank() }
+            .distinct()
+            .map { recordId ->
+                NotiSavedItemLink(
+                    notiKey = recordId.substringBeforeLast("_"),
+                    notiRecordId = recordId,
+                    type = type,
+                    savedItemId = savedItemId,
+                    createdAt = now,
+                )
+            }
+        if (links.isNotEmpty()) linkDao.upsertAll(links)
+    }
+
+    /** Record ids linked to [savedItemId], in no particular order. */
+    suspend fun getLinkedRecordIds(savedItemId: String): List<String> = withContext(Dispatchers.IO) {
+        linkDao.getBySavedItemId(savedItemId).map { it.notiRecordId }.distinct()
+    }
+
+    /** Distinct notification group keys linked to [savedItemId]. */
+    suspend fun getLinkedKeys(savedItemId: String): List<String> = withContext(Dispatchers.IO) {
+        linkDao.getBySavedItemId(savedItemId).map { it.notiKey }.distinct()
+    }
+
+    /** Map of savedItemId -> its linked record ids, for batch payload building. */
+    suspend fun getLinkedRecordIdsFor(savedItemIds: List<String>): Map<String, List<String>> = withContext(Dispatchers.IO) {
+        if (savedItemIds.isEmpty()) return@withContext emptyMap()
+        linkDao.getBySavedItemIds(savedItemIds)
+            .groupBy { it.savedItemId }
+            .mapValues { (_, links) -> links.map { it.notiRecordId }.distinct() }
     }
 
     suspend fun updateSortScoreAndHistory(savedItemId: String, sortScore: Float, reRankHistory: String) = withContext(Dispatchers.IO) {

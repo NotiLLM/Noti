@@ -22,7 +22,19 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import org.muilab.notigpt.MainActivity
+import org.muilab.notigpt.R
 import org.muilab.notigpt.data.local.room.AppDatabase
+import org.muilab.notigpt.model.features.SavedItemType
+
+/**
+ * Notification group keys keep the app's distinct notification concerns from auto-bundling together on
+ * Android <= 15. (Android 16+ force-groups all of an app's notifications regardless of these keys.)
+ */
+object NotiGroups {
+    const val STATUS = "org.muilab.notigpt.group.STATUS"
+    const val REMINDERS = "org.muilab.notigpt.group.REMINDERS"
+    const val GENERATION = "org.muilab.notigpt.group.GENERATION"
+}
 
 /**
  * Helpers for the app's persistent foreground-style status notification.
@@ -102,14 +114,25 @@ fun postOngoingNotification(context: Context) {
     CoroutineScope(Dispatchers.IO).launch {
         val appDatabase = AppDatabase.getInstance(context)
         val drawerDao = appDatabase.drawerDao()
+        val savedItemDao = appDatabase.reminderListDao()
 
         val allNotiCount = drawerDao.getActiveNotiCount()
+        val newTaskCount = savedItemDao.countNewByType(SavedItemType.Task)
+        val newKeepCount = savedItemDao.countNewByType(SavedItemType.Keep)
         val notiTitle = "$allNotiCount notifications"
         val smallIcon = createCountIcon(context, allNotiCount, false)
 
-        val sb = StringBuilder()
-
-        val notiContent = sb.toString()
+        // Summary body: "X new tasks, Y new keep, Z new notifications", omitting any zero clause.
+        val clauses = buildList {
+            if (newTaskCount > 0) add("$newTaskCount new tasks")
+            if (newKeepCount > 0) add("$newKeepCount new keep")
+            if (allNotiCount > 0) add("$allNotiCount new notifications")
+        }
+        val notiContent = if (clauses.isEmpty()) {
+            context.getString(R.string.ongoing_status_idle)
+        } else {
+            clauses.joinToString(", ")
+        }
         val bigTextStyle = NotificationCompat.BigTextStyle()
         bigTextStyle.bigText(notiContent)
 
@@ -130,6 +153,7 @@ fun postOngoingNotification(context: Context) {
             setContentIntent(pendingIntent)
             setOngoing(true)  // This makes the notification ongoing
             setAutoCancel(false)
+            setGroup(NotiGroups.STATUS)  // Keep status separate from reminders/generation groups.
         }
         val notificationId = 44
 

@@ -16,20 +16,30 @@ interface SavedItemDao {
     @Upsert
     suspend fun upsert(reminder: SavedItem)
 
-    @Query("SELECT * FROM saved_item WHERE isVisible = 1 ORDER BY isPinned DESC, sortScore DESC, lastUpdateTimestamp DESC, savedItemId DESC")
+    @Query("SELECT * FROM saved_item WHERE isVisible = 1 ORDER BY sortScore DESC, lastUpdateTimestamp DESC, savedItemId DESC")
     fun observeAll(): Flow<List<SavedItem>>
 
-    @Query("SELECT * FROM saved_item WHERE isVisible = 1 AND itemType = 'task' AND state IN ('saved', 'completed') ORDER BY isPinned DESC, sortScore DESC, lastUpdateTimestamp DESC, savedItemId DESC")
+    @Query("SELECT * FROM saved_item WHERE isVisible = 1 AND itemType = 'task' AND state IN ('saved', 'completed') ORDER BY sortScore DESC, lastUpdateTimestamp DESC, savedItemId DESC")
     fun observeTasks(): Flow<List<SavedItem>>
 
-    @Query("SELECT * FROM saved_item WHERE isVisible = 1 AND itemType = 'keep' AND state IN ('saved', 'archived') ORDER BY isPinned DESC, sortScore DESC, lastUpdateTimestamp DESC, savedItemId DESC")
+    @Query("SELECT * FROM saved_item WHERE isVisible = 1 AND itemType = 'keep' AND state IN ('saved', 'archived') ORDER BY sortScore DESC, lastUpdateTimestamp DESC, savedItemId DESC")
     fun observeMemos(): Flow<List<SavedItem>>
 
-    @Query("SELECT * FROM saved_item WHERE isVisible = 1 AND itemType = 'task' AND state = 'completed' ORDER BY isPinned DESC, sortScore DESC, lastUpdateTimestamp DESC, savedItemId DESC")
+    @Query("SELECT * FROM saved_item WHERE isVisible = 1 AND itemType = 'keep' AND state = 'saved' ORDER BY sortScore DESC, lastUpdateTimestamp DESC, savedItemId DESC")
+    fun observeActiveKeeps(): Flow<List<SavedItem>>
+
+    @Query("SELECT * FROM saved_item WHERE isVisible = 1 AND itemType = 'keep' AND state = 'archived' ORDER BY sortScore DESC, lastUpdateTimestamp DESC, savedItemId DESC")
+    fun observeArchivedKeeps(): Flow<List<SavedItem>>
+
+    @Query("SELECT * FROM saved_item WHERE isVisible = 1 AND itemType = 'task' AND state = 'completed' ORDER BY sortScore DESC, lastUpdateTimestamp DESC, savedItemId DESC")
     fun observeCompletedTasks(): Flow<List<SavedItem>>
 
     @Query("SELECT * FROM saved_item WHERE isVisible = 1 AND state IN ('new', 'updated') ORDER BY lastUpdateTimestamp DESC, savedItemId DESC")
     fun observeNewItems(): Flow<List<SavedItem>>
+
+    /** Count of new/updated items of a given type, for the status notification summary. */
+    @Query("SELECT COUNT(*) FROM saved_item WHERE isVisible = 1 AND itemType = :itemType AND state IN ('new', 'updated')")
+    suspend fun countNewByType(itemType: String): Int
 
     @Query("SELECT * FROM saved_item WHERE savedItemId = :savedItemId")
     suspend fun getById(savedItemId: String): SavedItem?
@@ -58,9 +68,6 @@ interface SavedItemDao {
 
     @Query("UPDATE saved_item SET state = 'saved' WHERE savedItemId = :savedItemId")
     suspend fun setViewed(savedItemId: String)
-
-    @Query("UPDATE saved_item SET isPinned = :pinned WHERE savedItemId = :savedItemId")
-    suspend fun setPinned(savedItemId: String, pinned: Boolean)
 
     @Query("UPDATE saved_item SET sortScore = :sortScore, reRankHistory = :reRankHistory WHERE savedItemId = :savedItemId")
     suspend fun updateSortScoreAndHistory(savedItemId: String, sortScore: Float, reRankHistory: String)

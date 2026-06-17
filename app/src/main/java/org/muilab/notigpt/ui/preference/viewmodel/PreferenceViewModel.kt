@@ -189,7 +189,6 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
                 "isEvent" to r.isEvent,
                 "isCompleted" to r.isCompleted,
                 "origin" to r.origin,
-                "sourceNotiRecordIds" to r.sourceNotiRecordIds.toList(),
             )
         }
         reminderBefore?.let { r ->

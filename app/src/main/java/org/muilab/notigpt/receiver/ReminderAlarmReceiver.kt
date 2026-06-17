@@ -18,6 +18,7 @@ import org.muilab.notigpt.R
 import org.muilab.notigpt.data.local.room.AppDatabase
 import org.muilab.notigpt.data.repository.reminder.ReminderScheduler
 import org.muilab.notigpt.model.features.ReminderStatus
+import org.muilab.notigpt.util.NotiGroups
 
 class ReminderAlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -56,6 +57,7 @@ class ReminderAlarmReceiver : BroadcastReceiver() {
             .setContentText(content.lineSequence().firstOrNull().orEmpty())
             .setStyle(NotificationCompat.BigTextStyle().bigText(content))
             .setAutoCancel(true)
+            .setGroup(NotiGroups.REMINDERS)  // Keep reminders out of the status/generation groups.
             .setContentIntent(ReminderScheduler.seenPendingIntent(context, reminderId))
             .build()
 

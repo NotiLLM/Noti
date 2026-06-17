@@ -53,6 +53,7 @@ internal object ReminderRegenerationHandler {
         val payload = buildPayload(
             reminders = listOf(reminder),
             notiContextMap = mapOf(savedItemId to notiContext),
+            linkedByItem = ctx.reminderRepository.getLinkedRecordIdsFor(listOf(savedItemId)),
             trigger = "REGENERATE_ONE",
             extractionPreferences = ctx.getExtractionPreferencesPayload(),
             userContexts = ctx.getUserContextsPayload(),
@@ -87,6 +88,7 @@ internal object ReminderRegenerationHandler {
         val payload = buildPayload(
             reminders = allReminders,
             notiContextMap = notiContextMap,
+            linkedByItem = ctx.reminderRepository.getLinkedRecordIdsFor(allReminders.map { it.savedItemId }),
             trigger = "REGENERATE_ALL",
             extractionPreferences = ctx.getExtractionPreferencesPayload(),
             userContexts = ctx.getUserContextsPayload(),
@@ -105,10 +107,8 @@ internal object ReminderRegenerationHandler {
         ctx: N8nWorkerContext,
         reminder: SavedItem,
     ): List<Map<String, Any>> {
-        if (reminder.sourceNotiRecordIds.isEmpty()) return emptyList()
-
         val db = ctx.database
-        val wantedKeys = reminder.associatedNotiKeys.toList()
+        val wantedKeys = ctx.reminderRepository.getLinkedKeys(reminder.savedItemId)
         if (wantedKeys.isEmpty()) return emptyList()
 
         val records = try {
@@ -133,6 +133,7 @@ internal object ReminderRegenerationHandler {
     private fun buildPayload(
         reminders: List<SavedItem>,
         notiContextMap: Map<String, List<Map<String, Any>>>,
+        linkedByItem: Map<String, List<String>>,
         trigger: String,
         extractionPreferences: List<Map<String, String>>,
         userContexts: List<Map<String, String>>,
@@ -154,11 +155,10 @@ internal object ReminderRegenerationHandler {
                 "startAtMsString" to startAtMsIso,
                 "endAtMsString" to endAtMsIso,
                 "estimatedCompletionMinutes" to r.estimatedCompletionTime,
-                "sourceNotiRecordIds" to r.sourceNotiRecordIds.toList(),
+                "sourceNotiRecordIds" to (linkedByItem[r.savedItemId] ?: emptyList()),
                 "userEdited" to r.userEdited,
                 "buttons" to r.buttons,
                 "sortScore" to r.sortScore,
-                "isPinned" to r.isPinned,
                 "reRankHistory" to r.reRankHistory,
                 "notiContext" to (notiContextMap[r.savedItemId] ?: emptyList<Any>()),
             )
@@ -250,14 +250,14 @@ internal object ReminderRegenerationHandler {
                     })
                 }
 
-                // Preserve sourceNotiRecordIds from existing
+                // Preserve linked record ids from existing links when the response omits them.
                 val assocIds = mutableSetOf<String>()
                 val assoc = obj.optJSONArray("sourceNotiRecordIds") ?: obj.optJSONArray("associatedNotiRecords") ?: obj.optJSONArray("associatedNotis")
                 if (assoc != null) {
                     for (j in 0 until assoc.length()) assocIds.add(assoc.optString(j))
                 }
                 if (assocIds.isEmpty() && existing != null) {
-                    assocIds.addAll(existing.sourceNotiRecordIds)
+                    assocIds.addAll(ctx.reminderRepository.getLinkedRecordIds(savedItemId))
                 }
 
                 val unit = SavedItem(
@@ -271,8 +271,6 @@ internal object ReminderRegenerationHandler {
                     startAtMs = startAtMsMs,
                     endAtMs = endAtMsMs,
                     estimatedCompletionTime = estimate,
-                    sourceNotiRecordIds = assocIds.toSet(),
-                    sourceExtractionSnapshotId = existing?.sourceExtractionSnapshotId,
                     origin = existing?.origin ?: "llm_auto_extraction",
                     humanEditCount = existing?.humanEditCount ?: 0,
                     deletedAtMs = null,
@@ -280,12 +278,12 @@ internal object ReminderRegenerationHandler {
                     isVisible = true,
                     buttons = buttons,
                     isViewed = false,
-                    isPinned = existing?.isPinned ?: false,
                     sortScore = sortScore,
                     reRankHistory = existingHistory.toString(),
                 )
 
                 ctx.reminderRepository.upsert(unit)
+                ctx.reminderRepository.replaceLinks(savedItemId, assocIds, unit.itemType)
                 ReminderExtractionHandler.persistReturnedSubTasks(ctx, savedItemId, obj, System.currentTimeMillis())
             }
         } catch (e: Exception) {

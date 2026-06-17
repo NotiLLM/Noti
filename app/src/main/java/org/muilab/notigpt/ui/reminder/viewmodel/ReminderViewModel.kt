@@ -37,7 +37,7 @@ import java.util.UUID
  */
 class ReminderViewModel(application: Application) : AndroidViewModel(application) {
 
-    enum class FilterTab { All, Pending, Tasks, Memos, Completed }
+    enum class FilterTab { All, Pending, Tasks, Memos, Completed, Keep, Archived }
     enum class ListMode { All, Tasks, Keep }
 
     /**
@@ -88,6 +88,8 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
     private val allFlow = repo.observeAll()
     private val tasksFlow = repo.observeTasks()
     private val memosFlow = repo.observeMemos()
+    private val activeKeepsFlow = repo.observeActiveKeeps()
+    private val archivedKeepsFlow = repo.observeArchivedKeeps()
     private val completedFlow = repo.observeCompletedTasks()
     private val newItemsFlow = repo.observeNewItems()
 
@@ -103,7 +105,9 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
      * Search terms are split on '+', then AND-matched against title and content so users can narrow noisy reminder
      * lists without changing persisted reminder data.
      */
-    val reminders: StateFlow<List<SavedItem>> = combine(_filter, _searchQuery, _listMode, allFlow, tasksFlow, memosFlow, completedFlow) { values ->
+    val reminders: StateFlow<List<SavedItem>> = combine(
+        _filter, _searchQuery, _listMode, allFlow, tasksFlow, memosFlow, completedFlow, activeKeepsFlow, archivedKeepsFlow
+    ) { values ->
         val f = values[0] as FilterTab
         @Suppress("UNCHECKED_CAST")
         val query = values[1] as String
@@ -116,20 +120,32 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
         val memos = values[5] as List<SavedItem>
         @Suppress("UNCHECKED_CAST")
         val completed = values[6] as List<SavedItem>
+        @Suppress("UNCHECKED_CAST")
+        val activeKeeps = values[7] as List<SavedItem>
+        @Suppress("UNCHECKED_CAST")
+        val archivedKeeps = values[8] as List<SavedItem>
 
-        val modeList = when (mode) {
-            ListMode.All -> all
-            ListMode.Tasks -> tasks
-            ListMode.Keep -> memos
-        }
-        val modeIds = modeList.mapTo(mutableSetOf()) { it.savedItemId }
-
-        val baseList = when (f) {
-            FilterTab.All -> modeList
-            FilterTab.Pending -> modeList.filter { !it.isCompleted }
-            FilterTab.Tasks -> tasks.filter { it.savedItemId in modeIds }
-            FilterTab.Memos -> memos.filter { it.savedItemId in modeIds }
-            FilterTab.Completed -> completed.filter { it.savedItemId in modeIds }
+        val baseList = when (mode) {
+            ListMode.Keep -> when (f) {
+                FilterTab.Keep -> activeKeeps
+                FilterTab.Archived -> archivedKeeps
+                else -> memos // All
+            }
+            ListMode.Tasks -> when (f) {
+                FilterTab.Pending -> tasks.filter { !it.isCompleted }
+                FilterTab.Completed -> completed
+                else -> tasks // All (saved + completed)
+            }
+            ListMode.All -> {
+                val modeIds = all.mapTo(mutableSetOf()) { it.savedItemId }
+                when (f) {
+                    FilterTab.Pending -> all.filter { !it.isCompleted }
+                    FilterTab.Tasks -> tasks.filter { it.savedItemId in modeIds }
+                    FilterTab.Memos -> memos.filter { it.savedItemId in modeIds }
+                    FilterTab.Completed -> completed.filter { it.savedItemId in modeIds }
+                    else -> all // All
+                }
+            }
         }
 
         if (query.isBlank()) {
@@ -211,8 +227,6 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
             lastUpdateTimestamp = now,
             deadlineAtMs = 0L,
             estimatedCompletionTime = 0L,
-            sourceNotiRecordIds = emptySet(),
-            sourceExtractionSnapshotId = null,
             origin = "manual",
             humanEditCount = 0,
             deletedAtMs = null,
@@ -297,13 +311,6 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
 
     // ========== Sorting / Ranking ==========
 
-    fun togglePinned(savedItemId: String) {
-        viewModelScope.launch {
-            val existing = repo.getById(savedItemId) ?: return@launch
-            repo.setPinned(savedItemId, !existing.isPinned)
-        }
-    }
-
     fun markViewed(savedItemId: String) {
         viewModelScope.launch {
             repo.setViewed(savedItemId)
@@ -318,68 +325,9 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    /**
-     * Handle drag-and-drop reorder within the scored section.
-     * [scoreAbove] and [scoreBelow] are the sort scores of the neighbors,
-     * or null if at the top/bottom of the scored section.
-     */
-    fun onDragDrop(savedItemId: String, scoreAbove: Float?, scoreBelow: Float?) {
-        viewModelScope.launch {
-            val epsilon = 0.01f
-            val newScore = when {
-                scoreAbove != null && scoreBelow != null -> (scoreAbove + scoreBelow) / 2f
-                scoreAbove == null && scoreBelow != null -> minOf(100f, scoreBelow + epsilon)
-                scoreAbove != null && scoreBelow == null -> maxOf(0f, scoreAbove - epsilon)
-                else -> 50f
-            }
-
-            val existing = repo.getById(savedItemId) ?: return@launch
-            val history = try {
-                JSONArray(existing.reRankHistory)
-            } catch (_: Exception) {
-                JSONArray()
-            }
-            history.put(JSONObject().apply {
-                put("rankedAt", System.currentTimeMillis())
-                put("trigger", "USER_DRAG")
-                put("newScore", newScore)
-                put("scoreExplanation", "User manually reordered reminder via drag")
-            })
-
-            repo.updateSortScoreAndHistory(savedItemId, newScore, history.toString())
-
-            // Score normalization check
-            normalizeScoresIfNeeded()
-        }
-    }
-
     fun submitFeedback(savedItemId: String, trigger: String) {
         viewModelScope.launch {
             enqueueRerank(getApplication(), savedItemId, trigger)
-        }
-    }
-
-    private suspend fun normalizeScoresIfNeeded() {
-        val all = repo.getAllVisible()
-        val scored = all.filter { it.isViewed && !it.isPinned }
-            .sortedByDescending { it.sortScore }
-
-        if (scored.size < 2) return
-
-        var minGap = Float.MAX_VALUE
-        for (i in 0 until scored.size - 1) {
-            val gap = scored[i].sortScore - scored[i + 1].sortScore
-            if (gap < minGap) minGap = gap
-        }
-
-        if (minGap >= 0.001f) return
-
-        // Renormalize: evenly space from 100 to 0
-        val step = if (scored.size > 1) 100f / (scored.size - 1) else 0f
-        for ((idx, reminder) in scored.withIndex()) {
-            val newScore = 100f - (step * idx)
-            // Do NOT append reRankHistory for normalization
-            repo.updateSortScoreAndHistory(reminder.savedItemId, newScore, reminder.reRankHistory)
         }
     }
 

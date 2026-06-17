@@ -44,6 +44,7 @@ import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -112,8 +113,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.material3.AssistChip
-import sh.calvin.reorderable.ReorderableItem
-import sh.calvin.reorderable.rememberReorderableLazyListState
+import androidx.compose.material3.minimumInteractiveComponentSize
 
 /**
  * Main reminders screen for tasks, memos, completion state, sub-tasks, export, and related notifications.
@@ -153,14 +153,6 @@ fun RemindersScreen(
 
     val reminders by vm.reminders.collectAsState()
     val filter by vm.filter.collectAsState()
-
-    // Local mutable copy for live drag reordering visual feedback
-    val localReminders = remember { androidx.compose.runtime.mutableStateListOf<SavedItem>() }
-    LaunchedEffect(reminders) {
-        // Only sync when not mid-drag (list size or content changed from DB)
-        localReminders.clear()
-        localReminders.addAll(reminders)
-    }
 
     var editing by remember { mutableStateOf<SavedItem?>(null) }
     var editingId by remember { mutableStateOf<String?>(null) }
@@ -265,18 +257,20 @@ fun RemindersScreen(
             ) {
                 when (listMode) {
                     ReminderViewModel.ListMode.All -> {
-                        FilterChip(stringResource(R.string.ui_reminders_filter_all), filter == ReminderViewModel.FilterTab.All) { vm.setFilter(ReminderViewModel.FilterTab.All) }
-                        FilterChip(stringResource(R.string.ui_reminders_filter_tasks), filter == ReminderViewModel.FilterTab.Tasks) { vm.setFilter(ReminderViewModel.FilterTab.Tasks) }
-                        FilterChip(stringResource(R.string.ui_reminders_filter_memos), filter == ReminderViewModel.FilterTab.Memos) { vm.setFilter(ReminderViewModel.FilterTab.Memos) }
-                        FilterChip(stringResource(R.string.ui_reminders_filter_completed), filter == ReminderViewModel.FilterTab.Completed) { vm.setFilter(ReminderViewModel.FilterTab.Completed) }
+                        ReminderFilterChip(stringResource(R.string.ui_reminders_filter_all), filter == ReminderViewModel.FilterTab.All, { vm.setFilter(ReminderViewModel.FilterTab.All) })
+                        ReminderFilterChip(stringResource(R.string.ui_reminders_filter_tasks), filter == ReminderViewModel.FilterTab.Tasks, { vm.setFilter(ReminderViewModel.FilterTab.Tasks) })
+                        ReminderFilterChip(stringResource(R.string.ui_reminders_filter_memos), filter == ReminderViewModel.FilterTab.Memos, { vm.setFilter(ReminderViewModel.FilterTab.Memos) })
+                        ReminderFilterChip(stringResource(R.string.ui_reminders_filter_completed), filter == ReminderViewModel.FilterTab.Completed, { vm.setFilter(ReminderViewModel.FilterTab.Completed) })
                     }
                     ReminderViewModel.ListMode.Tasks -> {
-                        FilterChip(stringResource(R.string.ui_reminders_filter_pending), filter == ReminderViewModel.FilterTab.Pending) { vm.setFilter(ReminderViewModel.FilterTab.Pending) }
-                        FilterChip(stringResource(R.string.ui_reminders_filter_all), filter == ReminderViewModel.FilterTab.All) { vm.setFilter(ReminderViewModel.FilterTab.All) }
-                        FilterChip(stringResource(R.string.ui_reminders_filter_completed), filter == ReminderViewModel.FilterTab.Completed) { vm.setFilter(ReminderViewModel.FilterTab.Completed) }
+                        ReminderFilterChip(stringResource(R.string.ui_reminders_filter_pending), filter == ReminderViewModel.FilterTab.Pending, { vm.setFilter(ReminderViewModel.FilterTab.Pending) }, leadingIconRes = R.drawable.check_box_unchecked)
+                        ReminderFilterChip(stringResource(R.string.ui_reminders_filter_completed), filter == ReminderViewModel.FilterTab.Completed, { vm.setFilter(ReminderViewModel.FilterTab.Completed) }, leadingIconRes = R.drawable.check_box_checked)
+                        ReminderFilterChip(stringResource(R.string.ui_reminders_filter_all), filter == ReminderViewModel.FilterTab.All, { vm.setFilter(ReminderViewModel.FilterTab.All) })
                     }
                     ReminderViewModel.ListMode.Keep -> {
-                        FilterChip(stringResource(R.string.ui_reminders_filter_all), filter == ReminderViewModel.FilterTab.All) { vm.setFilter(ReminderViewModel.FilterTab.All) }
+                        ReminderFilterChip(stringResource(R.string.ui_reminders_filter_keep), filter == ReminderViewModel.FilterTab.Keep, { vm.setFilter(ReminderViewModel.FilterTab.Keep) })
+                        ReminderFilterChip(stringResource(R.string.ui_reminders_filter_archived), filter == ReminderViewModel.FilterTab.Archived, { vm.setFilter(ReminderViewModel.FilterTab.Archived) }, leadingIconRes = R.drawable.archive_yes)
+                        ReminderFilterChip(stringResource(R.string.ui_reminders_filter_all), filter == ReminderViewModel.FilterTab.All, { vm.setFilter(ReminderViewModel.FilterTab.All) })
                     }
                 }
 
@@ -291,91 +285,70 @@ fun RemindersScreen(
                 }
             }
 
-            val reorderableState = rememberReorderableLazyListState(lazyListState = listState) { from, to ->
-                val fromReminder = localReminders.getOrNull(from.index)
-                val toReminder = localReminders.getOrNull(to.index)
-                // Only allow drag within scored section (isViewed && !isPinned)
-                if (fromReminder != null && toReminder != null &&
-                    fromReminder.isViewed && !fromReminder.isPinned &&
-                    toReminder.isViewed && !toReminder.isPinned
-                ) {
-                    // Move for live visual feedback
-                    localReminders.add(to.index, localReminders.removeAt(from.index))
-                    // Compute new score from neighbours after move
-                    val toIdx = localReminders.indexOfFirst { it.savedItemId == fromReminder.savedItemId }
-                    val scoreAbove = localReminders.getOrNull(toIdx - 1)?.sortScore
-                    val scoreBelow = localReminders.getOrNull(toIdx + 1)?.sortScore
-                    vm.onDragDrop(fromReminder.savedItemId, scoreAbove, scoreBelow)
-                }
-            }
-
             LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 96.dp)
             ) {
-                items(localReminders, key = { it.savedItemId }) { reminder ->
-                    val isDraggable = reminder.isViewed && !reminder.isPinned
-                    ReorderableItem(reorderableState, key = reminder.savedItemId) {
-                        ReminderCard(
-                            reminder = reminder,
-                            subTasks = allSavedSubItemsByReminder[reminder.savedItemId] ?: emptyList(),
-                            onDelete = {
-                                vm.delete(reminder.savedItemId)
-                                if (reminder.origin.contains("llm")) {
-                                    prefVm.startFlow(
-                                        entryPoint = PreferenceEntryPoint.DELETE,
-                                        reminder = reminder,
-                                    )
-                                }
-                            },
-                            onToggleCompleted = { completed: Boolean -> vm.toggleCompleted(reminder, completed) },
-                            onEdit = {
-                                editing = reminder
-                                editingId = reminder.savedItemId
-                                editingInitialSnapshot = reminder
-                            },
-                            onLongPress = { feedbackDialogReminder = reminder },
-                            onCreateReminder = { reminderDialogSavedItem = reminder },
-                            onTogglePinned = { vm.togglePinned(reminder.savedItemId) },
-                            onQuickExportTasks = if (reminder.isTask) {
-                                { openExportDialog(reminder, ExportType.GOOGLE_TASKS) }
-                            } else null,
-                            onQuickExportCalendar = if (reminder.isEvent) {
-                                { openExportDialog(reminder, ExportType.GOOGLE_CALENDAR) }
-                            } else null,
-                            showDragHandle = isDraggable,
-                            dragHandleModifier = if (isDraggable) Modifier.draggableHandle() else Modifier,
-                            onSavedSubItemToggle = { stId, checked -> vm.toggleSavedSubItemCompleted(stId, checked) },
-                            onSavedSubItemClick = { st ->
-                                // Open parent reminder detail first, then navigate to sub-task detail
-                                editing = reminder
-                                editingId = reminder.savedItemId
-                                editingInitialSnapshot = reminder
-                                editingSavedSubItem = st
-                                editingSavedSubItemInitial = st
-                            },
-                            onSavedSubItemEdit = { st ->
-                                editing = reminder
-                                editingId = reminder.savedItemId
-                                editingInitialSnapshot = reminder
-                                editingSavedSubItem = st
-                                editingSavedSubItemInitial = st
-                            },
-                            onSavedSubItemDelete = { st -> vm.deleteSavedSubItem(st.savedSubItemId) },
-                            onSavedSubItemExportGoogleTasks = { st -> vm.exportToGoogleTasks(st.asExportable()) },
-                            onSavedSubItemExportGoogleCalendar = { st ->
-                                val calIntent = Intent(Intent.ACTION_INSERT).apply {
-                                    data = CalendarContract.Events.CONTENT_URI
-                                    putExtra(CalendarContract.Events.TITLE, st.title)
-                                    putExtra(CalendarContract.Events.DESCRIPTION, st.description)
-                                    if (st.startAtMs > 0L) putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, st.startAtMs)
-                                    if (st.endAtMs > 0L) putExtra(CalendarContract.EXTRA_EVENT_END_TIME, st.endAtMs)
-                                }
-                                try { context.startActivity(calIntent) } catch (_: Exception) {}
-                            },
-                        )
-                    }
+                items(reminders, key = { it.savedItemId }) { reminder ->
+                    ReminderCard(
+                        reminder = reminder,
+                        subTasks = allSavedSubItemsByReminder[reminder.savedItemId] ?: emptyList(),
+                        onDelete = {
+                            vm.delete(reminder.savedItemId)
+                            if (reminder.origin.contains("llm")) {
+                                prefVm.startFlow(
+                                    entryPoint = PreferenceEntryPoint.DELETE,
+                                    reminder = reminder,
+                                )
+                            }
+                        },
+                        onToggleCompleted = { completed: Boolean -> vm.toggleCompleted(reminder, completed) },
+                        onEdit = {
+                            editing = reminder
+                            editingId = reminder.savedItemId
+                            editingInitialSnapshot = reminder
+                        },
+                        onLongPress = { feedbackDialogReminder = reminder },
+                        onCreateReminder = { reminderDialogSavedItem = reminder },
+                        // Task/Keep pages: no inline delete (delete lives in the detail editor).
+                        showDeleteButton = false,
+                        onArchive = { vm.archiveKeep(reminder.savedItemId) },
+                        onQuickExportTasks = if (reminder.isTask) {
+                            { openExportDialog(reminder, ExportType.GOOGLE_TASKS) }
+                        } else null,
+                        onQuickExportCalendar = if (reminder.isEvent) {
+                            { openExportDialog(reminder, ExportType.GOOGLE_CALENDAR) }
+                        } else null,
+                        onSavedSubItemToggle = { stId, checked -> vm.toggleSavedSubItemCompleted(stId, checked) },
+                        onSavedSubItemClick = { st ->
+                            // Open parent reminder detail first, then navigate to sub-task detail
+                            editing = reminder
+                            editingId = reminder.savedItemId
+                            editingInitialSnapshot = reminder
+                            editingSavedSubItem = st
+                            editingSavedSubItemInitial = st
+                        },
+                        onSavedSubItemEdit = { st ->
+                            editing = reminder
+                            editingId = reminder.savedItemId
+                            editingInitialSnapshot = reminder
+                            editingSavedSubItem = st
+                            editingSavedSubItemInitial = st
+                        },
+                        onSavedSubItemDelete = { st -> vm.deleteSavedSubItem(st.savedSubItemId) },
+                        onSavedSubItemExportGoogleTasks = { st -> vm.exportToGoogleTasks(st.asExportable()) },
+                        onSavedSubItemExportGoogleCalendar = { st ->
+                            val calIntent = Intent(Intent.ACTION_INSERT).apply {
+                                data = CalendarContract.Events.CONTENT_URI
+                                putExtra(CalendarContract.Events.TITLE, st.title)
+                                putExtra(CalendarContract.Events.DESCRIPTION, st.description)
+                                if (st.startAtMs > 0L) putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, st.startAtMs)
+                                if (st.endAtMs > 0L) putExtra(CalendarContract.EXTRA_EVENT_END_TIME, st.endAtMs)
+                            }
+                            try { context.startActivity(calIntent) } catch (_: Exception) {}
+                        },
+                    )
                 }
             }
         }
@@ -407,8 +380,6 @@ fun RemindersScreen(
                     lastUpdateTimestamp = System.currentTimeMillis(),
                     deadlineAtMs = 0L,
                     estimatedCompletionTime = 0L,
-                    sourceNotiRecordIds = emptySet(),
-                    sourceExtractionSnapshotId = null,
                     origin = "manual",
                     humanEditCount = 0,
                     deletedAtMs = null,
@@ -773,14 +744,33 @@ private fun SectionHeader(title: String) {
     )
 }
 
+/**
+ * Single-select filter chip used by the Task/Keep filter rows.
+ *
+ * Wraps Material3 [FilterChip]; pass [leadingIconRes] to show a leading icon (e.g. checkbox glyphs for
+ * Pending/Completed). These are mutually-exclusive filters, which is exactly FilterChip's role.
+ */
 @Composable
-private fun FilterChip(text: String, selected: Boolean, onClick: () -> Unit) {
-    TextButton(onClick = onClick) {
-        Text(
-            text = text,
-            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-        )
-    }
+private fun ReminderFilterChip(
+    text: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    leadingIconRes: Int? = null,
+) {
+    FilterChip(
+        selected = selected,
+        onClick = onClick,
+        label = { Text(text) },
+        leadingIcon = leadingIconRes?.let {
+            {
+                Icon(
+                    painter = painterResource(it),
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+        },
+    )
 }
 
 @Composable
@@ -866,9 +856,8 @@ fun ReminderCard(
     onQuickExportTasks: (() -> Unit)? = null,
     onQuickExportCalendar: (() -> Unit)? = null,
     onLongPress: () -> Unit = {},
-    onTogglePinned: () -> Unit = {},
-    showDragHandle: Boolean = false,
-    dragHandleModifier: Modifier = Modifier,
+    onArchive: () -> Unit = {},
+    showDeleteButton: Boolean = true,
     // Sub-task callbacks
     onSavedSubItemToggle: (String, Boolean) -> Unit = { _, _ -> },
     onSavedSubItemClick: (SavedSubItem) -> Unit = {},
@@ -904,33 +893,22 @@ fun ReminderCard(
             .combinedClickable(onClick = onEdit, onLongClick = onLongPress)
     ) {
         Row(modifier = Modifier.fillMaxWidth()) {
-            // Left gutter: checkbox (if task) on top, drag handle below — vertically stacked
-            if (true) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.padding(end = 4.dp),
-                ) {
-                    if (reminder.isTask) {
-                        Checkbox(
-                            checked = reminder.isCompleted,
-                            onCheckedChange = { onToggleCompleted(it) },
-                        )
-                    } else {
+            // Left gutter: tasks get a completion checkbox; keeps get an archive toggle.
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.padding(end = 4.dp),
+            ) {
+                if (reminder.isTask) {
+                    Checkbox(
+                        checked = reminder.isCompleted,
+                        onCheckedChange = { onToggleCompleted(it) },
+                    )
+                } else {
+                    IconButton(onClick = onArchive, modifier = Modifier.minimumInteractiveComponentSize()) {
                         Icon(
-                            painter = painterResource(R.drawable.check),
-                            contentDescription = null,
-                            modifier = Modifier.size(32.dp).padding(6.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    if (showDragHandle) {
-                        Icon(
-                            painter = painterResource(R.drawable.drag_indicator),
-                            contentDescription = stringResource(R.string.a11y_drag_handle),
-                            modifier = Modifier
-                                .size(32.dp)
-                                .then(dragHandleModifier)
-                                .padding(6.dp),
+                            painter = painterResource(if (reminder.isArchived) R.drawable.archive_yes else R.drawable.archive_no),
+                            contentDescription = stringResource(R.string.a11y_archive),
+                            modifier = Modifier.size(20.dp),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
@@ -959,17 +937,12 @@ fun ReminderCard(
                             onQuickExportTasks = onQuickExportTasks,
                             onQuickExportCalendar = onQuickExportCalendar,
                         )
-                        IconButton(onClick = onTogglePinned, modifier = Modifier.size(36.dp)) {
-                            Icon(
-                                painter = painterResource(if (reminder.isPinned) R.drawable.pin_yes else R.drawable.pin_no),
-                                contentDescription = stringResource(if (reminder.isPinned) R.string.a11y_unpin else R.string.a11y_pin),
-                                modifier = Modifier.size(20.dp),
-                            )
-                        }
                     }
 
-                    IconButton(onClick = onDelete) {
-                        Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.a11y_delete))
+                    if (showDeleteButton) {
+                        IconButton(onClick = onDelete) {
+                            Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.a11y_delete))
+                        }
                     }
                 }
 
@@ -1339,14 +1312,15 @@ fun ReminderDetailScreen(
             val relatedRecordsByKey = if (relatedForThisReminder) relatedNotificationsState.related.recordsByKey else emptyMap()
             val relatedUnitsByKey = if (relatedForThisReminder) relatedNotificationsState.related.unitsByKey else emptyMap()
 
-            LaunchedEffect(initial.savedItemId, initial.sourceExtractionSnapshotId, initial.sourceNotiRecordIds) {
+            LaunchedEffect(initial.savedItemId, initial.lastUpdateTimestamp) {
                 onLoadRelatedNotifications(initial)
             }
 
-            // Show the section as long as this reminder claims it has associated notifications.
-            if (initial.sourceNotiRecordIds.isNotEmpty()) {
-                val relatedKeys = initial.associatedNotiKeys.toList()
+            // Keys are derived from the loaded link-backed related notifications.
+            val relatedKeys = relatedRecordsByKey.keys.toList()
 
+            // Show the section while loading or whenever related notifications resolve.
+            if (relatedLoading || relatedRecordsByKey.isNotEmpty()) {
                 HorizontalDivider(modifier = Modifier.padding(top = 8.dp))
 
                 Row(
