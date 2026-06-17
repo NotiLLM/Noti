@@ -271,7 +271,7 @@ fun NotiCard(
             shadowElevation = 0.dp,
             color = backgroundColor,
         ) {
-            Box(modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp)) {
+            Box(modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp)) {
                 Column(Modifier.fillMaxWidth()
                     .then(if (isSortingMode) Modifier else swipeModifier)) {
 

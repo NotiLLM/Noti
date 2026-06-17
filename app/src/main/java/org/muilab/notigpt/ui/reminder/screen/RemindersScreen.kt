@@ -93,6 +93,7 @@ import org.muilab.notigpt.model.features.SavedSubItem
 import org.muilab.notigpt.data.export.asExportable
 import org.muilab.notigpt.ui.preference.component.PreferenceLearningBottomSheet
 import org.muilab.notigpt.ui.common.component.DueChip
+import org.muilab.notigpt.ui.theme.NotiTheme
 import org.muilab.notigpt.ui.notification.component.RelatedNotificationPreview
 import org.muilab.notigpt.ui.reminder.component.SavedSubItemRow
 import org.muilab.notigpt.ui.reminder.component.SavedSubItemListInCard
@@ -158,6 +159,23 @@ fun RemindersScreen(
 
     val reminders by vm.reminders.collectAsState()
     val filter by vm.filter.collectAsState()
+
+    // Section identity color for the active tab (Tasks=amber, Keep=teal). Drives card accents + FAB.
+    val tabAccent: Color? = when (listMode) {
+        ReminderViewModel.ListMode.Tasks -> NotiTheme.semantic.taskAccent
+        ReminderViewModel.ListMode.Keep -> NotiTheme.semantic.keepAccent
+        else -> null
+    }
+    val fabContainer = when (listMode) {
+        ReminderViewModel.ListMode.Tasks -> NotiTheme.semantic.taskContainer
+        ReminderViewModel.ListMode.Keep -> NotiTheme.semantic.keepContainer
+        else -> MaterialTheme.colorScheme.primaryContainer
+    }
+    val fabContent = when (listMode) {
+        ReminderViewModel.ListMode.Tasks -> NotiTheme.semantic.onTaskContainer
+        ReminderViewModel.ListMode.Keep -> NotiTheme.semantic.onKeepContainer
+        else -> MaterialTheme.colorScheme.onPrimaryContainer
+    }
 
     var editing by remember { mutableStateOf<SavedItem?>(null) }
     var editingId by remember { mutableStateOf<String?>(null) }
@@ -318,6 +336,7 @@ fun RemindersScreen(
                         onCreateReminder = { reminderDialogSavedItem = reminder },
                         // Task/Keep pages: no inline delete (delete lives in the detail editor).
                         showDeleteButton = false,
+                        sectionAccent = tabAccent,
                         onArchive = { vm.archiveKeep(reminder.savedItemId) },
                         // Export is available on both task and keep cards (users may push kept info to Tasks/Calendar).
                         onQuickExportTasks = { openExportDialog(reminder, ExportType.GOOGLE_TASKS) },
@@ -371,6 +390,8 @@ fun RemindersScreen(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(16.dp),
+            containerColor = fabContainer,
+            contentColor = fabContent,
             onClick = {
                 val empty = SavedItem(
                     savedItemId = "manual_${java.util.UUID.randomUUID()}",

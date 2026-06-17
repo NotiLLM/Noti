@@ -170,6 +170,7 @@ fun NewScreen(
                 NewSavedItemSectionHeader(
                     title = "New Tasks",
                     accent = NotiTheme.semantic.taskAccent,
+                    iconRes = R.drawable.task,
                     count = newTasks.size,
                     items = newTasks,
                     showBulkActions = normalizedQuery.isBlank(),
@@ -222,6 +223,7 @@ fun NewScreen(
                 NewSavedItemSectionHeader(
                     title = "New Keep",
                     accent = NotiTheme.semantic.keepAccent,
+                    iconRes = R.drawable.bookmark,
                     count = newKeep.size,
                     items = newKeep,
                     showBulkActions = normalizedQuery.isBlank(),
@@ -450,6 +452,7 @@ fun NewScreen(
 private fun NewSavedItemSectionHeader(
     title: String,
     count: Int,
+    iconRes: Int,
     items: List<SavedItem>,
     showBulkActions: Boolean,
     accent: Color,
@@ -457,20 +460,7 @@ private fun NewSavedItemSectionHeader(
     onDeleteAll: () -> Unit,
 ) {
     Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                Modifier
-                    .size(8.dp)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(accent)
-            )
-            Text(
-                "$title ($count)",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(start = 8.dp),
-            )
-        }
+        SectionHeaderRow(iconRes = iconRes, iconTint = accent, label = title, count = count)
         if (items.isNotEmpty() && showBulkActions) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = onSaveAll) { Text("Looks good, save all") }
@@ -493,11 +483,12 @@ private fun NewNotificationsSectionHeader(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            text = stringResource(R.string.ui_notifications_new, count),
+        SectionHeaderRow(
+            iconRes = R.drawable.notifications,
+            iconTint = MaterialTheme.colorScheme.onSurfaceVariant,
+            label = "New Notifications",
+            count = count,
             modifier = Modifier.weight(1f),
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
         )
         IconButton(
             enabled = clearableCount > 0,
@@ -508,6 +499,37 @@ private fun NewNotificationsSectionHeader(
                 contentDescription = stringResource(R.string.ui_action_clear_unpinned_notifications),
             )
         }
+    }
+}
+
+/** Shared section header: [icon] Label  count — with the count in a lighter style. */
+@Composable
+private fun SectionHeaderRow(
+    iconRes: Int,
+    iconTint: Color,
+    label: String,
+    count: Int,
+    modifier: Modifier = Modifier,
+) {
+    Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
+        Icon(
+            painter = painterResource(iconRes),
+            contentDescription = null,
+            tint = iconTint,
+            modifier = Modifier.size(20.dp),
+        )
+        Text(
+            label,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(start = 8.dp),
+        )
+        Text(
+            count.toString(),
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 6.dp),
+        )
     }
 }
 
