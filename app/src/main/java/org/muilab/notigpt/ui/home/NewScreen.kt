@@ -326,6 +326,7 @@ fun NewScreen(
             ReminderDetailScreen(
                 initial = current,
                 drawerViewModel = drawerViewModel,
+                onCreateReminder = scheduledReminderViewModel?.let { { reminderDialogSavedItem = current } },
                 onBack = { updatedOrNull ->
                     if (updatedOrNull != null) {
                         persistEditedItem(

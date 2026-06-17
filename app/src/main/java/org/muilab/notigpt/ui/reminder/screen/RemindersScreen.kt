@@ -44,6 +44,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenu
@@ -57,6 +58,9 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -447,6 +451,7 @@ fun RemindersScreen(
                 ReminderDetailScreen(
                     initial = current,
                     drawerViewModel = drawerViewModel,
+                    onCreateReminder = { reminderDialogSavedItem = current },
                     onBack = { updatedOrNull: SavedItem? ->
                         val base = editingInitialSnapshot
                         val isNew = base != null && base.title.isBlank() && base.content.isBlank() && base.userEdited
@@ -1128,6 +1133,7 @@ fun ReminderDetailScreen(
     isGoogleTasksExporting: Boolean = false,
     onOpenExportDialog: (SavedItem, ExportType) -> Unit = { _, _ -> },
     onRegenerate: () -> Unit = {},
+    onCreateReminder: (() -> Unit)? = null,
     relatedNotificationsState: ReminderViewModel.RelatedNotificationsState = ReminderViewModel.RelatedNotificationsState(),
     onLoadRelatedNotifications: (SavedItem) -> Unit = {},
     // Sub-task parameters
@@ -1151,6 +1157,11 @@ fun ReminderDetailScreen(
     var deadlineAtMs by remember(initial.savedItemId) { mutableStateOf(initial.deadlineAtMs) }
     var ectMinutes by remember(initial.savedItemId) { mutableStateOf(initial.estimatedCompletionTime) }
 
+    // Per-type accent: indigo for Task, green for Keep.
+    val accent = if (isTask) NotiTheme.semantic.taskAccent else NotiTheme.semantic.keepAccent
+    val accentContainer = if (isTask) NotiTheme.semantic.taskContainer else NotiTheme.semantic.keepContainer
+    val onAccentContainer = if (isTask) NotiTheme.semantic.onTaskContainer else NotiTheme.semantic.onKeepContainer
+
     fun buildUpdated(): SavedItem {
         return initial.copy(
             title = title,
@@ -1169,6 +1180,7 @@ fun ReminderDetailScreen(
 
     var showDatePicker by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
+    var headerMenuOpen by remember { mutableStateOf(false) }
 
     Column(Modifier.fillMaxSize()) {
         Surface(color = MaterialTheme.colorScheme.surface) {
@@ -1199,14 +1211,22 @@ fun ReminderDetailScreen(
                         innerTextField()
                     }
                 )
-                IconButton(onClick = onRegenerate) {
-                    Icon(painter = painterResource(R.drawable.refresh), contentDescription = stringResource(R.string.a11y_regenerate), modifier = Modifier.size(20.dp))
-                }
-                IconButton(onClick = { onDelete(initial.savedItemId) }) {
-                    Icon(painterResource(R.drawable.delete), contentDescription = stringResource(R.string.a11y_delete))
-                }
-                TextButton(onClick = { onSave(buildUpdated()) }) {
-                    Icon(painter = painterResource(R.drawable.save), contentDescription = stringResource(R.string.ui_action_save))
+                Box {
+                    IconButton(onClick = { headerMenuOpen = true }) {
+                        Icon(painterResource(R.drawable.more_vert), contentDescription = stringResource(R.string.a11y_subtask_more))
+                    }
+                    DropdownMenu(expanded = headerMenuOpen, onDismissRequest = { headerMenuOpen = false }) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.a11y_regenerate)) },
+                            leadingIcon = { Icon(painterResource(R.drawable.refresh), contentDescription = null, modifier = Modifier.size(20.dp)) },
+                            onClick = { headerMenuOpen = false; onRegenerate() },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.a11y_delete), color = MaterialTheme.colorScheme.error) },
+                            leadingIcon = { Icon(painterResource(R.drawable.delete), contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(20.dp)) },
+                            onClick = { headerMenuOpen = false; onDelete(initial.savedItemId) },
+                        )
+                    }
                 }
             }
         }
@@ -1220,15 +1240,45 @@ fun ReminderDetailScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Task toggle row
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                Text(stringResource(R.string.ui_reminders_editor_task_label), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                Switch(checked = isTask, onCheckedChange = { isTask = it })
+            // Type selector: Task (indigo) | Keep (green)
+            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                SegmentedButton(
+                    selected = isTask,
+                    onClick = { isTask = true },
+                    shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+                    colors = SegmentedButtonDefaults.colors(
+                        activeContainerColor = NotiTheme.semantic.taskContainer,
+                        activeContentColor = NotiTheme.semantic.onTaskContainer,
+                    ),
+                    icon = {},
+                ) {
+                    Icon(painterResource(R.drawable.check_box_checked), contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(stringResource(R.string.tab_tasks))
+                }
+                SegmentedButton(
+                    selected = !isTask,
+                    onClick = { isTask = false },
+                    shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+                    colors = SegmentedButtonDefaults.colors(
+                        activeContainerColor = NotiTheme.semantic.keepContainer,
+                        activeContentColor = NotiTheme.semantic.onKeepContainer,
+                    ),
+                    icon = {},
+                ) {
+                    Icon(painterResource(R.drawable.bookmark), contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(stringResource(R.string.tab_keep))
+                }
             }
 
             if (isTask) {
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                    Checkbox(checked = isCompleted, onCheckedChange = { isCompleted = it })
+                    Checkbox(
+                        checked = isCompleted,
+                        onCheckedChange = { isCompleted = it },
+                        colors = CheckboxDefaults.colors(checkedColor = accent),
+                    )
                     Spacer(Modifier.width(8.dp))
                     Text(stringResource(R.string.ui_reminders_editor_completed), style = MaterialTheme.typography.bodyMedium)
                 }
@@ -1247,14 +1297,24 @@ fun ReminderDetailScreen(
                 } else stringResource(R.string.reminder_no_time)
 
                 val deadlineColor = if (deadlineAtMs > 0L && deadlineAtMs < System.currentTimeMillis())
-                    MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                    MaterialTheme.colorScheme.error else accent
 
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(onClick = { showDatePicker = true }) {
-                        Text(text = "${stringResource(R.string.reminder_pick_date)}: $deadlineDateStr", color = deadlineColor)
-                    }
-                    TextButton(onClick = { showTimePicker = true }) {
-                        Text(text = "${stringResource(R.string.reminder_pick_time)}: $deadlineTimeStr", color = deadlineColor)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (deadlineAtMs > 0L) {
+                        // Urgency chip; tap to change the date.
+                        Box(modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { showDatePicker = true }) {
+                            DueChip(deadlineAtMs = deadlineAtMs)
+                        }
+                        TextButton(onClick = { showTimePicker = true }) {
+                            Text(text = deadlineTimeStr, color = deadlineColor)
+                        }
+                    } else {
+                        TextButton(onClick = { showDatePicker = true }) {
+                            Text(text = "${stringResource(R.string.reminder_pick_date)}: $deadlineDateStr", color = deadlineColor)
+                        }
+                        TextButton(onClick = { showTimePicker = true }) {
+                            Text(text = "${stringResource(R.string.reminder_pick_time)}: $deadlineTimeStr", color = deadlineColor)
+                        }
                     }
                 }
             }
@@ -1321,12 +1381,22 @@ fun ReminderDetailScreen(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
+                // Remind me (schedule a push reminder) — same flow as the outer cards.
+                if (onCreateReminder != null) {
+                    AssistChip(
+                        onClick = onCreateReminder,
+                        label = { Text(stringResource(R.string.ui_reminders_create_button), style = MaterialTheme.typography.labelSmall) },
+                        leadingIcon = {
+                            Icon(painter = painterResource(R.drawable.notifications), contentDescription = null, tint = accent, modifier = Modifier.size(16.dp))
+                        },
+                    )
+                }
                 // Google Tasks chip
                 AssistChip(
                     onClick = { onOpenExportDialog(buildUpdated(), ExportType.GOOGLE_TASKS) },
                     label = { Text(stringResource(R.string.google_tasks_export), style = MaterialTheme.typography.labelSmall) },
                     leadingIcon = {
-                        Icon(painter = painterResource(R.drawable.task_add), contentDescription = stringResource(R.string.a11y_export_google_tasks), modifier = Modifier.size(16.dp))
+                        Icon(painter = painterResource(R.drawable.task_add), contentDescription = stringResource(R.string.a11y_export_google_tasks), tint = accent, modifier = Modifier.size(16.dp))
                     },
                 )
                 // Google Calendar chip
@@ -1334,7 +1404,7 @@ fun ReminderDetailScreen(
                     onClick = { onOpenExportDialog(buildUpdated(), ExportType.GOOGLE_CALENDAR) },
                     label = { Text(stringResource(R.string.google_calendar_export), style = MaterialTheme.typography.labelSmall) },
                     leadingIcon = {
-                        Icon(painter = painterResource(R.drawable.calendar_add), contentDescription = stringResource(R.string.a11y_export_google_calendar), modifier = Modifier.size(16.dp))
+                        Icon(painter = painterResource(R.drawable.calendar_add), contentDescription = stringResource(R.string.a11y_export_google_calendar), tint = accent, modifier = Modifier.size(16.dp))
                     },
                 )
                 // Share chip
@@ -1349,7 +1419,7 @@ fun ReminderDetailScreen(
                     },
                     label = { Text(stringResource(R.string.reminder_share), style = MaterialTheme.typography.labelSmall) },
                     leadingIcon = {
-                        Icon(painter = painterResource(R.drawable.share), contentDescription = stringResource(R.string.a11y_share_reminder), modifier = Modifier.size(16.dp))
+                        Icon(painter = painterResource(R.drawable.share), contentDescription = stringResource(R.string.a11y_share_reminder), tint = accent, modifier = Modifier.size(16.dp))
                     },
                 )
             }
