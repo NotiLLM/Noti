@@ -7,6 +7,8 @@ import android.provider.CalendarContract
 import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.foundation.background
@@ -77,10 +79,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import org.json.JSONArray
@@ -142,10 +146,10 @@ fun RemindersScreen(
     LaunchedEffect(listMode) {
         vm.setListMode(listMode)
         vm.setFilter(
-            if (listMode == ReminderViewModel.ListMode.Tasks) {
-                ReminderViewModel.FilterTab.Pending
-            } else {
-                ReminderViewModel.FilterTab.All
+            when (listMode) {
+                ReminderViewModel.ListMode.Tasks -> ReminderViewModel.FilterTab.Pending
+                ReminderViewModel.ListMode.Keep -> ReminderViewModel.FilterTab.Keep
+                else -> ReminderViewModel.FilterTab.All
             }
         )
     }
@@ -159,6 +163,11 @@ fun RemindersScreen(
 
     val reminders by vm.reminders.collectAsState()
     val filter by vm.filter.collectAsState()
+
+    // Flash the destination filter chip when a card changes status (e.g. completed -> Completed chip).
+    var flashTarget by remember { mutableStateOf<ReminderViewModel.FilterTab?>(null) }
+    var flashTick by remember { mutableIntStateOf(0) }
+    val flashChip: (ReminderViewModel.FilterTab) -> Unit = { tab -> flashTarget = tab; flashTick++ }
 
     // Section identity color for the active tab (Tasks=amber, Keep=teal). Drives card accents + FAB.
     val tabAccent: Color? = when (listMode) {
@@ -286,13 +295,13 @@ fun RemindersScreen(
                         ReminderFilterChip(stringResource(R.string.ui_reminders_filter_completed), filter == ReminderViewModel.FilterTab.Completed, { vm.setFilter(ReminderViewModel.FilterTab.Completed) })
                     }
                     ReminderViewModel.ListMode.Tasks -> {
-                        ReminderFilterChip(stringResource(R.string.ui_reminders_filter_pending), filter == ReminderViewModel.FilterTab.Pending, { vm.setFilter(ReminderViewModel.FilterTab.Pending) }, leadingIconRes = R.drawable.check_box_unchecked, iconTint = NotiTheme.semantic.taskAccent)
-                        ReminderFilterChip(stringResource(R.string.ui_reminders_filter_completed), filter == ReminderViewModel.FilterTab.Completed, { vm.setFilter(ReminderViewModel.FilterTab.Completed) }, leadingIconRes = R.drawable.check_box_checked, iconTint = NotiTheme.semantic.taskAccent)
+                        ReminderFilterChip(stringResource(R.string.ui_reminders_filter_pending), filter == ReminderViewModel.FilterTab.Pending, { vm.setFilter(ReminderViewModel.FilterTab.Pending) }, leadingIconRes = R.drawable.check_box_unchecked, iconTint = NotiTheme.semantic.taskAccent, flashTick = if (flashTarget == ReminderViewModel.FilterTab.Pending) flashTick else 0)
+                        ReminderFilterChip(stringResource(R.string.ui_reminders_filter_completed), filter == ReminderViewModel.FilterTab.Completed, { vm.setFilter(ReminderViewModel.FilterTab.Completed) }, leadingIconRes = R.drawable.check_box_checked, iconTint = NotiTheme.semantic.taskAccent, flashTick = if (flashTarget == ReminderViewModel.FilterTab.Completed) flashTick else 0)
                         ReminderFilterChip(stringResource(R.string.ui_reminders_filter_all), filter == ReminderViewModel.FilterTab.All, { vm.setFilter(ReminderViewModel.FilterTab.All) })
                     }
                     ReminderViewModel.ListMode.Keep -> {
-                        ReminderFilterChip(stringResource(R.string.ui_reminders_filter_keep), filter == ReminderViewModel.FilterTab.Keep, { vm.setFilter(ReminderViewModel.FilterTab.Keep) }, leadingIconRes = R.drawable.bookmark, iconTint = NotiTheme.semantic.keepAccent)
-                        ReminderFilterChip(stringResource(R.string.ui_reminders_filter_archived), filter == ReminderViewModel.FilterTab.Archived, { vm.setFilter(ReminderViewModel.FilterTab.Archived) }, leadingIconRes = R.drawable.archive_yes, iconTint = NotiTheme.semantic.keepAccent)
+                        ReminderFilterChip(stringResource(R.string.ui_reminders_filter_keep), filter == ReminderViewModel.FilterTab.Keep, { vm.setFilter(ReminderViewModel.FilterTab.Keep) }, leadingIconRes = R.drawable.bookmark, iconTint = NotiTheme.semantic.keepAccent, flashTick = if (flashTarget == ReminderViewModel.FilterTab.Keep) flashTick else 0)
+                        ReminderFilterChip(stringResource(R.string.ui_reminders_filter_archived), filter == ReminderViewModel.FilterTab.Archived, { vm.setFilter(ReminderViewModel.FilterTab.Archived) }, leadingIconRes = R.drawable.archive_yes, iconTint = NotiTheme.semantic.keepAccent, flashTick = if (flashTarget == ReminderViewModel.FilterTab.Archived) flashTick else 0)
                         ReminderFilterChip(stringResource(R.string.ui_reminders_filter_all), filter == ReminderViewModel.FilterTab.All, { vm.setFilter(ReminderViewModel.FilterTab.All) })
                     }
                 }
@@ -326,7 +335,10 @@ fun RemindersScreen(
                                 )
                             }
                         },
-                        onToggleCompleted = { completed: Boolean -> vm.toggleCompleted(reminder, completed) },
+                        onToggleCompleted = { completed: Boolean ->
+                            vm.toggleCompleted(reminder, completed)
+                            flashChip(if (completed) ReminderViewModel.FilterTab.Completed else ReminderViewModel.FilterTab.Pending)
+                        },
                         onEdit = {
                             editing = reminder
                             editingId = reminder.savedItemId
@@ -337,7 +349,10 @@ fun RemindersScreen(
                         // Task/Keep pages: no inline delete (delete lives in the detail editor).
                         showDeleteButton = false,
                         sectionAccent = tabAccent,
-                        onArchive = { vm.archiveKeep(reminder.savedItemId) },
+                        onArchive = {
+                            flashChip(if (reminder.isArchived) ReminderViewModel.FilterTab.Keep else ReminderViewModel.FilterTab.Archived)
+                            vm.archiveKeep(reminder.savedItemId)
+                        },
                         // Export is available on both task and keep cards (users may push kept info to Tasks/Calendar).
                         onQuickExportTasks = { openExportDialog(reminder, ExportType.GOOGLE_TASKS) },
                         onQuickExportCalendar = { openExportDialog(reminder, ExportType.GOOGLE_CALENDAR) },
@@ -780,8 +795,19 @@ private fun ReminderFilterChip(
     onClick: () -> Unit,
     leadingIconRes: Int? = null,
     iconTint: Color? = null,
+    flashTick: Int = 0,
 ) {
+    // A quick scale "pop" when flashTick increments — signals an item just landed in this filter.
+    val scale = remember { Animatable(1f) }
+    LaunchedEffect(flashTick) {
+        if (flashTick > 0) {
+            scale.snapTo(1f)
+            scale.animateTo(1.18f, tween(110))
+            scale.animateTo(1f, tween(260))
+        }
+    }
     FilterChip(
+        modifier = Modifier.graphicsLayer { scaleX = scale.value; scaleY = scale.value },
         selected = selected,
         onClick = onClick,
         label = { Text(text) },
@@ -972,6 +998,8 @@ fun ReminderCard(
                             if (reminder.isTask) stringResource(R.string.ui_reminders_untitled_task) else stringResource(R.string.ui_reminders_untitled_memo)
                         },
                         style = titleStyle,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f)
                     )
 
@@ -1005,10 +1033,16 @@ fun ReminderCard(
                     }
                 }
 
-                // Content preview
-                val contentPreview = reminder.content.lineSequence().take(2).joinToString("\n")
+                // Content preview — capped at 2 visual lines.
+                val contentPreview = reminder.content.trim()
                 if (contentPreview.isNotBlank()) {
-                    Text(text = contentPreview, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 6.dp))
+                    Text(
+                        text = contentPreview,
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(top = 6.dp),
+                    )
                 }
 
                 // Action buttons
