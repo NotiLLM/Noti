@@ -88,10 +88,10 @@ val DarkScrim = Color(0xFF000000)
 // Sourced from the shared Amber / Teal / Red ramps. Section identity (Tasks=amber, Keep=teal,
 // Notifications=neutral) and deadline urgency (overdue=red, soon=amber) read consistently in both modes.
 
-// Light
-val LightTaskAccent = Color(0xFFB26A00)
-val LightTaskContainer = Color(0xFFFFDEA8)
-val LightOnTaskContainer = Color(0xFF5B3A00)
+// Light — Tasks use the indigo/blue family (distinct from amber urgency); Keep uses teal/green.
+val LightTaskAccent = Color(0xFF3F5C9A)
+val LightTaskContainer = Color(0xFFD8E2FF)
+val LightOnTaskContainer = Color(0xFF001A41)
 val LightKeepAccent = Color(0xFF0F6E56)
 val LightKeepContainer = Color(0xFF9FE1CB)
 val LightOnKeepContainer = Color(0xFF04342C)
@@ -102,10 +102,10 @@ val LightDueSoon = Color(0xFF854F0B)
 val LightDueSoonContainer = Color(0xFFFAC775)
 val LightOnDueSoonContainer = Color(0xFF412402)
 
-// Dark
-val DarkTaskAccent = Color(0xFFFFC36B)
-val DarkTaskContainer = Color(0xFF5B3A00)
-val DarkOnTaskContainer = Color(0xFFFFDEA8)
+// Dark — Tasks use the indigo/blue family; Keep uses teal/green.
+val DarkTaskAccent = Color(0xFFAEC6FF)
+val DarkTaskContainer = Color(0xFF234381)
+val DarkOnTaskContainer = Color(0xFFD8E2FF)
 val DarkKeepAccent = Color(0xFF5DCAA5)
 val DarkKeepContainer = Color(0xFF085041)
 val DarkOnKeepContainer = Color(0xFF9FE1CB)
