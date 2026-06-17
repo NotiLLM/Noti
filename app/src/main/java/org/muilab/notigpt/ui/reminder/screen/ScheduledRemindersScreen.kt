@@ -1,6 +1,7 @@
 package org.muilab.notigpt.ui.reminder.screen
 
 import android.app.TimePickerDialog
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -8,15 +9,14 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -33,11 +33,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import org.muilab.notigpt.R
 import org.muilab.notigpt.model.features.Reminder
 import org.muilab.notigpt.model.features.ReminderStatus
 import org.muilab.notigpt.ui.reminder.viewmodel.ScheduledReminderViewModel
+import org.muilab.notigpt.ui.theme.NotiTheme
 import org.muilab.notigpt.util.time.getAbsoluteTimeStr
 import java.util.Calendar
 
@@ -60,7 +63,7 @@ fun ScheduledRemindersScreen(
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Text("Scheduled reminders", style = MaterialTheme.typography.headlineSmall)
         Text(
-            "Due reminders stay here until you check them off. Seen and cancelled reminders are hidden.",
+            "Upcoming reminders and any that are due appear here. Checked-off and cancelled reminders are hidden.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 4.dp, bottom = 12.dp),
@@ -103,10 +106,14 @@ private fun ScheduledReminderCard(
     onReschedule: () -> Unit,
 ) {
     val isDue = reminder.status == ReminderStatus.DueUnseen
+    val accent = if (isDue) NotiTheme.semantic.overdue else MaterialTheme.colorScheme.onSurfaceVariant
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(enabled = isDue) { onSeen() },
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
         Row(
             modifier = Modifier.padding(12.dp),
@@ -114,9 +121,16 @@ private fun ScheduledReminderCard(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             if (isDue) {
-                IconButton(onClick = onSeen) { Icon(Icons.Default.Check, contentDescription = "Mark seen") }
+                IconButton(onClick = onSeen) {
+                    Icon(painterResource(R.drawable.check), contentDescription = "Mark seen", tint = accent, modifier = Modifier.size(22.dp))
+                }
             } else {
-                Icon(Icons.Default.Notifications, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Icon(
+                    painterResource(R.drawable.notifications),
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(22.dp),
+                )
             }
             Column(Modifier.weight(1f)) {
                 Text(reminder.title.ifBlank { "Reminder" }, style = MaterialTheme.typography.titleMedium)
@@ -125,12 +139,16 @@ private fun ScheduledReminderCard(
                 }
                 Text(
                     getAbsoluteTimeStr(reminder.remindAtMs),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (isDue) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = accent,
                 )
             }
-            IconButton(onClick = onReschedule) { Icon(Icons.Default.Notifications, contentDescription = "Reschedule") }
-            IconButton(onClick = onCancel) { Icon(Icons.Default.Close, contentDescription = "Cancel") }
+            IconButton(onClick = onReschedule) {
+                Icon(painterResource(R.drawable.schedule), contentDescription = "Reschedule", modifier = Modifier.size(20.dp))
+            }
+            IconButton(onClick = onCancel) {
+                Icon(painterResource(R.drawable.close), contentDescription = "Cancel", modifier = Modifier.size(20.dp))
+            }
         }
     }
 }
