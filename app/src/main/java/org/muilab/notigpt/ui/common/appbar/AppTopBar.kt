@@ -102,7 +102,7 @@ fun AppTopBar(
                     modifier = Modifier.minimumInteractiveComponentSize(),
                     onClick = { onSearchToggled(true) }
                 ) {
-                    Icon(Icons.Default.Search, contentDescription = "Search")
+                    Icon(painterResource(id = R.drawable.search), contentDescription = "Search")
                 }
                 if (showNotificationActions) {
                     IconButton(

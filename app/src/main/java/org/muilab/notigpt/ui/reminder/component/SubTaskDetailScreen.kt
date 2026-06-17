@@ -117,7 +117,7 @@ fun SavedSubItemDetailScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 IconButton(onClick = { onBack(buildUpdated()) }) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.a11y_back))
+                    Icon(painterResource(R.drawable.arrow_back), contentDescription = stringResource(R.string.a11y_back))
                 }
                 BasicTextField(
                     value = title,
@@ -138,7 +138,7 @@ fun SavedSubItemDetailScreen(
                     },
                 )
                 IconButton(onClick = { onDelete(initial.savedSubItemId) }) {
-                    Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.a11y_delete))
+                    Icon(painterResource(R.drawable.delete), contentDescription = stringResource(R.string.a11y_delete))
                 }
                 TextButton(onClick = { onSave(buildUpdated()) }) {
                     Icon(painter = painterResource(R.drawable.save), contentDescription = stringResource(R.string.ui_action_save))

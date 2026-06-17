@@ -91,7 +91,7 @@ fun SavedSubItemRow(
             modifier = Modifier.size(28.dp),
         ) {
             Icon(
-                Icons.Default.MoreVert,
+                painterResource(R.drawable.more_vert),
                 contentDescription = stringResource(R.string.a11y_subtask_more),
                 modifier = Modifier.size(18.dp),
             )

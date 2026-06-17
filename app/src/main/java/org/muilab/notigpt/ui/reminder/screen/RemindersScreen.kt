@@ -392,7 +392,7 @@ fun RemindersScreen(
                 editingInitialSnapshot = empty
             }
         ) {
-            Icon(Icons.Default.Add, contentDescription = stringResource(R.string.a11y_add))
+            Icon(painterResource(R.drawable.add), contentDescription = stringResource(R.string.a11y_add))
         }
 
         // EDITOR OVERLAY
@@ -814,7 +814,7 @@ private fun ReminderCardSplitActions(
         SplitButtonLayout(
             leadingButton = {
                 SplitButtonDefaults.OutlinedLeadingButton(onClick = onCreateReminder) {
-                    Icon(Icons.Default.Notifications, contentDescription = stringResource(R.string.ui_reminders_create_button), modifier = Modifier.size(SplitButtonDefaults.LeadingIconSize))
+                    Icon(painterResource(R.drawable.notifications), contentDescription = stringResource(R.string.ui_reminders_create_button), modifier = Modifier.size(SplitButtonDefaults.LeadingIconSize))
                 }
             },
             trailingButton = {
@@ -823,7 +823,7 @@ private fun ReminderCardSplitActions(
                         checked = expanded,
                         onCheckedChange = { expanded = it },
                     ) {
-                        Icon(Icons.Default.KeyboardArrowDown, contentDescription = "More reminder actions", modifier = Modifier.size(SplitButtonDefaults.TrailingIconSize))
+                        Icon(painterResource(R.drawable.keyboard_arrow_down), contentDescription = "More reminder actions", modifier = Modifier.size(SplitButtonDefaults.TrailingIconSize))
                     }
                     menuContent()
                 }
@@ -831,7 +831,7 @@ private fun ReminderCardSplitActions(
         )
     } else if (onCreateReminder != null) {
         SplitButtonDefaults.OutlinedLeadingButton(onClick = onCreateReminder) {
-            Icon(Icons.Default.Notifications, contentDescription = stringResource(R.string.ui_reminders_create_button), modifier = Modifier.size(SplitButtonDefaults.LeadingIconSize))
+            Icon(painterResource(R.drawable.notifications), contentDescription = stringResource(R.string.ui_reminders_create_button), modifier = Modifier.size(SplitButtonDefaults.LeadingIconSize))
         }
     } else if (hasOverflow) {
         Box {
@@ -839,7 +839,7 @@ private fun ReminderCardSplitActions(
                 checked = expanded,
                 onCheckedChange = { expanded = it },
             ) {
-                Icon(Icons.Default.KeyboardArrowDown, contentDescription = "More reminder actions", modifier = Modifier.size(SplitButtonDefaults.TrailingIconSize))
+                Icon(painterResource(R.drawable.keyboard_arrow_down), contentDescription = "More reminder actions", modifier = Modifier.size(SplitButtonDefaults.TrailingIconSize))
             }
             menuContent()
         }
@@ -962,7 +962,7 @@ fun ReminderCard(
 
                     if (showDeleteButton) {
                         IconButton(onClick = onDelete) {
-                            Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.a11y_delete))
+                            Icon(painterResource(R.drawable.delete), contentDescription = stringResource(R.string.a11y_delete))
                         }
                     }
                 }
@@ -1122,7 +1122,7 @@ fun ReminderDetailScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 IconButton(onClick = { onBack(buildUpdated()) }) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.a11y_back))
+                    Icon(painterResource(R.drawable.arrow_back), contentDescription = stringResource(R.string.a11y_back))
                 }
                 BasicTextField(
                     value = title,
@@ -1146,7 +1146,7 @@ fun ReminderDetailScreen(
                     Icon(painter = painterResource(R.drawable.refresh), contentDescription = stringResource(R.string.a11y_regenerate), modifier = Modifier.size(20.dp))
                 }
                 IconButton(onClick = { onDelete(initial.savedItemId) }) {
-                    Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.a11y_delete))
+                    Icon(painterResource(R.drawable.delete), contentDescription = stringResource(R.string.a11y_delete))
                 }
                 TextButton(onClick = { onSave(buildUpdated()) }) {
                     Icon(painter = painterResource(R.drawable.save), contentDescription = stringResource(R.string.ui_action_save))
@@ -1310,7 +1310,7 @@ fun ReminderDetailScreen(
                         style = MaterialTheme.typography.titleMedium,
                     )
                     TextButton(onClick = onAddSavedSubItem) {
-                        Icon(Icons.Default.Add, contentDescription = stringResource(R.string.a11y_add_subtask), modifier = Modifier.size(16.dp))
+                        Icon(painterResource(R.drawable.add), contentDescription = stringResource(R.string.a11y_add_subtask), modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(4.dp))
                         Text(stringResource(R.string.subtask_add), style = MaterialTheme.typography.labelMedium)
                     }
@@ -1360,7 +1360,7 @@ fun ReminderDetailScreen(
                         style = MaterialTheme.typography.titleSmall
                     )
                     Icon(
-                        imageVector = if (relatedExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                        painter = painterResource(if (relatedExpanded) R.drawable.keyboard_arrow_up else R.drawable.keyboard_arrow_down),
                         contentDescription = if (relatedExpanded) stringResource(R.string.a11y_collapse) else stringResource(R.string.a11y_expand),
                     )
                 }
