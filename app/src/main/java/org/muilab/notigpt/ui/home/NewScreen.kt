@@ -532,22 +532,28 @@ private fun NewSavedItemSectionHeader(
             }
         }
     } else {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            SectionHeaderRow(iconRes = iconRes, iconTint = accent, label = title, count = count, modifier = Modifier.weight(1f))
+        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+            SectionHeaderRow(iconRes = iconRes, iconTint = accent, label = title, count = count)
             if (showBulkActions) {
-                AssistChip(
-                    onClick = onSaveAll,
-                    label = { Text("Save all", style = MaterialTheme.typography.labelLarge) },
-                    leadingIcon = { Icon(painterResource(R.drawable.check), contentDescription = null, tint = accent, modifier = Modifier.size(18.dp)) },
-                )
-                IconButton(onClick = onEnterSelect) {
-                    Icon(painterResource(R.drawable.checklist), contentDescription = "Select", tint = accent, modifier = Modifier.size(22.dp))
-                }
-                IconButton(onClick = onDeleteAll) {
-                    Icon(painterResource(R.drawable.delete), contentDescription = "Delete all", tint = MaterialTheme.colorScheme.error)
+                Row(
+                    modifier = Modifier.padding(top = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    AssistChip(
+                        onClick = onSaveAll,
+                        label = { Text("Save all", style = MaterialTheme.typography.labelLarge) },
+                        leadingIcon = { Icon(painterResource(R.drawable.done_all), contentDescription = null, tint = accent, modifier = Modifier.size(18.dp)) },
+                    )
+                    AssistChip(
+                        onClick = onEnterSelect,
+                        label = { Text("Select", style = MaterialTheme.typography.labelLarge) },
+                        leadingIcon = { Icon(painterResource(R.drawable.checklist), contentDescription = null, tint = accent, modifier = Modifier.size(18.dp)) },
+                    )
+                    AssistChip(
+                        onClick = onDeleteAll,
+                        label = { Text("Delete all", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.error) },
+                        leadingIcon = { Icon(painterResource(R.drawable.delete), contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp)) },
+                    )
                 }
             }
         }

@@ -1035,7 +1035,7 @@ fun ReminderCard(
 
                     if (showDeleteButton) {
                         IconButton(onClick = onDelete) {
-                            Icon(painterResource(R.drawable.delete), contentDescription = stringResource(R.string.a11y_delete))
+                            Icon(painterResource(R.drawable.delete), contentDescription = stringResource(R.string.a11y_delete), tint = MaterialTheme.colorScheme.error)
                         }
                     }
                 }
@@ -1267,10 +1267,8 @@ fun ReminderDetailScreen(
                         activeContainerColor = NotiTheme.semantic.taskContainer,
                         activeContentColor = NotiTheme.semantic.onTaskContainer,
                     ),
-                    icon = {},
+                    icon = { Icon(painterResource(R.drawable.check_box_checked), contentDescription = null, modifier = Modifier.size(18.dp)) },
                 ) {
-                    Icon(painterResource(R.drawable.check_box_checked), contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp))
                     Text(stringResource(R.string.tab_tasks))
                 }
                 SegmentedButton(
@@ -1281,10 +1279,8 @@ fun ReminderDetailScreen(
                         activeContainerColor = NotiTheme.semantic.keepContainer,
                         activeContentColor = NotiTheme.semantic.onKeepContainer,
                     ),
-                    icon = {},
+                    icon = { Icon(painterResource(R.drawable.bookmark), contentDescription = null, modifier = Modifier.size(18.dp)) },
                 ) {
-                    Icon(painterResource(R.drawable.bookmark), contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp))
                     Text(stringResource(R.string.tab_keep))
                 }
             }

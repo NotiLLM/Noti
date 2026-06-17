@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.sp
 import org.muilab.notigpt.R
 import org.muilab.notigpt.model.notifications.NotiDisplayUnit
 import org.muilab.notigpt.ui.notification.component.info.ExpandedNotiRecord
+import org.muilab.notigpt.util.unescapeUserText
 
 /**
  * Reminder-facing preview of notification records associated with a reminder.
@@ -63,7 +64,7 @@ fun RelatedNotificationPreview(
     }
     val hasSecondTitle = notiSecondOverallTitle.isNotBlank() && notiSecondOverallTitle != notiOverallTitle
 
-    var expanded by remember(notiUnit.notiKey) { mutableStateOf(true) }
+    var expanded by remember(notiUnit.notiKey) { mutableStateOf(false) }
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -106,6 +107,19 @@ fun RelatedNotificationPreview(
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
+                    }
+                    // Collapsed: preview the latest record so the card isn't just a bare title.
+                    if (!expanded) {
+                        val latest = notiRecords.lastOrNull()?.content
+                        if (!latest.isNullOrBlank() && latest != "null") {
+                            Text(
+                                text = unescapeUserText(latest),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
                     }
                 }
 

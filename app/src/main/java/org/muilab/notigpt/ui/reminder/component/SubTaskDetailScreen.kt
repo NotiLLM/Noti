@@ -138,7 +138,7 @@ fun SavedSubItemDetailScreen(
                     },
                 )
                 IconButton(onClick = { onDelete(initial.savedSubItemId) }) {
-                    Icon(painterResource(R.drawable.delete), contentDescription = stringResource(R.string.a11y_delete))
+                    Icon(painterResource(R.drawable.delete), contentDescription = stringResource(R.string.a11y_delete), tint = MaterialTheme.colorScheme.error)
                 }
                 TextButton(onClick = { onSave(buildUpdated()) }) {
                     Icon(painter = painterResource(R.drawable.save), contentDescription = stringResource(R.string.ui_action_save))
