@@ -28,10 +28,8 @@ fun NotiInfoTime(notiTime: Long, modifier: Modifier = Modifier) {
             modifier = Modifier
                 .padding(end = 16.dp),
             text = getRelativeTimeStr(notiTime, context),
-            style = MaterialTheme.typography.bodySmall.copy(
-                fontSize = 12.sp,
-                fontStyle = FontStyle.Italic
-            )
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }

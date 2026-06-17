@@ -2,9 +2,11 @@ package org.muilab.notigpt.ui.notification.component.info
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 import androidx.constraintlayout.compose.ConstraintLayout
 import androidx.constraintlayout.compose.Dimension
 
@@ -21,7 +23,7 @@ fun ExpandedNotiRecord(
     notiContent: String,
     showTitle: Boolean
 ) {
-    Column(Modifier.fillMaxWidth()) {
+    Column(Modifier.fillMaxWidth().padding(bottom = 10.dp)) {
         ConstraintLayout (Modifier.fillMaxWidth()) {
             val (leftText, rightText) = createRefs()
             val leftTextModifier = Modifier
