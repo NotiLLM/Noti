@@ -88,6 +88,7 @@ import org.muilab.notigpt.model.features.SavedItemState
 import org.muilab.notigpt.model.features.SavedSubItem
 import org.muilab.notigpt.data.export.asExportable
 import org.muilab.notigpt.ui.preference.component.PreferenceLearningBottomSheet
+import org.muilab.notigpt.ui.common.component.DueChip
 import org.muilab.notigpt.ui.notification.component.RelatedNotificationPreview
 import org.muilab.notigpt.ui.reminder.component.SavedSubItemRow
 import org.muilab.notigpt.ui.reminder.component.SavedSubItemListInCard
@@ -946,18 +947,19 @@ fun ReminderCard(
                     }
                 }
 
-                // Deadline (no ECT)
+                // Deadline urgency chip (tasks only)
                 if (reminder.isTask) {
                     val deadline = reminder.deadlineAtMs
-                    val deadlineStr = if (deadline > 0L) {
-                        "${getAbsoluteTimeStr(deadline, context)} (${getRelativeTimeStr(deadline, context)})"
-                    } else stringResource(R.string.ui_reminders_no_deadline)
-                    Text(
-                        text = deadlineStr,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (deadline > 0L && deadline < System.currentTimeMillis()) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 4.dp),
-                    )
+                    if (deadline > 0L) {
+                        DueChip(deadlineAtMs = deadline, modifier = Modifier.padding(top = 4.dp))
+                    } else {
+                        Text(
+                            text = stringResource(R.string.ui_reminders_no_deadline),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 4.dp),
+                        )
+                    }
                 }
 
                 // Content preview
