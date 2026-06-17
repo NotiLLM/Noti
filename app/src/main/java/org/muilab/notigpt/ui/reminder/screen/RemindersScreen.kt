@@ -1452,6 +1452,7 @@ fun ReminderDetailScreen(
                         onDelete = { onSavedSubItemDelete(st) },
                         onExportGoogleTasks = { onSavedSubItemExportGoogleTasks(st) },
                         onExportGoogleCalendar = { onSavedSubItemExportGoogleCalendar(st) },
+                        showActionButtons = true,
                     )
                 }
             }
