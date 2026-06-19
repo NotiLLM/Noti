@@ -948,6 +948,7 @@ fun ReminderCard(
         } catch (_: Exception) { emptyList() }
     }
 
+    var expanded by remember(reminder.savedItemId) { mutableStateOf(false) }
     val selectedBorder = sectionAccent ?: MaterialTheme.colorScheme.primary
     Surface(
         modifier = Modifier
@@ -1020,7 +1021,7 @@ fun ReminderCard(
                             if (reminder.isTask) stringResource(R.string.ui_reminders_untitled_task) else stringResource(R.string.ui_reminders_untitled_memo)
                         },
                         style = titleStyle,
-                        maxLines = 2,
+                        maxLines = if (expanded) Int.MAX_VALUE else 2,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f)
                     )
@@ -1036,6 +1037,17 @@ fun ReminderCard(
                     if (showDeleteButton) {
                         IconButton(onClick = onDelete) {
                             Icon(painterResource(R.drawable.delete), contentDescription = stringResource(R.string.a11y_delete), tint = MaterialTheme.colorScheme.error)
+                        }
+                    }
+
+                    // Click-to-expand full title/content/subtasks (hidden during selection).
+                    if (!selectionMode) {
+                        IconButton(onClick = { expanded = !expanded }) {
+                            Icon(
+                                painter = painterResource(if (expanded) R.drawable.keyboard_arrow_up else R.drawable.keyboard_arrow_down),
+                                contentDescription = if (expanded) stringResource(R.string.a11y_collapse) else stringResource(R.string.a11y_expand),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                         }
                     }
                 }
@@ -1061,7 +1073,7 @@ fun ReminderCard(
                     Text(
                         text = contentPreview,
                         style = MaterialTheme.typography.bodyMedium,
-                        maxLines = 2,
+                        maxLines = if (expanded) Int.MAX_VALUE else 2,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.padding(top = 6.dp),
                     )
@@ -1087,6 +1099,7 @@ fun ReminderCard(
                         onSavedSubItemDelete = onSavedSubItemDelete,
                         onSavedSubItemExportGoogleTasks = onSavedSubItemExportGoogleTasks,
                         onSavedSubItemExportGoogleCalendar = onSavedSubItemExportGoogleCalendar,
+                        forceExpanded = expanded,
                     )
                 }
             }
