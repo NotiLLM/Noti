@@ -11,6 +11,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.muilab.notigpt.data.local.room.AppDatabase
+import org.muilab.notigpt.data.local.room.dao.NotiRecordDao
 import org.muilab.notigpt.model.notifications.NotiRecord
 
 @RunWith(AndroidJUnit4::class)

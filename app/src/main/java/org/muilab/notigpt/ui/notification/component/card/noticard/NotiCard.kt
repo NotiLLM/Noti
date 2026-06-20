@@ -153,7 +153,7 @@ fun NotiCard(
     val titleRecord by remember(anchored, firstRecord, lastRecord, collapseThreshold) {
         derivedStateOf {
             val offset = anchored.offset
-            if (!offset.isNaN() && offset > collapseThreshold) {
+            if (!offset.isNaN() && offset < collapseThreshold) {
                 lastRecord
             } else {
                 firstRecord
