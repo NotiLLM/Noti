@@ -5,6 +5,9 @@ import android.os.Build
 import android.provider.CalendarContract
 import android.widget.Toast
 import androidx.annotation.RequiresApi
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -27,6 +30,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -73,6 +77,7 @@ fun NewScreen(
     scheduledReminderViewModel: ScheduledReminderViewModel? = null,
     preferenceViewModel: PreferenceViewModel,
     searchQuery: String = "",
+    onDetailOpenChange: (Boolean) -> Unit = {},
 ) {
     val context = LocalContext.current
     val newItems by reminderViewModel.newSavedItems.collectAsState()
@@ -96,6 +101,7 @@ fun NewScreen(
     var notisCollapsed by remember { mutableStateOf(false) }
 
     var editing by remember { mutableStateOf<SavedItem?>(null) }
+    var lastEditing by remember { mutableStateOf<SavedItem?>(null) }
     var editingInitialSnapshot by remember { mutableStateOf<SavedItem?>(null) }
     var editingSavedSubItem by remember { mutableStateOf<SavedSubItem?>(null) }
     var editingSavedSubItemInitial by remember { mutableStateOf<SavedSubItem?>(null) }
@@ -379,7 +385,17 @@ fun NewScreen(
         )
     }
 
-    editing?.let { current ->
+    LaunchedEffect(editing) {
+        editing?.let { lastEditing = it }
+        onDetailOpenChange(editing != null)
+    }
+    AnimatedVisibility(
+        visible = editing != null,
+        enter = slideInHorizontally(initialOffsetX = { it }),
+        exit = slideOutHorizontally(targetOffsetX = { it }),
+    ) {
+      val current = editing ?: lastEditing
+      if (current != null) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -496,6 +512,7 @@ fun NewScreen(
                 }
             }
         }
+      }
     }
 
     val target = deleteTarget

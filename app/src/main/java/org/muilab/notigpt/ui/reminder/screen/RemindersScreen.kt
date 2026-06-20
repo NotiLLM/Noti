@@ -7,8 +7,11 @@ import android.provider.CalendarContract
 import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.foundation.background
@@ -142,6 +145,7 @@ fun RemindersScreen(
     scheduledReminderViewModel: ScheduledReminderViewModel? = null,
     preferenceViewModel: PreferenceViewModel? = null,
     listMode: ReminderViewModel.ListMode = ReminderViewModel.ListMode.All,
+    onDetailOpenChange: (Boolean) -> Unit = {},
 ) {
     val vm: ReminderViewModel = reminderViewModel ?: viewModel()
     val scheduledVm: ScheduledReminderViewModel = scheduledReminderViewModel ?: viewModel()
@@ -191,6 +195,7 @@ fun RemindersScreen(
     }
 
     var editing by remember { mutableStateOf<SavedItem?>(null) }
+    var lastEditing by remember { mutableStateOf<SavedItem?>(null) }
     var editingId by remember { mutableStateOf<String?>(null) }
     var editingInitialSnapshot by remember { mutableStateOf<SavedItem?>(null) }
 
@@ -435,8 +440,18 @@ fun RemindersScreen(
             Icon(painterResource(R.drawable.add), contentDescription = stringResource(R.string.a11y_add))
         }
 
-        // EDITOR OVERLAY
-        editing?.let { current ->
+        // EDITOR OVERLAY — drift in from the right, out to the right.
+        LaunchedEffect(editing) {
+            editing?.let { lastEditing = it }
+            onDetailOpenChange(editing != null)
+        }
+        AnimatedVisibility(
+            visible = editing != null,
+            enter = slideInHorizontally(initialOffsetX = { it }),
+            exit = slideOutHorizontally(targetOffsetX = { it }),
+        ) {
+          val current = editing ?: lastEditing
+          if (current != null) {
             // Full-screen overlay that blocks/consumes all clicks so nothing underneath is clickable.
             Box(
                 modifier = Modifier
@@ -670,6 +685,7 @@ fun RemindersScreen(
                     }
                 }
             }
+        }
         }
     }
 

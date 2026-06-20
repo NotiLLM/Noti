@@ -3,8 +3,15 @@ package org.muilab.notigpt.ui.common.component
 import android.os.Build
 import android.util.Log
 import androidx.annotation.RequiresApi
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Scaffold
@@ -68,6 +75,25 @@ fun AppScaffold(
     val context = LocalContext.current
 
     var selectedTab by remember { mutableStateOf(AppPrimaryTab.New) }
+
+    // A task/keep detail editor is open → hide the app bars (full-screen detail).
+    var detailOpen by remember { mutableStateOf(false) }
+    // Slide bars away on scroll-down, back on scroll-up — only on the list-style screens.
+    var barsVisible by remember { mutableStateOf(true) }
+    val barsScrollEnabled = menuScreen == null ||
+        menuScreen == AppMenuScreen.History ||
+        menuScreen == AppMenuScreen.Reminders
+    LaunchedEffect(selectedTab, menuScreen) { barsVisible = true }
+    val barHideConnection = remember {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                if (available.y < -2f) barsVisible = false
+                else if (available.y > 2f) barsVisible = true
+                return Offset.Zero
+            }
+        }
+    }
+    val barsShown = !detailOpen && (barsVisible || !barsScrollEnabled)
 
     val reminderViewModel: ReminderViewModel = viewModel()
     val scheduledReminderViewModel: ScheduledReminderViewModel = viewModel()
@@ -205,38 +231,54 @@ fun AppScaffold(
     ) {
         Scaffold(
             topBar = {
-                AppTopBar(
-                    drawerViewModel = drawerViewModel,
-                    isSearchExpanded = isSearchExpanded,
-                    onSearchToggled = { isSearchExpanded = it },
-                    showMenuButton = true,
-                    onMenuClicked = { scope.launch { drawerState.open() } },
-                    menuScreenTitle = null,
-                    onMenuScreenClosed = { menuScreen = null },
-                    // Search lives in this shared top bar for every screen.
-                    showNotificationActions = false,
-                    searchQuery = appSearchQuery,
-                    onSearchQueryChange = drawerViewModel::updateQueryString,
-                )
+                AnimatedVisibility(
+                    visible = barsShown,
+                    enter = slideInVertically { -it },
+                    exit = slideOutVertically { -it },
+                ) {
+                    AppTopBar(
+                        drawerViewModel = drawerViewModel,
+                        isSearchExpanded = isSearchExpanded,
+                        onSearchToggled = { isSearchExpanded = it },
+                        showMenuButton = true,
+                        onMenuClicked = { scope.launch { drawerState.open() } },
+                        menuScreenTitle = null,
+                        onMenuScreenClosed = { menuScreen = null },
+                        // Search lives in this shared top bar for every screen.
+                        showNotificationActions = false,
+                        searchQuery = appSearchQuery,
+                        onSearchQueryChange = drawerViewModel::updateQueryString,
+                    )
+                }
             },
             snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
             bottomBar = {
                 if (menuScreen == null) {
-                    org.muilab.notigpt.ui.common.appbar.AppBottomBar(
-                        selectedTab = selectedTab,
-                        unreadNotificationCount = unreadNotiCount,
-                        pendingTaskCount = pendingTaskCount,
-                        onTabSelected = { tab ->
-                            selectedTab = tab
-                            drawerViewModel.updateQueryString("")
-                            isSearchExpanded = false
-                        }
-                    )
+                    AnimatedVisibility(
+                        visible = barsShown,
+                        enter = slideInVertically { it },
+                        exit = slideOutVertically { it },
+                    ) {
+                        org.muilab.notigpt.ui.common.appbar.AppBottomBar(
+                            selectedTab = selectedTab,
+                            unreadNotificationCount = unreadNotiCount,
+                            pendingTaskCount = pendingTaskCount,
+                            onTabSelected = { tab ->
+                                selectedTab = tab
+                                drawerViewModel.updateQueryString("")
+                                isSearchExpanded = false
+                            }
+                        )
+                    }
                 }
             },
             containerColor = MaterialTheme.colorScheme.surfaceDim
         ) { paddingValues ->
-            Box(modifier = Modifier.padding(paddingValues)) {
+            Box(
+                modifier = Modifier
+                    .padding(paddingValues)
+                    .then(if (barsScrollEnabled) Modifier.nestedScroll(barHideConnection) else Modifier)
+            ) {
                 when (menuScreen) {
                     AppMenuScreen.Reminders -> ScheduledRemindersScreen(
                         viewModel = scheduledReminderViewModel,
@@ -257,6 +299,7 @@ fun AppScaffold(
                             scheduledReminderViewModel = scheduledReminderViewModel,
                             preferenceViewModel = preferenceViewModel,
                             searchQuery = appSearchQuery,
+                            onDetailOpenChange = { detailOpen = it },
                         )
                         AppPrimaryTab.Tasks -> RemindersScreen(
                             drawerViewModel = drawerViewModel,
@@ -264,6 +307,7 @@ fun AppScaffold(
                             scheduledReminderViewModel = scheduledReminderViewModel,
                             preferenceViewModel = preferenceViewModel,
                             listMode = ReminderViewModel.ListMode.Tasks,
+                            onDetailOpenChange = { detailOpen = it },
                         )
                         AppPrimaryTab.Keep -> RemindersScreen(
                             drawerViewModel = drawerViewModel,
@@ -271,6 +315,7 @@ fun AppScaffold(
                             scheduledReminderViewModel = scheduledReminderViewModel,
                             preferenceViewModel = preferenceViewModel,
                             listMode = ReminderViewModel.ListMode.Keep,
+                            onDetailOpenChange = { detailOpen = it },
                         )
                     }
                 }
