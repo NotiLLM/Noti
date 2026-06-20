@@ -90,6 +90,11 @@ fun NewScreen(
     fun exitSelection() { selectionSection = null; selectedIds.clear() }
     fun toggleSelected(id: String) { if (selectedIds.contains(id)) selectedIds.remove(id) else selectedIds.add(id) }
 
+    // Per-section collapse on the New screen.
+    var tasksCollapsed by remember { mutableStateOf(false) }
+    var keepCollapsed by remember { mutableStateOf(false) }
+    var notisCollapsed by remember { mutableStateOf(false) }
+
     var editing by remember { mutableStateOf<SavedItem?>(null) }
     var editingInitialSnapshot by remember { mutableStateOf<SavedItem?>(null) }
     var editingSavedSubItem by remember { mutableStateOf<SavedSubItem?>(null) }
@@ -201,9 +206,19 @@ fun NewScreen(
                         Toast.makeText(context, "Deleted", Toast.LENGTH_SHORT).show()
                         exitSelection()
                     },
+                    collapsed = tasksCollapsed,
+                    onToggleCollapse = { tasksCollapsed = !tasksCollapsed },
+                    showExportSelected = true,
+                    onExportSelected = {
+                        val sel = newTasks.filter { selectedIds.contains(it.savedItemId) }
+                        sel.forEach { reminderViewModel.exportToGoogleTasks(it) }
+                        Toast.makeText(context, "Exporting to Google Tasks…", Toast.LENGTH_SHORT).show()
+                        exitSelection()
+                    },
                 )
             }
         }
+        if (!tasksCollapsed) {
         items(newTasks, key = { it.savedItemId }) { item ->
             ReminderCard(
                 reminder = item,
@@ -243,6 +258,7 @@ fun NewScreen(
                 onSavedSubItemExportGoogleCalendar = { st -> exportSubItemToCalendar(st) },
             )
         }
+        }
         if (newKeep.isNotEmpty()) {
             item {
                 NewSavedItemSectionHeader(
@@ -270,9 +286,14 @@ fun NewScreen(
                         Toast.makeText(context, "Deleted", Toast.LENGTH_SHORT).show()
                         exitSelection()
                     },
+                    collapsed = keepCollapsed,
+                    onToggleCollapse = { keepCollapsed = !keepCollapsed },
+                    showExportSelected = false,
+                    onExportSelected = {},
                 )
             }
         }
+        if (!keepCollapsed) {
         items(newKeep, key = { it.savedItemId }) { item ->
             ReminderCard(
                 reminder = item,
@@ -311,22 +332,26 @@ fun NewScreen(
                 onSavedSubItemExportGoogleCalendar = { st -> exportSubItemToCalendar(st) },
             )
         }
+        }
         if (filteredUnits.isNotEmpty()) {
             item {
                 NewNotificationsSectionHeader(
                     count = filteredUnits.size,
                     clearableCount = countClearableActiveNotifications(filteredUnits),
+                    collapsed = notisCollapsed,
+                    onToggleCollapse = { notisCollapsed = !notisCollapsed },
                     onClearAll = { drawerViewModel.deleteAllNotis() },
                 )
             }
         }
+        if (!notisCollapsed) {
         items(filteredUnits, key = { it.notiKey }) { displayUnit ->
             val newRecords = newRecordsByKey[displayUnit.notiKey].orEmpty()
             val matchingRecords = newRecords.filter { record ->
                 normalizedQuery.isBlank() || listOf(record.title, record.content, record.person)
                     .any { it.lowercase().contains(normalizedQuery) }
             }
-            val recordsToShow = matchingRecords.ifEmpty { newRecords }
+            val recordsToShow = matchingRecords.ifEmpty { newRecords }.sortedBy { it.time }
             NotiCard(
                 context = context,
                 notiDisplayUnit = NotiDisplayUnit(displayUnit.notiUnit, recordsToShow),
@@ -335,6 +360,7 @@ fun NewScreen(
                 isCardVisible = true,
                 parentViewport = Rect.Zero,
             )
+        }
         }
         if (!hasAnyVisibleSection) {
             item { EmptySectionText(if (normalizedQuery.isBlank()) "No new items" else "No matching new items") }
@@ -499,15 +525,19 @@ private fun NewSavedItemSectionHeader(
     accent: Color,
     selectionMode: Boolean,
     selectedCount: Int,
+    collapsed: Boolean,
+    onToggleCollapse: () -> Unit,
+    showExportSelected: Boolean,
     onSaveAll: () -> Unit,
     onDeleteAll: () -> Unit,
     onEnterSelect: () -> Unit,
     onExitSelect: () -> Unit,
     onSaveSelected: () -> Unit,
     onDeleteSelected: () -> Unit,
+    onExportSelected: () -> Unit,
 ) {
     if (selectionMode) {
-        // Contextual selection bar: Cancel · N selected · Save N · Delete N
+        // Contextual selection bar: Cancel · N selected · Save N · (Export) · Delete N
         Row(
             modifier = Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -527,14 +557,28 @@ private fun NewSavedItemSectionHeader(
                 label = { Text("Save $selectedCount", style = MaterialTheme.typography.labelLarge) },
                 leadingIcon = { Icon(painterResource(R.drawable.check), contentDescription = null, tint = accent, modifier = Modifier.size(18.dp)) },
             )
+            if (showExportSelected) {
+                IconButton(onClick = onExportSelected, enabled = selectedCount > 0) {
+                    Icon(painterResource(R.drawable.task_add), contentDescription = "Export selected to Google Tasks", tint = accent)
+                }
+            }
             IconButton(onClick = onDeleteSelected, enabled = selectedCount > 0) {
                 Icon(painterResource(R.drawable.delete), contentDescription = "Delete selected", tint = MaterialTheme.colorScheme.error)
             }
         }
     } else {
         Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
-            SectionHeaderRow(iconRes = iconRes, iconTint = accent, label = title, count = count)
-            if (showBulkActions) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                SectionHeaderRow(iconRes = iconRes, iconTint = accent, label = title, count = count, modifier = Modifier.weight(1f))
+                IconButton(onClick = onToggleCollapse) {
+                    Icon(
+                        painter = painterResource(if (collapsed) R.drawable.keyboard_arrow_down else R.drawable.keyboard_arrow_up),
+                        contentDescription = if (collapsed) stringResource(R.string.a11y_expand) else stringResource(R.string.a11y_collapse),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            if (!collapsed && showBulkActions) {
                 Row(
                     modifier = Modifier.padding(top = 6.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -547,7 +591,7 @@ private fun NewSavedItemSectionHeader(
                     AssistChip(
                         onClick = onEnterSelect,
                         label = { Text("Select", style = MaterialTheme.typography.labelLarge) },
-                        leadingIcon = { Icon(painterResource(R.drawable.checklist), contentDescription = null, tint = accent, modifier = Modifier.size(18.dp)) },
+                        leadingIcon = { Icon(painterResource(R.drawable.checklist), contentDescription = null, modifier = Modifier.size(18.dp)) },
                     )
                     AssistChip(
                         onClick = onDeleteAll,
@@ -564,13 +608,14 @@ private fun NewSavedItemSectionHeader(
 private fun NewNotificationsSectionHeader(
     count: Int,
     clearableCount: Int,
+    collapsed: Boolean,
+    onToggleCollapse: () -> Unit,
     onClearAll: () -> Unit,
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         SectionHeaderRow(
@@ -587,6 +632,14 @@ private fun NewNotificationsSectionHeader(
             Icon(
                 painter = painterResource(id = R.drawable.sweep),
                 contentDescription = stringResource(R.string.ui_action_clear_unpinned_notifications),
+                tint = MaterialTheme.colorScheme.error
+            )
+        }
+        IconButton(onClick = onToggleCollapse) {
+            Icon(
+                painter = painterResource(if (collapsed) R.drawable.keyboard_arrow_down else R.drawable.keyboard_arrow_up),
+                contentDescription = if (collapsed) stringResource(R.string.a11y_expand) else stringResource(R.string.a11y_collapse),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }
