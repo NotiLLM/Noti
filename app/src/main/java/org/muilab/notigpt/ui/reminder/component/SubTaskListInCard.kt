@@ -34,22 +34,29 @@ import org.muilab.notigpt.model.features.SavedSubItem
 @Composable
 fun SavedSubItemListInCard(
     subTasks: List<SavedSubItem>,
-    maxVisible: Int = 3,
     onToggleCompleted: (String, Boolean) -> Unit,
     onSavedSubItemClick: (SavedSubItem) -> Unit,
     onSavedSubItemEdit: (SavedSubItem) -> Unit,
     onSavedSubItemDelete: (SavedSubItem) -> Unit,
     onSavedSubItemExportGoogleTasks: (SavedSubItem) -> Unit,
     onSavedSubItemExportGoogleCalendar: (SavedSubItem) -> Unit,
+    forceExpanded: Boolean = false,
 ) {
     if (subTasks.isEmpty()) return
 
     val incomplete = subTasks.filter { !it.isCompleted }
     val completed = subTasks.filter { it.isCompleted }
-    val visible = incomplete.take(maxVisible)
-    val hiddenIncomplete = incomplete.drop(maxVisible)
+    // Show all when there are 3 or fewer; otherwise the first 2 + an "X more" expander.
+    val visibleCount = when {
+        forceExpanded -> incomplete.size
+        incomplete.size <= 3 -> incomplete.size
+        else -> 2
+    }
+    val visible = incomplete.take(visibleCount)
+    val hiddenIncomplete = incomplete.drop(visibleCount)
     var showAllIncomplete by remember { mutableStateOf(false) }
     var showCompleted by remember { mutableStateOf(false) }
+    val completedVisible = showCompleted || forceExpanded
 
     val lineColor = MaterialTheme.colorScheme.outlineVariant
     Row(
@@ -119,7 +126,7 @@ fun SavedSubItemListInCard(
         // Expandable completed sub-tasks
         if (completed.isNotEmpty()) {
             AnimatedVisibility(
-                visible = showCompleted,
+                visible = completedVisible,
                 enter = expandVertically(),
                 exit = shrinkVertically(),
             ) {
@@ -138,18 +145,20 @@ fun SavedSubItemListInCard(
                 }
             }
 
-            Text(
-                text = if (showCompleted)
-                    stringResource(R.string.subtask_hide_completed)
-                else
-                    stringResource(R.string.subtask_n_completed, completed.size),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier
-                    .clickable { showCompleted = !showCompleted }
-                    .padding(start = 48.dp, top = 6.dp, bottom = 6.dp, end = 16.dp)
-                    .fillMaxWidth(),
-            )
+            if (!forceExpanded) {
+                Text(
+                    text = if (showCompleted)
+                        stringResource(R.string.subtask_hide_completed)
+                    else
+                        stringResource(R.string.subtask_n_completed, completed.size),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .clickable { showCompleted = !showCompleted }
+                        .padding(start = 48.dp, top = 6.dp, bottom = 6.dp, end = 16.dp)
+                        .fillMaxWidth(),
+                )
+            }
         }
         }
     }

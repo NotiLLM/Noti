@@ -5,6 +5,9 @@ import android.os.Build
 import android.provider.CalendarContract
 import android.widget.Toast
 import androidx.annotation.RequiresApi
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -19,20 +22,30 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -47,6 +60,7 @@ import org.muilab.notigpt.model.features.SavedItemState
 import org.muilab.notigpt.model.features.SavedItemType
 import org.muilab.notigpt.model.features.SavedSubItem
 import org.muilab.notigpt.model.notifications.NotiDisplayUnit
+import org.muilab.notigpt.ui.common.component.EmptyState
 import org.muilab.notigpt.ui.notification.component.card.noticard.NotiCard
 import org.muilab.notigpt.ui.notification.viewmodel.DrawerViewModel
 import org.muilab.notigpt.ui.preference.model.PreferenceEntryPoint
@@ -57,6 +71,7 @@ import org.muilab.notigpt.ui.reminder.screen.ReminderDateTimeDialog
 import org.muilab.notigpt.ui.reminder.screen.ReminderDetailScreen
 import org.muilab.notigpt.ui.reminder.viewmodel.ReminderViewModel
 import org.muilab.notigpt.ui.reminder.viewmodel.ScheduledReminderViewModel
+import org.muilab.notigpt.ui.theme.NotiTheme
 
 @RequiresApi(Build.VERSION_CODES.S)
 @Composable
@@ -66,6 +81,7 @@ fun NewScreen(
     scheduledReminderViewModel: ScheduledReminderViewModel? = null,
     preferenceViewModel: PreferenceViewModel,
     searchQuery: String = "",
+    onDetailOpenChange: (Boolean) -> Unit = {},
 ) {
     val context = LocalContext.current
     val newItems by reminderViewModel.newSavedItems.collectAsState()
@@ -74,9 +90,23 @@ fun NewScreen(
     val allSavedSubItemsByReminder by reminderViewModel.allSavedSubItemsByReminder.collectAsState()
     val relatedNotificationsState by reminderViewModel.relatedNotificationsState.collectAsState()
     val googleTasksExportResult by reminderViewModel.googleTasksExportResult.collectAsState()
+    val isExtracting by drawerViewModel.isExtracting.collectAsState()
 
     var deleteTarget by remember { mutableStateOf<Pair<String, List<SavedItem>>?>(null) }
+
+    // Multi-select triage: which section is selecting (SavedItemType.Task / .Keep / null) and the picked ids.
+    var selectionSection by remember { mutableStateOf<String?>(null) }
+    val selectedIds = remember { mutableStateListOf<String>() }
+    fun exitSelection() { selectionSection = null; selectedIds.clear() }
+    fun toggleSelected(id: String) { if (selectedIds.contains(id)) selectedIds.remove(id) else selectedIds.add(id) }
+
+    // Per-section collapse on the New screen.
+    var tasksCollapsed by remember { mutableStateOf(false) }
+    var keepCollapsed by remember { mutableStateOf(false) }
+    var notisCollapsed by remember { mutableStateOf(false) }
+
     var editing by remember { mutableStateOf<SavedItem?>(null) }
+    var lastEditing by remember { mutableStateOf<SavedItem?>(null) }
     var editingInitialSnapshot by remember { mutableStateOf<SavedItem?>(null) }
     var editingSavedSubItem by remember { mutableStateOf<SavedSubItem?>(null) }
     var editingSavedSubItemInitial by remember { mutableStateOf<SavedSubItem?>(null) }
@@ -163,18 +193,43 @@ fun NewScreen(
         if (newTasks.isNotEmpty()) {
             item {
                 NewSavedItemSectionHeader(
-                    title = "New Tasks",
+                    title = stringResource(R.string.ui_new_tasks),
+                    accent = NotiTheme.semantic.taskAccent,
+                    iconRes = R.drawable.task,
                     count = newTasks.size,
-                    items = newTasks,
                     showBulkActions = normalizedQuery.isBlank(),
+                    selectionMode = selectionSection == SavedItemType.Task,
+                    selectedCount = if (selectionSection == SavedItemType.Task) selectedIds.size else 0,
                     onSaveAll = {
                         reminderViewModel.markSavedByIds(newTasks.map { it.savedItemId })
-                        Toast.makeText(context, "Moved to Tasks", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, context.getString(R.string.toast_moved_to_tasks), Toast.LENGTH_SHORT).show()
                     },
                     onDeleteAll = { deleteTarget = "tasks" to newTasks },
+                    onEnterSelect = { selectionSection = SavedItemType.Task; selectedIds.clear() },
+                    onExitSelect = { exitSelection() },
+                    onSaveSelected = {
+                        reminderViewModel.markSavedByIds(selectedIds.toList())
+                        Toast.makeText(context, context.getString(R.string.toast_saved_to_tasks), Toast.LENGTH_SHORT).show()
+                        exitSelection()
+                    },
+                    onDeleteSelected = {
+                        reminderViewModel.deleteByIds(selectedIds.toList())
+                        Toast.makeText(context, context.getString(R.string.toast_deleted), Toast.LENGTH_SHORT).show()
+                        exitSelection()
+                    },
+                    collapsed = tasksCollapsed,
+                    onToggleCollapse = { tasksCollapsed = !tasksCollapsed },
+                    showExportSelected = true,
+                    onExportSelected = {
+                        val sel = newTasks.filter { selectedIds.contains(it.savedItemId) }
+                        sel.forEach { reminderViewModel.exportToGoogleTasks(it) }
+                        Toast.makeText(context, context.getString(R.string.toast_exporting_google_tasks), Toast.LENGTH_SHORT).show()
+                        exitSelection()
+                    },
                 )
             }
         }
+        if (!tasksCollapsed) {
         items(newTasks, key = { it.savedItemId }) { item ->
             ReminderCard(
                 reminder = item,
@@ -193,6 +248,10 @@ fun NewScreen(
                 onCreateReminder = scheduledReminderViewModel?.let { { reminderDialogSavedItem = item } },
                 onQuickExportTasks = { reminderViewModel.exportToGoogleTasks(item) },
                 showDeleteButton = true,
+                sectionAccent = NotiTheme.semantic.taskAccent,
+                selectionMode = selectionSection == SavedItemType.Task,
+                selected = selectedIds.contains(item.savedItemId),
+                onSelectedChange = { checked -> if (checked) { if (item.savedItemId !in selectedIds) selectedIds.add(item.savedItemId) } else selectedIds.remove(item.savedItemId) },
                 onArchive = { reminderViewModel.archiveKeep(item.savedItemId) },
                 onSavedSubItemToggle = { stId, checked -> reminderViewModel.toggleSavedSubItemCompleted(stId, checked) },
                 onSavedSubItemClick = { st ->
@@ -210,21 +269,42 @@ fun NewScreen(
                 onSavedSubItemExportGoogleCalendar = { st -> exportSubItemToCalendar(st) },
             )
         }
+        }
         if (newKeep.isNotEmpty()) {
             item {
                 NewSavedItemSectionHeader(
-                    title = "New Keep",
+                    title = stringResource(R.string.ui_new_keep),
+                    accent = NotiTheme.semantic.keepAccent,
+                    iconRes = R.drawable.bookmark,
                     count = newKeep.size,
-                    items = newKeep,
                     showBulkActions = normalizedQuery.isBlank(),
+                    selectionMode = selectionSection == SavedItemType.Keep,
+                    selectedCount = if (selectionSection == SavedItemType.Keep) selectedIds.size else 0,
                     onSaveAll = {
                         reminderViewModel.markSavedByIds(newKeep.map { it.savedItemId })
-                        Toast.makeText(context, "Moved to Keep", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, context.getString(R.string.toast_moved_to_keep), Toast.LENGTH_SHORT).show()
                     },
                     onDeleteAll = { deleteTarget = "keep" to newKeep },
+                    onEnterSelect = { selectionSection = SavedItemType.Keep; selectedIds.clear() },
+                    onExitSelect = { exitSelection() },
+                    onSaveSelected = {
+                        reminderViewModel.markSavedByIds(selectedIds.toList())
+                        Toast.makeText(context, context.getString(R.string.toast_saved_to_keep), Toast.LENGTH_SHORT).show()
+                        exitSelection()
+                    },
+                    onDeleteSelected = {
+                        reminderViewModel.deleteByIds(selectedIds.toList())
+                        Toast.makeText(context, context.getString(R.string.toast_deleted), Toast.LENGTH_SHORT).show()
+                        exitSelection()
+                    },
+                    collapsed = keepCollapsed,
+                    onToggleCollapse = { keepCollapsed = !keepCollapsed },
+                    showExportSelected = false,
+                    onExportSelected = {},
                 )
             }
         }
+        if (!keepCollapsed) {
         items(newKeep, key = { it.savedItemId }) { item ->
             ReminderCard(
                 reminder = item,
@@ -242,6 +322,10 @@ fun NewScreen(
                 onEdit = { openEditor(item) },
                 onCreateReminder = scheduledReminderViewModel?.let { { reminderDialogSavedItem = item } },
                 showDeleteButton = true,
+                sectionAccent = NotiTheme.semantic.keepAccent,
+                selectionMode = selectionSection == SavedItemType.Keep,
+                selected = selectedIds.contains(item.savedItemId),
+                onSelectedChange = { checked -> if (checked) { if (item.savedItemId !in selectedIds) selectedIds.add(item.savedItemId) } else selectedIds.remove(item.savedItemId) },
                 onArchive = { reminderViewModel.archiveKeep(item.savedItemId) },
                 onSavedSubItemToggle = { stId, checked -> reminderViewModel.toggleSavedSubItemCompleted(stId, checked) },
                 onSavedSubItemClick = { st ->
@@ -259,22 +343,27 @@ fun NewScreen(
                 onSavedSubItemExportGoogleCalendar = { st -> exportSubItemToCalendar(st) },
             )
         }
+        }
         if (filteredUnits.isNotEmpty()) {
             item {
                 NewNotificationsSectionHeader(
                     count = filteredUnits.size,
                     clearableCount = countClearableActiveNotifications(filteredUnits),
+                    collapsed = notisCollapsed,
+                    isExtracting = isExtracting,
+                    onToggleCollapse = { notisCollapsed = !notisCollapsed },
                     onClearAll = { drawerViewModel.deleteAllNotis() },
                 )
             }
         }
+        if (!notisCollapsed) {
         items(filteredUnits, key = { it.notiKey }) { displayUnit ->
             val newRecords = newRecordsByKey[displayUnit.notiKey].orEmpty()
             val matchingRecords = newRecords.filter { record ->
                 normalizedQuery.isBlank() || listOf(record.title, record.content, record.person)
                     .any { it.lowercase().contains(normalizedQuery) }
             }
-            val recordsToShow = matchingRecords.ifEmpty { newRecords }
+            val recordsToShow = matchingRecords.ifEmpty { newRecords }.sortedBy { it.time }
             NotiCard(
                 context = context,
                 notiDisplayUnit = NotiDisplayUnit(displayUnit.notiUnit, recordsToShow),
@@ -284,8 +373,15 @@ fun NewScreen(
                 parentViewport = Rect.Zero,
             )
         }
+        }
         if (!hasAnyVisibleSection) {
-            item { EmptySectionText(if (normalizedQuery.isBlank()) "No new items" else "No matching new items") }
+            item {
+                if (normalizedQuery.isBlank()) {
+                    EmptyState(R.drawable.inbox, stringResource(R.string.ui_new_empty))
+                } else {
+                    EmptyState(R.drawable.search_off, stringResource(R.string.ui_new_empty_search))
+                }
+            }
         }
     }
 
@@ -301,7 +397,17 @@ fun NewScreen(
         )
     }
 
-    editing?.let { current ->
+    LaunchedEffect(editing) {
+        editing?.let { lastEditing = it }
+        onDetailOpenChange(editing != null)
+    }
+    AnimatedVisibility(
+        visible = editing != null,
+        enter = slideInHorizontally(initialOffsetX = { it }),
+        exit = slideOutHorizontally(targetOffsetX = { it }),
+    ) {
+      val current = editing ?: lastEditing
+      if (current != null) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -315,6 +421,7 @@ fun NewScreen(
             ReminderDetailScreen(
                 initial = current,
                 drawerViewModel = drawerViewModel,
+                onCreateReminder = scheduledReminderViewModel?.let { { reminderDialogSavedItem = current } },
                 onBack = { updatedOrNull ->
                     if (updatedOrNull != null) {
                         persistEditedItem(
@@ -417,22 +524,23 @@ fun NewScreen(
                 }
             }
         }
+      }
     }
 
     val target = deleteTarget
     if (target != null) {
         AlertDialog(
             onDismissRequest = { deleteTarget = null },
-            title = { Text("Delete these suggestions?") },
-            text = { Text("This will remove the shown new ${target.first} items.") },
+            title = { Text(stringResource(R.string.ui_new_delete_dialog_title)) },
+            text = { Text(stringResource(R.string.ui_new_delete_dialog_message)) },
             confirmButton = {
                 TextButton(onClick = {
                     reminderViewModel.deleteByIds(target.second.map { it.savedItemId })
-                    Toast.makeText(context, "Deleted suggestions", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, context.getString(R.string.toast_deleted_suggestions), Toast.LENGTH_SHORT).show()
                     deleteTarget = null
-                }) { Text("Delete") }
+                }) { Text(stringResource(R.string.ui_action_delete)) }
             },
-            dismissButton = { TextButton(onClick = { deleteTarget = null }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { deleteTarget = null }) { Text(stringResource(R.string.ui_action_cancel)) } },
         )
     }
 }
@@ -441,17 +549,85 @@ fun NewScreen(
 private fun NewSavedItemSectionHeader(
     title: String,
     count: Int,
-    items: List<SavedItem>,
+    iconRes: Int,
     showBulkActions: Boolean,
+    accent: Color,
+    selectionMode: Boolean,
+    selectedCount: Int,
+    collapsed: Boolean,
+    onToggleCollapse: () -> Unit,
+    showExportSelected: Boolean,
     onSaveAll: () -> Unit,
     onDeleteAll: () -> Unit,
+    onEnterSelect: () -> Unit,
+    onExitSelect: () -> Unit,
+    onSaveSelected: () -> Unit,
+    onDeleteSelected: () -> Unit,
+    onExportSelected: () -> Unit,
 ) {
-    Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-        Text("$title ($count)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        if (items.isNotEmpty() && showBulkActions) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = onSaveAll) { Text("Looks good, save all") }
-                TextButton(onClick = onDeleteAll) { Text("Delete all") }
+    if (selectionMode) {
+        // Contextual selection bar: Cancel · N selected · Save N · (Export) · Delete N
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            IconButton(onClick = onExitSelect) {
+                Icon(painterResource(R.drawable.close), contentDescription = stringResource(R.string.a11y_cancel_selection))
+            }
+            Text(
+                stringResource(R.string.ui_selected_count, selectedCount),
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.weight(1f),
+            )
+            AssistChip(
+                onClick = onSaveSelected,
+                enabled = selectedCount > 0,
+                label = { Text(stringResource(R.string.ui_action_save_count, selectedCount), style = MaterialTheme.typography.labelLarge) },
+                leadingIcon = { Icon(painterResource(R.drawable.check), contentDescription = null, tint = accent, modifier = Modifier.size(18.dp)) },
+            )
+            if (showExportSelected) {
+                IconButton(onClick = onExportSelected, enabled = selectedCount > 0) {
+                    Icon(painterResource(R.drawable.task_add), contentDescription = stringResource(R.string.a11y_export_selected_tasks), tint = accent)
+                }
+            }
+            IconButton(onClick = onDeleteSelected, enabled = selectedCount > 0) {
+                Icon(painterResource(R.drawable.delete), contentDescription = stringResource(R.string.a11y_delete_selected), tint = MaterialTheme.colorScheme.error)
+            }
+        }
+    } else {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                SectionHeaderRow(iconRes = iconRes, iconTint = accent, label = title, count = count, modifier = Modifier.weight(1f))
+                IconButton(onClick = onToggleCollapse) {
+                    Icon(
+                        painter = painterResource(if (collapsed) R.drawable.keyboard_arrow_down else R.drawable.keyboard_arrow_up),
+                        contentDescription = if (collapsed) stringResource(R.string.a11y_expand) else stringResource(R.string.a11y_collapse),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            if (!collapsed && showBulkActions) {
+                Row(
+                    modifier = Modifier.padding(top = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    AssistChip(
+                        onClick = onSaveAll,
+                        label = { Text(stringResource(R.string.ui_action_save_all), style = MaterialTheme.typography.labelLarge) },
+                        leadingIcon = { Icon(painterResource(R.drawable.done_all), contentDescription = null, tint = accent, modifier = Modifier.size(18.dp)) },
+                    )
+                    AssistChip(
+                        onClick = onEnterSelect,
+                        label = { Text(stringResource(R.string.ui_action_select), style = MaterialTheme.typography.labelLarge) },
+                        leadingIcon = { Icon(painterResource(R.drawable.checklist), contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp)) },
+                    )
+                    AssistChip(
+                        onClick = onDeleteAll,
+                        label = { Text(stringResource(R.string.ui_action_delete_all), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.error) },
+                        leadingIcon = { Icon(painterResource(R.drawable.delete), contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp)) },
+                    )
+                }
             }
         }
     }
@@ -461,20 +637,40 @@ private fun NewSavedItemSectionHeader(
 private fun NewNotificationsSectionHeader(
     count: Int,
     clearableCount: Int,
+    collapsed: Boolean,
+    isExtracting: Boolean,
+    onToggleCollapse: () -> Unit,
     onClearAll: () -> Unit,
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            text = stringResource(R.string.ui_notifications_new, count),
+        SectionHeaderRow(
+            iconRes = R.drawable.notifications,
+            iconTint = MaterialTheme.colorScheme.onSurfaceVariant,
+            label = stringResource(R.string.ui_new_notifications_label),
+            count = count,
             modifier = Modifier.weight(1f),
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
+            trailing = if (isExtracting) {
+                {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(14.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            stringResource(R.string.ui_extracting),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            } else null,
         )
         IconButton(
             enabled = clearableCount > 0,
@@ -483,7 +679,50 @@ private fun NewNotificationsSectionHeader(
             Icon(
                 painter = painterResource(id = R.drawable.sweep),
                 contentDescription = stringResource(R.string.ui_action_clear_unpinned_notifications),
+                tint = MaterialTheme.colorScheme.error
             )
+        }
+        IconButton(onClick = onToggleCollapse) {
+            Icon(
+                painter = painterResource(if (collapsed) R.drawable.keyboard_arrow_down else R.drawable.keyboard_arrow_up),
+                contentDescription = if (collapsed) stringResource(R.string.a11y_expand) else stringResource(R.string.a11y_collapse),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+/** Shared section header: [icon] Label  count — with the count in a lighter style. */
+@Composable
+private fun SectionHeaderRow(
+    iconRes: Int,
+    iconTint: Color,
+    label: String,
+    count: Int,
+    modifier: Modifier = Modifier,
+    trailing: (@Composable () -> Unit)? = null,
+) {
+    Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
+        Icon(
+            painter = painterResource(iconRes),
+            contentDescription = null,
+            tint = iconTint,
+            modifier = Modifier.size(20.dp),
+        )
+        Text(
+            label,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(start = 8.dp),
+        )
+        Text(
+            count.toString(),
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 6.dp),
+        )
+        if (trailing != null) {
+            Box(Modifier.padding(start = 10.dp)) { trailing() }
         }
     }
 }

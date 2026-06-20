@@ -2,7 +2,6 @@ package org.muilab.notigpt.ui.notification.component.card.noticard
 
 import android.content.Context
 import android.os.Build
-import android.util.Log
 import androidx.annotation.RequiresApi
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateDpAsState
@@ -26,6 +25,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -56,7 +56,6 @@ import org.muilab.notigpt.ui.notification.component.card.noticard.elements.NotiC
 import org.muilab.notigpt.ui.notification.component.card.noticard.elements.NotiCardHeaderContent
 import org.muilab.notigpt.ui.notification.component.card.noticard.elements.NotiCardOptionsDialog
 import org.muilab.notigpt.ui.notification.component.card.noticard.elements.NotiCardOptionsState
-import org.muilab.notigpt.ui.notification.component.card.noticard.elements.NotiCardOverlayButtons
 import org.muilab.notigpt.ui.notification.component.card.noticard.elements.notiCardExpansionFlingBehavior
 import org.muilab.notigpt.ui.notification.component.card.noticard.elements.notiCardSwipeHandler
 import org.muilab.notigpt.ui.notification.component.card.noticard.elements.rememberNotiCardExpansionState
@@ -110,23 +109,6 @@ fun NotiCard(
 
     val isPinned = notiUnit.isPinned
 
-    val lastRecord = notiRecords.lastOrNull()
-    val notiOverallTitle = when {
-        lastRecord != null && lastRecord.extraConversationTitle != "null" -> lastRecord.extraConversationTitle
-        notiDisplayUnit.title != "null" -> notiDisplayUnit.title
-        lastRecord != null && lastRecord.extraSubText != "null" -> lastRecord.extraSubText
-        else -> ""
-    }
-    val notiSecondOverallTitle = when {
-        lastRecord != null && lastRecord.extraConversationTitle != "null" && notiDisplayUnit.title != "null" -> notiDisplayUnit.title
-        lastRecord != null && lastRecord.extraConversationTitle == "null" && notiDisplayUnit.title != "null" && lastRecord.extraSubText != "null" -> lastRecord.extraSubText
-        lastRecord != null && lastRecord.extraConversationTitle == "null" && notiDisplayUnit.title != "null" -> ""
-        else -> ""
-    }
-
-    val hasSecondTitle = notiSecondOverallTitle.isNotBlank() && notiSecondOverallTitle != notiOverallTitle
-    val isPeople = notiUnit.isPeople
-
     val summary = notiUnit.summary
     val hasSummary = summary.isNotEmpty()
 
@@ -140,14 +122,6 @@ fun NotiCard(
     val maxHeightDp = 200.dp
     val sampleLimit = 8
     val density = LocalDensity.current
-
-    var requiresExpansion by remember(notiRecords, summary, notiOverallTitle, isPeople) {
-        mutableStateOf(
-            notiRecords.size > 1 || hasSummary ||
-                (notiRecords.size == 1 && notiRecords[0].getDisplayedTitle(isPeople)
-                    .let { notiOverallTitle.isNotBlank() && notiOverallTitle != it })
-        )
-    }
 
     val initialEstimatePx = remember(notiRecords.size, density) {
         val perItemPx = with(density) { 56.dp.toPx() }
@@ -173,6 +147,44 @@ fun NotiCard(
 
     val collapseThreshold = NOTI_CARD_COLLAPSE_THRESHOLD_PX_DEFAULT
     val showSummary = { anchored.offset < collapseThreshold && hasSummary }
+
+    val firstRecord = notiRecords.firstOrNull()
+    val lastRecord = notiRecords.lastOrNull()
+    val titleRecord by remember(anchored, firstRecord, lastRecord, collapseThreshold) {
+        derivedStateOf {
+            val offset = anchored.offset
+            if (!offset.isNaN() && offset < collapseThreshold) {
+                lastRecord
+            } else {
+                firstRecord
+            }
+        }
+    }
+    // Capture the delegated value into a local so it can be smart-cast in the when-branches below.
+    val tr = titleRecord
+    val notiOverallTitle = when {
+        tr != null && tr.extraConversationTitle != "null" -> tr.extraConversationTitle
+        notiDisplayUnit.title != "null" -> notiDisplayUnit.title
+        tr != null && tr.extraSubText != "null" -> tr.extraSubText
+        else -> ""
+    }
+    val notiSecondOverallTitle = when {
+        tr != null && tr.extraConversationTitle != "null" && notiDisplayUnit.title != "null" -> notiDisplayUnit.title
+        tr != null && tr.extraConversationTitle == "null" && notiDisplayUnit.title != "null" && tr.extraSubText != "null" -> tr.extraSubText
+        tr != null && tr.extraConversationTitle == "null" && notiDisplayUnit.title != "null" -> ""
+        else -> ""
+    }
+
+    val hasSecondTitle = notiSecondOverallTitle.isNotBlank() && notiSecondOverallTitle != notiOverallTitle
+    val isPeople = notiUnit.isPeople
+
+    var requiresExpansion by remember(notiRecords, summary, notiOverallTitle, isPeople) {
+        mutableStateOf(
+            notiRecords.size > 1 || hasSummary ||
+                    (notiRecords.size == 1 && notiRecords[0].getDisplayedTitle(isPeople)
+                        .let { notiOverallTitle.isNotBlank() && notiOverallTitle != it })
+        )
+    }
 
     val coroutineScope = rememberCoroutineScope()
     val horizontalOffsetX = remember { Animatable(0f) }
@@ -271,7 +283,7 @@ fun NotiCard(
             shadowElevation = 0.dp,
             color = backgroundColor,
         ) {
-            Box(modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp)) {
+            Box(modifier = Modifier.fillMaxWidth().padding(vertical = 7.dp)) {
                 Column(Modifier.fillMaxWidth()
                     .then(if (isSortingMode) Modifier else swipeModifier)) {
 

@@ -161,7 +161,7 @@ fun NotiRecordContextCard(
                 }
 
                 IconButton(onClick = { showMenu = true }) {
-                    Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.a11y_show_more_context))
+                    Icon(painterResource(R.drawable.more_vert), contentDescription = stringResource(R.string.a11y_show_more_context))
                 }
                 IconButton(onClick = { drawerViewModel.accessNotificationByKey(notiKey) }) {
                     Icon(painterResource(R.drawable.external_access), contentDescription = stringResource(R.string.ui_action_open))

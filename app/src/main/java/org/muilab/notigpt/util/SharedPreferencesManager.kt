@@ -110,6 +110,12 @@ object SharedPreferencesManager {
         get() = get(KEY_LOCAL_PREFS, KEY_SWIPE_DELETE_LEFT, true)
         set(value) = put(KEY_LOCAL_PREFS, KEY_SWIPE_DELETE_LEFT, value)
 
+    // --- Dynamic color (Material You) opt-in; retints neutral chrome only ---
+    const val KEY_USE_DYNAMIC_COLOR = "useDynamicColor"
+    var useDynamicColor: Boolean
+        get() = get(KEY_LOCAL_PREFS, KEY_USE_DYNAMIC_COLOR, false)
+        set(value) = put(KEY_LOCAL_PREFS, KEY_USE_DYNAMIC_COLOR, value)
+
     // --- Task List Default Expanded ---
     const val KEY_TASK_LIST_DEFAULT_EXPANDED = "taskListDefaultExpanded"
     var taskListDefaultExpanded: Boolean

@@ -2,11 +2,11 @@ package org.muilab.notigpt.ui.notification.component
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -16,6 +16,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
@@ -27,12 +31,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.muilab.notigpt.R
 import org.muilab.notigpt.model.notifications.NotiDisplayUnit
+import org.muilab.notigpt.ui.notification.component.info.ExpandedNotiRecord
+import org.muilab.notigpt.util.unescapeUserText
 
 /**
  * Reminder-facing preview of notification records associated with a reminder.
  *
- * This component renders provenance context, not the live drawer row. If it becomes a general notification
- * card variant, merge shared rendering with the main notification-card components.
+ * One instance = one notiKey group. The header is tap-to-collapse; expanded records render
+ * content-left / time-right exactly like the expanded notification card on the New screen.
  */
 @Composable
 fun RelatedNotificationPreview(
@@ -58,10 +64,12 @@ fun RelatedNotificationPreview(
     }
     val hasSecondTitle = notiSecondOverallTitle.isNotBlank() && notiSecondOverallTitle != notiOverallTitle
 
+    var expanded by remember(notiUnit.notiKey) { mutableStateOf(false) }
+
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.medium,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         color = MaterialTheme.colorScheme.surface,
     ) {
         Column {
@@ -70,6 +78,7 @@ fun RelatedNotificationPreview(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .clickable { expanded = !expanded }
                     .padding(horizontal = 12.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -99,7 +108,26 @@ fun RelatedNotificationPreview(
                             overflow = TextOverflow.Ellipsis,
                         )
                     }
+                    // Collapsed: preview the latest record so the card isn't just a bare title.
+                    if (!expanded) {
+                        val latest = notiRecords.lastOrNull()?.content
+                        if (!latest.isNullOrBlank() && latest != "null") {
+                            Text(
+                                text = unescapeUserText(latest),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
                 }
+
+                Icon(
+                    painter = painterResource(if (expanded) R.drawable.keyboard_arrow_up else R.drawable.keyboard_arrow_down),
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
 
                 if (showOpenButton && onOpen != null) {
                     IconButton(onClick = onOpen) {
@@ -111,21 +139,24 @@ fun RelatedNotificationPreview(
                 }
             }
 
-            val recordsToShow = if (notiRecords.size > 30) notiRecords.takeLast(30) else notiRecords
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 10.dp),
-            ) {
-                recordsToShow.forEachIndexed { idx, record ->
-                    val content = record.content
-                    if (content.isBlank() || content == "null") return@forEachIndexed
-                    if (idx != 0) Spacer(Modifier.height(8.dp))
-                    Text(
-                        text = content,
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
+            if (expanded) {
+                val recordsToShow = if (notiRecords.size > 30) notiRecords.takeLast(30) else notiRecords
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp),
+                ) {
+                    recordsToShow.forEach { record ->
+                        val content = record.content
+                        if (content.isBlank() || content == "null") return@forEach
+                        // content-left / time-right, matching the expanded notification card.
+                        ExpandedNotiRecord(
+                            notiTitle = "",
+                            notiTime = record.time,
+                            notiContent = content,
+                            showTitle = false,
+                        )
+                    }
                 }
             }
         }

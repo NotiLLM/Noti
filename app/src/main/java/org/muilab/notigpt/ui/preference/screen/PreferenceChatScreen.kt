@@ -58,6 +58,7 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.painterResource
 import org.muilab.notigpt.R
 import org.muilab.notigpt.ui.preference.model.ChatFlowContext
 import org.muilab.notigpt.ui.preference.model.ChatMessage
@@ -117,7 +118,7 @@ fun PreferenceChatScreen(
             )
             if (messages.isNotEmpty()) {
                 IconButton(onClick = { showClearConfirm = true }) {
-                    Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.pref_chat_clear_desc))
+                    Icon(painterResource(R.drawable.delete), contentDescription = stringResource(R.string.pref_chat_clear_desc))
                 }
             }
         }
@@ -305,7 +306,7 @@ fun PreferenceChatScreen(
                 },
                 enabled = inputText.isNotBlank() && !isLoading,
             ) {
-                Icon(Icons.AutoMirrored.Filled.Send, contentDescription = stringResource(R.string.pref_chat_send_desc))
+                Icon(painterResource(R.drawable.send), contentDescription = stringResource(R.string.pref_chat_send_desc))
             }
         }
     }
@@ -519,7 +520,7 @@ private fun ActivePreferencesPanel(
             )
             Spacer(Modifier.width(4.dp))
             Icon(
-                imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                painter = painterResource(if (expanded) R.drawable.keyboard_arrow_up else R.drawable.keyboard_arrow_down),
                 contentDescription = if (expanded) stringResource(R.string.a11y_collapse) else stringResource(R.string.a11y_expand),
                 modifier = Modifier.size(20.dp),
             )
@@ -552,7 +553,7 @@ private fun ActivePreferencesPanel(
                             modifier = Modifier.size(24.dp),
                         ) {
                             Icon(
-                                Icons.Default.Close,
+                                painterResource(R.drawable.close),
                                 contentDescription = stringResource(R.string.pref_action_dismiss),
                                 modifier = Modifier.size(16.dp),
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -621,7 +622,7 @@ private fun UserContextPanel(
             )
             Spacer(Modifier.width(4.dp))
             Icon(
-                imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                painter = painterResource(if (expanded) R.drawable.keyboard_arrow_up else R.drawable.keyboard_arrow_down),
                 contentDescription = if (expanded) stringResource(R.string.a11y_collapse) else stringResource(R.string.a11y_expand),
                 modifier = Modifier.size(20.dp),
             )
@@ -654,7 +655,7 @@ private fun UserContextPanel(
                             modifier = Modifier.size(24.dp),
                         ) {
                             Icon(
-                                Icons.Default.Close,
+                                painterResource(R.drawable.close),
                                 contentDescription = stringResource(R.string.pref_action_dismiss),
                                 modifier = Modifier.size(16.dp),
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -800,10 +801,9 @@ private fun ConflictsBanner(
                 modifier = Modifier.weight(1f),
             )
             Icon(
-                imageVector = if (expanded)
-                    Icons.Default.KeyboardArrowUp
-                else
-                    Icons.Default.KeyboardArrowDown,
+                painter = painterResource(
+                    if (expanded) R.drawable.keyboard_arrow_up else R.drawable.keyboard_arrow_down
+                ),
                 contentDescription = if (expanded) stringResource(R.string.a11y_collapse) else stringResource(R.string.a11y_expand),
                 tint = MaterialTheme.colorScheme.error,
             )

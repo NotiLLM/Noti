@@ -89,6 +89,10 @@ fun getRelativeTimeStr(unixTime: Long, context: Context?, locale: Locale = Local
         return diffDays
     }
 
+    // Calendar-day delta drives the day labels so they never disagree with the wall clock.
+    // (A raw 48h window can span two midnights, mislabeling a 2-days-ago time as "today".)
+    val dayDelta = dayDeltaOf(unixTime)
+
     return when {
         diffAbsMillis < TimeUnit.MINUTES.toMillis(1) -> {
             val soon = context?.getString(R.string.time_now)
@@ -107,33 +111,18 @@ fun getRelativeTimeStr(unixTime: Long, context: Context?, locale: Locale = Local
             RelativeDateTimeFormatter.RelativeUnit.HOURS
         )
 
-        diffAbsMillis < TimeUnit.DAYS.toMillis(2) -> {
-            // Within about 48h: show Today/Yesterday/Tomorrow + time when applicable.
-            val dayDelta = dayDeltaOf(unixTime)
+        // Same calendar day, or one calendar day away: Today/Yesterday/Tomorrow + time.
+        dayDelta in -1..1 -> {
             val t = timeFormat.format(Date(unixTime))
-
             when (dayDelta) {
-                1 -> {
-                    // Tomorrow
-                    sf(R.string.time_tomorrow_hhmm, t) ?: (s(R.string.time_tomorrow, "Tomorrow") + " " + t)
-                }
-
-                -1 -> {
-                    // Yesterday
-                    sf(R.string.time_yesterday_hhmm, t) ?: (s(R.string.time_yesterday, "Yesterday") + " " + t)
-                }
-
-                0 -> {
-                    // Today
-                    sf(R.string.time_today_hhmm, t) ?: (s(R.string.time_today, "Today") + " " + t)
-                }
-
-                else -> t
+                1 -> sf(R.string.time_tomorrow_hhmm, t) ?: (s(R.string.time_tomorrow, "Tomorrow") + " " + t)
+                -1 -> sf(R.string.time_yesterday_hhmm, t) ?: (s(R.string.time_yesterday, "Yesterday") + " " + t)
+                else -> sf(R.string.time_today_hhmm, t) ?: (s(R.string.time_today, "Today") + " " + t)
             }
         }
 
-        // Older than ~48 hours: keep previous behavior.
-        abs(dayDeltaOf(unixTime)) < 7 -> SimpleDateFormat("EEEE", locale).format(Date(unixTime))
+        // Within the same week: weekday name.
+        abs(dayDelta) < 7 -> SimpleDateFormat("EEEE", locale).format(Date(unixTime))
 
         else -> SimpleDateFormat(monthDayPattern, locale).format(Date(unixTime))
     }

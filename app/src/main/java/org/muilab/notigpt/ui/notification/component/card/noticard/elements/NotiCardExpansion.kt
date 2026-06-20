@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableFloatState
@@ -169,7 +170,7 @@ fun NotiCardExpandedRecords(
             HorizontalDivider(
                 Modifier.padding(horizontal = 16.dp),
                 1.dp,
-                Color.White,
+                MaterialTheme.colorScheme.outlineVariant,
             )
         }
         if (fullRecords.isEmpty() && anchored.currentValue == NotiExpandState.Opened) {
