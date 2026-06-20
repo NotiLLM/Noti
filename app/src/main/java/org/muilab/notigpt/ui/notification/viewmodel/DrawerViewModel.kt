@@ -78,6 +78,13 @@ class DrawerViewModel(
     val isTargetLoading: StateFlow<Boolean> = filters.isTargetLoading
     val isSortingMode: StateFlow<Boolean> = filters.isSortingMode
 
+    /** True while the n8n task-extraction WorkManager job is actively running. */
+    val isExtracting: StateFlow<Boolean> =
+        androidx.work.WorkManager.getInstance(application)
+            .getWorkInfosForUniqueWorkFlow("n8n_task_extraction")
+            .map { infos -> infos.any { it.state == androidx.work.WorkInfo.State.RUNNING } }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
     /**
      * Updates the active drawer category filter and resets dependent app-filter state when needed.
      *

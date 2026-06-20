@@ -71,7 +71,8 @@ fun DueChip(
         }
     }
 
-    val label = "${getAbsoluteTimeStr(deadlineAtMs, context)} (${getRelativeTimeStr(deadlineAtMs, context)})"
+    // Relative-only on cards (e.g. "明天 23:59" / "2 天前"); the detail screen shows the absolute date/time.
+    val label = getRelativeTimeStr(deadlineAtMs, context)
 
     Row(
         modifier = modifier

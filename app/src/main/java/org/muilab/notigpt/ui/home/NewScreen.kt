@@ -24,6 +24,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -42,6 +43,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.platform.LocalContext
@@ -57,6 +60,7 @@ import org.muilab.notigpt.model.features.SavedItemState
 import org.muilab.notigpt.model.features.SavedItemType
 import org.muilab.notigpt.model.features.SavedSubItem
 import org.muilab.notigpt.model.notifications.NotiDisplayUnit
+import org.muilab.notigpt.ui.common.component.EmptyState
 import org.muilab.notigpt.ui.notification.component.card.noticard.NotiCard
 import org.muilab.notigpt.ui.notification.viewmodel.DrawerViewModel
 import org.muilab.notigpt.ui.preference.model.PreferenceEntryPoint
@@ -86,6 +90,7 @@ fun NewScreen(
     val allSavedSubItemsByReminder by reminderViewModel.allSavedSubItemsByReminder.collectAsState()
     val relatedNotificationsState by reminderViewModel.relatedNotificationsState.collectAsState()
     val googleTasksExportResult by reminderViewModel.googleTasksExportResult.collectAsState()
+    val isExtracting by drawerViewModel.isExtracting.collectAsState()
 
     var deleteTarget by remember { mutableStateOf<Pair<String, List<SavedItem>>?>(null) }
 
@@ -345,6 +350,7 @@ fun NewScreen(
                     count = filteredUnits.size,
                     clearableCount = countClearableActiveNotifications(filteredUnits),
                     collapsed = notisCollapsed,
+                    isExtracting = isExtracting,
                     onToggleCollapse = { notisCollapsed = !notisCollapsed },
                     onClearAll = { drawerViewModel.deleteAllNotis() },
                 )
@@ -369,7 +375,13 @@ fun NewScreen(
         }
         }
         if (!hasAnyVisibleSection) {
-            item { EmptySectionText(if (normalizedQuery.isBlank()) stringResource(R.string.ui_new_empty) else stringResource(R.string.ui_new_empty_search)) }
+            item {
+                if (normalizedQuery.isBlank()) {
+                    EmptyState(R.drawable.inbox, stringResource(R.string.ui_new_empty))
+                } else {
+                    EmptyState(R.drawable.search_off, stringResource(R.string.ui_new_empty_search))
+                }
+            }
         }
     }
 
@@ -626,6 +638,7 @@ private fun NewNotificationsSectionHeader(
     count: Int,
     clearableCount: Int,
     collapsed: Boolean,
+    isExtracting: Boolean,
     onToggleCollapse: () -> Unit,
     onClearAll: () -> Unit,
 ) {
@@ -641,6 +654,23 @@ private fun NewNotificationsSectionHeader(
             label = stringResource(R.string.ui_new_notifications_label),
             count = count,
             modifier = Modifier.weight(1f),
+            trailing = if (isExtracting) {
+                {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(14.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            stringResource(R.string.ui_extracting),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            } else null,
         )
         IconButton(
             enabled = clearableCount > 0,
@@ -670,6 +700,7 @@ private fun SectionHeaderRow(
     label: String,
     count: Int,
     modifier: Modifier = Modifier,
+    trailing: (@Composable () -> Unit)? = null,
 ) {
     Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
         Icon(
@@ -690,6 +721,9 @@ private fun SectionHeaderRow(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(start = 6.dp),
         )
+        if (trailing != null) {
+            Box(Modifier.padding(start = 10.dp)) { trailing() }
+        }
     }
 }
 

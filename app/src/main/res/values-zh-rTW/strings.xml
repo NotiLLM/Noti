@@ -373,6 +373,8 @@
     <string name="ui_new_empty">沒有新項目</string>
     <string name="ui_new_empty_search">沒有符合的新項目</string>
 
+    <string name="ui_extracting">擷取中…</string>
+
     <!-- History -->
     <string name="history_grouped">分組</string>
     <string name="history_timeline">時間軸</string>

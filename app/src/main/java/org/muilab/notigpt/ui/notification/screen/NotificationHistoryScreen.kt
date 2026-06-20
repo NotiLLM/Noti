@@ -28,6 +28,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import org.muilab.notigpt.R
+import org.muilab.notigpt.ui.common.component.EmptyState
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -94,7 +95,7 @@ fun NotificationHistoryScreen(
         }
 
         if (filtered.isEmpty()) {
-            item { Text(stringResource(R.string.history_no_match), modifier = Modifier.padding(16.dp)) }
+            item { EmptyState(R.drawable.search_off, stringResource(R.string.history_no_match)) }
         }
     }
 }

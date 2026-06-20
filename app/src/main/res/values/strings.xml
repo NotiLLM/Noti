@@ -403,6 +403,8 @@
     <string name="ui_new_empty">No new items</string>
     <string name="ui_new_empty_search">No matching new items</string>
 
+    <string name="ui_extracting">Extracting…</string>
+
     <!-- History -->
     <string name="history_grouped">Grouped</string>
     <string name="history_timeline">Timeline</string>

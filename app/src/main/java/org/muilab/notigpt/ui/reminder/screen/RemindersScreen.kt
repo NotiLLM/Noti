@@ -87,7 +87,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextDecoration
@@ -850,8 +852,9 @@ private fun ReminderCardSplitActions(
     onCreateReminder: (() -> Unit)?,
     onQuickExportTasks: (() -> Unit)?,
     onQuickExportCalendar: (() -> Unit)?,
+    onDelete: (() -> Unit)? = null,
 ) {
-    val hasAny = onCreateReminder != null || onQuickExportTasks != null || onQuickExportCalendar != null
+    val hasAny = onCreateReminder != null || onQuickExportTasks != null || onQuickExportCalendar != null || onDelete != null
     if (!hasAny) return
 
     var expanded by remember { mutableStateOf(false) }
@@ -879,6 +882,13 @@ private fun ReminderCardSplitActions(
                     text = { Text(stringResource(R.string.google_calendar_export)) },
                     leadingIcon = { Icon(painterResource(R.drawable.calendar_add), contentDescription = null, modifier = Modifier.size(20.dp)) },
                     onClick = { expanded = false; onQuickExportCalendar() },
+                )
+            }
+            if (onDelete != null) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.ui_action_delete), color = MaterialTheme.colorScheme.error) },
+                    leadingIcon = { Icon(painterResource(R.drawable.delete), contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(20.dp)) },
+                    onClick = { expanded = false; onDelete() },
                 )
             }
         }
@@ -915,6 +925,7 @@ fun ReminderCard(
 ) {
     val context = LocalContext.current
     val clipboard = remember(context) { AndroidClipboardController(context) }
+    val haptic = LocalHapticFeedback.current
 
     // Parse LLM-generated buttons
     val buttons = remember(reminder.buttons) {
@@ -979,10 +990,19 @@ fun ReminderCard(
                 } else if (reminder.isTask) {
                     Checkbox(
                         checked = reminder.isCompleted,
-                        onCheckedChange = { onToggleCompleted(it) },
+                        onCheckedChange = {
+                            haptic.performHapticFeedback(if (it) HapticFeedbackType.ToggleOn else HapticFeedbackType.ToggleOff)
+                            onToggleCompleted(it)
+                        },
                     )
                 } else {
-                    IconButton(onClick = onArchive, modifier = Modifier.minimumInteractiveComponentSize()) {
+                    IconButton(
+                        onClick = {
+                            haptic.performHapticFeedback(if (!reminder.isArchived) HapticFeedbackType.ToggleOn else HapticFeedbackType.ToggleOff)
+                            onArchive()
+                        },
+                        modifier = Modifier.minimumInteractiveComponentSize(),
+                    ) {
                         Icon(
                             painter = painterResource(if (reminder.isArchived) R.drawable.archive_yes else R.drawable.archive_no),
                             contentDescription = stringResource(R.string.a11y_archive),
@@ -1016,6 +1036,8 @@ fun ReminderCard(
                             onCreateReminder = onCreateReminder,
                             onQuickExportTasks = onQuickExportTasks,
                             onQuickExportCalendar = onQuickExportCalendar,
+                            // On Tasks/Keep tabs (no inline trash) delete lives in this overflow menu.
+                            onDelete = if (!showDeleteButton) onDelete else null,
                         )
                     }
 
