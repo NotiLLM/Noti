@@ -188,7 +188,7 @@ fun NewScreen(
         if (newTasks.isNotEmpty()) {
             item {
                 NewSavedItemSectionHeader(
-                    title = "New Tasks",
+                    title = stringResource(R.string.ui_new_tasks),
                     accent = NotiTheme.semantic.taskAccent,
                     iconRes = R.drawable.task,
                     count = newTasks.size,
@@ -197,19 +197,19 @@ fun NewScreen(
                     selectedCount = if (selectionSection == SavedItemType.Task) selectedIds.size else 0,
                     onSaveAll = {
                         reminderViewModel.markSavedByIds(newTasks.map { it.savedItemId })
-                        Toast.makeText(context, "Moved to Tasks", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, context.getString(R.string.toast_moved_to_tasks), Toast.LENGTH_SHORT).show()
                     },
                     onDeleteAll = { deleteTarget = "tasks" to newTasks },
                     onEnterSelect = { selectionSection = SavedItemType.Task; selectedIds.clear() },
                     onExitSelect = { exitSelection() },
                     onSaveSelected = {
                         reminderViewModel.markSavedByIds(selectedIds.toList())
-                        Toast.makeText(context, "Saved to Tasks", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, context.getString(R.string.toast_saved_to_tasks), Toast.LENGTH_SHORT).show()
                         exitSelection()
                     },
                     onDeleteSelected = {
                         reminderViewModel.deleteByIds(selectedIds.toList())
-                        Toast.makeText(context, "Deleted", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, context.getString(R.string.toast_deleted), Toast.LENGTH_SHORT).show()
                         exitSelection()
                     },
                     collapsed = tasksCollapsed,
@@ -218,7 +218,7 @@ fun NewScreen(
                     onExportSelected = {
                         val sel = newTasks.filter { selectedIds.contains(it.savedItemId) }
                         sel.forEach { reminderViewModel.exportToGoogleTasks(it) }
-                        Toast.makeText(context, "Exporting to Google Tasks…", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, context.getString(R.string.toast_exporting_google_tasks), Toast.LENGTH_SHORT).show()
                         exitSelection()
                     },
                 )
@@ -268,7 +268,7 @@ fun NewScreen(
         if (newKeep.isNotEmpty()) {
             item {
                 NewSavedItemSectionHeader(
-                    title = "New Keep",
+                    title = stringResource(R.string.ui_new_keep),
                     accent = NotiTheme.semantic.keepAccent,
                     iconRes = R.drawable.bookmark,
                     count = newKeep.size,
@@ -277,19 +277,19 @@ fun NewScreen(
                     selectedCount = if (selectionSection == SavedItemType.Keep) selectedIds.size else 0,
                     onSaveAll = {
                         reminderViewModel.markSavedByIds(newKeep.map { it.savedItemId })
-                        Toast.makeText(context, "Moved to Keep", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, context.getString(R.string.toast_moved_to_keep), Toast.LENGTH_SHORT).show()
                     },
                     onDeleteAll = { deleteTarget = "keep" to newKeep },
                     onEnterSelect = { selectionSection = SavedItemType.Keep; selectedIds.clear() },
                     onExitSelect = { exitSelection() },
                     onSaveSelected = {
                         reminderViewModel.markSavedByIds(selectedIds.toList())
-                        Toast.makeText(context, "Saved to Keep", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, context.getString(R.string.toast_saved_to_keep), Toast.LENGTH_SHORT).show()
                         exitSelection()
                     },
                     onDeleteSelected = {
                         reminderViewModel.deleteByIds(selectedIds.toList())
-                        Toast.makeText(context, "Deleted", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, context.getString(R.string.toast_deleted), Toast.LENGTH_SHORT).show()
                         exitSelection()
                     },
                     collapsed = keepCollapsed,
@@ -369,7 +369,7 @@ fun NewScreen(
         }
         }
         if (!hasAnyVisibleSection) {
-            item { EmptySectionText(if (normalizedQuery.isBlank()) "No new items" else "No matching new items") }
+            item { EmptySectionText(if (normalizedQuery.isBlank()) stringResource(R.string.ui_new_empty) else stringResource(R.string.ui_new_empty_search)) }
         }
     }
 
@@ -519,16 +519,16 @@ fun NewScreen(
     if (target != null) {
         AlertDialog(
             onDismissRequest = { deleteTarget = null },
-            title = { Text("Delete these suggestions?") },
-            text = { Text("This will remove the shown new ${target.first} items.") },
+            title = { Text(stringResource(R.string.ui_new_delete_dialog_title)) },
+            text = { Text(stringResource(R.string.ui_new_delete_dialog_message)) },
             confirmButton = {
                 TextButton(onClick = {
                     reminderViewModel.deleteByIds(target.second.map { it.savedItemId })
-                    Toast.makeText(context, "Deleted suggestions", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, context.getString(R.string.toast_deleted_suggestions), Toast.LENGTH_SHORT).show()
                     deleteTarget = null
-                }) { Text("Delete") }
+                }) { Text(stringResource(R.string.ui_action_delete)) }
             },
-            dismissButton = { TextButton(onClick = { deleteTarget = null }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { deleteTarget = null }) { Text(stringResource(R.string.ui_action_cancel)) } },
         )
     }
 }
@@ -561,26 +561,26 @@ private fun NewSavedItemSectionHeader(
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             IconButton(onClick = onExitSelect) {
-                Icon(painterResource(R.drawable.close), contentDescription = "Cancel selection")
+                Icon(painterResource(R.drawable.close), contentDescription = stringResource(R.string.a11y_cancel_selection))
             }
             Text(
-                "$selectedCount selected",
+                stringResource(R.string.ui_selected_count, selectedCount),
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.weight(1f),
             )
             AssistChip(
                 onClick = onSaveSelected,
                 enabled = selectedCount > 0,
-                label = { Text("Save $selectedCount", style = MaterialTheme.typography.labelLarge) },
+                label = { Text(stringResource(R.string.ui_action_save_count, selectedCount), style = MaterialTheme.typography.labelLarge) },
                 leadingIcon = { Icon(painterResource(R.drawable.check), contentDescription = null, tint = accent, modifier = Modifier.size(18.dp)) },
             )
             if (showExportSelected) {
                 IconButton(onClick = onExportSelected, enabled = selectedCount > 0) {
-                    Icon(painterResource(R.drawable.task_add), contentDescription = "Export selected to Google Tasks", tint = accent)
+                    Icon(painterResource(R.drawable.task_add), contentDescription = stringResource(R.string.a11y_export_selected_tasks), tint = accent)
                 }
             }
             IconButton(onClick = onDeleteSelected, enabled = selectedCount > 0) {
-                Icon(painterResource(R.drawable.delete), contentDescription = "Delete selected", tint = MaterialTheme.colorScheme.error)
+                Icon(painterResource(R.drawable.delete), contentDescription = stringResource(R.string.a11y_delete_selected), tint = MaterialTheme.colorScheme.error)
             }
         }
     } else {
@@ -602,17 +602,17 @@ private fun NewSavedItemSectionHeader(
                 ) {
                     AssistChip(
                         onClick = onSaveAll,
-                        label = { Text("Save all", style = MaterialTheme.typography.labelLarge) },
+                        label = { Text(stringResource(R.string.ui_action_save_all), style = MaterialTheme.typography.labelLarge) },
                         leadingIcon = { Icon(painterResource(R.drawable.done_all), contentDescription = null, tint = accent, modifier = Modifier.size(18.dp)) },
                     )
                     AssistChip(
                         onClick = onEnterSelect,
-                        label = { Text("Select", style = MaterialTheme.typography.labelLarge) },
-                        leadingIcon = { Icon(painterResource(R.drawable.checklist), contentDescription = null, modifier = Modifier.size(18.dp)) },
+                        label = { Text(stringResource(R.string.ui_action_select), style = MaterialTheme.typography.labelLarge) },
+                        leadingIcon = { Icon(painterResource(R.drawable.checklist), contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp)) },
                     )
                     AssistChip(
                         onClick = onDeleteAll,
-                        label = { Text("Delete all", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.error) },
+                        label = { Text(stringResource(R.string.ui_action_delete_all), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.error) },
                         leadingIcon = { Icon(painterResource(R.drawable.delete), contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp)) },
                     )
                 }
@@ -638,7 +638,7 @@ private fun NewNotificationsSectionHeader(
         SectionHeaderRow(
             iconRes = R.drawable.notifications,
             iconTint = MaterialTheme.colorScheme.onSurfaceVariant,
-            label = "New Notifications",
+            label = stringResource(R.string.ui_new_notifications_label),
             count = count,
             modifier = Modifier.weight(1f),
         )

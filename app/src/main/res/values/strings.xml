@@ -371,5 +371,43 @@
     <string name="reminder_pick_time">Time</string>
     <string name="reminder_no_date">No date</string>
     <string name="reminder_no_time">No time</string>
+
+    <!-- Navigation / drawer -->
+    <string name="tab_new">New</string>
+    <string name="menu_home">Home</string>
+    <string name="menu_reminders">Reminders</string>
+    <string name="menu_history">History</string>
+    <string name="a11y_more_actions">More actions</string>
+
+    <!-- New screen sections + triage -->
+    <string name="ui_new_tasks">New Tasks</string>
+    <string name="ui_new_keep">New Keep</string>
+    <string name="ui_new_notifications_label">New Notifications</string>
+    <string name="ui_action_save_all">Save all</string>
+    <string name="ui_action_select">Select</string>
+    <string name="ui_action_delete_all">Delete all</string>
+    <string name="ui_selected_count">%1$d selected</string>
+    <string name="ui_action_save_count">Save %1$d</string>
+    <string name="a11y_cancel_selection">Cancel selection</string>
+    <string name="a11y_delete_selected">Delete selected</string>
+    <string name="a11y_export_selected_tasks">Export selected to Google Tasks</string>
+    <string name="toast_moved_to_tasks">Moved to Tasks</string>
+    <string name="toast_moved_to_keep">Moved to Keep</string>
+    <string name="toast_saved_to_tasks">Saved to Tasks</string>
+    <string name="toast_saved_to_keep">Saved to Keep</string>
+    <string name="toast_deleted">Deleted</string>
+    <string name="toast_exporting_google_tasks">Exporting to Google Tasks…</string>
+    <string name="toast_deleted_suggestions">Deleted suggestions</string>
+    <string name="ui_new_delete_dialog_title">Delete these suggestions?</string>
+    <string name="ui_new_delete_dialog_message">This will remove the shown new items.</string>
+    <string name="ui_new_empty">No new items</string>
+    <string name="ui_new_empty_search">No matching new items</string>
+
+    <!-- History -->
+    <string name="history_grouped">Grouped</string>
+    <string name="history_timeline">Timeline</string>
+    <string name="history_notification">Notification</string>
+    <string name="history_records_count">%1$d records</string>
+    <string name="history_no_match">No matching notifications</string>
 </resources>
 

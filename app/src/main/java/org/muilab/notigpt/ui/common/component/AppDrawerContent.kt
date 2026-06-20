@@ -25,13 +25,13 @@ fun AppDrawerContent(
         // New / Tasks / Keep live in the bottom bar; the drawer just offers a way back to the
         // main screen (defaulting to the New tab).
         NavigationDrawerItem(
-            label = { Text("Home") },
+            label = { Text(stringResource(R.string.menu_home)) },
             icon = { Icon(painter = painterResource(R.drawable.home), contentDescription = null) },
             selected = selectedPrimaryTab != null,
             onClick = { onPrimaryTabSelected(AppPrimaryTab.New) },
         )
         NavigationDrawerItem(
-            label = { Text("Reminders") },
+            label = { Text(stringResource(R.string.menu_reminders)) },
             icon = { Icon(painter = painterResource(R.drawable.task), contentDescription = null) },
             badge = {
                 if (dueUnseenReminderCount > 0) {
@@ -55,7 +55,7 @@ fun AppDrawerContent(
             onClick = { onMenuScreenSelected(AppMenuScreen.Preferences) },
         )
         NavigationDrawerItem(
-            label = { Text("History") },
+            label = { Text(stringResource(R.string.menu_history)) },
             icon = { Icon(painter = painterResource(R.drawable.notifications), contentDescription = null) },
             selected = false,
             onClick = { onMenuScreenSelected(AppMenuScreen.History) },

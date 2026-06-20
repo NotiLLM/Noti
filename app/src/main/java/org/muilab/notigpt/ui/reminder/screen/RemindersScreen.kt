@@ -851,67 +851,36 @@ private fun ReminderCardSplitActions(
     onQuickExportTasks: (() -> Unit)?,
     onQuickExportCalendar: (() -> Unit)?,
 ) {
-    val hasOverflow = onQuickExportTasks != null || onQuickExportCalendar != null
-    if (onCreateReminder == null && !hasOverflow) return
+    val hasAny = onCreateReminder != null || onQuickExportTasks != null || onQuickExportCalendar != null
+    if (!hasAny) return
 
     var expanded by remember { mutableStateOf(false) }
-    val menuContent: @Composable () -> Unit = {
+    Box {
+        IconButton(onClick = { expanded = true }) {
+            Icon(painterResource(R.drawable.more_vert), contentDescription = stringResource(R.string.a11y_more_actions), modifier = Modifier.size(20.dp))
+        }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            if (onCreateReminder != null) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.ui_reminders_create_button)) },
+                    leadingIcon = { Icon(painterResource(R.drawable.notifications), contentDescription = null, modifier = Modifier.size(20.dp)) },
+                    onClick = { expanded = false; onCreateReminder() },
+                )
+            }
             if (onQuickExportTasks != null) {
                 DropdownMenuItem(
-                    text = { Text(stringResource(R.string.a11y_quick_export_tasks)) },
+                    text = { Text(stringResource(R.string.google_tasks_export)) },
                     leadingIcon = { Icon(painterResource(R.drawable.task_add), contentDescription = null, modifier = Modifier.size(20.dp)) },
-                    onClick = {
-                        expanded = false
-                        onQuickExportTasks()
-                    },
+                    onClick = { expanded = false; onQuickExportTasks() },
                 )
             }
             if (onQuickExportCalendar != null) {
                 DropdownMenuItem(
-                    text = { Text(stringResource(R.string.a11y_quick_export_calendar)) },
+                    text = { Text(stringResource(R.string.google_calendar_export)) },
                     leadingIcon = { Icon(painterResource(R.drawable.calendar_add), contentDescription = null, modifier = Modifier.size(20.dp)) },
-                    onClick = {
-                        expanded = false
-                        onQuickExportCalendar()
-                    },
+                    onClick = { expanded = false; onQuickExportCalendar() },
                 )
             }
-        }
-    }
-
-    if (onCreateReminder != null && hasOverflow) {
-        SplitButtonLayout(
-            leadingButton = {
-                SplitButtonDefaults.OutlinedLeadingButton(onClick = onCreateReminder) {
-                    Icon(painterResource(R.drawable.notifications), contentDescription = stringResource(R.string.ui_reminders_create_button), modifier = Modifier.size(SplitButtonDefaults.LeadingIconSize))
-                }
-            },
-            trailingButton = {
-                Box {
-                    SplitButtonDefaults.OutlinedTrailingButton(
-                        checked = expanded,
-                        onCheckedChange = { expanded = it },
-                    ) {
-                        Icon(painterResource(R.drawable.keyboard_arrow_down), contentDescription = "More reminder actions", modifier = Modifier.size(SplitButtonDefaults.TrailingIconSize))
-                    }
-                    menuContent()
-                }
-            },
-        )
-    } else if (onCreateReminder != null) {
-        SplitButtonDefaults.OutlinedLeadingButton(onClick = onCreateReminder) {
-            Icon(painterResource(R.drawable.notifications), contentDescription = stringResource(R.string.ui_reminders_create_button), modifier = Modifier.size(SplitButtonDefaults.LeadingIconSize))
-        }
-    } else if (hasOverflow) {
-        Box {
-            SplitButtonDefaults.OutlinedTrailingButton(
-                checked = expanded,
-                onCheckedChange = { expanded = it },
-            ) {
-                Icon(painterResource(R.drawable.keyboard_arrow_down), contentDescription = "More reminder actions", modifier = Modifier.size(SplitButtonDefaults.TrailingIconSize))
-            }
-            menuContent()
         }
     }
 }

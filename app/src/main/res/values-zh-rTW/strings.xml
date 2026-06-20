@@ -110,7 +110,7 @@
     <!-- Bottom bar tabs -->
     <string name="tab_notifications">通知</string>
     <string name="tab_tasks">任務</string>
-    <string name="tab_keep">Keep</string>
+    <string name="tab_keep">備忘</string>
     <string name="tab_preferences">偏好</string>
     <string name="menu_settings">設定</string>
     <string name="reminder_related_notifications">相關通知（%1$d）</string>
@@ -341,6 +341,44 @@
     <string name="reminder_pick_time">時間</string>
     <string name="reminder_no_date">未設定日期</string>
     <string name="reminder_no_time">未設定時間</string>
+
+    <!-- Navigation / drawer -->
+    <string name="tab_new">最新</string>
+    <string name="menu_home">主頁</string>
+    <string name="menu_reminders">排程提醒</string>
+    <string name="menu_history">歷史記錄</string>
+    <string name="a11y_more_actions">更多動作</string>
+
+    <!-- New screen sections + triage -->
+    <string name="ui_new_tasks">新任務</string>
+    <string name="ui_new_keep">新備忘</string>
+    <string name="ui_new_notifications_label">新通知</string>
+    <string name="ui_action_save_all">全部儲存</string>
+    <string name="ui_action_select">選取</string>
+    <string name="ui_action_delete_all">全部刪除</string>
+    <string name="ui_selected_count">已選取 %1$d 項</string>
+    <string name="ui_action_save_count">儲存 %1$d 項</string>
+    <string name="a11y_cancel_selection">取消選取</string>
+    <string name="a11y_delete_selected">刪除所選</string>
+    <string name="a11y_export_selected_tasks">將所選匯出到 Google Tasks</string>
+    <string name="toast_moved_to_tasks">已移至任務</string>
+    <string name="toast_moved_to_keep">已移至備忘</string>
+    <string name="toast_saved_to_tasks">已儲存至任務</string>
+    <string name="toast_saved_to_keep">已儲存至備忘</string>
+    <string name="toast_deleted">已刪除</string>
+    <string name="toast_exporting_google_tasks">正在匯出到 Google Tasks…</string>
+    <string name="toast_deleted_suggestions">已刪除建議</string>
+    <string name="ui_new_delete_dialog_title">刪除這些建議？</string>
+    <string name="ui_new_delete_dialog_message">這將移除顯示的新項目。</string>
+    <string name="ui_new_empty">沒有新項目</string>
+    <string name="ui_new_empty_search">沒有符合的新項目</string>
+
+    <!-- History -->
+    <string name="history_grouped">分組</string>
+    <string name="history_timeline">時間軸</string>
+    <string name="history_notification">通知</string>
+    <string name="history_records_count">%1$d 筆記錄</string>
+    <string name="history_no_match">沒有符合的通知</string>
 </resources>
 
 

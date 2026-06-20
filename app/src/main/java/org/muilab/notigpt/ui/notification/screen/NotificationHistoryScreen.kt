@@ -26,6 +26,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import org.muilab.notigpt.R
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -68,13 +70,13 @@ fun NotificationHistoryScreen(
                     FilterChip(
                         selected = mode == HistoryMode.Grouped,
                         onClick = { mode = HistoryMode.Grouped },
-                        label = { Text("Grouped") },
+                        label = { Text(stringResource(R.string.history_grouped)) },
                     )
                     Spacer(Modifier.padding(4.dp))
                     FilterChip(
                         selected = mode == HistoryMode.Timeline,
                         onClick = { mode = HistoryMode.Timeline },
-                        label = { Text("Timeline") },
+                        label = { Text(stringResource(R.string.history_timeline)) },
                     )
                 }
             }
@@ -92,7 +94,7 @@ fun NotificationHistoryScreen(
         }
 
         if (filtered.isEmpty()) {
-            item { Text("No matching notifications", modifier = Modifier.padding(16.dp)) }
+            item { Text(stringResource(R.string.history_no_match), modifier = Modifier.padding(16.dp)) }
         }
     }
 }
@@ -116,13 +118,13 @@ private fun HistoryGroupCard(
     ) {
         Column(Modifier.padding(16.dp)) {
             val latest = records.maxByOrNull { it.time }
-            Text(latest?.title?.ifBlank { "Notification" } ?: "Notification", fontWeight = FontWeight.Bold)
+            Text(latest?.title?.ifBlank { stringResource(R.string.history_notification) } ?: stringResource(R.string.history_notification), fontWeight = FontWeight.Bold)
             val latestTime = latest?.time ?: 0L
             val absRel = if (latestTime > 0L) {
                 "${getAbsoluteTimeStr(latestTime, context)} (${getRelativeTimeStr(latestTime, context)})"
             } else ""
             Text(
-                "${records.size} records${if (absRel.isNotBlank()) " · $absRel" else ""}",
+                stringResource(R.string.history_records_count, records.size) + if (absRel.isNotBlank()) " · $absRel" else "",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -154,7 +156,7 @@ private fun HistoryRecordCard(record: NotiRecord) {
 @Composable
 private fun HistoryRecordContent(record: NotiRecord) {
     val context = LocalContext.current
-    Text(record.title.ifBlank { "Notification" }, style = MaterialTheme.typography.titleSmall)
+    Text(record.title.ifBlank { stringResource(R.string.history_notification) }, style = MaterialTheme.typography.titleSmall)
     if (record.content.isNotBlank()) {
         Text(unescapeUserText(record.content), style = MaterialTheme.typography.bodyMedium)
     }
