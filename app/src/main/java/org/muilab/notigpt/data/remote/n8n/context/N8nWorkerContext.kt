@@ -4,8 +4,11 @@ import android.content.Context
 import androidx.work.ListenableWorker
 import org.muilab.notigpt.data.local.room.AppDatabase
 import org.muilab.notigpt.data.remote.n8n.N8nAPIClient
+import org.muilab.notigpt.data.repository.notification.NotiLlmStateRepository
 import org.muilab.notigpt.data.repository.notification.NotiRepository
 import org.muilab.notigpt.data.repository.notification.NotiRepositoryProvider
+import org.muilab.notigpt.data.repository.reminder.ExtractionJournalRepository
+import org.muilab.notigpt.data.repository.reminder.SavedItemChangeLogRepository
 import org.muilab.notigpt.data.repository.reminder.SavedItemRepository
 import org.muilab.notigpt.data.repository.reminder.SavedSubItemRepository
 import org.muilab.notigpt.util.SharedPreferencesManager
@@ -29,6 +32,18 @@ internal class N8nWorkerContext(
 
     val savedSubItemRepository: SavedSubItemRepository by lazy {
         SavedSubItemRepository(database.subTaskDao())
+    }
+
+    val journalRepository: ExtractionJournalRepository by lazy {
+        ExtractionJournalRepository(database.extractionJournalDao())
+    }
+
+    val notiLlmStateRepository: NotiLlmStateRepository by lazy {
+        NotiLlmStateRepository(database.notiLlmStateDao())
+    }
+
+    val changeLogRepository: SavedItemChangeLogRepository by lazy {
+        SavedItemChangeLogRepository(database.savedItemChangeLogDao())
     }
 
 /**

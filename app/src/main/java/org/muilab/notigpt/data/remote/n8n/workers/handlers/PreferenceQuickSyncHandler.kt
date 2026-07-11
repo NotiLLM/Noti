@@ -75,6 +75,11 @@ internal object PreferenceQuickSyncHandler {
             val prefDao = ctx.database.extractionPreferenceDao()
             prefDao.replacePreferences(prefs)
             Log.d(TAG, "Replaced local preferences with ${prefs.size} rules")
+            try {
+                org.muilab.notigpt.data.remote.firestore.FirestoreSyncRepository(ctx.appContext)
+                    .syncPreferencesAndContexts()
+            } catch (_: Exception) {
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Error parsing quick-sync response", e)
             // Don't fail the worker for a parsing error; the preference push itself succeeded.

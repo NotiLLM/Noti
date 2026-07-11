@@ -20,6 +20,10 @@ class ReminderRelatedNotificationsRepository(context: Context) {
     data class RelatedNotifications(
         val recordsByKey: Map<String, List<NotiRecord>>,
         val unitsByKey: Map<String, NotiUnit>,
+        /** Record ids that directly evidence the saved item (the link rows). */
+        val evidenceRecordIds: Set<String> = emptySet(),
+        /** Keys whose full thread context has been lazily loaded into [recordsByKey]. */
+        val contextLoadedKeys: Set<String> = emptySet(),
     ) {
         companion object {
             val Empty = RelatedNotifications(emptyMap(), emptyMap())
@@ -47,6 +51,32 @@ class ReminderRelatedNotificationsRepository(context: Context) {
         RelatedNotifications(
             recordsByKey = records.groupBy { it.notiKey },
             unitsByKey = units,
+            evidenceRecordIds = recordIds.toSet(),
+        )
+    }
+
+    /**
+     * Lazily expands one notiUnit group with its surrounding (non-evidence) records.
+     *
+     * Only evidence records are stored as links; the rest of the thread is loaded from
+     * noti_record on demand so the user can see the conversation around the evidence.
+     */
+    suspend fun withSurroundingContext(
+        current: RelatedNotifications,
+        notiKey: String,
+        maxRecords: Int = 30,
+    ): RelatedNotifications = withContext(Dispatchers.IO) {
+        if (notiKey in current.contextLoadedKeys) return@withContext current
+        val unitRecords = try {
+            db.recordDao().getRecordsByKey(notiKey).sortedByDescending { it.whenTime }.take(maxRecords)
+        } catch (_: Exception) {
+            return@withContext current
+        }
+        val merged = (current.recordsByKey[notiKey].orEmpty() + unitRecords)
+            .distinctBy { it.notiRecordId }
+        current.copy(
+            recordsByKey = current.recordsByKey + (notiKey to merged),
+            contextLoadedKeys = current.contextLoadedKeys + notiKey,
         )
     }
 }

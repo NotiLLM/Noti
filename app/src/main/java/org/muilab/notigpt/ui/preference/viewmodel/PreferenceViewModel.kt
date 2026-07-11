@@ -362,6 +362,7 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
                         )
                     }
                     prefDao.replacePreferences(newPrefs)
+                    pushPrefsToCloud()
 
                     // Persist any conflicts detected by the backend
                     persistConflicts(result.conflicts, "QUICK_SYNC")
@@ -566,6 +567,7 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
                             updatedAt = now,
                         )
                         userContextDao.upsertContext(ctx)
+                        pushPrefsToCloud()
                     } else {
                         val pref = ExtractionPreference(
                             id = action.actionId,
@@ -575,6 +577,7 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
                             updatedAt = now,
                         )
                         prefDao.upsertPreference(pref)
+                        pushPrefsToCloud()
                     }
                 }
                 ProposedActionType.MODIFY -> {
@@ -588,6 +591,7 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
                             updatedAt = now,
                         )
                         userContextDao.upsertContext(ctx)
+                        pushPrefsToCloud()
                     } else {
                         val pref = ExtractionPreference(
                             id = targetId,
@@ -597,14 +601,17 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
                             updatedAt = now,
                         )
                         prefDao.upsertPreference(pref)
+                        pushPrefsToCloud()
                     }
                 }
                 ProposedActionType.DELETE -> {
                     val targetId = action.targetPreferenceId ?: return@launch
                     if (isContext) {
                         userContextDao.deleteContext(targetId)
+                        pushPrefsToCloud()
                     } else {
                         prefDao.deletePreference(targetId)
+                        pushPrefsToCloud()
                     }
                 }
             }
@@ -658,10 +665,20 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
         _chatFlowContext.value = null
     }
 
+    /** Mirrors the full preference/context sets to Firestore after any mutation (best-effort). */
+    private suspend fun pushPrefsToCloud() {
+        try {
+            org.muilab.notigpt.data.remote.firestore.FirestoreSyncRepository(getApplication())
+                .syncPreferencesAndContexts()
+        } catch (_: Exception) {
+        }
+    }
+
     /** Delete a single active preference (from the active rules UI). */
     fun deleteActivePreference(id: String) {
         viewModelScope.launch(Dispatchers.IO) {
             prefDao.deletePreference(id)
+            pushPrefsToCloud()
         }
     }
 
@@ -669,6 +686,7 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
     fun deleteActiveContext(id: String) {
         viewModelScope.launch(Dispatchers.IO) {
             userContextDao.deleteContext(id)
+            pushPrefsToCloud()
         }
     }
 

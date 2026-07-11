@@ -23,6 +23,9 @@ import org.muilab.notigpt.model.features.SavedItemState
 import org.muilab.notigpt.model.features.SavedItemType
 import org.muilab.notigpt.model.features.SavedSubItem
 import org.muilab.notigpt.data.remote.googletasks.GoogleTasksRepository
+import kotlinx.coroutines.flow.Flow
+import org.muilab.notigpt.model.features.SavedItemChangeLog
+import org.muilab.notigpt.data.repository.reminder.SavedItemChangeLogRepository
 import org.muilab.notigpt.data.repository.reminder.SavedItemRepository
 import org.muilab.notigpt.data.repository.reminder.ReminderRelatedNotificationsRepository
 import org.muilab.notigpt.data.repository.reminder.SavedSubItemRepository
@@ -37,7 +40,7 @@ import java.util.UUID
  */
 class ReminderViewModel(application: Application) : AndroidViewModel(application) {
 
-    enum class FilterTab { All, Pending, Tasks, Memos, Completed, Keep, Archived }
+    enum class FilterTab { All, Pending, Tasks, Memos, Completed, Keep, Archived, Starred }
     enum class ListMode { All, Tasks, Keep }
 
     /**
@@ -55,6 +58,14 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
     private val subTaskRepo: SavedSubItemRepository
     private val googleTasksRepo: GoogleTasksRepository
     private val relatedNotificationsRepo: ReminderRelatedNotificationsRepository
+    private val changeLogRepo: SavedItemChangeLogRepository
+
+    /** Extraction pipeline health, for the "server unreachable" banner. */
+    val extractionStatus: StateFlow<org.muilab.notigpt.data.remote.n8n.ExtractionStatusStore.Status> =
+        org.muilab.notigpt.data.remote.n8n.ExtractionStatusStore.status
+
+    /** Records still waiting to be sent for extraction. */
+    val pendingExtractionCount: StateFlow<Int>
 
     init {
         val db = AppDatabase.getInstance(application.applicationContext)
@@ -62,6 +73,14 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
         subTaskRepo = SavedSubItemRepository(db.subTaskDao())
         googleTasksRepo = GoogleTasksRepository(application.applicationContext)
         relatedNotificationsRepo = ReminderRelatedNotificationsRepository(application.applicationContext)
+        changeLogRepo = SavedItemChangeLogRepository(db.savedItemChangeLogDao())
+        pendingExtractionCount = db.recordDao().observePendingExtractionCount()
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+    }
+
+    /** Manual retry from the offline banner: re-enqueues periodic extraction immediately. */
+    fun retryExtraction() {
+        org.muilab.notigpt.data.remote.n8n.enqueueTaskExtraction(getApplication(), emptyList(), userTriggered = false)
     }
 
     private val _filter = MutableStateFlow(FilterTab.All)
@@ -129,11 +148,13 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
             ListMode.Keep -> when (f) {
                 FilterTab.Keep -> activeKeeps
                 FilterTab.Archived -> archivedKeeps
+                FilterTab.Starred -> memos.filter { it.isStarred }
                 else -> memos // All
             }
             ListMode.Tasks -> when (f) {
                 FilterTab.Pending -> tasks.filter { !it.isCompleted }
                 FilterTab.Completed -> completed
+                FilterTab.Starred -> tasks.filter { it.isStarred }
                 else -> tasks // All (saved + completed)
             }
             ListMode.All -> {
@@ -143,6 +164,7 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
                     FilterTab.Tasks -> tasks.filter { it.savedItemId in modeIds }
                     FilterTab.Memos -> memos.filter { it.savedItemId in modeIds }
                     FilterTab.Completed -> completed.filter { it.savedItemId in modeIds }
+                    FilterTab.Starred -> all.filter { it.isStarred }
                     else -> all // All
                 }
             }
@@ -171,6 +193,30 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
     fun toggleCompleted(reminder: SavedItem, completed: Boolean) {
         viewModelScope.launch {
             repo.setCompleted(reminder.savedItemId, completed, System.currentTimeMillis())
+        }
+    }
+
+    fun toggleStarred(reminder: SavedItem) {
+        viewModelScope.launch {
+            repo.setStarred(reminder.savedItemId, !reminder.isStarred, System.currentTimeMillis())
+        }
+    }
+
+    /** Explicit review acknowledgment ("Got it"): clears the New/Updated badge and moves the change cursor. */
+    fun acknowledgeReview(savedItemId: String) {
+        viewModelScope.launch {
+            repo.acknowledgeReview(savedItemId, System.currentTimeMillis())
+        }
+    }
+
+    /** Change history rows for one item, newest first; drives the detail view's change sections. */
+    fun changeLogFlow(savedItemId: String): Flow<List<SavedItemChangeLog>> =
+        changeLogRepo.observeByItem(savedItemId)
+
+    /** [doAtMs] = 0 clears the do date. */
+    fun setDoDate(savedItemId: String, doAtMs: Long) {
+        viewModelScope.launch {
+            repo.setDoDate(savedItemId, doAtMs, System.currentTimeMillis())
         }
     }
 
@@ -272,6 +318,21 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
                 isLoading = false,
                 related = related,
             )
+        }
+    }
+
+    /** Lazily expands one related-notification group with the thread's surrounding records. */
+    fun loadSurroundingContext(savedItemId: String, notiKey: String) {
+        val current = _relatedNotificationsState.value
+        if (current.savedItemId != savedItemId || current.isLoading) return
+        viewModelScope.launch {
+            val expanded = try {
+                relatedNotificationsRepo.withSurroundingContext(current.related, notiKey)
+            } catch (t: Throwable) {
+                Log.e("ReminderRelatedNotis", "Failed loading surrounding context", t)
+                return@launch
+            }
+            _relatedNotificationsState.value = current.copy(related = expanded)
         }
     }
 

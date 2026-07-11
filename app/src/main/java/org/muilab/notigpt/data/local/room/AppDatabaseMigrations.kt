@@ -1034,4 +1034,180 @@ object AppDatabaseMigrations {
         }
     }
 
+    /**
+     * Rebuilds noti_saved_item_link for evidence-only provenance: surrogate linkId PK plus
+     * role/source columns. Pre-existing links were "every record sent in the request", not
+     * evidence, so this deliberately wipes them instead of copying (fresh-start decision).
+     */
+    val MIGRATION_40_41 = object : Migration(40, 41) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("DROP INDEX IF EXISTS `index_noti_saved_item_link_savedItemId`")
+            db.execSQL("DROP INDEX IF EXISTS `index_noti_saved_item_link_notiKey`")
+            db.execSQL("DROP TABLE IF EXISTS `noti_saved_item_link`")
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `noti_saved_item_link` (
+                    `linkId` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    `notiKey` TEXT NOT NULL,
+                    `notiRecordId` TEXT NOT NULL,
+                    `type` TEXT NOT NULL,
+                    `savedItemId` TEXT NOT NULL,
+                    `role` TEXT NOT NULL,
+                    `source` TEXT NOT NULL,
+                    `createdAt` INTEGER NOT NULL,
+                    FOREIGN KEY(`savedItemId`) REFERENCES `saved_item`(`savedItemId`) ON UPDATE NO ACTION ON DELETE CASCADE
+                )
+                """.trimIndent()
+            )
+            db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_noti_saved_item_link_savedItemId_notiRecordId_role` ON `noti_saved_item_link` (`savedItemId`, `notiRecordId`, `role`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_noti_saved_item_link_savedItemId` ON `noti_saved_item_link` (`savedItemId`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_noti_saved_item_link_notiRecordId` ON `noti_saved_item_link` (`notiRecordId`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_noti_saved_item_link_notiKey` ON `noti_saved_item_link` (`notiKey`)")
+        }
+    }
+
+    /** Adds user-owned star/do-date + review cursor to saved_item and the per-item change log. */
+    val MIGRATION_41_42 = object : Migration(41, 42) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE `saved_item` ADD COLUMN `isStarred` INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE `saved_item` ADD COLUMN `doAtMs` INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE `saved_item` ADD COLUMN `lastViewedChangeAt` INTEGER NOT NULL DEFAULT 0")
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `saved_item_change_log` (
+                    `changeId` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    `savedItemId` TEXT NOT NULL,
+                    `createdAt` INTEGER NOT NULL,
+                    `changeType` TEXT NOT NULL,
+                    `changeSummary` TEXT NOT NULL DEFAULT '',
+                    `appendedContent` TEXT NOT NULL DEFAULT '',
+                    `addedSubTasksJson` TEXT NOT NULL DEFAULT '[]',
+                    `removedSubTasksJson` TEXT NOT NULL DEFAULT '[]',
+                    `changedFieldsJson` TEXT NOT NULL DEFAULT '{}',
+                    `evidenceRecordIdsJson` TEXT NOT NULL DEFAULT '[]',
+                    `origin` TEXT NOT NULL DEFAULT 'llm',
+                    FOREIGN KEY(`savedItemId`) REFERENCES `saved_item`(`savedItemId`) ON UPDATE NO ACTION ON DELETE CASCADE
+                )
+                """.trimIndent()
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_saved_item_change_log_savedItemId_createdAt` ON `saved_item_change_log` (`savedItemId`, `createdAt`)")
+        }
+    }
+
+    /** Adds the per-notiUnit extraction journal (verbatim entries + rolling summary). */
+    val MIGRATION_42_43 = object : Migration(42, 43) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `extraction_journal_entry` (
+                    `entryId` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    `notiKey` TEXT NOT NULL,
+                    `createdAt` INTEGER NOT NULL,
+                    `eventType` TEXT NOT NULL,
+                    `savedItemId` TEXT NOT NULL DEFAULT '',
+                    `itemTitle` TEXT NOT NULL DEFAULT '',
+                    `detail` TEXT NOT NULL DEFAULT ''
+                )
+                """.trimIndent()
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_extraction_journal_entry_notiKey_createdAt` ON `extraction_journal_entry` (`notiKey`, `createdAt`)")
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `extraction_journal_summary` (
+                    `notiKey` TEXT NOT NULL,
+                    `summaryText` TEXT NOT NULL DEFAULT '',
+                    `lastFoldedAt` INTEGER NOT NULL DEFAULT 0,
+                    `foldedEntryCount` INTEGER NOT NULL DEFAULT 0,
+                    PRIMARY KEY(`notiKey`)
+                )
+                """.trimIndent()
+            )
+        }
+    }
+
+    /**
+     * Moves the LLM-derived scan flags off noti_drawer into the new per-thread noti_llm_state
+     * table (which also carries the classification fields). NotiUnit stays purely notification
+     * content + display state from here on; thread-level LLM conclusions live in noti_llm_state.
+     */
+    val MIGRATION_43_44 = object : Migration(43, 44) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `noti_llm_state` (
+                    `notiKey` TEXT NOT NULL,
+                    `shouldExtractReminder` INTEGER NOT NULL DEFAULT 0,
+                    `hasTask` INTEGER NOT NULL DEFAULT 0,
+                    `hasMemo` INTEGER NOT NULL DEFAULT 0,
+                    `hasEvent` INTEGER NOT NULL DEFAULT 0,
+                    `categories` TEXT NOT NULL DEFAULT '[]',
+                    `categoryReason` TEXT NOT NULL DEFAULT '',
+                    `categorySource` TEXT NOT NULL DEFAULT '',
+                    `lastClassifiedAt` INTEGER NOT NULL DEFAULT 0,
+                    `lastClassifiedRecordCount` INTEGER NOT NULL DEFAULT 0,
+                    `updatedAt` INTEGER NOT NULL DEFAULT 0,
+                    PRIMARY KEY(`notiKey`)
+                )
+                """.trimIndent()
+            )
+            // Seed from the old drawer flags. All-false rows are equivalent to no row at all.
+            db.execSQL(
+                """
+                INSERT OR REPLACE INTO `noti_llm_state`
+                    (`notiKey`, `shouldExtractReminder`, `hasTask`, `hasMemo`, `hasEvent`)
+                SELECT `notiKey`, `shouldExtractReminder`, `hasTask`, `hasMemo`, `hasEvent`
+                FROM `noti_drawer`
+                WHERE `shouldExtractReminder` = 1 OR `hasTask` = 1 OR `hasMemo` = 1 OR `hasEvent` = 1
+                """.trimIndent()
+            )
+            // Drop the moved columns: SQLite needs a table recreate for column removal.
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `noti_drawer_new` (
+                    `notiKey` TEXT NOT NULL,
+                    `pkgName` TEXT NOT NULL,
+                    `hashKey` INTEGER NOT NULL,
+                    `groupKey` TEXT NOT NULL,
+                    `isAppGroup` INTEGER NOT NULL,
+                    `isGroupChat` INTEGER NOT NULL,
+                    `sortKey` TEXT NOT NULL,
+                    `appName` TEXT NOT NULL,
+                    `lastUpdateTime` INTEGER NOT NULL,
+                    `lastSyncTime` INTEGER NOT NULL,
+                    `icon` TEXT NOT NULL,
+                    `largeIcon` TEXT NOT NULL,
+                    `isPeople` INTEGER NOT NULL,
+                    `isPinned` INTEGER NOT NULL,
+                    `isArchived` INTEGER NOT NULL,
+                    `isDismissed` INTEGER NOT NULL,
+                    `isRead` INTEGER NOT NULL,
+                    `isSetToTop` INTEGER NOT NULL,
+                    `setToTopTime` INTEGER NOT NULL,
+                    `sortPosition` INTEGER NOT NULL,
+                    `explanation` TEXT NOT NULL,
+                    `summary` TEXT NOT NULL,
+                    `sortScore` REAL NOT NULL,
+                    PRIMARY KEY(`notiKey`)
+                )
+                """.trimIndent()
+            )
+            db.execSQL(
+                """
+                INSERT INTO `noti_drawer_new`
+                    (`notiKey`, `pkgName`, `hashKey`, `groupKey`, `isAppGroup`, `isGroupChat`,
+                     `sortKey`, `appName`, `lastUpdateTime`, `lastSyncTime`, `icon`, `largeIcon`,
+                     `isPeople`, `isPinned`, `isArchived`, `isDismissed`, `isRead`, `isSetToTop`,
+                     `setToTopTime`, `sortPosition`, `explanation`, `summary`, `sortScore`)
+                SELECT `notiKey`, `pkgName`, `hashKey`, `groupKey`, `isAppGroup`, `isGroupChat`,
+                     `sortKey`, `appName`, `lastUpdateTime`, `lastSyncTime`, `icon`, `largeIcon`,
+                     `isPeople`, `isPinned`, `isArchived`, `isDismissed`, `isRead`, `isSetToTop`,
+                     `setToTopTime`, `sortPosition`, `explanation`, `summary`, `sortScore`
+                FROM `noti_drawer`
+                """.trimIndent()
+            )
+            db.execSQL("DROP TABLE `noti_drawer`")
+            db.execSQL("ALTER TABLE `noti_drawer_new` RENAME TO `noti_drawer`")
+        }
+    }
+
 }

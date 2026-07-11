@@ -18,6 +18,7 @@ object NotiRepositoryProvider {
             appDatabase.drawerDao(),
             appDatabase.actionDao(),
             appDatabase.recordDao(),
+            appDatabase.notiLlmStateDao(),
         )
     }
 }

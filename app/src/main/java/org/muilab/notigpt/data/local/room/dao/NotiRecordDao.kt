@@ -138,6 +138,27 @@ interface NotiRecordDao {
     @Query("SELECT * FROM noti_record WHERE taskExtractionClaimed = 0 AND taskExtracted = 0 AND notiKey = :notiKey ORDER BY whenTime ASC")
     fun getUnclaimedUnextractedByKey(notiKey: String): List<NotiRecord>
 
+    @Query("SELECT COUNT(*) FROM noti_record WHERE notiKey = :notiKey")
+    fun getRecordCountByKey(notiKey: String): Int
+
+    /** Newest record time for a key; null when the key has no records. Drives idle-thread checks. */
+    @Query("SELECT MAX(whenTime) FROM noti_record WHERE notiKey = :notiKey")
+    fun getLastRecordTimeByKey(notiKey: String): Long?
+
+    /** Live count of records still waiting for extraction; drives the offline/pending banner. */
+    @Query(
+        """
+        SELECT COUNT(*) FROM noti_record
+        WHERE taskExtracted = 0 AND taskExtractionClaimed = 0
+        AND notiKey IN (
+            SELECT s.notiKey FROM noti_llm_state s
+            JOIN noti_drawer d ON d.notiKey = s.notiKey
+            WHERE d.isDismissed = 0 AND s.shouldExtractReminder = 1
+        )
+        """
+    )
+    fun observePendingExtractionCount(): kotlinx.coroutines.flow.Flow<Int>
+
     // Search: always searches across all records ever received.
     @Query("""
         SELECT * FROM noti_record 

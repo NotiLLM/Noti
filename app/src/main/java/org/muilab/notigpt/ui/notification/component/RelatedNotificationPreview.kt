@@ -2,6 +2,7 @@ package org.muilab.notigpt.ui.notification.component
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -15,6 +16,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -24,6 +26,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -45,6 +48,12 @@ fun RelatedNotificationPreview(
     notiDisplayUnit: NotiDisplayUnit,
     showOpenButton: Boolean = false,
     onOpen: (() -> Unit)? = null,
+    /** Record ids that directly evidence the owning saved item; rendered highlighted. */
+    evidenceRecordIds: Set<String> = emptySet(),
+    /** True once the thread's surrounding (non-evidence) records were lazily loaded in. */
+    contextLoaded: Boolean = false,
+    /** Loads the surrounding records of this thread; null hides the affordance. */
+    onLoadContext: (() -> Unit)? = null,
 ) {
     val notiUnit = notiDisplayUnit.notiUnit
     val notiRecords = notiDisplayUnit.notiRecords.sortedBy { it.time }
@@ -141,6 +150,7 @@ fun RelatedNotificationPreview(
 
             if (expanded) {
                 val recordsToShow = if (notiRecords.size > 30) notiRecords.takeLast(30) else notiRecords
+                val highlightEvidence = evidenceRecordIds.isNotEmpty() && contextLoaded
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -149,12 +159,43 @@ fun RelatedNotificationPreview(
                     recordsToShow.forEach { record ->
                         val content = record.content
                         if (content.isBlank() || content == "null") return@forEach
-                        // content-left / time-right, matching the expanded notification card.
-                        ExpandedNotiRecord(
-                            notiTitle = "",
-                            notiTime = record.time,
-                            notiContent = content,
-                            showTitle = false,
+                        val isEvidence = record.notiRecordId in evidenceRecordIds
+                        // Once surrounding context is loaded, evidence rows keep a tinted background
+                        // so the messages that produced the item stand out from the conversation.
+                        val rowModifier = if (highlightEvidence && isEvidence) {
+                            Modifier
+                                .fillMaxWidth()
+                                .background(MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.35f))
+                        } else {
+                            Modifier.fillMaxWidth()
+                        }
+                        Column(modifier = rowModifier) {
+                            // content-left / time-right, matching the expanded notification card.
+                            ExpandedNotiRecord(
+                                notiTitle = "",
+                                notiTime = record.time,
+                                notiContent = content,
+                                showTitle = false,
+                            )
+                        }
+                    }
+
+                    if (onLoadContext != null && !contextLoaded) {
+                        TextButton(
+                            onClick = onLoadContext,
+                            modifier = Modifier.align(Alignment.CenterHorizontally),
+                        ) {
+                            Text(
+                                text = stringResource(R.string.reminder_show_surrounding_context),
+                                style = MaterialTheme.typography.labelMedium,
+                            )
+                        }
+                    } else if (highlightEvidence) {
+                        Text(
+                            text = stringResource(R.string.reminder_evidence_legend),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
                         )
                     }
                 }

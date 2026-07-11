@@ -6,7 +6,6 @@ import org.muilab.notigpt.model.notifications.NotiDisplayUnit
 import org.muilab.notigpt.model.notifications.NotiUnit
 import org.muilab.notigpt.model.notifications.components.NotiDisplayState
 import org.muilab.notigpt.model.notifications.components.NotiMetadata
-import org.muilab.notigpt.model.notifications.components.NotiReminderAttr
 
 class ClearableNotificationFilterTest {
 
@@ -48,10 +47,6 @@ class ClearableNotificationFilterTest {
                     this.isDismissed = isDismissed
                     isRead = true
                 },
-                reminderAttr = NotiReminderAttr(
-                    shouldExtractReminder = false,
-                    hasTask = false,
-                ),
             ),
             notiRecords = emptyList(),
         )

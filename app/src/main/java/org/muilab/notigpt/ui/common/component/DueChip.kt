@@ -95,3 +95,46 @@ fun DueChip(
         )
     }
 }
+
+/**
+ * A small neutral pill showing the user-set "do date" (when they plan to work on the task),
+ * as opposed to [DueChip]'s deadline. No urgency coloring: the do date is a plan, not an obligation.
+ *
+ * Values ≤ 0 (unset) render nothing.
+ */
+@Composable
+fun DoDateChip(
+    doAtMs: Long,
+    modifier: Modifier = Modifier,
+) {
+    if (doAtMs <= 0L) return
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val container = MaterialTheme.colorScheme.secondaryContainer
+    val onContainer = MaterialTheme.colorScheme.onSecondaryContainer
+
+    val label = androidx.compose.ui.res.stringResource(
+        R.string.ui_reminders_do_date_chip,
+        getRelativeTimeStr(doAtMs, context),
+    )
+
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(container)
+            .padding(horizontal = 8.dp, vertical = 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            painter = painterResource(R.drawable.ic_calendar_today),
+            contentDescription = null,
+            tint = onContainer,
+            modifier = Modifier.size(14.dp),
+        )
+        Spacer(Modifier.width(4.dp))
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            color = onContainer,
+        )
+    }
+}

@@ -59,9 +59,35 @@ class ReminderPeriodicWorker(
             }
         }
 
+        // === Classification re-check pass (rare) ===
+        // ~95% of threads never change category; re-classify only when a thread's record count
+        // has doubled since it was last classified, or the classification has gone stale.
+        val reclassKeys = try {
+            val llmStateDao = db.notiLlmStateDao()
+            val now = System.currentTimeMillis()
+            activeKeys.filter { key ->
+                if (key in scanKeys) return@filter false // a normal scan is already on its way
+                val state = llmStateDao.getByKey(key) ?: return@filter false
+                if (state.lastClassifiedAt <= 0L) return@filter false
+                val total = recordDao.getRecordCountByKey(key)
+                val grewTwofold = state.lastClassifiedRecordCount > 0 &&
+                    total >= state.lastClassifiedRecordCount * 2
+                val stale = now - state.lastClassifiedAt > RECLASSIFY_MAX_AGE_MS
+                grewTwofold || stale
+            }
+        } catch (_: Exception) {
+            emptyList()
+        }
+        if (reclassKeys.isNotEmpty()) {
+            Log.d(TAG, "Periodic reclassification: enqueuing for ${reclassKeys.size} keys")
+            reclassKeys.forEach { key ->
+                enqueueTaskScan(applicationContext, key, forceReclassify = true)
+            }
+        }
+
         // === Extraction pass ===
         val extractKeys = try {
-            drawerDao.getAllActive().filter { it.shouldExtractReminder }.map { it.notiKey }
+            db.notiLlmStateDao().getActiveShouldExtractKeys()
         } catch (_: Exception) {
             emptyList()
         }
@@ -79,5 +105,8 @@ class ReminderPeriodicWorker(
     companion object {
         private const val TAG = "ReminderPeriodicWorker"
         private const val MAX_RETRIES = 3
+
+        /** Classification older than this is re-checked even without record growth. */
+        private const val RECLASSIFY_MAX_AGE_MS = 14L * 24 * 60 * 60 * 1000
     }
 }

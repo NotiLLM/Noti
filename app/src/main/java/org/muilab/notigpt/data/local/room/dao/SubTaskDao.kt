@@ -43,6 +43,10 @@ interface SavedSubItemDao {
     @Query("UPDATE saved_sub_item SET isVisible = 0, lastUpdateTimestamp = :ts WHERE parentSavedItemId = :savedItemId")
     suspend fun softDeleteByParentId(savedItemId: String, ts: Long)
 
+    /** Account-switch wipe. */
+    @Query("DELETE FROM saved_sub_item")
+    suspend fun deleteAllForAccountSwitch()
+
     /** Soft-delete visible sub-tasks omitted from a replacement backend response. */
     @Query("UPDATE saved_sub_item SET isVisible = 0, lastUpdateTimestamp = :ts WHERE parentSavedItemId = :savedItemId AND savedSubItemId NOT IN (:keptIds)")
     suspend fun softDeleteByParentIdExcept(savedItemId: String, keptIds: List<String>, ts: Long)

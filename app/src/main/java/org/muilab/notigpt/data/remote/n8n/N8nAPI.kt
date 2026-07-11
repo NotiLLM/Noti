@@ -74,11 +74,19 @@ fun enqueueNotificationAction(
  * A per-key KEEP policy bounds scheduler growth and lets an in-flight scan finish before another identical scan
  * is added. Extraction is scheduled separately after scan acceptance.
  */
-fun enqueueTaskScan(context: Context, notiKey: String) {
-    Log.d("N8nAPI", "enqueueTaskScan: key=$notiKey")
+private fun isSignedIn(): Boolean =
+    com.google.firebase.auth.FirebaseAuth.getInstance().currentUser != null
+
+fun enqueueTaskScan(context: Context, notiKey: String, forceReclassify: Boolean = false) {
+    if (!isSignedIn()) {
+        Log.d("N8nAPI", "Skipping task scan: not signed in")
+        return
+    }
+    Log.d("N8nAPI", "enqueueTaskScan: key=$notiKey forceReclassify=$forceReclassify")
      val inputData = Data.Builder()
          .putString("api_type", N8N_TASK_SCAN)
          .putString("noti_key", notiKey)
+         .putBoolean("force_reclassify", forceReclassify)
          .putString("webhook_path", BuildConfig.N8N_TASK_SCAN_PATH)
          .build()
 
@@ -94,8 +102,10 @@ fun enqueueTaskScan(context: Context, notiKey: String) {
 
      // Use per-key unique name to prevent unbounded job accumulation in JobScheduler.
      // KEEP: if a scan for this key is already pending/running, don't restart it.
+     // Forced re-classification uses its own slot so it never collides with a pending normal scan.
+     val uniqueName = if (forceReclassify) "n8n_task_scan_reclass_$notiKey" else "n8n_task_scan_$notiKey"
      WorkManager.getInstance(context)
-         .enqueueUniqueWork("n8n_task_scan_$notiKey", ExistingWorkPolicy.KEEP, workerRequest)
+         .enqueueUniqueWork(uniqueName, ExistingWorkPolicy.KEEP, workerRequest)
  }
 
 /**
@@ -110,6 +120,10 @@ fun enqueueTaskExtraction(
     userTriggered: Boolean = false,
     visibleRecordIds: List<String> = emptyList(),
 ) {
+    if (!isSignedIn()) {
+        Log.d("N8nAPI", "Skipping task extraction: not signed in")
+        return
+    }
     Log.d("N8nAPI", "enqueueTaskExtraction: keys=${notiKeys.size} ${notiKeys.take(5)} userTriggered=$userTriggered visibleRecordIds=${visibleRecordIds.size}")
     val inputDataBuilder = Data.Builder()
         .putString("api_type", N8N_TASK_EXTRACTION)
@@ -130,7 +144,8 @@ fun enqueueTaskExtraction(
         .build()
 
     val workerRequest = OneTimeWorkRequestBuilder<N8nAPIWorker>()
-        .setBackoffCriteria(BackoffPolicy.LINEAR, 1, TimeUnit.MINUTES)
+        // Exponential: extraction retries during an outage back off instead of hammering every minute.
+        .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
         .setConstraints(constraints)
         .setInputData(inputData)
         .build()
@@ -148,6 +163,10 @@ fun enqueueTaskExtraction(
  * debounce timer and prevents overlapping backend jobs.
  */
 fun enqueueDelayedTaskExtraction(context: Context, delaySeconds: Long, userTriggered: Boolean = false) {
+    if (!isSignedIn()) {
+        Log.d("N8nAPI", "Skipping delayed task extraction: not signed in")
+        return
+    }
     Log.d("N8nAPI", "enqueueDelayedTaskExtraction: delaySeconds=$delaySeconds userTriggered=$userTriggered")
      val inputData = Data.Builder()
          .putString("api_type", N8N_TASK_EXTRACTION)
@@ -163,7 +182,7 @@ fun enqueueDelayedTaskExtraction(context: Context, delaySeconds: Long, userTrigg
 
      val workerRequest = OneTimeWorkRequestBuilder<N8nAPIWorker>()
          .setInitialDelay(delaySeconds, TimeUnit.SECONDS)
-         .setBackoffCriteria(BackoffPolicy.LINEAR, 1, TimeUnit.MINUTES)
+         .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
          .setConstraints(constraints)
          .setInputData(inputData)
          .build()

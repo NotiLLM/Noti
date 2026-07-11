@@ -10,6 +10,7 @@ import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import org.muilab.notigpt.data.local.room.dao.NotiActionDao
 import org.muilab.notigpt.data.local.room.dao.NotiDrawerDao
+import org.muilab.notigpt.data.local.room.dao.NotiLlmStateDao
 import org.muilab.notigpt.data.local.room.dao.NotiRecordDao
 import org.muilab.notigpt.model.notifications.NotiAction
 import org.muilab.notigpt.model.notifications.NotiDisplayUnit
@@ -28,6 +29,7 @@ class NotiRepository(
     private val notiDrawerDao: NotiDrawerDao,
     private val notiActionDao: NotiActionDao,
     private val notiRecordDao: NotiRecordDao,
+    private val notiLlmStateDao: NotiLlmStateDao,
 ) {
 
     private val activeUnitsRepo = NotiActiveUnitsRepository(
@@ -39,6 +41,7 @@ class NotiRepository(
         appContext = appContext,
         notiDrawerDao = notiDrawerDao,
         notiRecordDao = notiRecordDao,
+        notiLlmStateDao = notiLlmStateDao,
     )
 
 

@@ -164,6 +164,12 @@ object SharedPreferencesManager {
         get() = get(KEY_LOCAL_PREFS, KEY_MAX_PAST_CONTEXT, 0)
         set(value) = put(KEY_LOCAL_PREFS, KEY_MAX_PAST_CONTEXT, value)
 
+    /** Days without new records before a thread's journal is folded/truncated as idle. */
+    const val KEY_JOURNAL_IDLE_FOLD_DAYS = "journalIdleFoldDays"
+    var journalIdleFoldDays: Int
+        get() = get(KEY_LOCAL_PREFS, KEY_JOURNAL_IDLE_FOLD_DAYS, 7)
+        set(value) = put(KEY_LOCAL_PREFS, KEY_JOURNAL_IDLE_FOLD_DAYS, value)
+
     private const val KEY_INSTALL_TIMESTAMP_MS = "installTimestampMs"
 
     /**

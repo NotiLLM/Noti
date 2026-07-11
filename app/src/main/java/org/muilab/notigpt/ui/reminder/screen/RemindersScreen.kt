@@ -105,6 +105,7 @@ import org.muilab.notigpt.model.features.SavedItemState
 import org.muilab.notigpt.model.features.SavedSubItem
 import org.muilab.notigpt.data.export.asExportable
 import org.muilab.notigpt.ui.preference.component.PreferenceLearningBottomSheet
+import org.muilab.notigpt.ui.common.component.DoDateChip
 import org.muilab.notigpt.ui.common.component.DueChip
 import org.muilab.notigpt.ui.theme.NotiTheme
 import org.muilab.notigpt.ui.notification.component.RelatedNotificationPreview
@@ -308,11 +309,13 @@ fun RemindersScreen(
                     ReminderViewModel.ListMode.Tasks -> {
                         ReminderFilterChip(stringResource(R.string.ui_reminders_filter_pending), filter == ReminderViewModel.FilterTab.Pending, { vm.setFilter(ReminderViewModel.FilterTab.Pending) }, leadingIconRes = R.drawable.check_box_unchecked, iconTint = NotiTheme.semantic.taskAccent, flashTick = if (flashTarget == ReminderViewModel.FilterTab.Pending) flashTick else 0)
                         ReminderFilterChip(stringResource(R.string.ui_reminders_filter_completed), filter == ReminderViewModel.FilterTab.Completed, { vm.setFilter(ReminderViewModel.FilterTab.Completed) }, leadingIconRes = R.drawable.check_box_checked, iconTint = NotiTheme.semantic.taskAccent, flashTick = if (flashTarget == ReminderViewModel.FilterTab.Completed) flashTick else 0)
+                        ReminderFilterChip(stringResource(R.string.ui_reminders_filter_starred), filter == ReminderViewModel.FilterTab.Starred, { vm.setFilter(ReminderViewModel.FilterTab.Starred) }, leadingIconRes = R.drawable.star_filled, iconTint = NotiTheme.semantic.taskAccent)
                         ReminderFilterChip(stringResource(R.string.ui_reminders_filter_all), filter == ReminderViewModel.FilterTab.All, { vm.setFilter(ReminderViewModel.FilterTab.All) })
                     }
                     ReminderViewModel.ListMode.Keep -> {
                         ReminderFilterChip(stringResource(R.string.ui_reminders_filter_keep), filter == ReminderViewModel.FilterTab.Keep, { vm.setFilter(ReminderViewModel.FilterTab.Keep) }, leadingIconRes = R.drawable.bookmark, iconTint = NotiTheme.semantic.keepAccent, flashTick = if (flashTarget == ReminderViewModel.FilterTab.Keep) flashTick else 0)
                         ReminderFilterChip(stringResource(R.string.ui_reminders_filter_archived), filter == ReminderViewModel.FilterTab.Archived, { vm.setFilter(ReminderViewModel.FilterTab.Archived) }, leadingIconRes = R.drawable.archive_yes, iconTint = NotiTheme.semantic.keepAccent, flashTick = if (flashTarget == ReminderViewModel.FilterTab.Archived) flashTick else 0)
+                        ReminderFilterChip(stringResource(R.string.ui_reminders_filter_starred), filter == ReminderViewModel.FilterTab.Starred, { vm.setFilter(ReminderViewModel.FilterTab.Starred) }, leadingIconRes = R.drawable.star_filled, iconTint = NotiTheme.semantic.keepAccent)
                         ReminderFilterChip(stringResource(R.string.ui_reminders_filter_all), filter == ReminderViewModel.FilterTab.All, { vm.setFilter(ReminderViewModel.FilterTab.All) })
                     }
                 }
@@ -325,6 +328,31 @@ fun RemindersScreen(
                         contentDescription = stringResource(R.string.a11y_refresh_all),
                         modifier = Modifier.size(20.dp),
                     )
+                }
+            }
+
+            // Offline banner: extraction requests are failing and records are queued locally.
+            val extractionStatus by vm.extractionStatus.collectAsState()
+            val pendingExtractionCount by vm.pendingExtractionCount.collectAsState()
+            if (extractionStatus.consecutiveFailures > 0 && pendingExtractionCount > 0) {
+                Surface(
+                    color = MaterialTheme.colorScheme.errorContainer,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = stringResource(R.string.extraction_pending_banner, pendingExtractionCount),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            modifier = Modifier.weight(1f),
+                        )
+                        TextButton(onClick = { vm.retryExtraction() }) {
+                            Text(stringResource(R.string.extraction_retry), style = MaterialTheme.typography.labelMedium)
+                        }
+                    }
                 }
             }
 
@@ -355,6 +383,7 @@ fun RemindersScreen(
                             editingId = reminder.savedItemId
                             editingInitialSnapshot = reminder
                         },
+                        onToggleStarred = { vm.toggleStarred(reminder) },
                         onLongPress = { feedbackDialogReminder = reminder },
                         onCreateReminder = { reminderDialogSavedItem = reminder },
                         // Task/Keep pages: no inline delete (delete lives in the detail editor).
@@ -489,6 +518,11 @@ fun RemindersScreen(
 
                         if (updatedOrNull != null) {
                             val emptyNow = updatedOrNull.title.isBlank() && updatedOrNull.content.isBlank()
+                            // Do date is user-owned planning: persist it via the targeted setter so a
+                            // do-date-only edit does not flip userEdited (which shields content from LLM updates).
+                            if (!emptyNow && base != null && base.doAtMs != updatedOrNull.doAtMs && !changed) {
+                                vm.setDoDate(updatedOrNull.savedItemId, updatedOrNull.doAtMs)
+                            }
                             when {
                                 emptyNow -> {
                                     // For brand-new manual reminders, just discard. For existing reminders, delete.
@@ -557,6 +591,10 @@ fun RemindersScreen(
                         )
 
                         val emptyNow = updated.title.isBlank() && updated.content.isBlank()
+                        // See onBack: do-date-only edits persist without flipping userEdited.
+                        if (!emptyNow && base != null && base.doAtMs != updated.doAtMs && !changed) {
+                            vm.setDoDate(updated.savedItemId, updated.doAtMs)
+                        }
                         when {
                             emptyNow -> {
                                 if (!isNew) vm.delete(updated.savedItemId)
@@ -602,6 +640,9 @@ fun RemindersScreen(
                     onRegenerate = { vm.regenerateOne(current.savedItemId) },
                     relatedNotificationsState = relatedNotificationsState,
                     onLoadRelatedNotifications = { reminder -> vm.loadRelatedNotifications(reminder) },
+                    changeLog = remember(current.savedItemId) { vm.changeLogFlow(current.savedItemId) },
+                    onAcknowledgeReview = { vm.acknowledgeReview(current.savedItemId) },
+                    onLoadSurroundingContext = { key -> vm.loadSurroundingContext(current.savedItemId, key) },
                     // Sub-task parameters
                     subTasks = allSavedSubItemsByReminder[current.savedItemId] ?: emptyList(),
                     onAddSavedSubItem = { vm.addSavedSubItem(current.savedItemId) },
@@ -903,6 +944,7 @@ fun ReminderCard(
     onDelete: () -> Unit,
     onToggleCompleted: (Boolean) -> Unit,
     onEdit: () -> Unit,
+    onToggleStarred: (() -> Unit)? = null,
     onCreateReminder: (() -> Unit)? = null,
     onQuickExportTasks: (() -> Unit)? = null,
     onQuickExportCalendar: (() -> Unit)? = null,
@@ -1015,6 +1057,25 @@ fun ReminderCard(
 
             // Right content column
             Column(modifier = Modifier.weight(1f)) {
+                // Review badge: stays until the user explicitly acknowledges in the detail view.
+                if (reminder.isNewLike && !selectionMode) {
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = MaterialTheme.colorScheme.secondaryContainer,
+                        modifier = Modifier.padding(bottom = 2.dp),
+                    ) {
+                        Text(
+                            text = stringResource(
+                                if (reminder.state == SavedItemState.New) R.string.reminder_badge_new
+                                else R.string.reminder_badge_updated
+                            ),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                        )
+                    }
+                }
+
                 // Title row
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     val titleStyle = if (reminder.isTask && reminder.isCompleted) {
@@ -1032,6 +1093,21 @@ fun ReminderCard(
                     )
 
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        if (onToggleStarred != null && !selectionMode) {
+                            IconButton(
+                                onClick = {
+                                    haptic.performHapticFeedback(if (!reminder.isStarred) HapticFeedbackType.ToggleOn else HapticFeedbackType.ToggleOff)
+                                    onToggleStarred()
+                                },
+                            ) {
+                                Icon(
+                                    painter = painterResource(if (reminder.isStarred) R.drawable.star_filled else R.drawable.star_outline),
+                                    contentDescription = stringResource(if (reminder.isStarred) R.string.a11y_unstar else R.string.a11y_star),
+                                    modifier = Modifier.size(20.dp),
+                                    tint = if (reminder.isStarred) NotiTheme.semantic.taskAccent else MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
                         ReminderCardSplitActions(
                             onCreateReminder = onCreateReminder,
                             onQuickExportTasks = onQuickExportTasks,
@@ -1059,18 +1135,24 @@ fun ReminderCard(
                     }
                 }
 
-                // Deadline urgency chip (tasks only)
+                // Deadline urgency chip + user-set do-date chip (tasks only)
                 if (reminder.isTask) {
                     val deadline = reminder.deadlineAtMs
-                    if (deadline > 0L) {
-                        DueChip(deadlineAtMs = deadline, modifier = Modifier.padding(top = 4.dp))
-                    } else {
-                        Text(
-                            text = stringResource(R.string.ui_reminders_no_deadline),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 4.dp),
-                        )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.padding(top = 4.dp),
+                    ) {
+                        if (deadline > 0L) {
+                            DueChip(deadlineAtMs = deadline)
+                        } else {
+                            Text(
+                                text = stringResource(R.string.ui_reminders_no_deadline),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        DoDateChip(doAtMs = reminder.doAtMs)
                     }
                 }
 
@@ -1173,6 +1255,10 @@ fun ReminderDetailScreen(
     onCreateReminder: (() -> Unit)? = null,
     relatedNotificationsState: ReminderViewModel.RelatedNotificationsState = ReminderViewModel.RelatedNotificationsState(),
     onLoadRelatedNotifications: (SavedItem) -> Unit = {},
+    // Review flow + change history
+    changeLog: kotlinx.coroutines.flow.Flow<List<org.muilab.notigpt.model.features.SavedItemChangeLog>>? = null,
+    onAcknowledgeReview: (() -> Unit)? = null,
+    onLoadSurroundingContext: ((String) -> Unit)? = null,
     // Sub-task parameters
     subTasks: List<SavedSubItem> = emptyList(),
     onAddSavedSubItem: () -> Unit = {},
@@ -1192,6 +1278,7 @@ fun ReminderDetailScreen(
     var isTask by remember(initial.savedItemId) { mutableStateOf(initial.isTask) }
     var isCompleted by remember(initial.savedItemId) { mutableStateOf(initial.isCompleted) }
     var deadlineAtMs by remember(initial.savedItemId) { mutableStateOf(initial.deadlineAtMs) }
+    var doAtMs by remember(initial.savedItemId) { mutableStateOf(initial.doAtMs) }
     var ectMinutes by remember(initial.savedItemId) { mutableStateOf(initial.estimatedCompletionTime) }
 
     // Per-type accent: indigo for Task, green for Keep.
@@ -1206,6 +1293,7 @@ fun ReminderDetailScreen(
             itemType = if (isTask) SavedItemType.Task else SavedItemType.Keep,
             state = if (isTask && isCompleted) SavedItemState.Completed else SavedItemState.Saved,
             deadlineAtMs = if (isTask) deadlineAtMs else 0L,
+            doAtMs = if (isTask) doAtMs else 0L,
             estimatedCompletionTime = if (isTask) ectMinutes else 0L,
         )
     }
@@ -1217,6 +1305,8 @@ fun ReminderDetailScreen(
 
     var showDatePicker by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
+    var showDoDatePicker by remember { mutableStateOf(false) }
+    var showDoTimePicker by remember { mutableStateOf(false) }
     var headerMenuOpen by remember { mutableStateOf(false) }
 
     Column(Modifier.fillMaxSize()) {
@@ -1277,6 +1367,21 @@ fun ReminderDetailScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            // Review flow: unacknowledged LLM changes stay flagged until the explicit "Got it" tap.
+            val changes by (changeLog ?: kotlinx.coroutines.flow.flowOf(emptyList()))
+                .collectAsState(initial = emptyList())
+            var reviewAcknowledged by remember(initial.savedItemId) { mutableStateOf(false) }
+            if (!reviewAcknowledged && onAcknowledgeReview != null) {
+                org.muilab.notigpt.ui.reminder.component.ReminderWhatsNewBlock(
+                    reminder = initial,
+                    changes = changes,
+                    onAcknowledge = {
+                        reviewAcknowledged = true
+                        onAcknowledgeReview()
+                    },
+                )
+            }
+
             // Type selector chips: Task (indigo) / Keep (green)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(
@@ -1353,6 +1458,37 @@ fun ReminderDetailScreen(
                     )
                     TextButton(onClick = { showTimePicker = true }) {
                         Text(text = deadlineTimeStr, color = deadlineColor)
+                    }
+                }
+
+                // User-set do date (when to work on it), independent of the deadline.
+                val doDateStr = if (doAtMs > 0L) {
+                    java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date(doAtMs))
+                } else stringResource(R.string.reminder_no_date)
+                val doTimeStr = if (doAtMs > 0L) {
+                    java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date(doAtMs))
+                } else stringResource(R.string.reminder_no_time)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "${stringResource(R.string.ui_reminders_editor_do_date)}:",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    TextButton(onClick = { showDoDatePicker = true }) {
+                        Text(text = doDateStr, color = accent)
+                    }
+                    if (doAtMs > 0L) {
+                        TextButton(onClick = { showDoTimePicker = true }) {
+                            Text(text = doTimeStr, color = accent)
+                        }
+                        IconButton(onClick = { doAtMs = 0L }) {
+                            Icon(
+                                painterResource(R.drawable.delete),
+                                contentDescription = stringResource(R.string.a11y_clear_do_date),
+                                modifier = Modifier.size(16.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                 }
             }
@@ -1495,6 +1631,12 @@ fun ReminderDetailScreen(
                 )
             }
 
+            // === Change history ===
+            if (changes.isNotEmpty()) {
+                HorizontalDivider(modifier = Modifier.padding(top = 8.dp))
+                org.muilab.notigpt.ui.reminder.component.ReminderChangeHistorySection(changes = changes)
+            }
+
             // === Related notifications ===
             var relatedExpanded by remember(initial.savedItemId) { mutableStateOf(false) }
             val relatedForThisReminder = relatedNotificationsState.savedItemId == initial.savedItemId
@@ -1556,7 +1698,8 @@ fun ReminderDetailScreen(
                                 val unit = relatedUnitsByKey[key]
 
                                 if (unit != null) {
-                                    // IMPORTANT: show ALL records that were deemed related by the snapshot.
+                                    // Evidence records come from the link table; the rest of the
+                                    // thread loads lazily via "show surrounding messages".
                                     val displayUnit = org.muilab.notigpt.model.notifications.NotiDisplayUnit(unit, recs)
                                     RelatedNotificationPreview(
                                         notiDisplayUnit = displayUnit,
@@ -1566,6 +1709,9 @@ fun ReminderDetailScreen(
                                                 drawerViewModel.accessNotificationByKey(key)
                                             }
                                         },
+                                        evidenceRecordIds = relatedNotificationsState.related.evidenceRecordIds,
+                                        contextLoaded = key in relatedNotificationsState.related.contextLoadedKeys,
+                                        onLoadContext = onLoadSurroundingContext?.let { load -> { load(key) } },
                                     )
                                 } else {
                                     // Fallback: drawer entry missing; show text-only context.
@@ -1665,6 +1811,70 @@ fun ReminderDetailScreen(
                 true
             ).apply {
                 setOnCancelListener { showTimePicker = false }
+            }.show()
+        }
+    }
+
+    // Do-date pickers. Unset do dates default to 09:00 on the picked day (a work-start plan, not a 23:59 deadline).
+    if (showDoDatePicker) {
+        val doDatePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = if (doAtMs > 0L) doAtMs else System.currentTimeMillis()
+        )
+        DatePickerDialog(
+            onDismissRequest = { showDoDatePicker = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val selectedDate = doDatePickerState.selectedDateMillis
+                        if (selectedDate != null) {
+                            val hadTime = doAtMs > 0L
+                            val existingCal = Calendar.getInstance().apply {
+                                timeInMillis = if (hadTime) doAtMs else System.currentTimeMillis()
+                            }
+                            val newCal = Calendar.getInstance().apply {
+                                timeInMillis = selectedDate
+                                set(Calendar.HOUR_OF_DAY, if (hadTime) existingCal.get(Calendar.HOUR_OF_DAY) else 9)
+                                set(Calendar.MINUTE, if (hadTime) existingCal.get(Calendar.MINUTE) else 0)
+                                set(Calendar.SECOND, 0)
+                                set(Calendar.MILLISECOND, 0)
+                            }
+                            doAtMs = newCal.timeInMillis
+                            showDoDatePicker = false
+                        }
+                    }
+                ) { Text(stringResource(R.string.ui_action_ok)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDoDatePicker = false }) { Text(stringResource(R.string.ui_action_cancel)) }
+            }
+        ) {
+            DatePicker(state = doDatePickerState)
+        }
+    }
+
+    if (showDoTimePicker) {
+        LaunchedEffect(showDoTimePicker) {
+            val cal = Calendar.getInstance().apply {
+                timeInMillis = if (doAtMs > 0L) doAtMs else System.currentTimeMillis()
+            }
+            TimePickerDialog(
+                context,
+                { _, hour, minute ->
+                    val c = Calendar.getInstance().apply {
+                        timeInMillis = if (doAtMs > 0L) doAtMs else System.currentTimeMillis()
+                        set(Calendar.HOUR_OF_DAY, hour)
+                        set(Calendar.MINUTE, minute)
+                        set(Calendar.SECOND, 0)
+                        set(Calendar.MILLISECOND, 0)
+                    }
+                    doAtMs = c.timeInMillis
+                    showDoTimePicker = false
+                },
+                cal.get(Calendar.HOUR_OF_DAY),
+                cal.get(Calendar.MINUTE),
+                true
+            ).apply {
+                setOnCancelListener { showDoTimePicker = false }
             }.show()
         }
     }

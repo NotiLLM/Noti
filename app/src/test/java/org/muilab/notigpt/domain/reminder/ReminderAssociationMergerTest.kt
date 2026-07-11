@@ -4,50 +4,47 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 /**
- * Unit tests for [ReminderAssociationMerger.merge], the pure link-derivation logic used by the
- * extraction/regeneration handlers after the snapshot mechanism was replaced by the
- * [org.muilab.notigpt.model.features.NotiSavedItemLink] table.
+ * Unit tests for [ReminderAssociationMerger.filterValidEvidence], the pure evidence-guard logic
+ * used by the extraction handler when applying contract-v2 ops.
  *
- * (The JSON-reading [ReminderAssociationMerger.associationIdsFrom] relies on android's org.json, which is a
+ * (The JSON-reading [ReminderAssociationMerger.evidenceIdsFrom] relies on android's org.json, which is a
  * non-functional stub under plain JVM unit tests, so it is exercised by instrumented tests instead.)
  */
 class ReminderAssociationMergerTest {
 
     @Test
-    fun `merge unions existing links, request, and response ids and drops blanks`() {
-        val merged = ReminderAssociationMerger.merge(
-            existingRecordIds = setOf("a_1"),
-            responseAssociationIds = setOf("c_3", ""),
-            requestRecordIds = setOf("b_2", " "),
+    fun `filterValidEvidence keeps only ids present in the request`() {
+        val valid = ReminderAssociationMerger.filterValidEvidence(
+            citedIds = listOf("a_1", "hallucinated_9", "b_2"),
+            validRequestIds = setOf("a_1", "b_2", "c_3"),
         )
-        assertEquals(setOf("a_1", "b_2", "c_3"), merged)
+        assertEquals(setOf("a_1", "b_2"), valid)
     }
 
     @Test
-    fun `merge with only existing links preserves them`() {
-        val merged = ReminderAssociationMerger.merge(
-            existingRecordIds = setOf("a_1", "a_2"),
-            responseAssociationIds = emptySet(),
+    fun `filterValidEvidence drops blanks and trims whitespace`() {
+        val valid = ReminderAssociationMerger.filterValidEvidence(
+            citedIds = listOf(" a_1 ", "", "  "),
+            validRequestIds = setOf("a_1"),
         )
-        assertEquals(setOf("a_1", "a_2"), merged)
+        assertEquals(setOf("a_1"), valid)
     }
 
     @Test
-    fun `merge with only response ids returns them`() {
-        val merged = ReminderAssociationMerger.merge(
-            existingRecordIds = emptySet(),
-            responseAssociationIds = setOf("c_3"),
-            requestRecordIds = emptySet(),
+    fun `filterValidEvidence returns empty when nothing cited is real`() {
+        val valid = ReminderAssociationMerger.filterValidEvidence(
+            citedIds = listOf("x_1", "y_2"),
+            validRequestIds = setOf("a_1"),
         )
-        assertEquals(setOf("c_3"), merged)
+        assertEquals(emptySet<String>(), valid)
     }
 
     @Test
-    fun `merge returns empty when all inputs empty`() {
-        val merged = ReminderAssociationMerger.merge(
-            existingRecordIds = emptySet(),
-            responseAssociationIds = emptySet(),
+    fun `filterValidEvidence returns empty for empty citation list`() {
+        val valid = ReminderAssociationMerger.filterValidEvidence(
+            citedIds = emptyList(),
+            validRequestIds = setOf("a_1"),
         )
-        assertEquals(emptySet<String>(), merged)
+        assertEquals(emptySet<String>(), valid)
     }
 }

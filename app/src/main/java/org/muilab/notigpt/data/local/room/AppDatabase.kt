@@ -5,9 +5,13 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
+import org.muilab.notigpt.model.features.ExtractionJournalEntry
+import org.muilab.notigpt.model.features.ExtractionJournalSummary
 import org.muilab.notigpt.model.features.ExtractionPreference
 import org.muilab.notigpt.model.features.PreferenceConflict
+import org.muilab.notigpt.model.features.NotiLlmState
 import org.muilab.notigpt.model.features.NotiSavedItemLink
+import org.muilab.notigpt.model.features.SavedItemChangeLog
 import org.muilab.notigpt.model.features.Reminder
 import org.muilab.notigpt.model.features.ReminderNotiRecordRef
 import org.muilab.notigpt.model.features.ReminderSavedItemRef
@@ -18,9 +22,12 @@ import org.muilab.notigpt.model.notifications.NotiAction
 import org.muilab.notigpt.model.notifications.NotiRecord
 import org.muilab.notigpt.model.notifications.NotiUnit
 import org.muilab.notigpt.model.notifications.VisibleNotiRecord
+import org.muilab.notigpt.data.local.room.dao.ExtractionJournalDao
 import org.muilab.notigpt.data.local.room.dao.ExtractionPreferenceDao
+import org.muilab.notigpt.data.local.room.dao.SavedItemChangeLogDao
 import org.muilab.notigpt.data.local.room.dao.NotiActionDao
 import org.muilab.notigpt.data.local.room.dao.NotiDrawerDao
+import org.muilab.notigpt.data.local.room.dao.NotiLlmStateDao
 import org.muilab.notigpt.data.local.room.dao.NotiRecordDao
 import org.muilab.notigpt.data.local.room.dao.NotiSavedItemLinkDao
 import org.muilab.notigpt.data.local.room.dao.PreferenceConflictDao
@@ -40,9 +47,13 @@ import org.muilab.notigpt.data.local.room.dao.UserContextDao
         NotiUnit::class,
         NotiRecord::class,
         NotiAction::class,
+        NotiLlmState::class,
         SavedItem::class,
         SavedSubItem::class,
         NotiSavedItemLink::class,
+        SavedItemChangeLog::class,
+        ExtractionJournalEntry::class,
+        ExtractionJournalSummary::class,
         Reminder::class,
         ReminderSavedItemRef::class,
         ReminderNotiRecordRef::class,
@@ -51,7 +62,7 @@ import org.muilab.notigpt.data.local.room.dao.UserContextDao
         UserContext::class,
     ],
     views = [VisibleNotiRecord::class],
-    version = 40,
+    version = 44,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -60,9 +71,12 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun drawerDao(): NotiDrawerDao
     abstract fun recordDao(): NotiRecordDao
     abstract fun actionDao(): NotiActionDao
+    abstract fun notiLlmStateDao(): NotiLlmStateDao
     abstract fun reminderListDao(): SavedItemDao
     abstract fun subTaskDao(): SavedSubItemDao
     abstract fun notiSavedItemLinkDao(): NotiSavedItemLinkDao
+    abstract fun savedItemChangeLogDao(): SavedItemChangeLogDao
+    abstract fun extractionJournalDao(): ExtractionJournalDao
     abstract fun reminderDao(): ReminderDao
     abstract fun extractionPreferenceDao(): ExtractionPreferenceDao
     abstract fun preferenceConflictDao(): PreferenceConflictDao
@@ -119,6 +133,10 @@ abstract class AppDatabase : RoomDatabase() {
                 .addMigrations(AppDatabaseMigrations.MIGRATION_37_38)
                 .addMigrations(AppDatabaseMigrations.MIGRATION_38_39)
                 .addMigrations(AppDatabaseMigrations.MIGRATION_39_40)
+                .addMigrations(AppDatabaseMigrations.MIGRATION_40_41)
+                .addMigrations(AppDatabaseMigrations.MIGRATION_41_42)
+                .addMigrations(AppDatabaseMigrations.MIGRATION_42_43)
+                .addMigrations(AppDatabaseMigrations.MIGRATION_43_44)
                 .setJournalMode(JournalMode.TRUNCATE)
                 .build()
         }

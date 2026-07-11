@@ -12,15 +12,20 @@ import org.muilab.notigpt.data.remote.n8n.context.N8nWorkerContext
 import org.muilab.notigpt.util.SharedPreferencesManager
 
 /**
- * Worker handler that asks n8n whether a notification should enter reminder extraction.
+ * Worker handler for the thread classification (scan) stage.
  *
- * This handler owns scan request formatting, response parsing, and record-claim transitions. Extraction itself
- * remains a separate queued workflow so scan and extraction can retry independently.
+ * One cheap model pass per notiUnit does two jobs: gate flags (hasTask/hasMemo/hasEvent → whether
+ * the thread enters reminder extraction) and thread categories (communication/content), both
+ * stored in noti_llm_state. Extraction itself remains a separate queued workflow so scan and
+ * extraction can retry independently.
  */
 internal object ReminderScanHandler {
 
+    /** Most recent records sent on a forced re-classification pass. */
+    private const val RECLASSIFY_RECORD_CAP = 20
+
     /**
-     * Runs one scan job and writes only scan flags back to the notification drawer/records.
+     * Runs one scan job and writes only thread-state flags/categories back to noti_llm_state.
      *
      * Do not create reminders here. Keeping scan as a lightweight classification stage makes it safe
      * to retry separately from extraction.
@@ -35,19 +40,25 @@ internal object ReminderScanHandler {
             return ctx.failure()
         }
         val notiKey = inputData.getString("noti_key") ?: return ctx.failure()
+        val forceReclassify = inputData.getBoolean("force_reclassify", false)
 
         val notiUnit = ctx.getNotiUnit(notiKey) ?: return ctx.failure()
 
         // ensure noti_contents are ordered by time ascending (oldest -> newest)
-        val notiRecords =
+        val notiRecords = if (forceReclassify) {
+            // Re-check pass: classify from the most recent records even if all are already scanned.
+            ctx.database.recordDao().getRecordsByKey(notiKey)
+                .sortedByDescending { it.time }.take(RECLASSIFY_RECORD_CAP).sortedBy { it.time }
+        } else {
             ctx.database.recordDao().getUnscannedRecordsByKey(notiKey).sortedBy { it.time }
+        }
 
         if (notiRecords.isEmpty()) return ctx.success()
 
         // Build payload for scan
         val notiContentList =
             notiRecords.map { rec -> N8nRecordFormatter.format(rec, notiUnit.isPeople) }
-        val pastCount = SharedPreferencesManager.maxPastContext
+        val pastCount = if (forceReclassify) 0 else SharedPreferencesManager.maxPastContext
         val pastRecords = if (pastCount > 0) ctx.database.recordDao()
             .getLastScannedRecordsByKey(notiKey, pastCount).sortedBy { it.time } else emptyList()
         val pastContextList = pastRecords.map { N8nRecordFormatter.format(it, notiUnit.isPeople) }
@@ -122,7 +133,22 @@ internal object ReminderScanHandler {
             val hasEvent = inner.optInt("hasEvent", 0) == 1 || inner.optBoolean("hasEvent", false)
 
             ctx.notiRepository.setScanStates(notiKey, hasTask, hasMemo, hasEvent)
-            ctx.database.recordDao().setRecordsTaskScannedByIds(notiRecords.map { it.notiRecordId })
+
+            // Thread categories (communication/content/custom) ride along in the same response.
+            val categories = inner.optJSONArray("categories")?.let { arr ->
+                (0 until arr.length()).mapNotNull { i -> arr.optString(i).takeIf { it.isNotBlank() } }
+            } ?: emptyList()
+            ctx.notiLlmStateRepository.applyClassification(
+                notiKey = notiKey,
+                categories = categories,
+                reason = inner.optString("reason", ""),
+                source = "llm",
+                recordCount = ctx.database.recordDao().getRecordCountByKey(notiKey),
+            )
+
+            if (!forceReclassify) {
+                ctx.database.recordDao().setRecordsTaskScannedByIds(notiRecords.map { it.notiRecordId })
+            }
 
         } catch (e: Exception) {
             Log.e("N8nWebhook", "Error parsing scan response. body=$bodyStr", e)

@@ -16,8 +16,12 @@ import org.muilab.notigpt.model.features.NotiSavedItemLink
 @Dao
 interface NotiSavedItemLinkDao {
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun upsertAll(links: List<NotiSavedItemLink>)
+    /**
+     * Links are add-only: re-citing an already-linked record is a no-op (unique index on
+     * savedItemId+notiRecordId+role), and existing evidence is never displaced by later responses.
+     */
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertAll(links: List<NotiSavedItemLink>)
 
     @Query("SELECT * FROM noti_saved_item_link WHERE savedItemId = :savedItemId")
     suspend fun getBySavedItemId(savedItemId: String): List<NotiSavedItemLink>
@@ -30,6 +34,15 @@ interface NotiSavedItemLinkDao {
 
     @Query("SELECT * FROM noti_saved_item_link WHERE notiRecordId = :notiRecordId")
     suspend fun getByNotiRecordId(notiRecordId: String): List<NotiSavedItemLink>
+
+    @Query("SELECT DISTINCT savedItemId FROM noti_saved_item_link WHERE notiKey = :notiKey")
+    suspend fun getSavedItemIdsByNotiKey(notiKey: String): List<String>
+
+    @Query("SELECT DISTINCT savedItemId FROM noti_saved_item_link WHERE notiKey IN (:notiKeys)")
+    suspend fun getSavedItemIdsByNotiKeys(notiKeys: List<String>): List<String>
+
+    @Query("SELECT DISTINCT savedItemId FROM noti_saved_item_link WHERE notiRecordId = :notiRecordId")
+    suspend fun getSavedItemIdsByRecordId(notiRecordId: String): List<String>
 
     @Query("DELETE FROM noti_saved_item_link WHERE savedItemId = :savedItemId")
     suspend fun deleteBySavedItemId(savedItemId: String)

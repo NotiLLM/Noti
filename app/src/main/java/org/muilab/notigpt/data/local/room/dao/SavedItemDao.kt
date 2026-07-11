@@ -16,22 +16,22 @@ interface SavedItemDao {
     @Upsert
     suspend fun upsert(reminder: SavedItem)
 
-    @Query("SELECT * FROM saved_item WHERE isVisible = 1 ORDER BY sortScore DESC, lastUpdateTimestamp DESC, savedItemId DESC")
+    @Query("SELECT * FROM saved_item WHERE isVisible = 1 ORDER BY isStarred DESC, sortScore DESC, lastUpdateTimestamp DESC, savedItemId DESC")
     fun observeAll(): Flow<List<SavedItem>>
 
-    @Query("SELECT * FROM saved_item WHERE isVisible = 1 AND itemType = 'task' AND state IN ('saved', 'completed') ORDER BY sortScore DESC, lastUpdateTimestamp DESC, savedItemId DESC")
+    @Query("SELECT * FROM saved_item WHERE isVisible = 1 AND itemType = 'task' AND state IN ('new', 'updated', 'saved', 'completed') ORDER BY isStarred DESC, sortScore DESC, lastUpdateTimestamp DESC, savedItemId DESC")
     fun observeTasks(): Flow<List<SavedItem>>
 
-    @Query("SELECT * FROM saved_item WHERE isVisible = 1 AND itemType = 'keep' AND state IN ('saved', 'archived') ORDER BY sortScore DESC, lastUpdateTimestamp DESC, savedItemId DESC")
+    @Query("SELECT * FROM saved_item WHERE isVisible = 1 AND itemType = 'keep' AND state IN ('new', 'updated', 'saved', 'archived') ORDER BY isStarred DESC, sortScore DESC, lastUpdateTimestamp DESC, savedItemId DESC")
     fun observeMemos(): Flow<List<SavedItem>>
 
-    @Query("SELECT * FROM saved_item WHERE isVisible = 1 AND itemType = 'keep' AND state = 'saved' ORDER BY sortScore DESC, lastUpdateTimestamp DESC, savedItemId DESC")
+    @Query("SELECT * FROM saved_item WHERE isVisible = 1 AND itemType = 'keep' AND state IN ('new', 'updated', 'saved') ORDER BY isStarred DESC, sortScore DESC, lastUpdateTimestamp DESC, savedItemId DESC")
     fun observeActiveKeeps(): Flow<List<SavedItem>>
 
-    @Query("SELECT * FROM saved_item WHERE isVisible = 1 AND itemType = 'keep' AND state = 'archived' ORDER BY sortScore DESC, lastUpdateTimestamp DESC, savedItemId DESC")
+    @Query("SELECT * FROM saved_item WHERE isVisible = 1 AND itemType = 'keep' AND state = 'archived' ORDER BY isStarred DESC, sortScore DESC, lastUpdateTimestamp DESC, savedItemId DESC")
     fun observeArchivedKeeps(): Flow<List<SavedItem>>
 
-    @Query("SELECT * FROM saved_item WHERE isVisible = 1 AND itemType = 'task' AND state = 'completed' ORDER BY sortScore DESC, lastUpdateTimestamp DESC, savedItemId DESC")
+    @Query("SELECT * FROM saved_item WHERE isVisible = 1 AND itemType = 'task' AND state = 'completed' ORDER BY isStarred DESC, sortScore DESC, lastUpdateTimestamp DESC, savedItemId DESC")
     fun observeCompletedTasks(): Flow<List<SavedItem>>
 
     @Query("SELECT * FROM saved_item WHERE isVisible = 1 AND state IN ('new', 'updated') ORDER BY lastUpdateTimestamp DESC, savedItemId DESC")
@@ -69,9 +69,23 @@ interface SavedItemDao {
     @Query("UPDATE saved_item SET state = 'saved' WHERE savedItemId = :savedItemId")
     suspend fun setViewed(savedItemId: String)
 
+    @Query("UPDATE saved_item SET isStarred = :starred, lastUpdateTimestamp = :ts WHERE savedItemId = :savedItemId")
+    suspend fun setStarred(savedItemId: String, starred: Boolean, ts: Long)
+
+    @Query("UPDATE saved_item SET doAtMs = :doAtMs, lastUpdateTimestamp = :ts WHERE savedItemId = :savedItemId")
+    suspend fun setDoDate(savedItemId: String, doAtMs: Long, ts: Long)
+
+    /** Explicit user acknowledgment of a New/Updated item: exits review state and moves the change cursor. */
+    @Query("UPDATE saved_item SET state = 'saved', lastViewedChangeAt = :ts, lastUpdateTimestamp = :ts WHERE savedItemId = :savedItemId")
+    suspend fun acknowledgeReview(savedItemId: String, ts: Long)
+
     @Query("UPDATE saved_item SET sortScore = :sortScore, reRankHistory = :reRankHistory WHERE savedItemId = :savedItemId")
     suspend fun updateSortScoreAndHistory(savedItemId: String, sortScore: Float, reRankHistory: String)
 
     @Query("UPDATE saved_item SET buttons = :buttons WHERE savedItemId = :savedItemId")
     suspend fun updateButtons(savedItemId: String, buttons: String)
+
+    /** Account-switch wipe: hard-deletes all saved items (cascades links + change log). */
+    @Query("DELETE FROM saved_item")
+    suspend fun deleteAllForAccountSwitch()
 }

@@ -7,6 +7,7 @@ plugins {
     alias(libs.plugins.ksp)
     alias(libs.plugins.secretsGradlePlugin)
     alias(libs.plugins.google.services)
+    alias(libs.plugins.firebase.crashlytics)
 }
 
 android {
@@ -134,6 +135,13 @@ dependencies {
 
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.firestore)
+    implementation(libs.firebase.auth)
+    implementation(libs.firebase.crashlytics)
+
+    // Credential Manager for Google Sign-In (mandatory login)
+    implementation(libs.androidx.credentials)
+    implementation(libs.androidx.credentials.play.services)
+    implementation(libs.googleid)
 
     // Google Tasks API integration
     implementation(libs.play.services.auth)

@@ -10,7 +10,11 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.muilab.notigpt.data.remote.n8n.formatter.N8nRecordFormatter
 import org.muilab.notigpt.data.remote.n8n.context.N8nWorkerContext
+import org.muilab.notigpt.model.features.ExtractionJournalEntry
+import org.muilab.notigpt.model.features.ExtractionJournalEventType
 import org.muilab.notigpt.model.features.SavedItem
+import org.muilab.notigpt.model.features.SavedItemChangeLog
+import org.muilab.notigpt.model.features.SavedItemChangeType
 import org.muilab.notigpt.model.features.SavedItemType
 import org.muilab.notigpt.model.features.SavedItemState
 import org.muilab.notigpt.util.SharedPreferencesManager
@@ -251,15 +255,6 @@ internal object ReminderRegenerationHandler {
                 }
 
                 // Preserve linked record ids from existing links when the response omits them.
-                val assocIds = mutableSetOf<String>()
-                val assoc = obj.optJSONArray("sourceNotiRecordIds") ?: obj.optJSONArray("associatedNotiRecords") ?: obj.optJSONArray("associatedNotis")
-                if (assoc != null) {
-                    for (j in 0 until assoc.length()) assocIds.add(assoc.optString(j))
-                }
-                if (assocIds.isEmpty() && existing != null) {
-                    assocIds.addAll(ctx.reminderRepository.getLinkedRecordIds(savedItemId))
-                }
-
                 val unit = SavedItem(
                     savedItemId = savedItemId,
                     title = title,
@@ -280,11 +275,56 @@ internal object ReminderRegenerationHandler {
                     isViewed = false,
                     sortScore = sortScore,
                     reRankHistory = existingHistory.toString(),
+                    // User-owned fields: regeneration must never reset them.
+                    isStarred = existing?.isStarred ?: false,
+                    doAtMs = existing?.doAtMs ?: 0L,
+                    lastViewedChangeAt = existing?.lastViewedChangeAt ?: 0L,
                 )
 
                 ctx.reminderRepository.upsert(unit)
-                ctx.reminderRepository.replaceLinks(savedItemId, assocIds, unit.itemType)
+                // Regeneration rewrites content from the item's existing noti context; it neither
+                // adds nor removes provenance, so links stay untouched.
                 ReminderExtractionHandler.persistReturnedSubTasks(ctx, savedItemId, obj, System.currentTimeMillis())
+
+                // Record the rewrite in the change history (regeneration is the one flow allowed
+                // to replace text wholesale — the user explicitly asked for it) and the journal.
+                if (existing != null) {
+                    val now = System.currentTimeMillis()
+                    val changeSummary = obj.optString("changeSummary", "")
+                    val changedFields = JSONObject().apply {
+                        if (existing.title != title) {
+                            put("title", JSONObject().put("old", existing.title).put("new", title))
+                        }
+                        if (existing.content != content) {
+                            put("content", JSONObject().put("old", existing.content).put("new", content))
+                        }
+                        if (existing.deadlineAtMs != deadlineMs) {
+                            put("deadlineAtMs", JSONObject().put("old", existing.deadlineAtMs).put("new", deadlineMs))
+                        }
+                    }
+                    ctx.changeLogRepository.record(
+                        SavedItemChangeLog(
+                            savedItemId = savedItemId,
+                            createdAt = now,
+                            changeType = SavedItemChangeType.Regenerated,
+                            changeSummary = changeSummary,
+                            changedFieldsJson = changedFields.toString(),
+                            origin = "llm",
+                        )
+                    )
+                    ctx.reminderRepository.getLinkedKeys(savedItemId).forEach { key ->
+                        ctx.journalRepository.append(
+                            ExtractionJournalEntry(
+                                notiKey = key,
+                                createdAt = now,
+                                eventType = ExtractionJournalEventType.ItemUpdated,
+                                savedItemId = savedItemId,
+                                itemTitle = title,
+                                detail = changeSummary.ifBlank { "Regenerated ($trigger)" },
+                            )
+                        )
+                    }
+                }
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error parsing response ($trigger)", e)

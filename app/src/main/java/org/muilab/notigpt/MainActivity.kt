@@ -9,6 +9,7 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.util.Log
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
@@ -16,6 +17,11 @@ import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.core.app.NotificationManagerCompat
 import org.muilab.notigpt.data.repository.notification.NotiRepositoryProvider
@@ -47,10 +53,17 @@ class MainActivity : ComponentActivity() {
         // WorkManager.getInstance(applicationContext).cancelAllWork()
 
         SharedPreferencesManager.init(this)
-        SharedPreferencesManager.userId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
+        // Identity: signed-in Firebase UID keys Firestore and n8n payloads; the device id is only
+        // a pre-login placeholder (extraction is gated behind sign-in anyway).
+        SharedPreferencesManager.userId =
+            org.muilab.notigpt.data.remote.auth.GoogleAuthManager.currentUser()?.uid
+                ?: Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
+        org.muilab.notigpt.data.remote.n8n.ExtractionStatusStore.restore()
 
-        // Periodic safety-net for reminder scan/extraction.
-        ReminderPeriodicWork.enqueue(applicationContext)
+        // Periodic safety-net for reminder scan/extraction — only once signed in.
+        if (org.muilab.notigpt.data.remote.auth.GoogleAuthManager.isSignedIn()) {
+            ReminderPeriodicWork.enqueue(applicationContext)
+        }
 
         if (!NotificationManagerCompat.from(applicationContext).areNotificationsEnabled()) {
             val intent = Intent().apply {
@@ -82,13 +95,39 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             NotiTheme {
+                // Surface user-triggered extraction failures as a toast, wherever they were triggered from.
+                val extractionStatus by org.muilab.notigpt.data.remote.n8n.ExtractionStatusStore.status.collectAsState()
+                LaunchedEffect(extractionStatus.userTriggeredFailureTick) {
+                    if (extractionStatus.userTriggeredFailureTick > 0L) {
+                        Toast.makeText(
+                            this@MainActivity,
+                            getString(R.string.extraction_failed_toast),
+                            Toast.LENGTH_SHORT,
+                        ).show()
+                    }
+                }
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    AppScaffold(
-                        drawerViewModel = drawerViewModel,
-                    )
+                    // Mandatory login: Firestore data is keyed by the Google account's UID.
+                    var signedIn by remember {
+                        androidx.compose.runtime.mutableStateOf(
+                            org.muilab.notigpt.data.remote.auth.GoogleAuthManager.isSignedIn()
+                        )
+                    }
+                    if (!signedIn) {
+                        org.muilab.notigpt.ui.auth.SignInScreen(
+                            onSignedIn = {
+                                signedIn = true
+                                ReminderPeriodicWork.enqueue(applicationContext)
+                            },
+                        )
+                    } else {
+                        AppScaffold(
+                            drawerViewModel = drawerViewModel,
+                        )
+                    }
                 }
             }
         }

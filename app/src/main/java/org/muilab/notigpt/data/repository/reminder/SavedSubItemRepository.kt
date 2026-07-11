@@ -44,6 +44,19 @@ class SavedSubItemRepository(private val subTaskDao: SavedSubItemDao) {
         }
     }
 
+    /**
+     * Adds new sub-tasks for a parent without touching existing rows (contract-v2 update ops are
+     * additive; existing sub-tasks are never renamed or reset by the backend).
+     */
+    suspend fun addSubTasks(subTasks: List<SavedSubItem>) = withContext(Dispatchers.IO) {
+        if (subTasks.isNotEmpty()) subTaskDao.upsertAll(subTasks)
+    }
+
+    /** Soft-hides sub-tasks the backend reported as obsolete; rows stay for the change history. */
+    suspend fun hideSubTasks(savedSubItemIds: List<String>, ts: Long) = withContext(Dispatchers.IO) {
+        savedSubItemIds.forEach { subTaskDao.softDeleteById(it, ts) }
+    }
+
     suspend fun setCompleted(savedSubItemId: String, completed: Boolean, ts: Long) = withContext(Dispatchers.IO) {
         subTaskDao.setCompleted(savedSubItemId, completed, ts)
     }

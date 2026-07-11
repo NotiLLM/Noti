@@ -4,6 +4,7 @@ import okhttp3.RequestBody
 import okhttp3.ResponseBody
 import retrofit2.Response
 import retrofit2.http.Body
+import retrofit2.http.GET
 import retrofit2.http.POST
 import retrofit2.http.Url
 
@@ -22,4 +23,8 @@ interface N8nAPIService {
         @Url webhookPath: String,
         @Body body: RequestBody
     ): Response<ResponseBody>
+
+    /** n8n's built-in instance health endpoint; used to cheap-fail before claiming large batches. */
+    @GET("healthz")
+    suspend fun healthCheck(): Response<ResponseBody>
 }

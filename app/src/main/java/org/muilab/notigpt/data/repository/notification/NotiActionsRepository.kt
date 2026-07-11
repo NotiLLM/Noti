@@ -14,7 +14,9 @@ import org.muilab.notigpt.data.remote.n8n.enqueueDelayedTaskExtraction
 import org.muilab.notigpt.data.remote.n8n.enqueueTaskExtraction
 import org.muilab.notigpt.data.remote.n8n.enqueueTaskScan
 import org.muilab.notigpt.data.local.room.dao.NotiDrawerDao
+import org.muilab.notigpt.data.local.room.dao.NotiLlmStateDao
 import org.muilab.notigpt.data.local.room.dao.NotiRecordDao
+import org.muilab.notigpt.model.features.NotiLlmState
 import org.muilab.notigpt.model.notifications.NotiRecord
 import org.muilab.notigpt.model.notifications.NotiUnit
 import org.muilab.notigpt.data.remote.firestore.FirestoreSyncRepository
@@ -32,6 +34,7 @@ class NotiActionsRepository(
     private val appContext: Context,
     private val notiDrawerDao: NotiDrawerDao,
     private val notiRecordDao: NotiRecordDao,
+    private val notiLlmStateDao: NotiLlmStateDao,
 ) {
 
     private val detectionCounters = mutableMapOf<String, Int>()
@@ -138,9 +141,9 @@ class NotiActionsRepository(
 
         if (totalPending >= maxCount) {
             val candidateKeys: List<String> = synchronized(extractionCounters) { extractionCounters.keys.toList() }
-            val toSubmit = candidateKeys.filter { k -> notiDrawerDao.getByNotiKey(k)?.shouldExtractReminder == true }
+            val toSubmit = candidateKeys.filter { k -> notiLlmStateDao.getByKey(k)?.shouldExtractReminder == true }
             if (toSubmit.isNotEmpty()) {
-                notiDrawerDao.setShouldExtractReminderByKeys(toSubmit, false)
+                notiLlmStateDao.setShouldExtractByKeys(toSubmit, false, System.currentTimeMillis())
                 enqueueTaskExtraction(appContext, toSubmit)
             }
             synchronized(extractionCounters) { extractionCounters.clear() }
@@ -157,10 +160,8 @@ class NotiActionsRepository(
     suspend fun actOnNotiLegacy(notiKey: String, action: String) {
         // Special-case actions that carry payload after ::
         if (action.startsWith("extract_reminder_with_records")) {
-            val existing = notiDrawerDao.getByNotiKey(notiKey) ?: return
-            if (!existing.shouldExtractReminder) {
-                notiDrawerDao.setShouldExtractReminderByKey(notiKey, true)
-            }
+            notiDrawerDao.getByNotiKey(notiKey) ?: return
+            promoteShouldExtract(notiKey)
 
             val parts = action.split("::", limit = 2)
             val json = parts.getOrNull(1).orEmpty()
@@ -206,10 +207,8 @@ class NotiActionsRepository(
             "extract_reminder" -> {
                 // Legacy path: still allows triggering extraction, but without explicit record IDs we
                 // fall back to previous behavior.
-                val existing = notiDrawerDao.getByNotiKey(notiKey) ?: return
-                if (!existing.shouldExtractReminder) {
-                    notiDrawerDao.setShouldExtractReminderByKey(notiKey, true)
-                }
+                notiDrawerDao.getByNotiKey(notiKey) ?: return
+                promoteShouldExtract(notiKey)
 
                 enqueueTaskExtraction(appContext, listOf(notiKey), userTriggered = true)
             }
@@ -222,38 +221,51 @@ class NotiActionsRepository(
     }
 
     suspend fun setHasTask(notiKey: String, hasTask: Boolean) {
-        val existing = notiDrawerDao.getByNotiKey(notiKey) ?: return
-        notiDrawerDao.setHasTaskByKey(notiKey, hasTask)
+        notiDrawerDao.getByNotiKey(notiKey) ?: return
+        val state = llmStateOrDefault(notiKey)
+        notiLlmStateDao.upsert(state.copy(hasTask = hasTask, updatedAt = System.currentTimeMillis()))
 
         // Never demote the flag once it's true.
-        if (!existing.shouldExtractReminder && hasTask) {
+        if (!state.shouldExtractReminder && hasTask) {
             Log.d("NotiActionsRepository", "Setting shouldExtractReminder to true for $notiKey")
-            notiDrawerDao.setShouldExtractReminderByKey(notiKey, true)
+            promoteShouldExtract(notiKey)
             registerShouldExtractForNotiUnit(notiKey)
         }
     }
 
     suspend fun setHasMemo(notiKey: String, hasMemo: Boolean) {
-        val existing = notiDrawerDao.getByNotiKey(notiKey) ?: return
-        notiDrawerDao.setHasMemoByKey(notiKey, hasMemo)
+        notiDrawerDao.getByNotiKey(notiKey) ?: return
+        val state = llmStateOrDefault(notiKey)
+        notiLlmStateDao.upsert(state.copy(hasMemo = hasMemo, updatedAt = System.currentTimeMillis()))
 
         // Never demote the flag once it's true.
-        if (!existing.shouldExtractReminder && hasMemo) {
+        if (!state.shouldExtractReminder && hasMemo) {
             Log.d("NotiActionsRepository", "Setting shouldExtractReminder to true for $notiKey")
-            notiDrawerDao.setShouldExtractReminderByKey(notiKey, true)
+            promoteShouldExtract(notiKey)
             registerShouldExtractForNotiUnit(notiKey)
         }
     }
 
     suspend fun setHasEvent(notiKey: String, hasEvent: Boolean) {
-        val existing = notiDrawerDao.getByNotiKey(notiKey) ?: return
-        notiDrawerDao.setHasEventByKey(notiKey, hasEvent)
+        notiDrawerDao.getByNotiKey(notiKey) ?: return
+        val state = llmStateOrDefault(notiKey)
+        notiLlmStateDao.upsert(state.copy(hasEvent = hasEvent, updatedAt = System.currentTimeMillis()))
 
         // Never demote the flag once it's true.
-        if (!existing.shouldExtractReminder && hasEvent) {
+        if (!state.shouldExtractReminder && hasEvent) {
             Log.d("NotiActionsRepository", "Setting shouldExtractReminder to true for $notiKey")
-            notiDrawerDao.setShouldExtractReminderByKey(notiKey, true)
+            promoteShouldExtract(notiKey)
             registerShouldExtractForNotiUnit(notiKey)
         }
+    }
+
+    private fun llmStateOrDefault(notiKey: String): NotiLlmState =
+        notiLlmStateDao.getByKey(notiKey) ?: NotiLlmState(notiKey = notiKey)
+
+    /** Sets shouldExtractReminder without disturbing the other thread-state fields. */
+    private fun promoteShouldExtract(notiKey: String) {
+        val state = llmStateOrDefault(notiKey)
+        if (state.shouldExtractReminder) return
+        notiLlmStateDao.upsert(state.copy(shouldExtractReminder = true, updatedAt = System.currentTimeMillis()))
     }
 }

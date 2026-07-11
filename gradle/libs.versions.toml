@@ -45,6 +45,9 @@ work-runtime = "2.11.2"
 kotlin-toon = "1.0.0"
 
 googleServices = "4.4.4"
+crashlyticsPlugin = "3.0.6"
+credentials = "1.5.0"
+googleid = "1.1.1"
 firebaseBom = "34.13.0"
 playServicesAuth = "21.6.0"
 googleApiClient = "2.9.0"
@@ -109,6 +112,13 @@ kotlin-toon = { group = "br.com.vexpera", name = "kotlin-toon", version.ref = "k
 
 firebase-bom = { module = "com.google.firebase:firebase-bom", version.ref = "firebaseBom" }
 firebase-firestore = { module = "com.google.firebase:firebase-firestore" }
+firebase-auth = { module = "com.google.firebase:firebase-auth" }
+firebase-crashlytics = { module = "com.google.firebase:firebase-crashlytics" }
+
+# Credential Manager (Google Sign-In)
+androidx-credentials = { module = "androidx.credentials:credentials", version.ref = "credentials" }
+androidx-credentials-play-services = { module = "androidx.credentials:credentials-play-services-auth", version.ref = "credentials" }
+googleid = { module = "com.google.android.libraries.identity.googleid:googleid", version.ref = "googleid" }
 
 # Google Play Services & Tasks API
 play-services-auth = { module = "com.google.android.gms:play-services-auth", version.ref = "playServicesAuth" }
@@ -126,3 +136,4 @@ compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 secretsGradlePlugin = { id = "com.google.android.libraries.mapsplatform.secrets-gradle-plugin", version.ref = "secrets-gradle-plugin" }
 google-services = { id = "com.google.gms.google-services", version.ref = "googleServices" }
+firebase-crashlytics = { id = "com.google.firebase.crashlytics", version.ref = "crashlyticsPlugin" }

@@ -9,20 +9,19 @@ import androidx.room.Embedded
 import androidx.room.Entity
 import org.muilab.notigpt.model.notifications.components.NotiMetadata
 import org.muilab.notigpt.model.notifications.components.NotiDisplayState
-import org.muilab.notigpt.model.notifications.components.NotiReminderAttr
 
 /**
  * Room entity for the latest drawer state of one Android notification key.
  *
- * NotiUnit owns current display metadata, read/pin/dismiss state, and scan/extraction flags.
- * Detailed content history belongs to NotiRecord so repeated updates do not overwrite context.
+ * NotiUnit owns current display metadata and read/pin/dismiss state. Detailed content history
+ * belongs to NotiRecord, and LLM-derived thread state (scan flags, categories) lives in
+ * NotiLlmState so this row stays purely what happened + how the user arranged it.
  */
 @Entity(tableName = "noti_drawer", primaryKeys = ["notiKey"])
 data class NotiUnit(
     val notiKey: String,
     @Embedded val metadata: NotiMetadata,
     @Embedded val displayState: NotiDisplayState = NotiDisplayState(),
-    @Embedded val reminderAttr: NotiReminderAttr = NotiReminderAttr(),
 ) {
     @RequiresApi(Build.VERSION_CODES.S)
     constructor(
@@ -88,23 +87,6 @@ data class NotiUnit(
     var sortPosition: Int
         get() = displayState.sortPosition
         set(value) { displayState.sortPosition = value }
-
-
-    var shouldExtractReminder: Boolean
-        get() = reminderAttr.shouldExtractReminder
-        set(value) { reminderAttr.shouldExtractReminder = value }
-
-    var hasTask: Boolean
-        get() = reminderAttr.hasTask
-        set(value) { reminderAttr.hasTask = value }
-
-    var hasMemo: Boolean
-        get() = reminderAttr.hasMemo
-        set(value) { reminderAttr.hasMemo = value }
-
-    var hasEvent: Boolean
-        get() = reminderAttr.hasEvent
-        set(value) { reminderAttr.hasEvent = value }
 
     var isSetToTop: Boolean
         get() = displayState.isSetToTop

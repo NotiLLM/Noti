@@ -27,5 +27,8 @@ interface UserContextDao {
 
     @Query("DELETE FROM user_contexts WHERE id = :id")
     suspend fun deleteContext(id: String)
+
+    @Query("DELETE FROM user_contexts")
+    suspend fun deleteAll()
 }
 

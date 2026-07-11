@@ -44,9 +44,6 @@ interface NotiDrawerDao {
     @Query("SELECT notiKey FROM noti_drawer WHERE isDismissed = 0")
     fun getAllActiveKeys(): List<String>
 
-    @Query("SELECT notiKey FROM noti_drawer WHERE isDismissed = 0 AND shouldExtractReminder = 1")
-    fun getAllActiveShouldExtractKeys(): List<String>
-
     @Query("SELECT * FROM noti_drawer WHERE notiKey = :notiKey")
     fun getByNotiKey(notiKey: String): NotiUnit?
 
@@ -100,31 +97,6 @@ interface NotiDrawerDao {
     // Set units read by keys
     @Query("UPDATE noti_drawer SET isRead = 1 WHERE notiKey IN (:notiKeys)")
     suspend fun setUnitsReadByKeys(notiKeys: List<String>)
-
-    // Task-related attribute setters
-    @Query("UPDATE noti_drawer SET shouldExtractReminder = :value WHERE notiKey = :notiKey")
-    suspend fun setShouldExtractReminderByKey(notiKey: String, value: Boolean)
-
-    @Query("UPDATE noti_drawer SET shouldExtractReminder = :value WHERE notiKey IN (:notiKeys)")
-    fun setShouldExtractReminderByKeys(notiKeys: List<String>, value: Boolean)
-
-    @Query("UPDATE noti_drawer SET hasTask = :value WHERE notiKey = :notiKey")
-    fun setHasTaskByKey(notiKey: String, value: Boolean)
-
-    @Query("UPDATE noti_drawer SET hasTask = :value WHERE notiKey IN (:notiKeys)")
-    fun setHasTaskByKeys(notiKeys: List<String>, value: Boolean)
-
-    @Query("UPDATE noti_drawer SET hasMemo = :value WHERE notiKey = :notiKey")
-    fun setHasMemoByKey(notiKey: String, value: Boolean)
-
-    @Query("UPDATE noti_drawer SET hasMemo = :value WHERE notiKey IN (:notiKeys)")
-    fun setHasMemoByKeys(notiKeys: List<String>, value: Boolean)
-
-    @Query("UPDATE noti_drawer SET hasEvent = :value WHERE notiKey = :notiKey")
-    fun setHasEventByKey(notiKey: String, value: Boolean)
-
-    @Query("UPDATE noti_drawer SET hasEvent = :value WHERE notiKey IN (:notiKeys)")
-    fun setHasEventByKeys(notiKeys: List<String>, value: Boolean)
 
     // Manual ordering
     @Query("UPDATE noti_drawer SET sortPosition = :newPosition WHERE notiKey = :notiKey")

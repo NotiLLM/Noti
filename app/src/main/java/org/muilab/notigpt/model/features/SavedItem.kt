@@ -90,6 +90,24 @@ data class SavedItem(
     /** JSON array of rerank history records. */
     @ColumnInfo(defaultValue = "[]")
     val reRankHistory: String = "[]",
+
+    /** User-set star. User-owned: never touched by LLM flows. */
+    @ColumnInfo(defaultValue = "0")
+    val isStarred: Boolean = false,
+
+    /**
+     * User-set "do date" (ms since epoch) — when the user intends to work on the task, distinct
+     * from [deadlineAtMs]. 0 = unset. User-owned: never touched by LLM flows.
+     */
+    @ColumnInfo(defaultValue = "0")
+    val doAtMs: Long = 0L,
+
+    /**
+     * Timestamp of the newest change the user has explicitly acknowledged (via the review action).
+     * Change-log rows newer than this render as "what's new".
+     */
+    @ColumnInfo(defaultValue = "0")
+    val lastViewedChangeAt: Long = 0L,
 ) {
     val isTask: Boolean
         @Ignore get() = itemType == SavedItemType.Task
