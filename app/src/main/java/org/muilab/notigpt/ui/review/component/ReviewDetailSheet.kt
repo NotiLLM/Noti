@@ -60,8 +60,7 @@ fun ReviewDetailSheet(
     ) {
         Text(
             text = item.title.ifBlank { stringResource(R.string.ui_reminders_untitled_task) },
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.SemiBold,
+            style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.SemiBold),
         )
 
         if (item.content.isNotBlank()) {
