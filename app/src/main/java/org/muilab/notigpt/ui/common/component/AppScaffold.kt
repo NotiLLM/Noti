@@ -3,13 +3,21 @@ package org.muilab.notigpt.ui.common.component
 import android.os.Build
 import android.util.Log
 import androidx.annotation.RequiresApi
-import androidx.activity.compose.BackHandler
+import androidx.activity.compose.PredictiveBackHandler
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -66,6 +74,19 @@ import org.muilab.notigpt.ui.preference.viewmodel.PreferenceViewModel
 import org.muilab.notigpt.ui.review.ReviewScreen
 import org.muilab.notigpt.ui.reminder.viewmodel.ReminderViewModel
 import org.muilab.notigpt.ui.reminder.viewmodel.ScheduledReminderViewModel
+import org.muilab.notigpt.ui.theme.MotionSpecs
+import kotlin.coroutines.cancellation.CancellationException
+
+/**
+ * Immutable snapshot of the current navigation position, used as the [AnimatedContent] key so the
+ * outgoing and incoming screens each render from their own state during a transition. [depth]
+ * (back-stack size, +1 while a menu screen is open) drives push-vs-pop direction.
+ */
+private data class NavSnapshot(
+    val menuScreen: AppMenuScreen?,
+    val dest: HomeDestination,
+    val depth: Int,
+)
 
 /**
  * Top-level Compose scaffold that places app bars, navigation, and the selected screen content.
@@ -95,12 +116,20 @@ fun AppScaffold(
 
     // A task/keep detail editor is open → hide the app bars (full-screen detail).
     var detailOpen by remember { mutableStateOf(false) }
-    // Collapse the top bar in step with scrolling — only on the list-style screens.
-    val barsScrollEnabled = menuScreen == AppMenuScreen.History ||
+    // The home root uses a collapsing large-title bar; list screens use an enter-always small bar;
+    // everything else has a pinned small bar (no scroll behavior).
+    val listScrollEnabled = menuScreen == AppMenuScreen.History ||
         menuScreen == AppMenuScreen.Reminders ||
         (menuScreen == null && (currentDest is HomeDestination.SavedList || currentDest is HomeDestination.NotiList))
     val topBarState = rememberTopAppBarState()
-    val topBarScrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(topBarState)
+    // Both behaviors share topBarState; only the active one is attached to the Scaffold's nestedScroll.
+    val exitUntilCollapsed = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(topBarState)
+    val enterAlways = TopAppBarDefaults.enterAlwaysScrollBehavior(topBarState)
+    val topBarScrollBehavior = when {
+        atHomeRoot -> exitUntilCollapsed
+        listScrollEnabled -> enterAlways
+        else -> null
+    }
     LaunchedEffect(currentDest, menuScreen) {
         topBarState.heightOffset = 0f
         topBarState.contentOffset = 0f
@@ -247,8 +276,18 @@ fun AppScaffold(
         if (backStack.size > 1) backStack.removeAt(backStack.lastIndex)
     }
 
-    BackHandler(enabled = menuScreen != null || backStack.size > 1) {
-        if (menuScreen != null) menuScreen = null else popBack()
+    // Predictive back: scrub a subtle scale on the content during the gesture, commit the pop on
+    // completion (which then plays the AnimatedContent pop), and spring back on cancel.
+    var backProgress by remember { mutableStateOf(0f) }
+    PredictiveBackHandler(enabled = menuScreen != null || backStack.size > 1) { events ->
+        try {
+            events.collect { event -> backProgress = event.progress }
+            backProgress = 0f
+            if (menuScreen != null) menuScreen = null else popBack()
+        } catch (e: CancellationException) {
+            backProgress = 0f
+            throw e
+        }
     }
 
     // ── Top-bar configuration for the current destination ──
@@ -272,6 +311,7 @@ fun AppScaffold(
         drawerContent = {
             AppDrawerContent(
                 isHome = atHomeRoot,
+                accountEmail = org.muilab.notigpt.data.remote.auth.GoogleAuthManager.currentUser()?.email,
                 unresolvedConflictCount = unresolvedConflicts.size,
                 dueUnseenReminderCount = dueUnseenReminderCount,
                 activeTaskCount = activeTaskCount,
@@ -283,7 +323,7 @@ fun AppScaffold(
         },
     ) {
         Scaffold(
-            modifier = if (barsScrollEnabled) {
+            modifier = if (topBarScrollBehavior != null) {
                 Modifier.nestedScroll(topBarScrollBehavior.nestedScrollConnection)
             } else Modifier,
             topBar = {
@@ -304,7 +344,8 @@ fun AppScaffold(
                         showSearch = showSearch,
                         searchQuery = appSearchQuery,
                         onSearchQueryChange = drawerViewModel::updateQueryString,
-                        scrollBehavior = if (barsScrollEnabled) topBarScrollBehavior else null,
+                        scrollBehavior = topBarScrollBehavior,
+                        large = atHomeRoot,
                         actions = {
                             // Clear-all bin on the notification category (Communication/Content) pages.
                             // Scoped to the visible list: the current category + time window, excluding pinned.
@@ -329,61 +370,89 @@ fun AppScaffold(
                 }
             },
             snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
-            containerColor = MaterialTheme.colorScheme.surfaceDim,
+            // Canvas: the lightest surface; cards (surfaceContainerLow / surfaceBright) provide
+            // subtle separation. See the surface-role note in Color.kt.
+            containerColor = MaterialTheme.colorScheme.surface,
         ) { paddingValues ->
-            Box(
-                modifier = Modifier.padding(paddingValues)
-            ) {
-                when (val screen = menuScreen) {
-                    AppMenuScreen.Reminders -> ScheduledRemindersScreen(
-                        viewModel = scheduledReminderViewModel,
-                        searchQuery = appSearchQuery,
-                    )
-                    AppMenuScreen.Preferences -> PreferenceChatScreen(
-                        preferenceViewModel = preferenceViewModel,
-                    )
-                    AppMenuScreen.History -> NotificationHistoryScreen(
-                        drawerViewModel = drawerViewModel,
-                        searchQuery = appSearchQuery,
-                    )
-                    AppMenuScreen.Settings -> SettingsScreen()
-                    null -> when (val dest = currentDest) {
-                        HomeDestination.Home -> HomeScreen(
-                            drawerViewModel = drawerViewModel,
-                            onOpenReview = { pushHome(HomeDestination.Review) },
-                            onOpenNotiCategory = { category -> pushHome(HomeDestination.NotiList(category)) },
-                            onOpenSavedList = { filter -> pushHome(HomeDestination.SavedList(filter)) },
-                        )
-                        HomeDestination.Review -> ReviewScreen(
-                            drawerViewModel = drawerViewModel,
-                            reminderViewModel = reminderViewModel,
-                            onBack = popBack,
-                        )
-                        is HomeDestination.NotiList -> NotiCategoryScreen(
-                            category = dest.category,
-                            drawerViewModel = drawerViewModel,
-                            scheduledReminderViewModel = scheduledReminderViewModel,
+            val navDepth = backStack.size + (if (menuScreen != null) 1 else 0)
+            val navSnapshot = NavSnapshot(menuScreen, currentDest, navDepth)
+            AnimatedContent(
+                targetState = navSnapshot,
+                modifier = Modifier
+                    .padding(paddingValues)
+                    .graphicsLayer {
+                        val s = 1f - 0.06f * backProgress.coerceIn(0f, 1f)
+                        scaleX = s
+                        scaleY = s
+                    },
+                transitionSpec = {
+                    val ms = MotionSpecs.ScreenTransitionMs
+                    val menuInvolved = initialState.menuScreen != null || targetState.menuScreen != null
+                    when {
+                        menuInvolved ->
+                            fadeIn(tween(ms)) togetherWith fadeOut(tween(ms))
+                        targetState.depth >= initialState.depth ->
+                            (slideInHorizontally(tween(ms)) { it / 4 } + fadeIn(tween(ms))) togetherWith
+                                (slideOutHorizontally(tween(ms)) { -it / 6 } + fadeOut(tween(ms)))
+                        else ->
+                            (slideInHorizontally(tween(ms)) { -it / 6 } + fadeIn(tween(ms))) togetherWith
+                                (slideOutHorizontally(tween(ms)) { it / 4 } + fadeOut(tween(ms)))
+                    }
+                },
+                label = "screen",
+            ) { snap ->
+                Box(Modifier.fillMaxSize()) {
+                    when (snap.menuScreen) {
+                        AppMenuScreen.Reminders -> ScheduledRemindersScreen(
+                            viewModel = scheduledReminderViewModel,
                             searchQuery = appSearchQuery,
                         )
-                        is HomeDestination.SavedList -> {
-                            val listMode = when (dest.filter) {
-                                SavedListFilter.Tasks -> ReminderViewModel.ListMode.Tasks
-                                SavedListFilter.Keep -> ReminderViewModel.ListMode.Keep
-                                else -> ReminderViewModel.ListMode.All
-                            }
-                            val smart = when (dest.filter) {
-                                SavedListFilter.Tasks, SavedListFilter.Keep -> null
-                                else -> dest.filter
-                            }
-                            RemindersScreen(
+                        AppMenuScreen.Preferences -> PreferenceChatScreen(
+                            preferenceViewModel = preferenceViewModel,
+                        )
+                        AppMenuScreen.History -> NotificationHistoryScreen(
+                            drawerViewModel = drawerViewModel,
+                            searchQuery = appSearchQuery,
+                        )
+                        AppMenuScreen.Settings -> SettingsScreen()
+                        null -> when (val dest = snap.dest) {
+                            HomeDestination.Home -> HomeScreen(
+                                drawerViewModel = drawerViewModel,
+                                onOpenReview = { pushHome(HomeDestination.Review) },
+                                onOpenNotiCategory = { category -> pushHome(HomeDestination.NotiList(category)) },
+                                onOpenSavedList = { filter -> pushHome(HomeDestination.SavedList(filter)) },
+                            )
+                            HomeDestination.Review -> ReviewScreen(
                                 drawerViewModel = drawerViewModel,
                                 reminderViewModel = reminderViewModel,
-                                scheduledReminderViewModel = scheduledReminderViewModel,
-                                preferenceViewModel = preferenceViewModel,
-                                listMode = listMode,
-                                smartFilter = smart,
-                                onDetailOpenChange = { detailOpen = it },
+                                onBack = popBack,
                             )
+                            is HomeDestination.NotiList -> NotiCategoryScreen(
+                                category = dest.category,
+                                drawerViewModel = drawerViewModel,
+                                scheduledReminderViewModel = scheduledReminderViewModel,
+                                searchQuery = appSearchQuery,
+                            )
+                            is HomeDestination.SavedList -> {
+                                val listMode = when (dest.filter) {
+                                    SavedListFilter.Tasks -> ReminderViewModel.ListMode.Tasks
+                                    SavedListFilter.Keep -> ReminderViewModel.ListMode.Keep
+                                    else -> ReminderViewModel.ListMode.All
+                                }
+                                val smart = when (dest.filter) {
+                                    SavedListFilter.Tasks, SavedListFilter.Keep -> null
+                                    else -> dest.filter
+                                }
+                                RemindersScreen(
+                                    drawerViewModel = drawerViewModel,
+                                    reminderViewModel = reminderViewModel,
+                                    scheduledReminderViewModel = scheduledReminderViewModel,
+                                    preferenceViewModel = preferenceViewModel,
+                                    listMode = listMode,
+                                    smartFilter = smart,
+                                    onDetailOpenChange = { detailOpen = it },
+                                )
+                            }
                         }
                     }
                 }

@@ -14,6 +14,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -46,32 +47,51 @@ fun AppTopBar(
     searchQuery: String? = null,
     onSearchQueryChange: ((String) -> Unit)? = null,
     scrollBehavior: TopAppBarScrollBehavior? = null,
+    /** Render as a collapsing large-title bar (home root). Ignores search. */
+    large: Boolean = false,
     /** Screen-specific trailing actions (e.g. "Clear all"), shown to the right of search when not searching. */
     actions: @Composable RowScope.() -> Unit = {},
 ) {
+    val barColors = TopAppBarDefaults.topAppBarColors(
+        containerColor = MaterialTheme.colorScheme.surface,
+        scrolledContainerColor = MaterialTheme.colorScheme.surface,
+    )
+    val navIcon: @Composable () -> Unit = {
+        if (onNavigateBack != null) {
+            IconButton(
+                modifier = Modifier.minimumInteractiveComponentSize(),
+                onClick = onNavigateBack,
+            ) {
+                Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.a11y_back))
+            }
+        } else {
+            IconButton(
+                modifier = Modifier.minimumInteractiveComponentSize(),
+                onClick = onMenuClicked,
+            ) {
+                Icon(painter = painterResource(id = R.drawable.menu), contentDescription = stringResource(R.string.a11y_menu))
+            }
+        }
+    }
+
+    if (large) {
+        LargeTopAppBar(
+            scrollBehavior = scrollBehavior,
+            colors = TopAppBarDefaults.largeTopAppBarColors(
+                containerColor = MaterialTheme.colorScheme.surface,
+                scrolledContainerColor = MaterialTheme.colorScheme.surface,
+            ),
+            navigationIcon = navIcon,
+            title = { Text(text = screenTitle ?: stringResource(R.string.app_name)) },
+            actions = actions,
+        )
+        return
+    }
+
     TopAppBar(
         scrollBehavior = scrollBehavior,
-        colors = TopAppBarDefaults.topAppBarColors(
-            containerColor = MaterialTheme.colorScheme.surface,
-            scrolledContainerColor = MaterialTheme.colorScheme.surface,
-        ),
-        navigationIcon = {
-            if (onNavigateBack != null) {
-                IconButton(
-                    modifier = Modifier.minimumInteractiveComponentSize(),
-                    onClick = onNavigateBack,
-                ) {
-                    Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.a11y_back))
-                }
-            } else {
-                IconButton(
-                    modifier = Modifier.minimumInteractiveComponentSize(),
-                    onClick = onMenuClicked,
-                ) {
-                    Icon(painter = painterResource(id = R.drawable.menu), contentDescription = stringResource(R.string.a11y_menu))
-                }
-            }
-        },
+        colors = barColors,
+        navigationIcon = navIcon,
         title = {
             AnimatedContent(
                 targetState = isSearchExpanded && showSearch,

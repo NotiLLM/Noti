@@ -390,6 +390,8 @@
     <string name="menu_home">主頁</string>
     <string name="menu_reminders">排程提醒</string>
     <string name="menu_history">歷史記錄</string>
+    <string name="menu_section_collections">收藏</string>
+    <string name="menu_section_more">更多</string>
     <string name="a11y_more_actions">更多動作</string>
 
     <!-- New screen sections + triage -->

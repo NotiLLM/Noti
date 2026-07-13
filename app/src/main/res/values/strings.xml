@@ -420,6 +420,8 @@
     <string name="menu_home">Home</string>
     <string name="menu_reminders">Reminders</string>
     <string name="menu_history">History</string>
+    <string name="menu_section_collections">Collections</string>
+    <string name="menu_section_more">More</string>
     <string name="a11y_more_actions">More actions</string>
 
     <!-- New screen sections + triage -->
