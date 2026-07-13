@@ -9,10 +9,11 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.util.Log
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.activity.viewModels
 import androidx.core.content.ContextCompat
 import android.content.pm.PackageManager
@@ -54,6 +55,11 @@ class MainActivity : ComponentActivity() {
 
     @RequiresApi(Build.VERSION_CODES.S)
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Must precede super.onCreate: swaps the launch (splash) theme for the app theme.
+        installSplashScreen()
+        // Draw behind the system bars; enableEdgeToEdge also keeps status/nav icon contrast in sync
+        // with the light/dark mode. Compose consumes the insets via Scaffold + WindowInsets.
+        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
 
         // WorkManager.getInstance(applicationContext).cancelAllWork()
@@ -109,11 +115,9 @@ class MainActivity : ComponentActivity() {
                 val extractionStatus by org.muilab.notigpt.data.remote.n8n.ExtractionStatusStore.status.collectAsState()
                 LaunchedEffect(extractionStatus.userTriggeredFailureTick) {
                     if (extractionStatus.userTriggeredFailureTick > 0L) {
-                        Toast.makeText(
-                            this@MainActivity,
-                            getString(R.string.extraction_failed_toast),
-                            Toast.LENGTH_SHORT,
-                        ).show()
+                        org.muilab.notigpt.ui.common.feedback.AppSnackbar.show(
+                            getString(R.string.extraction_failed_toast)
+                        )
                     }
                 }
                 Surface(

@@ -1,7 +1,6 @@
 package org.muilab.notigpt.ui.notification.component.action
 
 import android.content.Context
-import android.widget.Toast
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -19,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.muilab.notigpt.model.notifications.NotiUnit
+import org.muilab.notigpt.ui.common.feedback.AppSnackbar
 
 /**
  * Dropdown for user feedback on notification extraction/classification.
@@ -39,7 +39,7 @@ fun NotiFeedbackDropdown(context: Context, notiUnit: NotiUnit, isDropdownMenuExp
         Column {
             Row {
                 Button(onClick = {
-                    Toast.makeText(context, "Start Updating Notification", Toast.LENGTH_SHORT).show()
+                    AppSnackbar.show("Start Updating Notification")
 //                    enqueueUpdateNotification(context, notiUnit.notiKey)
                     isDropdownMenuExpanded.value = false
                 }) {

@@ -1,6 +1,6 @@
 package org.muilab.notigpt.ui.notification.screen
 
-import android.widget.Toast
+import org.muilab.notigpt.ui.common.feedback.AppSnackbar
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -284,7 +284,7 @@ private fun HistoryActionMenu(
                 TextButton(
                     onClick = {
                         clipboard.setText(AnnotatedString(target.copyText))
-                        Toast.makeText(context, R.string.history_copied, Toast.LENGTH_SHORT).show()
+                        AppSnackbar.show(context.getString(R.string.history_copied))
                         onDismiss()
                     },
                     modifier = Modifier.fillMaxWidth(),
@@ -301,7 +301,7 @@ private fun HistoryActionMenu(
                         scope.launch {
                             val idsJson = com.google.gson.Gson().toJson(target.recordIds.distinct())
                             drawerViewModel.actOnNoti(target.notiKey, "extract_reminder_with_records::$idsJson")
-                            Toast.makeText(context, R.string.history_extract_requested, Toast.LENGTH_SHORT).show()
+                            AppSnackbar.show(context.getString(R.string.history_extract_requested))
                         }
                         onDismiss()
                     },

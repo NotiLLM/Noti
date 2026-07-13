@@ -106,6 +106,7 @@ import org.muilab.notigpt.model.features.SavedSubItem
 import org.muilab.notigpt.data.export.asExportable
 import org.muilab.notigpt.ui.preference.component.PreferenceLearningBottomSheet
 import org.muilab.notigpt.ui.common.component.DueChip
+import org.muilab.notigpt.ui.common.feedback.AppSnackbar
 import org.muilab.notigpt.ui.reminder.component.ExportChooserDialog
 import org.muilab.notigpt.ui.theme.NotiTheme
 import org.muilab.notigpt.ui.notification.component.RelatedNotificationPreview
@@ -237,19 +238,11 @@ fun RemindersScreen(
     LaunchedEffect(googleTasksExportResult) {
         when (val r = googleTasksExportResult) {
             is ReminderViewModel.GoogleTasksExportResult.Success -> {
-                android.widget.Toast.makeText(
-                    context,
-                    strGoogleTasksSuccess,
-                    android.widget.Toast.LENGTH_SHORT
-                ).show()
+                AppSnackbar.show(strGoogleTasksSuccess)
                 vm.clearGoogleTasksExportResult()
             }
             is ReminderViewModel.GoogleTasksExportResult.Error -> {
-                android.widget.Toast.makeText(
-                    context,
-                    strGoogleTasksErrorFmt.replace("%s", r.message ?: ""),
-                    android.widget.Toast.LENGTH_LONG
-                ).show()
+                AppSnackbar.show(strGoogleTasksErrorFmt.replace("%s", r.message ?: ""))
                 vm.clearGoogleTasksExportResult()
             }
             is ReminderViewModel.GoogleTasksExportResult.NotSignedIn -> {
@@ -769,11 +762,7 @@ fun RemindersScreen(
                 try {
                     context.startActivity(calIntent)
                 } catch (_: Exception) {
-                    android.widget.Toast.makeText(
-                        context,
-                        strGoogleCalendarNoApp,
-                        android.widget.Toast.LENGTH_SHORT
-                    ).show()
+                    AppSnackbar.show(strGoogleCalendarNoApp)
                 }
             },
         )

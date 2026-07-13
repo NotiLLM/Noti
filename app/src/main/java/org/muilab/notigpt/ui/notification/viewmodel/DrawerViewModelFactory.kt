@@ -6,7 +6,7 @@ import androidx.lifecycle.ViewModelProvider
 import org.muilab.notigpt.data.repository.notification.NotiRepository
 import org.muilab.notigpt.ui.common.clipboard.AndroidClipboardController
 import org.muilab.notigpt.data.export.MediaStoreNotiLogExporter
-import org.muilab.notigpt.ui.common.feedback.ToastUserToaster
+import org.muilab.notigpt.ui.common.feedback.SnackbarUserToaster
 
 /**
  * Factory for constructing DrawerViewModel with Android context-backed repositories.
@@ -26,7 +26,7 @@ class DrawerViewModelFactory(
                 application = application,
                 notiRepository = notiRepository,
                 clipboard = AndroidClipboardController(appContext),
-                notifier = ToastUserToaster(appContext),
+                notifier = SnackbarUserToaster(),
                 logExporter = MediaStoreNotiLogExporter(appContext),
             ) as T
         }

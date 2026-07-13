@@ -15,6 +15,17 @@ interface UserToaster {
     fun showShort(message: String, duration: Long = 1_000L)
 }
 
+/**
+ * Default [UserToaster] that routes messages to the app-wide [AppSnackbar] bus (shown as Material
+ * snackbars by AppScaffold). Preferred over [ToastUserToaster] so ViewModel status messages match the
+ * rest of the app's feedback. Context-free; [duration] is ignored (snackbars use their own timing).
+ */
+class SnackbarUserToaster : UserToaster {
+    override fun showShort(message: String, duration: Long) {
+        AppSnackbar.show(message)
+    }
+}
+
 class ToastUserToaster(context: Context) : UserToaster {
 
     // Use applicationContext to avoid leaking an Activity

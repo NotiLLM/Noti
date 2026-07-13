@@ -2,7 +2,7 @@ package org.muilab.notigpt.ui.preference.viewmodel
 
 import android.app.Application
 import android.util.Log
-import android.widget.Toast
+import org.muilab.notigpt.ui.common.feedback.AppSnackbar
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
@@ -369,20 +369,14 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
 
                     val toast = result.toastMessage
                     if (!toast.isNullOrBlank()) {
-                        withContext(Dispatchers.Main) {
-                            Toast.makeText(getApplication(), toast, Toast.LENGTH_LONG).show()
-                        }
+                        AppSnackbar.show(toast)
                     }
                 } else {
-                    withContext(Dispatchers.Main) {
-                        Toast.makeText(getApplication(), R.string.pref_sync_failed, Toast.LENGTH_SHORT).show()
-                    }
+                    AppSnackbar.show(getApplication<Application>().getString(R.string.pref_sync_failed))
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Quick-sync error", e)
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(getApplication(), R.string.pref_sync_error, Toast.LENGTH_SHORT).show()
-                }
+                AppSnackbar.show(getApplication<Application>().getString(R.string.pref_sync_error))
             } finally {
                 withContext(Dispatchers.Main) {
                     _bottomSheetStep.value = BottomSheetStep.Hidden

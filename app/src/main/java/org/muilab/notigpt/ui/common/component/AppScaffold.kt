@@ -47,6 +47,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import org.muilab.notigpt.R
 import org.muilab.notigpt.model.features.NotiCategory
 import org.muilab.notigpt.ui.preference.model.PreferenceEntryPoint
+import org.muilab.notigpt.ui.common.feedback.AppSnackbar
 import org.muilab.notigpt.ui.common.appbar.AppTopBar
 import org.muilab.notigpt.ui.home.HomeScreen
 import org.muilab.notigpt.ui.home.viewmodel.HomeViewModel
@@ -150,6 +151,18 @@ fun AppScaffold(
                 SnackbarResult.ActionPerformed -> preferenceViewModel.promoteSnackbarToFlow(event)
                 SnackbarResult.Dismissed -> { /* already cleared */ }
             }
+        }
+    }
+
+    // App-wide status messages (replaces scattered Toasts). Emitted via AppSnackbar from UI or VMs.
+    LaunchedEffect(Unit) {
+        AppSnackbar.messages.collect { msg ->
+            val result = snackbarHostState.showSnackbar(
+                message = msg.text,
+                actionLabel = msg.actionLabel,
+                duration = SnackbarDuration.Short,
+            )
+            if (result == SnackbarResult.ActionPerformed) msg.onAction?.invoke()
         }
     }
 
