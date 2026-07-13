@@ -11,6 +11,9 @@ object SavedItemChangeType {
     const val LlmUpdate = "llm_update"
     const val UserEdit = "user_edit"
     const val Regenerated = "regenerated"
+
+    /** The user rejected pending LLM updates in review; the item was rolled back to its prior state. */
+    const val Reverted = "reverted"
 }
 
 /**

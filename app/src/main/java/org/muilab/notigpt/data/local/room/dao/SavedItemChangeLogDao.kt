@@ -29,4 +29,8 @@ interface SavedItemChangeLogDao {
 
     @Query("SELECT MAX(createdAt) FROM saved_item_change_log WHERE savedItemId = :savedItemId")
     suspend fun getLatestChangeTs(savedItemId: String): Long?
+
+    /** Removes a single change-log row, used to undo a revert's own audit entry. */
+    @Query("DELETE FROM saved_item_change_log WHERE changeId = :changeId")
+    suspend fun deleteById(changeId: Long)
 }

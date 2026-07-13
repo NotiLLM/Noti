@@ -188,6 +188,10 @@ class NotiRepository(
         maintenanceRepo.deleteAllNotis { k, a -> maintenanceRepo.logAction(k, a) }
     }
 
+    suspend fun deleteNotisByKeys(notiKeys: List<String>) = withContext(Dispatchers.IO) {
+        maintenanceRepo.deleteNotisByKeys(notiKeys) { k, a -> maintenanceRepo.logAction(k, a) }
+    }
+
     suspend fun markAllNotisRead() = withContext(Dispatchers.IO) {
         maintenanceRepo.markAllNotisRead { k, a -> maintenanceRepo.logAction(k, a) }
     }

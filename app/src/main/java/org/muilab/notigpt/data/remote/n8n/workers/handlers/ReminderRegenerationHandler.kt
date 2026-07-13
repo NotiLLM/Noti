@@ -4,6 +4,8 @@ import android.util.Log
 import androidx.work.Data
 import androidx.work.ListenableWorker
 import com.google.gson.Gson
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
@@ -210,6 +212,11 @@ internal object ReminderRegenerationHandler {
         Log.d(TAG, "Response ($trigger): $bodyStr")
 
         try {
+            // NonCancellable: a response is already in hand at this point. A concurrent REPLACE of
+            // this unique work slot must not cut off persistence partway through the array, or
+            // later reminders in the same response are silently dropped even though the network
+            // call already succeeded.
+            withContext(NonCancellable) {
             val arr = JSONArray(bodyStr)
             for (i in 0 until arr.length()) {
                 val obj = arr.getJSONObject(i)
@@ -217,6 +224,7 @@ internal object ReminderRegenerationHandler {
                 if (savedItemId.isBlank()) continue
 
                 val existing = ctx.reminderRepository.getById(savedItemId)
+                val now = System.currentTimeMillis()
 
                 val title = ReminderExtractionHandler.titleFrom(obj, existing?.title ?: "")
                 val content = ReminderExtractionHandler.contentFrom(obj, existing?.content ?: "")
@@ -254,14 +262,24 @@ internal object ReminderRegenerationHandler {
                     })
                 }
 
+                // Regeneration is user-initiated, so it must NOT drop the item into the review queue
+                // (an unrevertible wholesale rewrite has no place in the swipe-to-reject flow). A brand
+                // new row is still reviewable; an existing pending item is auto-acknowledged to `saved`;
+                // otherwise the prior list state (saved/completed/archived) is preserved.
+                val newState = when {
+                    existing == null -> SavedItemState.New
+                    SavedItemState.isNewLike(existing.state) -> SavedItemState.Saved
+                    else -> existing.state
+                }
+
                 // Preserve linked record ids from existing links when the response omits them.
                 val unit = SavedItem(
                     savedItemId = savedItemId,
                     title = title,
                     content = content,
                     itemType = if (isTask) SavedItemType.Task else SavedItemType.Keep,
-                    state = if (existing == null) SavedItemState.New else SavedItemState.Updated,
-                    lastUpdateTimestamp = System.currentTimeMillis(),
+                    state = newState,
+                    lastUpdateTimestamp = now,
                     deadlineAtMs = deadlineMs,
                     startAtMs = startAtMsMs,
                     endAtMs = endAtMsMs,
@@ -278,18 +296,19 @@ internal object ReminderRegenerationHandler {
                     // User-owned fields: regeneration must never reset them.
                     isStarred = existing?.isStarred ?: false,
                     doAtMs = existing?.doAtMs ?: 0L,
-                    lastViewedChangeAt = existing?.lastViewedChangeAt ?: 0L,
+                    // Advance the review cursor past this regeneration's change-log row so it never
+                    // surfaces as "what's new" and revert never treats the rewrite as pending.
+                    lastViewedChangeAt = now,
                 )
 
                 ctx.reminderRepository.upsert(unit)
                 // Regeneration rewrites content from the item's existing noti context; it neither
                 // adds nor removes provenance, so links stay untouched.
-                ReminderExtractionHandler.persistReturnedSubTasks(ctx, savedItemId, obj, System.currentTimeMillis())
+                ReminderExtractionHandler.persistReturnedSubTasks(ctx, savedItemId, obj, now)
 
                 // Record the rewrite in the change history (regeneration is the one flow allowed
                 // to replace text wholesale — the user explicitly asked for it) and the journal.
                 if (existing != null) {
-                    val now = System.currentTimeMillis()
                     val changeSummary = obj.optString("changeSummary", "")
                     val changedFields = JSONObject().apply {
                         if (existing.title != title) {
@@ -325,6 +344,7 @@ internal object ReminderRegenerationHandler {
                         )
                     }
                 }
+            }
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error parsing response ($trigger)", e)

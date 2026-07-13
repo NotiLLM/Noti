@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import org.json.JSONArray
@@ -18,10 +19,13 @@ import org.muilab.notigpt.data.remote.n8n.enqueueRegenerateAll
 import org.muilab.notigpt.data.remote.n8n.enqueueRegenerateOne
 import org.muilab.notigpt.data.remote.n8n.enqueueRerank
 import org.muilab.notigpt.data.export.ExportableItem
+import org.muilab.notigpt.model.features.DoDateBucket
 import org.muilab.notigpt.model.features.SavedItem
 import org.muilab.notigpt.model.features.SavedItemState
 import org.muilab.notigpt.model.features.SavedItemType
 import org.muilab.notigpt.model.features.SavedSubItem
+import org.muilab.notigpt.ui.common.navigation.SavedListFilter
+import org.muilab.notigpt.util.time.DayBoundaries
 import org.muilab.notigpt.data.remote.googletasks.GoogleTasksRepository
 import kotlinx.coroutines.flow.Flow
 import org.muilab.notigpt.model.features.SavedItemChangeLog
@@ -104,6 +108,18 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
         _searchQuery.value = query
     }
 
+    /**
+     * When non-null, the reminders list is a home-screen smart filter (planned-date bucket or
+     * starred) that mixes tasks and keeps and ignores [_filter]/[_listMode]. Tasks/Keep collections
+     * are NOT routed here — they use [_listMode] with their own in-screen chips.
+     */
+    private val _smartFilter = MutableStateFlow<SavedListFilter?>(null)
+    val smartFilter: StateFlow<SavedListFilter?> = _smartFilter
+
+    fun setSmartFilter(filter: SavedListFilter?) {
+        _smartFilter.value = filter
+    }
+
     private val allFlow = repo.observeAll()
     private val tasksFlow = repo.observeTasks()
     private val memosFlow = repo.observeMemos()
@@ -125,26 +141,41 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
      * lists without changing persisted reminder data.
      */
     val reminders: StateFlow<List<SavedItem>> = combine(
-        _filter, _searchQuery, _listMode, allFlow, tasksFlow, memosFlow, completedFlow, activeKeepsFlow, archivedKeepsFlow
+        _filter, _searchQuery, _listMode, _smartFilter, allFlow, tasksFlow, memosFlow, completedFlow, activeKeepsFlow, archivedKeepsFlow
     ) { values ->
         val f = values[0] as FilterTab
         @Suppress("UNCHECKED_CAST")
         val query = values[1] as String
         val mode = values[2] as ListMode
+        val smart = values[3] as SavedListFilter?
         @Suppress("UNCHECKED_CAST")
-        val all = values[3] as List<SavedItem>
+        val all = values[4] as List<SavedItem>
         @Suppress("UNCHECKED_CAST")
-        val tasks = values[4] as List<SavedItem>
+        val tasks = values[5] as List<SavedItem>
         @Suppress("UNCHECKED_CAST")
-        val memos = values[5] as List<SavedItem>
+        val memos = values[6] as List<SavedItem>
         @Suppress("UNCHECKED_CAST")
-        val completed = values[6] as List<SavedItem>
+        val completed = values[7] as List<SavedItem>
         @Suppress("UNCHECKED_CAST")
-        val activeKeeps = values[7] as List<SavedItem>
+        val activeKeeps = values[8] as List<SavedItem>
         @Suppress("UNCHECKED_CAST")
-        val archivedKeeps = values[8] as List<SavedItem>
+        val archivedKeeps = values[9] as List<SavedItem>
 
-        val baseList = when (mode) {
+        val baseList = if (smart != null) {
+            // Home smart filters: planned-date buckets (or starred), mixing tasks and keeps, over the
+            // actionable set only (exclude completed/archived) to match the home-screen counts.
+            val startOfTomorrow = DayBoundaries.startOfTomorrowMs()
+            val scoped = all.filter { !it.isCompleted && !it.isArchived }
+            when (smart) {
+                SavedListFilter.TodayEarlier -> scoped.filter { SavedItem.plannedBucket(it.doAtMs, startOfTomorrow, it.isTask) == DoDateBucket.TodayEarlier }
+                SavedListFilter.Upcoming -> scoped.filter { SavedItem.plannedBucket(it.doAtMs, startOfTomorrow, it.isTask) == DoDateBucket.Upcoming }
+                SavedListFilter.Someday -> scoped.filter { SavedItem.plannedBucket(it.doAtMs, startOfTomorrow, it.isTask) == DoDateBucket.Someday }
+                SavedListFilter.Undetermined -> scoped.filter { SavedItem.plannedBucket(it.doAtMs, startOfTomorrow, it.isTask) == DoDateBucket.Undetermined }
+                SavedListFilter.Starred -> scoped.filter { it.isStarred }
+                // Tasks/Keep collections are never routed through smart filters.
+                SavedListFilter.Tasks, SavedListFilter.Keep -> scoped
+            }
+        } else when (mode) {
             ListMode.Keep -> when (f) {
                 FilterTab.Keep -> activeKeeps
                 FilterTab.Archived -> archivedKeeps
@@ -183,7 +214,11 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
                 }
             }
         }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    }
+        // Drop byte-identical re-emissions so a write to any of the six observed saved_item queries
+        // doesn't recompose the list when the resulting content is unchanged.
+        .distinctUntilChanged()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /** Sub-tasks grouped by parent reminder ID. */
     val allSavedSubItemsByReminder: StateFlow<Map<String, List<SavedSubItem>>> =

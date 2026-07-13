@@ -13,6 +13,7 @@ import android.graphics.drawable.Icon
 import android.os.Build
 import android.service.notification.StatusBarNotification
 import android.util.Base64
+import android.util.LruCache
 import androidx.annotation.RequiresApi
 import androidx.core.graphics.drawable.toBitmap
 import java.io.ByteArrayOutputStream
@@ -40,6 +41,19 @@ data class NotiMetadata(
 ) {
 
     companion object {
+        /**
+         * Process-wide cache of decoded notification icons, keyed by the Base64 string.
+         *
+         * Icons are stored as Base64 PNG columns and would otherwise be re-decoded on every card
+         * recomposition and every scroll re-bind. Decoding once per distinct icon keeps the card
+         * list smooth at 100+ notifications. Sized by bitmap bytes; evicted entries are left for GC
+         * (cards may still hold a reference, so we must not recycle them here).
+         */
+        private const val ICON_CACHE_BYTES = 8 * 1024 * 1024 // ~8 MB
+        private val iconBitmapCache = object : LruCache<String, Bitmap>(ICON_CACHE_BYTES) {
+            override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount
+        }
+
         @RequiresApi(Build.VERSION_CODES.S)
         fun fetchIsPeople(sbn: StatusBarNotification): Boolean {
             val notification = sbn.notification
@@ -168,11 +182,14 @@ data class NotiMetadata(
             val cleaned = iconStr.trim()
             if (cleaned.isBlank() || cleaned == "null") return null
 
+            iconBitmapCache.get(cleaned)?.let { return it }
+
             val options = BitmapFactory.Options().apply {
                 inPreferredConfig = Bitmap.Config.ARGB_8888
             }
             val byteArray = Base64.decode(cleaned, Base64.DEFAULT)
             BitmapFactory.decodeByteArray(byteArray, 0, byteArray.size, options)
+                ?.also { iconBitmapCache.put(cleaned, it) }
         } catch (_: Throwable) {
             null
         }

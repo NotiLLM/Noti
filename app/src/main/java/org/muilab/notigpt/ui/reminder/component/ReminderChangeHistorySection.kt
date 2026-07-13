@@ -129,6 +129,7 @@ private fun ChangeRow(change: SavedItemChangeLog, showDivider: Boolean = false) 
         SavedItemChangeType.Created -> stringResource(R.string.change_type_created)
         SavedItemChangeType.UserEdit -> stringResource(R.string.change_type_user_edit)
         SavedItemChangeType.Regenerated -> stringResource(R.string.change_type_regenerated)
+        SavedItemChangeType.Reverted -> stringResource(R.string.change_type_reverted)
         else -> stringResource(R.string.change_type_llm_update)
     }
 

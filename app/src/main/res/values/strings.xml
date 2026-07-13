@@ -20,9 +20,11 @@
     <string name="ui_action_add">Add</string>
     <string name="ui_action_back">Back</string>
     <string name="ui_action_cancel">Cancel</string>
+    <string name="ui_action_clear">Clear</string>
     <string name="ui_action_delete">Delete</string>
     <string name="ui_action_ok">OK</string>
     <string name="ui_action_save">Save</string>
+    <string name="a11y_set_do_date">Set do date</string>
 
     <!-- Settings -->
     <string name="ui_settings_dynamic_color">Use system colors</string>
@@ -36,6 +38,7 @@
     <string name="ui_settings_extraction_language_original">Original (notification language)</string>
     <string name="ui_settings_extraction_language_en">English</string>
     <string name="ui_settings_extraction_language_zhtw">繁體中文 (zh-TW)</string>
+    <string name="ui_settings_extraction_language_search">Search languages</string>
 
     <string name="ui_settings_export_data">Export Data</string>
     <string name="ui_settings_export_description">Export all notifications and user actions</string>
@@ -105,6 +108,8 @@
     <!-- Accessibility -->
     <string name="a11y_add">Add</string>
     <string name="a11y_back">Back</string>
+    <string name="a11y_menu">Menu</string>
+    <string name="a11y_search">Search</string>
     <string name="a11y_delete">Delete</string>
     <string name="a11y_close_search">Close search</string>
 
@@ -449,5 +454,72 @@
     <string name="history_notification">Notification</string>
     <string name="history_records_count">%1$d records</string>
     <string name="history_no_match">No matching notifications</string>
+    <string name="history_action_copy">Copy text</string>
+    <string name="history_copied">Copied to clipboard</string>
+    <string name="history_extract_requested">Generating item…</string>
+
+    <!-- Home overview -->
+    <string name="home_review_title">Review items</string>
+    <string name="home_review_none">Nothing to review</string>
+    <string name="home_review_new_tasks">%1$d new tasks</string>
+    <string name="home_review_updated_tasks">%1$d updated tasks</string>
+    <string name="home_review_new_keeps">%1$d new keeps</string>
+    <string name="home_review_updated_keeps">%1$d updated keeps</string>
+    <string name="home_section_notifications">Notifications</string>
+    <string name="home_noti_communication">Communication</string>
+    <string name="home_noti_content">Content</string>
+    <string name="home_noti_none">No new notifications</string>
+    <string name="home_section_saved">Saved</string>
+    <string name="home_filter_today">Today &amp; earlier</string>
+    <string name="home_filter_upcoming">Upcoming</string>
+    <string name="home_filter_someday">Someday</string>
+    <string name="home_filter_undetermined">Unscheduled tasks</string>
+    <string name="home_filter_starred">Starred</string>
+    <string name="home_collection_tasks">Tasks</string>
+    <string name="home_collection_keep">Keep</string>
+
+    <!-- Notification category pages -->
+    <string name="noti_filter_all">All</string>
+    <string name="noti_filter_last_24h">Last 24 hrs</string>
+    <string name="noti_filter_all_count">All · %1$d</string>
+    <string name="noti_filter_last_24h_count">Last 24 hrs · %1$d</string>
+    <string name="noti_category_empty">No notifications here</string>
+
+    <!-- Expandable text -->
+    <string name="ui_show_more">Show more</string>
+    <string name="ui_show_less">Show less</string>
+
+    <!-- Review (swipe) screen -->
+    <string name="review_title">Review</string>
+    <string name="review_empty">All caught up</string>
+    <string name="review_chip_new_tasks">%1$d new tasks</string>
+    <string name="review_chip_updated_tasks">%1$d edited tasks</string>
+    <string name="review_chip_new_keeps">%1$d new keeps</string>
+    <string name="review_chip_updated_keeps">%1$d edited keeps</string>
+    <string name="review_approve">Approve</string>
+    <string name="review_reject">Reject</string>
+    <string name="review_approve_all">Approve all</string>
+    <string name="review_undo">Undo</string>
+    <string name="review_approved_toast">Approved</string>
+    <string name="review_rejected_toast">Rejected</string>
+    <string name="review_reverted_toast">Change reverted</string>
+    <string name="review_triggered_this">Triggered this edit</string>
+    <string name="review_previous_context">Previous context</string>
+    <string name="a11y_review_approve">Swipe right to approve</string>
+    <string name="a11y_review_reject">Swipe left to reject</string>
+
+    <!-- Change history -->
+    <string name="change_type_reverted">Reverted</string>
+
+    <!-- Card action row -->
+    <string name="export_chooser_title">Export to</string>
+    <string name="delete_confirm_title">Delete this item?</string>
+    <string name="delete_confirm_message">This item will be removed.</string>
+    <string name="a11y_set_reminder">Set reminder</string>
+    <string name="a11y_export">Export</string>
+
+    <!-- Do date -->
+    <string name="do_date_someday">Someday</string>
+    <string name="do_date_clear">Clear</string>
 </resources>
 

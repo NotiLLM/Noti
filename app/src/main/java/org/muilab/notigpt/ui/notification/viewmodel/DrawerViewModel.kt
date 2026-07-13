@@ -37,7 +37,9 @@ import org.muilab.notigpt.domain.action.NotiActionType
 import org.muilab.notigpt.model.notifications.NotiDisplayUnit
 import org.muilab.notigpt.model.notifications.NotiRecord
 import org.muilab.notigpt.model.notifications.NotiUnit
+import org.muilab.notigpt.data.repository.notification.NotiClassificationRepository
 import org.muilab.notigpt.data.repository.notification.NotiRepository
+import org.muilab.notigpt.ui.home.viewmodel.HomeViewModel
 import org.muilab.notigpt.util.Constants.Companion.APP_CATEGORY_ALL
 import org.muilab.notigpt.util.postOngoingNotification
 import org.muilab.notigpt.ui.common.clipboard.ClipboardController
@@ -84,6 +86,25 @@ class DrawerViewModel(
             .getWorkInfosForUniqueWorkFlow("n8n_task_extraction")
             .map { infos -> infos.any { it.state == androidx.work.WorkInfo.State.RUNNING } }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    /**
+     * Persisted per-thread LLM state, keyed by notiKey, for classifying the active drawer into
+     * Communication/Content on the home screen and the category pages. Rows persist across dismissals,
+     * so a thread keeps its category until the next scan reclassifies it.
+     */
+    val llmStatesByKey: StateFlow<Map<String, org.muilab.notigpt.model.features.NotiLlmState>> =
+        org.muilab.notigpt.data.local.room.AppDatabase.getInstance(application.applicationContext)
+            .notiLlmStateDao().observeAll()
+            .map { list -> list.associateBy { it.notiKey } }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
+
+    /**
+     * The category page's "past 24 hrs" time-window toggle, lifted here so the top-bar Clear All action
+     * (which lives outside the screen) can scope itself to exactly the visible list.
+     */
+    private val _notiLast24hOnly = MutableStateFlow(true)
+    val notiLast24hOnly: StateFlow<Boolean> = _notiLast24hOnly.asStateFlow()
+    fun setNotiLast24hOnly(value: Boolean) { _notiLast24hOnly.value = value }
 
     /**
      * Updates the active drawer category filter and resets dependent app-filter state when needed.
@@ -172,6 +193,12 @@ class DrawerViewModel(
         .distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
+    /** Active, unpinned notifications that "Clear all" would remove; drives the top-bar clear button. */
+    val clearableActiveCount: StateFlow<Int> = activeNotiUnits
+        .map { units -> org.muilab.notigpt.domain.notification.countClearableActiveNotifications(units) }
+        .distinctUntilChanged()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+
     private val _newNotificationRecords = MutableStateFlow<Map<String, List<NotiRecord>>>(emptyMap())
     val newNotificationRecords: StateFlow<Map<String, List<NotiRecord>>> = _newNotificationRecords.asStateFlow()
 
@@ -181,6 +208,24 @@ class DrawerViewModel(
             if (newRecords.isEmpty()) null else NotiDisplayUnit(unit.notiUnit, newRecords)
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** True if a visible thread should be cleared by "Clear all": right category, in-window, not pinned. */
+    private fun isVisibleClearable(du: NotiDisplayUnit, category: String, last24hOnly: Boolean, cutoff: Long, llm: Map<String, org.muilab.notigpt.model.features.NotiLlmState>): Boolean =
+        !du.notiUnit.isPinned &&
+            NotiClassificationRepository.categoryOf(du.notiUnit, llm[du.notiKey]) == category &&
+            (!last24hOnly || du.notiRecords.any { it.time >= cutoff })
+
+    /**
+     * Count of threads "Clear all" would remove for each category, honoring the current time window and
+     * excluding pinned. Drives the top-bar button's enabled state so it disables when the visible list is empty.
+     */
+    val clearableVisibleCountByCategory: StateFlow<Map<String, Int>> =
+        combine(newNotificationUnits, llmStatesByKey, _notiLast24hOnly) { units, llm, last24hOnly ->
+            val cutoff = System.currentTimeMillis() - HomeViewModel.NEW_NOTI_WINDOW_MS
+            units.filter { du -> !du.notiUnit.isPinned && (!last24hOnly || du.notiRecords.any { it.time >= cutoff }) }
+                .groupingBy { du -> NotiClassificationRepository.categoryOf(du.notiUnit, llm[du.notiKey]) }
+                .eachCount()
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
 
     private suspend fun refreshNewNotificationRecords() {
         val records = withContext(Dispatchers.IO) { notiRepository.getNewRecords() }
@@ -315,6 +360,27 @@ class DrawerViewModel(
         viewModelScope.launch(Dispatchers.IO) {
             notiRepository.deleteAllNotis()
             postOngoingNotification(context)
+        }
+        unreadCounts.refresh()
+    }
+
+    /**
+     * Clears only the threads currently visible on the given category page: matching category, within the
+     * active time window ([notiLast24hOnly]), excluding pinned. Whole units are dismissed (records included).
+     */
+    @RequiresApi(Build.VERSION_CODES.S)
+    fun clearVisibleNotis(category: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val cutoff = System.currentTimeMillis() - HomeViewModel.NEW_NOTI_WINDOW_MS
+            val llm = llmStatesByKey.value
+            val last24hOnly = _notiLast24hOnly.value
+            val keys = newNotificationUnits.value
+                .filter { du -> isVisibleClearable(du, category, last24hOnly, cutoff, llm) }
+                .map { it.notiKey }
+            if (keys.isNotEmpty()) {
+                notiRepository.deleteNotisByKeys(keys)
+                postOngoingNotification(context)
+            }
         }
         unreadCounts.refresh()
     }
@@ -513,6 +579,14 @@ class DrawerViewModel(
 
     suspend fun getNotiUnitForHistory(notiKey: String): NotiUnit? {
         return withContext(Dispatchers.IO) { notiRepository.getNotiUnit(notiKey) }
+    }
+
+    /** Batch-fetch NotiUnit rows for the given keys, for showing app icons in the history list. */
+    suspend fun getNotiUnitsForHistory(notiKeys: List<String>): Map<String, NotiUnit> {
+        if (notiKeys.isEmpty()) return emptyMap()
+        return withContext(Dispatchers.IO) {
+            notiRepository.getNotiUnitByKeys(notiKeys.distinct()).associateBy { it.notiKey }
+        }
     }
 
     @RequiresApi(Build.VERSION_CODES.S)

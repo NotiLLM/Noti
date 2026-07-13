@@ -120,7 +120,13 @@ class FirestoreSyncRepository(
             "sourceNotiRecordIds" to linkedRecordIds,
             "sourceNotiRecordIdsCount" to linkedRecordIds.size,
             "isStarred" to reminder.isStarred,
-            "doAtMs" to (if (reminder.doAtMs > 0L) TimeFormatters.toLocalIso(reminder.doAtMs, zoneId) else ""),
+            // "someday" sentinel (Long.MAX_VALUE) is not a real instant — formatting it would throw;
+            // the raw value still round-trips via doAtMsEpoch below.
+            "doAtMs" to when {
+                SavedItem.isSomeday(reminder.doAtMs) -> "someday"
+                reminder.doAtMs > 0L -> TimeFormatters.toLocalIso(reminder.doAtMs, zoneId)
+                else -> ""
+            },
             "state" to reminder.state,
             "lastViewedChangeAt" to (if (reminder.lastViewedChangeAt > 0L) TimeFormatters.toLocalIso(reminder.lastViewedChangeAt, zoneId) else ""),
             "isVisible" to reminder.isVisible,

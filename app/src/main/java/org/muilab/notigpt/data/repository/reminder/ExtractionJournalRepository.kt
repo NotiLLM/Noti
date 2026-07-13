@@ -163,6 +163,7 @@ class ExtractionJournalRepository(private val journalDao: ExtractionJournalDao) 
             ExtractionJournalEventType.UserDeleted,
             ExtractionJournalEventType.UserEdited,
             ExtractionJournalEventType.ItemRestored,
+            ExtractionJournalEventType.UserRevertedUpdate,
             -> "user"
             ExtractionJournalEventType.RecordsSent -> "system"
             else -> "llm"

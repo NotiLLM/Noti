@@ -16,7 +16,11 @@ import org.muilab.notigpt.model.features.SavedItemChangeLog
 import org.muilab.notigpt.model.features.SavedItemChangeType
 import org.muilab.notigpt.model.features.SavedItemState
 import org.muilab.notigpt.data.remote.firestore.FirestoreSyncRepository
+import org.muilab.notigpt.data.remote.n8n.workers.handlers.ReminderExtractionHandler
+import org.muilab.notigpt.domain.reminder.SavedItemRevertLogic
 import org.muilab.notigpt.util.SharedPreferencesManager
+import org.json.JSONArray
+import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -37,6 +41,7 @@ class SavedItemRepository(
         ExtractionJournalRepository(AppDatabase.getInstance(appContext.applicationContext).extractionJournalDao())
     }
     private val changeLogDao by lazy { AppDatabase.getInstance(appContext.applicationContext).savedItemChangeLogDao() }
+    private val subTaskDao by lazy { AppDatabase.getInstance(appContext.applicationContext).subTaskDao() }
 
     /** Returns visible reminders in the canonical list order used by the reminders screen. */
     fun observeAll(): Flow<List<SavedItem>> = reminderListDao.observeAll()
@@ -189,6 +194,161 @@ class SavedItemRepository(
         firestoreSync.syncReminder(updated)
     }
 
+    /** Batch acknowledgment for "approve all" in the review screen. */
+    suspend fun acknowledgeReviewByIds(savedItemIds: List<String>, ts: Long) = withContext(Dispatchers.IO) {
+        if (savedItemIds.isEmpty()) return@withContext
+        reminderListDao.acknowledgeReviewByIds(savedItemIds, ts)
+        savedItemIds.mapNotNull { reminderListDao.getById(it) }.forEach { firestoreSync.syncReminder(it) }
+    }
+
+    // ========== Reject-an-update (revert) ==========
+
+    /**
+     * What a [revertPendingLlmUpdates] call changed, carried back so the caller can offer Undo.
+     *
+     * [previousItem] is the item exactly as it was before the revert (re-upsert to undo the field
+     * and content rollback). [hiddenSubTaskIds] were visible and the revert hid them; [restoredSubTaskIds]
+     * were hidden and the revert brought them back — undo swaps both. [revertChangeId] is the audit
+     * row the revert wrote; undo deletes it so the change history matches the restored state.
+     */
+    data class RevertOutcome(
+        val previousItem: SavedItem,
+        val hiddenSubTaskIds: List<String>,
+        val restoredSubTaskIds: List<String>,
+        val revertChangeId: Long,
+    )
+
+    /**
+     * Rejects the pending LLM edits on an "updated" item, rolling it back to how it was before the
+     * model touched it, and returns to the `saved` state.
+     *
+     * Only unacknowledged `llm_update` rows (createdAt > lastViewedChangeAt) are reverted, newest
+     * first so stacked appended sections strip off the end in order. User edits and regenerations in
+     * the window are left alone; each field is only rolled back if its current value still equals
+     * what that LLM row set (so a later user edit — or a hallucinated `old` echo — is never clobbered).
+     *
+     * Returns null if the item no longer exists. If there is nothing pending to revert, the item is
+     * simply acknowledged (equivalent to approve) and an outcome with no subtask changes is returned.
+     */
+    suspend fun revertPendingLlmUpdates(savedItemId: String, ts: Long): RevertOutcome? = withContext(Dispatchers.IO) {
+        val item = reminderListDao.getById(savedItemId) ?: return@withContext null
+        val pending = changeLogDao.getNewerThan(savedItemId, item.lastViewedChangeAt)
+            .filter { it.origin == "llm" && it.changeType == SavedItemChangeType.LlmUpdate }
+
+        var content = item.content
+        var title = item.title
+        var deadline = item.deadlineAtMs
+        var start = item.startAtMs
+        var end = item.endAtMs
+        var estimate = item.estimatedCompletionTime
+        val hiddenSubTaskIds = mutableListOf<String>()
+        val restoredSubTaskIds = mutableListOf<String>()
+
+        // getNewerThan returns newest-first (ORDER BY createdAt DESC), which is the order we need.
+        for (row in pending) {
+            if (row.appendedContent.isNotBlank()) {
+                stripUpdateSection(content, row.appendedContent, row.createdAt)?.let { content = it }
+            }
+
+            val changed = row.changedFieldsJson.toJsonObjectOrEmpty()
+            changed.optJSONObject("title")?.let { obj ->
+                title = SavedItemRevertLogic.revertField(title, obj.optString("new"), obj.optString("old", title))
+            }
+            changed.optJSONObject("deadlineTimeString")?.let { obj ->
+                deadline = SavedItemRevertLogic.revertField(
+                    deadline, deadlineMsFromIso(obj.optString("new", "-1")), deadlineMsFromIso(obj.optString("old", "-1")),
+                )
+            }
+            changed.optJSONObject("startTimeString")?.let { obj ->
+                start = SavedItemRevertLogic.revertField(
+                    start, startEndMsFromIso(obj.optString("new", "-1")), startEndMsFromIso(obj.optString("old", "-1")),
+                )
+            }
+            changed.optJSONObject("endTimeString")?.let { obj ->
+                end = SavedItemRevertLogic.revertField(
+                    end, startEndMsFromIso(obj.optString("new", "-1")), startEndMsFromIso(obj.optString("old", "-1")),
+                )
+            }
+            changed.optJSONObject("estimatedCompletionMinutes")?.let { obj ->
+                estimate = SavedItemRevertLogic.revertField(estimate, obj.optLong("new", estimate), obj.optLong("old", estimate))
+            }
+
+            parseSubTaskIds(row.addedSubTasksJson).forEach { id ->
+                subTaskDao.softDeleteById(id, ts)
+                hiddenSubTaskIds += id
+            }
+            val removed = parseSubTaskIds(row.removedSubTasksJson)
+            if (removed.isNotEmpty()) {
+                subTaskDao.restoreByIds(removed, ts)
+                restoredSubTaskIds += removed
+            }
+        }
+
+        val restored = item.copy(
+            title = title,
+            content = content,
+            state = SavedItemState.Saved,
+            deadlineAtMs = deadline,
+            startAtMs = start,
+            endAtMs = end,
+            estimatedCompletionTime = estimate,
+            lastViewedChangeAt = ts,
+            lastUpdateTimestamp = ts,
+        )
+        reminderListDao.upsert(restored)
+
+        val revertChangeId = changeLogDao.insert(
+            SavedItemChangeLog(
+                savedItemId = savedItemId,
+                createdAt = ts,
+                changeType = SavedItemChangeType.Reverted,
+                changeSummary = "",
+                origin = "user",
+            )
+        )
+        // Tell future extraction passes the user rejected these edits so they aren't re-applied.
+        journalUserEvent(savedItemId, ExtractionJournalEventType.UserRevertedUpdate, restored.title)
+        firestoreSync.syncReminder(restored)
+
+        RevertOutcome(
+            previousItem = item,
+            hiddenSubTaskIds = hiddenSubTaskIds,
+            restoredSubTaskIds = restoredSubTaskIds,
+            revertChangeId = revertChangeId,
+        )
+    }
+
+    /** Undoes a [revertPendingLlmUpdates], restoring the item and sub-task visibility as they were. */
+    suspend fun undoRevert(outcome: RevertOutcome, ts: Long) = withContext(Dispatchers.IO) {
+        reminderListDao.upsert(outcome.previousItem)
+        if (outcome.hiddenSubTaskIds.isNotEmpty()) subTaskDao.restoreByIds(outcome.hiddenSubTaskIds, ts)
+        outcome.restoredSubTaskIds.forEach { subTaskDao.softDeleteById(it, ts) }
+        changeLogDao.deleteById(outcome.revertChangeId)
+        firestoreSync.syncReminder(outcome.previousItem)
+    }
+
+    private fun deadlineMsFromIso(iso: String): Long = ReminderExtractionHandler.isoToUnixMillis(iso)
+
+    /** start/end use 0 (not -1) as their "unset" sentinel, mirroring how update ops are applied. */
+    private fun startEndMsFromIso(iso: String): Long =
+        ReminderExtractionHandler.isoToUnixMillis(iso).let { if (it == -1L) 0L else it }
+
+    private fun String.toJsonObjectOrEmpty(): JSONObject =
+        try { JSONObject(this) } catch (_: Exception) { JSONObject() }
+
+    private fun parseSubTaskIds(json: String): List<String> = try {
+        val arr = JSONArray(json)
+        buildList {
+            for (i in 0 until arr.length()) {
+                val obj = arr.optJSONObject(i) ?: continue
+                val id = obj.optString("savedSubItemId", obj.optString("subTaskId"))
+                if (id.isNotBlank()) add(id)
+            }
+        }
+    } catch (_: Exception) {
+        emptyList()
+    }
+
     // ========== Noti <-> saved-item links ==========
 
     /**
@@ -271,4 +431,16 @@ class SavedItemRepository(
         val time = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(ts))
         return "\n\n[$label — $time]\n$fragment"
     }
+
+    /**
+     * Inverse of [buildUpdateSection]: removes the dated section a given LLM [fragment] appended, so a
+     * rejected update leaves [content] as it was before.
+     *
+     * Prefers stripping the exact section [buildUpdateSection] would rebuild for ([fragment], [ts]).
+     * That can miss when the language preference or timezone changed since the append, so it falls
+     * back to locating the fragment and stripping back to its `"\n\n["` header. Returns null when the
+     * fragment can't be found at all (the user edited it away) — the caller then leaves content alone.
+     */
+    fun stripUpdateSection(content: String, fragment: String, ts: Long): String? =
+        SavedItemRevertLogic.stripUpdateSection(content, fragment, buildUpdateSection(fragment, ts))
 }

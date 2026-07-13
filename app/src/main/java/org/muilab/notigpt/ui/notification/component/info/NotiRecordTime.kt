@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.dp
@@ -21,13 +22,14 @@ import org.muilab.notigpt.util.time.getRelativeTimeStr
 @Composable
 fun NotiInfoTime(notiTime: Long, modifier: Modifier = Modifier) {
     val context = LocalContext.current
+    val relativeTime = remember(notiTime, context) { getRelativeTimeStr(notiTime, context) }
     Box(
         modifier = modifier
     ) {
         Text(
             modifier = Modifier
                 .padding(end = 16.dp),
-            text = getRelativeTimeStr(notiTime, context),
+            text = relativeTime,
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

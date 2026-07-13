@@ -44,7 +44,6 @@ import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import kotlinx.coroutines.launch
@@ -191,18 +190,16 @@ fun NotiCard(
     var endActionsWidth by remember { mutableFloatStateOf(0f) }
     var cardWidth by remember { mutableFloatStateOf(0f) }
 
-    val viewTouchSlop = LocalViewConfiguration.current.touchSlop
     var surfaceBoundsInWindow by remember { mutableStateOf<Rect?>(null) }
-    var overlayBoundsRelativeToSurface by remember { mutableStateOf<Rect?>(null) }
+    var excludedBoundsRelativeToSurface by remember { mutableStateOf<List<Rect>>(emptyList()) }
     var isSwipeActive by remember { mutableStateOf(false) }
 
     val swipeModifier = Modifier.notiCardSwipeHandler(
         enabled = swipeEnabled && !isDragging && !isSortingMode,
         endActionsWidth = endActionsWidth,
         cardWidth = cardWidth,
-        viewTouchSlop = viewTouchSlop,
         swipeDeleteLeft = swipeDeleteLeft,
-        overlayBoundsRelativeToSurface = overlayBoundsRelativeToSurface,
+        excludedBounds = excludedBoundsRelativeToSurface,
         horizontalOffsetX = horizontalOffsetX,
         onDismiss = { drawerViewModel.archiveNewNotificationCard(notiKey) },
         scope = coroutineScope,
@@ -277,6 +274,10 @@ fun NotiCard(
                         if (!isSortingMode) showOptionsDialog = true
                     },
                 )
+                // Swipe handler lives at the Surface level so the whole card is swipeable (except the
+                // expand/pin buttons, which report their bounds via excludedBounds). down.position is
+                // then in the same coordinate space as surfaceBoundsInWindow.
+                .then(if (isSortingMode) Modifier else swipeModifier)
                 .onGloballyPositioned { coords -> surfaceBoundsInWindow = coords.boundsInWindow() }
                 .then(surfaceBorderModifier),
             shape = MaterialTheme.shapes.large,
@@ -284,8 +285,7 @@ fun NotiCard(
             color = backgroundColor,
         ) {
             Box(modifier = Modifier.fillMaxWidth().padding(vertical = 7.dp)) {
-                Column(Modifier.fillMaxWidth()
-                    .then(if (isSortingMode) Modifier else swipeModifier)) {
+                Column(Modifier.fillMaxWidth()) {
 
                     // Header layer: main content + overlay buttons stacked.
                     Box(modifier = Modifier.fillMaxWidth()) {
@@ -328,16 +328,16 @@ fun NotiCard(
                                 },
                                 notiKey = notiKey,
                                 drawerViewModel = drawerViewModel,
-                                onOverlayBoundsChange = { overlayWindow ->
+                                onExcludedBoundsChange = { windowRects ->
                                     if (isSwipeActive) return@NotiCardOverlayButtons
 
-                                    val surfaceWindow = surfaceBoundsInWindow
-                                    if (overlayWindow != null && surfaceWindow != null) {
-                                        overlayBoundsRelativeToSurface = Rect(
-                                            overlayWindow.left - surfaceWindow.left,
-                                            overlayWindow.top - surfaceWindow.top,
-                                            overlayWindow.right - surfaceWindow.left,
-                                            overlayWindow.bottom - surfaceWindow.top,
+                                    val surfaceWindow = surfaceBoundsInWindow ?: return@NotiCardOverlayButtons
+                                    excludedBoundsRelativeToSurface = windowRects.map { r ->
+                                        Rect(
+                                            r.left - surfaceWindow.left,
+                                            r.top - surfaceWindow.top,
+                                            r.right - surfaceWindow.left,
+                                            r.bottom - surfaceWindow.top,
                                         )
                                     }
                                 },
@@ -367,10 +367,6 @@ fun NotiCard(
             }
         }
     }
-
-    // Ensure overlay bounds state isn't optimized away by tooling; it's used by the swipe handler.
-    @Suppress("UNUSED_VARIABLE")
-    val _keepOverlayBoundsState = overlayBoundsRelativeToSurface
 
     NotiCardOptionsDialog(
         show = showOptionsDialog,

@@ -31,9 +31,8 @@ fun Modifier.notiCardSwipeHandler(
     enabled: Boolean,
     endActionsWidth: Float,
     cardWidth: Float,
-    viewTouchSlop: Float,
     swipeDeleteLeft: Boolean,
-    overlayBoundsRelativeToSurface: Rect?,
+    excludedBounds: List<Rect>,
     horizontalOffsetX: Animatable<Float, *>,
     onDismiss: () -> Unit,
     scope: CoroutineScope,
@@ -41,23 +40,23 @@ fun Modifier.notiCardSwipeHandler(
 ): Modifier {
     if (!enabled) return this
 
-    return this.pointerInput(endActionsWidth, cardWidth, viewTouchSlop, swipeDeleteLeft) {
+    return this.pointerInput(endActionsWidth, cardWidth, swipeDeleteLeft) {
         val density = this
         val extraPx = with(density) { ACTIONS_REVEAL_EXTRA_DP.dp.toPx() }
         val maxActionsOffset = endActionsWidth + extraPx
 
-        // Horizontal swipe should start with a lighter horizontal intent.
-        // Keep the actual dismiss distance unchanged so removal is not easier to trigger accidentally.
+        // Direction decides horizontal intent, not speed: at slop crossing the post-slop
+        // overshoot is tiny for slow drags, so any magnitude floor here makes slow
+        // horizontal swipes impossible. Dismiss/reveal distances below stay unchanged.
         val horizontalBiasFactor = 1.05f
-        val minHorizontalPx = viewTouchSlop * 0.8f
 
         awaitEachGesture {
             onSwipeActiveChanged(false)
             val down = awaitFirstDown(requireUnconsumed = false)
 
-            // Read the latest overlay rect without re-keying pointerInput.
-            val overlayRect = overlayBoundsRelativeToSurface
-            if (overlayRect != null && overlayRect.contains(down.position)) {
+            // Read the latest excluded button rects (expand + pin) without re-keying pointerInput.
+            // Only those two controls swallow the gesture; the rest of the card is swipeable.
+            if (excludedBounds.any { it.contains(down.position) }) {
                 return@awaitEachGesture
             }
 
@@ -65,7 +64,7 @@ fun Modifier.notiCardSwipeHandler(
             val slopResult = awaitTouchSlopOrCancellation(down.id) { change, over ->
                 val absX = abs(over.x)
                 val absY = abs(over.y)
-                if (absX > max(minHorizontalPx, absY * horizontalBiasFactor)) {
+                if (absX > absY * horizontalBiasFactor) {
                     isHorizontal = true
                     onSwipeActiveChanged(true)
                     change.consume()

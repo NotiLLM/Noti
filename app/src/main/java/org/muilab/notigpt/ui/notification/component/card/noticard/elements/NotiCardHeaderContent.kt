@@ -1,6 +1,7 @@
 package org.muilab.notigpt.ui.notification.component.card.noticard.elements
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -9,6 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -17,6 +19,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontStyle
@@ -50,8 +53,10 @@ fun NotiCardHeaderContent(
     val notiUnit = notiDisplayUnit.notiUnit
     val notiRecords = remember(notiDisplayUnit.notiRecords) { notiDisplayUnit.notiRecords.sortedBy { it.time } }
     val appName = notiUnit.appName
-    val bitmap = notiUnit.bitmap
-    val largeBitmap = notiUnit.largeBitmap
+    // Key the decode on the stable icon strings (not the Bitmap) so it runs once per icon rather
+    // than on every recomposition. The underlying decode is also process-cached in NotiMetadata.
+    val bitmap = remember(notiUnit.metadata.icon) { notiUnit.bitmap }
+    val largeBitmap = remember(notiUnit.metadata.largeIcon, notiUnit.metadata.icon) { notiUnit.largeBitmap }
     val summary = notiUnit.summary
 
     Row(modifier = modifier.padding(start = 6.dp, end = 3.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -121,9 +126,24 @@ fun NotiCardHeaderContent(
                         }
                     }
                 }
+                val visibleRecordCount = notiRecords.size
+                if (visibleRecordCount > 1) {
+                    Text(
+                        text = visibleRecordCount.toString(),
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.secondaryContainer)
+                            .padding(horizontal = 6.dp, vertical = 1.dp),
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    )
+                }
                 val ctx = LocalContext.current
+                val relativeTime = remember(notiDisplayUnit.lastUpdateTime, ctx) {
+                    getRelativeTimeStr(notiDisplayUnit.lastUpdateTime, ctx)
+                }
                 Text(
-                    getRelativeTimeStr(notiDisplayUnit.lastUpdateTime, ctx),
+                    relativeTime,
                     Modifier.padding(horizontal = 5.dp),
                     maxLines = 1,
                     fontSize = 12.sp,

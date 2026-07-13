@@ -7,13 +7,16 @@ import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.anchoredDraggable
 import androidx.compose.foundation.gestures.animateTo
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Icon
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -53,7 +56,8 @@ fun NotiCardOverlayButtons(
     onUpdateMeasuredAnchors: suspend () -> Unit,
     notiKey: String,
     drawerViewModel: DrawerViewModel,
-    onOverlayBoundsChange: (Rect?) -> Unit,
+    /** Reports the window bounds of just the interactive controls (expand + pin/handle) to exclude from swipe. */
+    onExcludedBoundsChange: (List<Rect>) -> Unit,
     reorderEnabled: Boolean = false,
     // If provided by a parent ReorderableItem, this enables library-native drag/auto-scroll.
     reorderScope: ReorderableCollectionItemScope? = null,
@@ -64,15 +68,17 @@ fun NotiCardOverlayButtons(
 ) {
     val coroutineScope = rememberCoroutineScope()
 
+    // Report only the actual control bounds (not the whole row's full height) so the swipe handler
+    // excludes just these two buttons and treats the rest of the card as swipeable.
+    var expandRect by remember { mutableStateOf<Rect?>(null) }
+    var actionRect by remember { mutableStateOf<Rect?>(null) }
+    fun reportExcluded() = onExcludedBoundsChange(listOfNotNull(expandRect, actionRect))
+
     Row(
         modifier = modifier
             .padding(end = 12.dp, top = 8.dp)
-            .fillMaxHeight()
             .graphicsLayer { this.translationX = translationX }
-            .zIndex(2f)
-            .onGloballyPositioned { coords ->
-                onOverlayBoundsChange(coords.boundsInWindow())
-            },
+            .zIndex(2f),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (requiresExpansion) {
@@ -87,6 +93,7 @@ fun NotiCardOverlayButtons(
                 modifier = Modifier
                     .minimumInteractiveComponentSize()
                     .size(30.dp)
+                    .onGloballyPositioned { expandRect = it.boundsInWindow(); reportExcluded() }
                     .anchoredDraggable(anchored, Orientation.Vertical, enabled = true, flingBehavior = anchoredFlingBehavior)
                     .clickable {
                         coroutineScope.launch {
@@ -99,10 +106,11 @@ fun NotiCardOverlayButtons(
         }
 
         if (isSortingMode) {
+            val handleBase = Modifier.onGloballyPositioned { actionRect = it.boundsInWindow(); reportExcluded() }
             val handleModifier = if (reorderEnabled && reorderScope != null) {
-                with(reorderScope) { Modifier.minimumInteractiveComponentSize().longPressDraggableHandle() }
+                with(reorderScope) { handleBase.minimumInteractiveComponentSize().longPressDraggableHandle() }
             } else {
-                Modifier
+                handleBase
                     .minimumInteractiveComponentSize()
                     .longPressDragHandle(
                         enabled = reorderEnabled,
@@ -119,15 +127,19 @@ fun NotiCardOverlayButtons(
                 modifier = handleModifier,
             )
         } else {
-            NotiActionIconButton(
-                if (isPinned) R.drawable.pin_yes else R.drawable.pin_no,
-                "Pin",
-                {
-                    if (isPinned) drawerViewModel.actOnNoti(notiKey, NotiActionType.Unpin)
-                    else drawerViewModel.actOnNoti(notiKey, NotiActionType.Pin)
-                },
-                if (isPinned) Color(76, 139, 245) else Color.Unspecified,
-            )
+            androidx.compose.foundation.layout.Box(
+                modifier = Modifier.onGloballyPositioned { actionRect = it.boundsInWindow(); reportExcluded() }
+            ) {
+                NotiActionIconButton(
+                    if (isPinned) R.drawable.pin_yes else R.drawable.pin_no,
+                    "Pin",
+                    {
+                        if (isPinned) drawerViewModel.actOnNoti(notiKey, NotiActionType.Unpin)
+                        else drawerViewModel.actOnNoti(notiKey, NotiActionType.Pin)
+                    },
+                    if (isPinned) Color(76, 139, 245) else Color.Unspecified,
+                )
+            }
         }
     }
 }

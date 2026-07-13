@@ -5,9 +5,11 @@
     <string name="ui_action_add">新增</string>
     <string name="ui_action_back">返回</string>
     <string name="ui_action_cancel">取消</string>
+    <string name="ui_action_clear">清除</string>
     <string name="ui_action_delete">刪除</string>
     <string name="ui_action_ok">確定</string>
     <string name="ui_action_save">儲存</string>
+    <string name="a11y_set_do_date">設定執行日期</string>
 
     <!-- Settings -->
     <string name="ui_settings_delete_on_swipe">滑動刪除：</string>
@@ -20,6 +22,7 @@
     <string name="ui_settings_extraction_language_original">原始語言（通知語言）</string>
     <string name="ui_settings_extraction_language_en">English</string>
     <string name="ui_settings_extraction_language_zhtw">繁體中文 (zh-TW)</string>
+    <string name="ui_settings_extraction_language_search">搜尋語言</string>
 
     <!-- Reminders -->
     <string name="ui_reminders_filter_all">全部</string>
@@ -82,6 +85,8 @@
     <!-- Accessibility -->
     <string name="a11y_add">新增</string>
     <string name="a11y_back">返回</string>
+    <string name="a11y_menu">選單</string>
+    <string name="a11y_search">搜尋</string>
     <string name="a11y_delete">刪除</string>
     <string name="a11y_star">加星號</string>
     <string name="a11y_unstar">取消星號</string>
@@ -419,6 +424,73 @@
     <string name="history_notification">通知</string>
     <string name="history_records_count">%1$d 筆記錄</string>
     <string name="history_no_match">沒有符合的通知</string>
+    <string name="history_action_copy">複製文字</string>
+    <string name="history_copied">已複製到剪貼簿</string>
+    <string name="history_extract_requested">正在產生項目…</string>
+
+    <!-- Home overview -->
+    <string name="home_review_title">待檢視項目</string>
+    <string name="home_review_none">沒有待檢視項目</string>
+    <string name="home_review_new_tasks">%1$d 個新任務</string>
+    <string name="home_review_updated_tasks">%1$d 個已更新任務</string>
+    <string name="home_review_new_keeps">%1$d 則新收藏</string>
+    <string name="home_review_updated_keeps">%1$d 則已更新收藏</string>
+    <string name="home_section_notifications">通知</string>
+    <string name="home_noti_communication">通訊</string>
+    <string name="home_noti_content">內容</string>
+    <string name="home_noti_none">沒有新通知</string>
+    <string name="home_section_saved">已儲存</string>
+    <string name="home_filter_today">今天及更早</string>
+    <string name="home_filter_upcoming">即將到來</string>
+    <string name="home_filter_someday">將來某天</string>
+    <string name="home_filter_undetermined">尚未安排的任務</string>
+    <string name="home_filter_starred">已加星號</string>
+    <string name="home_collection_tasks">任務</string>
+    <string name="home_collection_keep">收藏</string>
+
+    <!-- Notification category pages -->
+    <string name="noti_filter_all">全部</string>
+    <string name="noti_filter_last_24h">近 24 小時</string>
+    <string name="noti_filter_all_count">全部 · %1$d</string>
+    <string name="noti_filter_last_24h_count">近 24 小時 · %1$d</string>
+    <string name="noti_category_empty">這裡沒有通知</string>
+
+    <!-- Expandable text -->
+    <string name="ui_show_more">顯示更多</string>
+    <string name="ui_show_less">收合</string>
+
+    <!-- Review (swipe) screen -->
+    <string name="review_title">檢視</string>
+    <string name="review_empty">全部處理完畢</string>
+    <string name="review_chip_new_tasks">%1$d 個新任務</string>
+    <string name="review_chip_updated_tasks">%1$d 個已編輯任務</string>
+    <string name="review_chip_new_keeps">%1$d 則新收藏</string>
+    <string name="review_chip_updated_keeps">%1$d 則已編輯收藏</string>
+    <string name="review_approve">核准</string>
+    <string name="review_reject">拒絕</string>
+    <string name="review_approve_all">全部核准</string>
+    <string name="review_undo">復原</string>
+    <string name="review_approved_toast">已核准</string>
+    <string name="review_rejected_toast">已拒絕</string>
+    <string name="review_reverted_toast">已還原變更</string>
+    <string name="review_triggered_this">觸發此次編輯</string>
+    <string name="review_previous_context">先前脈絡</string>
+    <string name="a11y_review_approve">向右滑動以核准</string>
+    <string name="a11y_review_reject">向左滑動以拒絕</string>
+
+    <!-- Change history -->
+    <string name="change_type_reverted">已還原</string>
+
+    <!-- Card action row -->
+    <string name="export_chooser_title">匯出至</string>
+    <string name="delete_confirm_title">要刪除這個項目嗎？</string>
+    <string name="delete_confirm_message">這個項目將被移除。</string>
+    <string name="a11y_set_reminder">設定提醒</string>
+    <string name="a11y_export">匯出</string>
+
+    <!-- Do date -->
+    <string name="do_date_someday">將來某天</string>
+    <string name="do_date_clear">清除</string>
 </resources>
 
 

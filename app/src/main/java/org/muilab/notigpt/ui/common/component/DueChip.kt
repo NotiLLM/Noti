@@ -112,10 +112,15 @@ fun DoDateChip(
     val container = MaterialTheme.colorScheme.secondaryContainer
     val onContainer = MaterialTheme.colorScheme.onSecondaryContainer
 
-    val label = androidx.compose.ui.res.stringResource(
-        R.string.ui_reminders_do_date_chip,
-        getRelativeTimeStr(doAtMs, context),
-    )
+    // The "someday" sentinel is not a real date; label it as such instead of formatting a far-future time.
+    val label = if (org.muilab.notigpt.model.features.SavedItem.isSomeday(doAtMs)) {
+        androidx.compose.ui.res.stringResource(R.string.do_date_someday)
+    } else {
+        androidx.compose.ui.res.stringResource(
+            R.string.ui_reminders_do_date_chip,
+            getRelativeTimeStr(doAtMs, context),
+        )
+    }
 
     Row(
         modifier = modifier

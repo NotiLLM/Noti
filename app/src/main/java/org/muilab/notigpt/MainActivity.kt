@@ -12,7 +12,10 @@ import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.core.content.ContextCompat
+import android.content.pm.PackageManager
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
@@ -46,6 +49,9 @@ class MainActivity : ComponentActivity() {
      * Keep permission prompts and service checks here because they depend on Android activity context; route
      * feature behavior through Compose screens and ViewModels.
      */
+    private val requestLocalNetworkPermission =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { /* no-op: workers retry */ }
+
     @RequiresApi(Build.VERSION_CODES.S)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -53,6 +59,10 @@ class MainActivity : ComponentActivity() {
         // WorkManager.getInstance(applicationContext).cancelAllWork()
 
         SharedPreferencesManager.init(this)
+
+        // Android 16+ (API 36) Local Network Protection: LAN/RFC-1918 hosts (e.g. the dev n8n server)
+        // are unreachable until this runtime permission is granted, even though internet access works.
+        maybeRequestLocalNetworkPermission()
         // Identity: signed-in Firebase UID keys Firestore and n8n payloads; the device id is only
         // a pre-login placeholder (extraction is gated behind sign-in anyway).
         SharedPreferencesManager.userId =
@@ -143,6 +153,18 @@ class MainActivity : ComponentActivity() {
         val flat: String? =
             Settings.Secure.getString(this.contentResolver, "enabled_notification_listeners")
         return (flat != null) && (cn.flattenToString() in flat)
+    }
+
+    /**
+     * Requests ACCESS_LOCAL_NETWORK on Android 16+ so the app can reach LAN hosts (dev n8n server).
+     * No-op on older versions where the permission does not exist and LAN access is unrestricted.
+     */
+    private fun maybeRequestLocalNetworkPermission() {
+        if (Build.VERSION.SDK_INT < 36) return
+        val perm = "android.permission.ACCESS_LOCAL_NETWORK"
+        if (ContextCompat.checkSelfPermission(this, perm) != PackageManager.PERMISSION_GRANTED) {
+            requestLocalNetworkPermission.launch(perm)
+        }
     }
 
     fun isBatteryOptimizationsIgnored(): Boolean {

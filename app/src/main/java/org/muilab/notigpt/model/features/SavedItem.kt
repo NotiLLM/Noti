@@ -123,4 +123,40 @@ data class SavedItem(
 
     val isEvent: Boolean
         @Ignore get() = false
+
+    companion object {
+        /**
+         * Sentinel [doAtMs] meaning the user marked the task "Someday": intended eventually, but with
+         * no committed date. Distinct from 0 (no planned date set at all). Chosen as [Long.MAX_VALUE]
+         * so it naturally sorts after every real planned date and is trivially excluded from date-range
+         * buckets. LLM flows never set [doAtMs], so only the user ever produces this value.
+         */
+        const val DO_AT_SOMEDAY = Long.MAX_VALUE
+
+        /** True when [doAtMs] holds a concrete planned date (not unset, not the Someday sentinel). */
+        fun hasPlannedDate(doAtMs: Long): Boolean = doAtMs > 0L && doAtMs != DO_AT_SOMEDAY
+
+        fun isSomeday(doAtMs: Long): Boolean = doAtMs == DO_AT_SOMEDAY
+
+        /**
+         * Single source of truth for planned-date bucketing, shared by the home-screen smart-filter
+         * counts (mirrored in SQL in `SavedItemDao.observeSmartFilterCounts`) and the in-memory list
+         * filter in `ReminderViewModel`. [startOfTomorrowMs] is the local midnight boundary, so
+         * "Today & earlier" absorbs overdue planned dates.
+         *
+         * Keeps carry no do-date (the editor forces their [doAtMs] to 0), so they are never
+         * "Undetermined" — they all default into [DoDateBucket.Someday]. Only tasks can land in the
+         * date-driven buckets, which is why "Undetermined" reads as "尚未安排的任務" (unscheduled tasks).
+         */
+        fun plannedBucket(doAtMs: Long, startOfTomorrowMs: Long, isTask: Boolean = true): DoDateBucket = when {
+            !isTask -> DoDateBucket.Someday
+            doAtMs == DO_AT_SOMEDAY -> DoDateBucket.Someday
+            doAtMs <= 0L -> DoDateBucket.Undetermined
+            doAtMs < startOfTomorrowMs -> DoDateBucket.TodayEarlier
+            else -> DoDateBucket.Upcoming
+        }
+    }
 }
+
+/** Planned-date smart-filter buckets keyed on [SavedItem.doAtMs]. */
+enum class DoDateBucket { TodayEarlier, Upcoming, Someday, Undetermined }

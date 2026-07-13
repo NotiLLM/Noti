@@ -21,7 +21,15 @@ class NotiMaintenanceRepository(
 ) {
 
     suspend fun deleteAllNotis(logAction: (String, String) -> Unit) {
-        val notiKeys = notiDrawerDao.getActiveNotPinnedKeys()
+        deleteNotisByKeys(notiDrawerDao.getActiveNotPinnedKeys(), logAction)
+    }
+
+    /**
+     * Clears a specific set of units (dismiss unit + records, mark read). Callers are responsible for
+     * scoping the keys — e.g. the category page passes only the visible, unpinned threads.
+     */
+    suspend fun deleteNotisByKeys(notiKeys: List<String>, logAction: (String, String) -> Unit) {
+        if (notiKeys.isEmpty()) return
         notiKeys.forEach { k -> logAction(k, "delete_all") }
         notiDrawerDao.dismissUnitsByKeys(notiKeys)
         notiDrawerDao.setUnitsReadByKeys(notiKeys)

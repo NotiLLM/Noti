@@ -17,8 +17,19 @@ object N8nAPIClient {
     private var retrofit: Retrofit? = null
 
     // If you want to keep it configurable, you can still read from SharedPreferencesManager,
-    // but since you said prefix is n8n.udchen.tw/webhook-test/, we hard-code the domain here.
-    private const val BASE_URL = "https://n8n.udchen.tw/"
+    // but since the webhook prefix is fixed (webhook/ and webhook-test/), we hard-code the domain here.
+    // Pointed at the locally-hosted n8n instance on port 5678. A prior LAN IP (10.50.148.125) hit a
+    // Wi-Fi-specific quirk where the app's own socket could not complete a TCP handshake to the LAN IP
+    // even though shell/adb and Chrome on the same phone reached it fine at the same moment — root
+    // cause undetermined after ruling out SELinux, Doze/standby, Data Saver, VPN/lockdown, per-UID
+    // ip-rule routing, and per-network proxy. If this IP hits the same issue, fall back to
+    // `adb reverse tcp:5678 tcp:5678` (USB) and point BASE_URL at 127.0.0.1 instead.
+    // Swap to "https://n8n.udchen.tw/" (or whatever public host you settle on) once the workflows move.
+    // Locally-hosted n8n on the LAN. On Android 16+ (API 36) this requires the ACCESS_LOCAL_NETWORK
+    // runtime permission (Local Network Protection) — declared in the manifest and requested in
+    // MainActivity. Without it, connections here silently time out while internet access still works.
+    // Swap to "https://n8n.udchen.tw/" (or whatever public host you settle on) once the workflows move.
+    private const val BASE_URL = "http://192.168.1.156:5678/"
 
     private fun createRetrofit(baseUrl: String = BASE_URL): Retrofit {
         val logging = HttpLoggingInterceptor().apply {

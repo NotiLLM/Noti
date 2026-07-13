@@ -43,6 +43,10 @@ interface SavedSubItemDao {
     @Query("UPDATE saved_sub_item SET isVisible = 0, lastUpdateTimestamp = :ts WHERE parentSavedItemId = :savedItemId")
     suspend fun softDeleteByParentId(savedItemId: String, ts: Long)
 
+    /** Un-hides previously soft-deleted sub-tasks, e.g. restoring ones an LLM edit removed on revert. */
+    @Query("UPDATE saved_sub_item SET isVisible = 1, lastUpdateTimestamp = :ts WHERE savedSubItemId IN (:ids)")
+    suspend fun restoreByIds(ids: List<String>, ts: Long)
+
     /** Account-switch wipe. */
     @Query("DELETE FROM saved_sub_item")
     suspend fun deleteAllForAccountSwitch()

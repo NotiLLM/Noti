@@ -34,6 +34,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import org.muilab.notigpt.R
@@ -43,6 +45,8 @@ import org.muilab.notigpt.ui.reminder.viewmodel.ScheduledReminderViewModel
 import org.muilab.notigpt.ui.theme.NotiTheme
 import org.muilab.notigpt.util.time.getAbsoluteTimeStr
 import java.util.Calendar
+
+private const val COLLAPSED_CONTENT_LINES = 3
 
 @Composable
 fun ScheduledRemindersScreen(
@@ -135,7 +139,25 @@ private fun ScheduledReminderCard(
             Column(Modifier.weight(1f)) {
                 Text(reminder.title.ifBlank { "Reminder" }, style = MaterialTheme.typography.titleMedium)
                 if (reminder.content.isNotBlank()) {
-                    Text(reminder.content, style = MaterialTheme.typography.bodyMedium)
+                    var contentExpanded by remember(reminder.reminderId) { mutableStateOf(false) }
+                    var contentOverflows by remember(reminder.reminderId) { mutableStateOf(false) }
+                    Text(
+                        reminder.content,
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = if (contentExpanded) Int.MAX_VALUE else COLLAPSED_CONTENT_LINES,
+                        overflow = TextOverflow.Ellipsis,
+                        onTextLayout = { if (!contentExpanded) contentOverflows = it.hasVisualOverflow },
+                    )
+                    if (contentOverflows || contentExpanded) {
+                        Text(
+                            stringResource(if (contentExpanded) R.string.ui_show_less else R.string.ui_show_more),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier
+                                .clickable { contentExpanded = !contentExpanded }
+                                .padding(vertical = 2.dp),
+                        )
+                    }
                 }
                 Text(
                     getAbsoluteTimeStr(reminder.remindAtMs),

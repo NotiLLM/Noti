@@ -4,7 +4,9 @@ import android.util.Log
 import androidx.work.Data
 import androidx.work.ListenableWorker
 import com.google.gson.Gson
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
@@ -194,18 +196,24 @@ internal object ReminderExtractionHandler {
         Log.d(TAG, "Extraction Response (user-triggered): $bodyStr")
 
         return try {
-            journalRecordsSent(ctx, mapOf(notiKey to combined))
-            val validRequestIds = combined.map { it.notiRecordId }.toSet()
-            applyResponse(
-                ctx = ctx,
-                bodyStr = bodyStr,
-                validRequestIds = validRequestIds,
-                linkSource = NotiSavedItemLinkSource.LlmManualExtraction,
-                origin = "llm_manual_extraction",
-                foldRequests = foldRequests,
-                requestKeys = listOf(notiKey),
-            )
-            ctx.database.notiLlmStateDao().setShouldExtractByKeys(listOf(notiKey), false, System.currentTimeMillis())
+            // NonCancellable: a response is already in hand at this point. A concurrent REPLACE of
+            // this unique work slot (e.g. another extraction trigger firing mid-write) must not cut
+            // off persistence partway through the ops list, or later ops in the same response are
+            // silently dropped even though the network call already succeeded.
+            withContext(NonCancellable) {
+                journalRecordsSent(ctx, mapOf(notiKey to combined))
+                val validRequestIds = combined.map { it.notiRecordId }.toSet()
+                applyResponse(
+                    ctx = ctx,
+                    bodyStr = bodyStr,
+                    validRequestIds = validRequestIds,
+                    linkSource = NotiSavedItemLinkSource.LlmManualExtraction,
+                    origin = "llm_manual_extraction",
+                    foldRequests = foldRequests,
+                    requestKeys = listOf(notiKey),
+                )
+                ctx.database.notiLlmStateDao().setShouldExtractByKeys(listOf(notiKey), false, System.currentTimeMillis())
+            }
             ctx.success()
         } catch (e: Exception) {
             Log.e(TAG, "Error parsing extract response (user-triggered)", e)
@@ -353,22 +361,28 @@ internal object ReminderExtractionHandler {
             Log.d(TAG, "Extraction Response: $bodyStr")
 
             try {
-                journalRecordsSent(ctx, claimedByKey)
-                // Evidence may cite the extracted records or the past-context records sent with them.
-                val validRequestIds = buildSet {
-                    claimedRecords.forEach { add(it.notiRecordId) }
-                    pastByKey.values.flatten().forEach { add(it.notiRecordId) }
+                // NonCancellable: a response is already in hand at this point. A concurrent REPLACE of
+                // this unique work slot (e.g. another extraction trigger firing mid-write) must not cut
+                // off persistence partway through the ops list, or later ops in the same response are
+                // silently dropped even though the network call already succeeded.
+                withContext(NonCancellable) {
+                    journalRecordsSent(ctx, claimedByKey)
+                    // Evidence may cite the extracted records or the past-context records sent with them.
+                    val validRequestIds = buildSet {
+                        claimedRecords.forEach { add(it.notiRecordId) }
+                        pastByKey.values.flatten().forEach { add(it.notiRecordId) }
+                    }
+                    applyResponse(
+                        ctx = ctx,
+                        bodyStr = bodyStr,
+                        validRequestIds = validRequestIds,
+                        linkSource = NotiSavedItemLinkSource.LlmAutoExtraction,
+                        origin = "llm_auto_extraction",
+                        foldRequests = foldRequests,
+                        requestKeys = requestKeys,
+                    )
+                    db.notiLlmStateDao().setShouldExtractByKeys(keysToProcess, false, System.currentTimeMillis())
                 }
-                applyResponse(
-                    ctx = ctx,
-                    bodyStr = bodyStr,
-                    validRequestIds = validRequestIds,
-                    linkSource = NotiSavedItemLinkSource.LlmAutoExtraction,
-                    origin = "llm_auto_extraction",
-                    foldRequests = foldRequests,
-                    requestKeys = requestKeys,
-                )
-                db.notiLlmStateDao().setShouldExtractByKeys(keysToProcess, false, System.currentTimeMillis())
             } catch (e: Exception) {
                 Log.e(TAG, "Error parsing extract response", e)
                 db.recordDao().clearClaimedRecords(candidateRecordIds)
@@ -505,7 +519,9 @@ internal object ReminderExtractionHandler {
                 "sourceNotiRecordIds" to (linkedByItem[r.savedItemId] ?: emptyList()),
                 "userEdited" to r.userEdited,
                 "isCompleted" to r.isCompleted,
-                "doDate" to iso(r.doAtMs),
+                // doDate is user context for the model. The "someday" sentinel (Long.MAX_VALUE) is not
+                // a real date, so surface it as a self-describing marker instead of a year-292M ISO string.
+                "doDate" to if (SavedItem.isSomeday(r.doAtMs)) "someday" else iso(r.doAtMs),
                 "buttons" to r.buttons,
                 "sortScore" to r.sortScore,
                 "subTasks" to subTasks,

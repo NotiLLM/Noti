@@ -105,8 +105,8 @@ import org.muilab.notigpt.model.features.SavedItemState
 import org.muilab.notigpt.model.features.SavedSubItem
 import org.muilab.notigpt.data.export.asExportable
 import org.muilab.notigpt.ui.preference.component.PreferenceLearningBottomSheet
-import org.muilab.notigpt.ui.common.component.DoDateChip
 import org.muilab.notigpt.ui.common.component.DueChip
+import org.muilab.notigpt.ui.reminder.component.ExportChooserDialog
 import org.muilab.notigpt.ui.theme.NotiTheme
 import org.muilab.notigpt.ui.notification.component.RelatedNotificationPreview
 import org.muilab.notigpt.ui.reminder.component.SavedSubItemRow
@@ -148,13 +148,16 @@ fun RemindersScreen(
     scheduledReminderViewModel: ScheduledReminderViewModel? = null,
     preferenceViewModel: PreferenceViewModel? = null,
     listMode: ReminderViewModel.ListMode = ReminderViewModel.ListMode.All,
+    /** When set, this screen shows a home smart-filter list (planned-date bucket or starred) instead of the tab chips. */
+    smartFilter: org.muilab.notigpt.ui.common.navigation.SavedListFilter? = null,
     onDetailOpenChange: (Boolean) -> Unit = {},
 ) {
     val vm: ReminderViewModel = reminderViewModel ?: viewModel()
     val scheduledVm: ScheduledReminderViewModel = scheduledReminderViewModel ?: viewModel()
     val prefVm: PreferenceViewModel = preferenceViewModel ?: viewModel()
 
-    LaunchedEffect(listMode) {
+    LaunchedEffect(listMode, smartFilter) {
+        vm.setSmartFilter(smartFilter)
         vm.setListMode(listMode)
         vm.setFilter(
             when (listMode) {
@@ -299,7 +302,9 @@ fun RemindersScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                when (listMode) {
+                // Smart-filter lists (Today/Upcoming/Someday/Undetermined/Starred) show no tab chips;
+                // the shell's top bar carries the filter name.
+                if (smartFilter == null) when (listMode) {
                     ReminderViewModel.ListMode.All -> {
                         ReminderFilterChip(stringResource(R.string.ui_reminders_filter_all), filter == ReminderViewModel.FilterTab.All, { vm.setFilter(ReminderViewModel.FilterTab.All) })
                         ReminderFilterChip(stringResource(R.string.ui_reminders_filter_tasks), filter == ReminderViewModel.FilterTab.Tasks, { vm.setFilter(ReminderViewModel.FilterTab.Tasks) })
@@ -309,26 +314,27 @@ fun RemindersScreen(
                     ReminderViewModel.ListMode.Tasks -> {
                         ReminderFilterChip(stringResource(R.string.ui_reminders_filter_pending), filter == ReminderViewModel.FilterTab.Pending, { vm.setFilter(ReminderViewModel.FilterTab.Pending) }, leadingIconRes = R.drawable.check_box_unchecked, iconTint = NotiTheme.semantic.taskAccent, flashTick = if (flashTarget == ReminderViewModel.FilterTab.Pending) flashTick else 0)
                         ReminderFilterChip(stringResource(R.string.ui_reminders_filter_completed), filter == ReminderViewModel.FilterTab.Completed, { vm.setFilter(ReminderViewModel.FilterTab.Completed) }, leadingIconRes = R.drawable.check_box_checked, iconTint = NotiTheme.semantic.taskAccent, flashTick = if (flashTarget == ReminderViewModel.FilterTab.Completed) flashTick else 0)
-                        ReminderFilterChip(stringResource(R.string.ui_reminders_filter_starred), filter == ReminderViewModel.FilterTab.Starred, { vm.setFilter(ReminderViewModel.FilterTab.Starred) }, leadingIconRes = R.drawable.star_filled, iconTint = NotiTheme.semantic.taskAccent)
+                        ReminderFilterChip(stringResource(R.string.ui_reminders_filter_starred), filter == ReminderViewModel.FilterTab.Starred, { vm.setFilter(ReminderViewModel.FilterTab.Starred) }, leadingIconRes = R.drawable.star_yes, iconTint = NotiTheme.semantic.taskAccent)
                         ReminderFilterChip(stringResource(R.string.ui_reminders_filter_all), filter == ReminderViewModel.FilterTab.All, { vm.setFilter(ReminderViewModel.FilterTab.All) })
                     }
                     ReminderViewModel.ListMode.Keep -> {
                         ReminderFilterChip(stringResource(R.string.ui_reminders_filter_keep), filter == ReminderViewModel.FilterTab.Keep, { vm.setFilter(ReminderViewModel.FilterTab.Keep) }, leadingIconRes = R.drawable.bookmark, iconTint = NotiTheme.semantic.keepAccent, flashTick = if (flashTarget == ReminderViewModel.FilterTab.Keep) flashTick else 0)
                         ReminderFilterChip(stringResource(R.string.ui_reminders_filter_archived), filter == ReminderViewModel.FilterTab.Archived, { vm.setFilter(ReminderViewModel.FilterTab.Archived) }, leadingIconRes = R.drawable.archive_yes, iconTint = NotiTheme.semantic.keepAccent, flashTick = if (flashTarget == ReminderViewModel.FilterTab.Archived) flashTick else 0)
-                        ReminderFilterChip(stringResource(R.string.ui_reminders_filter_starred), filter == ReminderViewModel.FilterTab.Starred, { vm.setFilter(ReminderViewModel.FilterTab.Starred) }, leadingIconRes = R.drawable.star_filled, iconTint = NotiTheme.semantic.keepAccent)
+                        ReminderFilterChip(stringResource(R.string.ui_reminders_filter_starred), filter == ReminderViewModel.FilterTab.Starred, { vm.setFilter(ReminderViewModel.FilterTab.Starred) }, leadingIconRes = R.drawable.star_yes, iconTint = NotiTheme.semantic.keepAccent)
                         ReminderFilterChip(stringResource(R.string.ui_reminders_filter_all), filter == ReminderViewModel.FilterTab.All, { vm.setFilter(ReminderViewModel.FilterTab.All) })
                     }
                 }
 
                 Spacer(Modifier.weight(1f))
 
-                IconButton(onClick = { showRegenerateAllDialog = true }) {
-                    Icon(
-                        painter = painterResource(R.drawable.refresh),
-                        contentDescription = stringResource(R.string.a11y_refresh_all),
-                        modifier = Modifier.size(20.dp),
-                    )
-                }
+                // Regenerate-all is hidden for now (kept for easy restore).
+                // IconButton(onClick = { showRegenerateAllDialog = true }) {
+                //     Icon(
+                //         painter = painterResource(R.drawable.refresh),
+                //         contentDescription = stringResource(R.string.a11y_refresh_all),
+                //         modifier = Modifier.size(20.dp),
+                //     )
+                // }
             }
 
             // Offline banner: extraction requests are failing and records are queued locally.
@@ -361,7 +367,7 @@ fun RemindersScreen(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 96.dp)
             ) {
-                items(reminders, key = { it.savedItemId }) { reminder ->
+                items(reminders, key = { it.savedItemId }, contentType = { "reminderCard" }) { reminder ->
                     ReminderCard(
                         reminder = reminder,
                         subTasks = allSavedSubItemsByReminder[reminder.savedItemId] ?: emptyList(),
@@ -384,10 +390,9 @@ fun RemindersScreen(
                             editingInitialSnapshot = reminder
                         },
                         onToggleStarred = { vm.toggleStarred(reminder) },
+                        onSetDoDate = { vm.setDoDate(reminder.savedItemId, it) },
                         onLongPress = { feedbackDialogReminder = reminder },
                         onCreateReminder = { reminderDialogSavedItem = reminder },
-                        // Task/Keep pages: no inline delete (delete lives in the detail editor).
-                        showDeleteButton = false,
                         sectionAccent = tabAccent,
                         onArchive = {
                             flashChip(if (reminder.isArchived) ReminderViewModel.FilterTab.Keep else ReminderViewModel.FilterTab.Archived)
@@ -888,54 +893,6 @@ private fun ReminderFilterChip(
     )
 }
 
-@Composable
-private fun ReminderCardSplitActions(
-    onCreateReminder: (() -> Unit)?,
-    onQuickExportTasks: (() -> Unit)?,
-    onQuickExportCalendar: (() -> Unit)?,
-    onDelete: (() -> Unit)? = null,
-) {
-    val hasAny = onCreateReminder != null || onQuickExportTasks != null || onQuickExportCalendar != null || onDelete != null
-    if (!hasAny) return
-
-    var expanded by remember { mutableStateOf(false) }
-    Box {
-        IconButton(onClick = { expanded = true }) {
-            Icon(painterResource(R.drawable.more_vert), contentDescription = stringResource(R.string.a11y_more_actions), modifier = Modifier.size(20.dp))
-        }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            if (onCreateReminder != null) {
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.ui_reminders_create_button)) },
-                    leadingIcon = { Icon(painterResource(R.drawable.notifications), contentDescription = null, modifier = Modifier.size(20.dp)) },
-                    onClick = { expanded = false; onCreateReminder() },
-                )
-            }
-            if (onQuickExportTasks != null) {
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.google_tasks_export)) },
-                    leadingIcon = { Icon(painterResource(R.drawable.task_add), contentDescription = null, modifier = Modifier.size(20.dp)) },
-                    onClick = { expanded = false; onQuickExportTasks() },
-                )
-            }
-            if (onQuickExportCalendar != null) {
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.google_calendar_export)) },
-                    leadingIcon = { Icon(painterResource(R.drawable.calendar_add), contentDescription = null, modifier = Modifier.size(20.dp)) },
-                    onClick = { expanded = false; onQuickExportCalendar() },
-                )
-            }
-            if (onDelete != null) {
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.ui_action_delete), color = MaterialTheme.colorScheme.error) },
-                    leadingIcon = { Icon(painterResource(R.drawable.delete), contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(20.dp)) },
-                    onClick = { expanded = false; onDelete() },
-                )
-            }
-        }
-    }
-}
-
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ReminderCard(
@@ -948,10 +905,11 @@ fun ReminderCard(
     onCreateReminder: (() -> Unit)? = null,
     onQuickExportTasks: (() -> Unit)? = null,
     onQuickExportCalendar: (() -> Unit)? = null,
+    /** Set/clear the user's planned "do date" straight from the card. Null hides the affordance. */
+    onSetDoDate: ((Long) -> Unit)? = null,
     onLongPress: () -> Unit = {},
     onArchive: () -> Unit = {},
-    showDeleteButton: Boolean = true,
-    /** Optional left-edge accent identifying the section (e.g. Tasks/Keep on the New screen). Null = no accent. */
+    /** Optional left-edge accent identifying the section (e.g. Tasks/Keep). Null = no accent. */
     sectionAccent: Color? = null,
     // Multi-select (New screen triage). When selectionMode, the card toggles selection instead of opening.
     selectionMode: Boolean = false,
@@ -987,6 +945,11 @@ fun ReminderCard(
     }
 
     var expanded by remember(reminder.savedItemId) { mutableStateOf(false) }
+    var showExportChooser by remember(reminder.savedItemId) { mutableStateOf(false) }
+    var confirmDelete by remember(reminder.savedItemId) { mutableStateOf(false) }
+    var showDoDatePicker by remember(reminder.savedItemId) { mutableStateOf(false) }
+    // Star tint follows the item's own type (fixes the previously hardcoded task accent on keep cards).
+    val rowAccent = if (reminder.isTask) NotiTheme.semantic.taskAccent else NotiTheme.semantic.keepAccent
     val selectedBorder = sectionAccent ?: MaterialTheme.colorScheme.primary
     Surface(
         modifier = Modifier
@@ -1092,38 +1055,7 @@ fun ReminderCard(
                         modifier = Modifier.weight(1f)
                     )
 
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        if (onToggleStarred != null && !selectionMode) {
-                            IconButton(
-                                onClick = {
-                                    haptic.performHapticFeedback(if (!reminder.isStarred) HapticFeedbackType.ToggleOn else HapticFeedbackType.ToggleOff)
-                                    onToggleStarred()
-                                },
-                            ) {
-                                Icon(
-                                    painter = painterResource(if (reminder.isStarred) R.drawable.star_filled else R.drawable.star_outline),
-                                    contentDescription = stringResource(if (reminder.isStarred) R.string.a11y_unstar else R.string.a11y_star),
-                                    modifier = Modifier.size(20.dp),
-                                    tint = if (reminder.isStarred) NotiTheme.semantic.taskAccent else MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
-                        ReminderCardSplitActions(
-                            onCreateReminder = onCreateReminder,
-                            onQuickExportTasks = onQuickExportTasks,
-                            onQuickExportCalendar = onQuickExportCalendar,
-                            // On Tasks/Keep tabs (no inline trash) delete lives in this overflow menu.
-                            onDelete = if (!showDeleteButton) onDelete else null,
-                        )
-                    }
-
-                    if (showDeleteButton) {
-                        IconButton(onClick = onDelete) {
-                            Icon(painterResource(R.drawable.delete), contentDescription = stringResource(R.string.a11y_delete), tint = MaterialTheme.colorScheme.error)
-                        }
-                    }
-
-                    // Click-to-expand full title/content/subtasks (hidden during selection).
+                    // Actions moved to the bottom row; the title row keeps only expand/collapse.
                     if (!selectionMode) {
                         IconButton(onClick = { expanded = !expanded }) {
                             Icon(
@@ -1135,7 +1067,7 @@ fun ReminderCard(
                     }
                 }
 
-                // Deadline urgency chip + user-set do-date chip (tasks only)
+                // Deadline urgency chip (tasks only). The do-date lives on the bottom action row.
                 if (reminder.isTask) {
                     val deadline = reminder.deadlineAtMs
                     Row(
@@ -1152,7 +1084,6 @@ fun ReminderCard(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
-                        DoDateChip(doAtMs = reminder.doAtMs)
                     }
                 }
 
@@ -1191,10 +1122,196 @@ fun ReminderCard(
                         forceExpanded = expanded,
                     )
                 }
+
+                // Bottom action row: do-date affordance on the left, icon controls on the right.
+                if (!selectionMode) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        if (onSetDoDate != null) {
+                            DoDateBottomButton(
+                                doAtMs = reminder.doAtMs,
+                                accent = rowAccent,
+                                onClick = { showDoDatePicker = true },
+                            )
+                        }
+                        Spacer(Modifier.weight(1f))
+                        if (onToggleStarred != null) {
+                            IconButton(onClick = {
+                                haptic.performHapticFeedback(if (!reminder.isStarred) HapticFeedbackType.ToggleOn else HapticFeedbackType.ToggleOff)
+                                onToggleStarred()
+                            }) {
+                                Icon(
+                                    painter = painterResource(if (reminder.isStarred) R.drawable.star_yes else R.drawable.star_no),
+                                    contentDescription = stringResource(if (reminder.isStarred) R.string.a11y_unstar else R.string.a11y_star),
+                                    modifier = Modifier.size(20.dp),
+                                    tint = if (reminder.isStarred) rowAccent else MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                        if (onCreateReminder != null) {
+                            IconButton(onClick = onCreateReminder) {
+                                Icon(
+                                    painter = painterResource(R.drawable.notifications),
+                                    contentDescription = stringResource(R.string.a11y_set_reminder),
+                                    modifier = Modifier.size(20.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                        if (onQuickExportTasks != null || onQuickExportCalendar != null) {
+                            IconButton(onClick = { showExportChooser = true }) {
+                                Icon(
+                                    painter = painterResource(R.drawable.task_add),
+                                    contentDescription = stringResource(R.string.a11y_export),
+                                    modifier = Modifier.size(20.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                        IconButton(onClick = {
+                            // Already-reviewed items confirm; new/updated ones (from the review flow) delete directly.
+                            if (reminder.isNewLike) onDelete() else confirmDelete = true
+                        }) {
+                            Icon(
+                                painter = painterResource(R.drawable.delete),
+                                contentDescription = stringResource(R.string.a11y_delete),
+                                modifier = Modifier.size(20.dp),
+                                tint = MaterialTheme.colorScheme.error,
+                            )
+                        }
+                    }
+                }
             }
         }
         }
       }
+    }
+
+    if (showExportChooser) {
+        ExportChooserDialog(
+            onDismiss = { showExportChooser = false },
+            onExportTasks = onQuickExportTasks?.let { { showExportChooser = false; it() } },
+            onExportCalendar = onQuickExportCalendar?.let { { showExportChooser = false; it() } },
+        )
+    }
+    if (confirmDelete) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text(stringResource(R.string.delete_confirm_title)) },
+            text = { Text(stringResource(R.string.delete_confirm_message)) },
+            confirmButton = {
+                TextButton(onClick = { confirmDelete = false; onDelete() }) {
+                    Text(stringResource(R.string.ui_action_delete), color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmDelete = false }) { Text(stringResource(R.string.ui_action_cancel)) }
+            },
+        )
+    }
+    if (showDoDatePicker && onSetDoDate != null) {
+        CardDoDatePickerDialog(
+            currentDoAtMs = reminder.doAtMs,
+            onDismiss = { showDoDatePicker = false },
+            onSet = { newVal ->
+                onSetDoDate(newVal)
+                showDoDatePicker = false
+            },
+        )
+    }
+}
+
+/**
+ * Compact do-date picker used from a reminder card's bottom row: pick a concrete day, or mark the
+ * task "Someday" / clear it. Mirrors the detail editor's date-merge (keeps existing time-of-day, else
+ * defaults to 09:00 — a work-start plan, not a 23:59 deadline).
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CardDoDatePickerDialog(
+    currentDoAtMs: Long,
+    onDismiss: () -> Unit,
+    onSet: (Long) -> Unit,
+) {
+    val pickerState = rememberDatePickerState(
+        initialSelectedDateMillis = if (SavedItem.hasPlannedDate(currentDoAtMs)) currentDoAtMs else System.currentTimeMillis()
+    )
+    DatePickerDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(onClick = {
+                val selectedDate = pickerState.selectedDateMillis
+                if (selectedDate != null) {
+                    val hadTime = SavedItem.hasPlannedDate(currentDoAtMs)
+                    val existingCal = Calendar.getInstance().apply {
+                        timeInMillis = if (hadTime) currentDoAtMs else System.currentTimeMillis()
+                    }
+                    val newCal = Calendar.getInstance().apply {
+                        timeInMillis = selectedDate
+                        set(Calendar.HOUR_OF_DAY, if (hadTime) existingCal.get(Calendar.HOUR_OF_DAY) else 9)
+                        set(Calendar.MINUTE, if (hadTime) existingCal.get(Calendar.MINUTE) else 0)
+                        set(Calendar.SECOND, 0)
+                        set(Calendar.MILLISECOND, 0)
+                    }
+                    onSet(newCal.timeInMillis)
+                }
+            }) { Text(stringResource(R.string.ui_action_ok)) }
+        },
+        dismissButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                TextButton(onClick = { onSet(0L) }) { Text(stringResource(R.string.ui_action_clear)) }
+                TextButton(onClick = { onSet(SavedItem.DO_AT_SOMEDAY) }) {
+                    Text(stringResource(R.string.do_date_someday))
+                }
+            }
+        },
+    ) {
+        DatePicker(state = pickerState)
+    }
+}
+
+/**
+ * The bottom-row do-date affordance: a calendar icon plus a "when I'll handle it" label
+ * (a concrete relative date, "Someday", or a muted "Set do date" when unset). Tapping opens the
+ * picker. Sits on the left of the card's bottom action row.
+ */
+@Composable
+private fun DoDateBottomButton(
+    doAtMs: Long,
+    accent: Color,
+    onClick: () -> Unit,
+) {
+    val context = LocalContext.current
+    val hasDo = doAtMs > 0L
+    val label = when {
+        SavedItem.isSomeday(doAtMs) -> stringResource(R.string.do_date_someday)
+        SavedItem.hasPlannedDate(doAtMs) ->
+            stringResource(R.string.ui_reminders_do_date_chip, getRelativeTimeStr(doAtMs, context))
+        else -> stringResource(R.string.a11y_set_do_date)
+    }
+    val tint = if (hasDo) accent else MaterialTheme.colorScheme.onSurfaceVariant
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            painter = painterResource(R.drawable.ic_calendar_today),
+            contentDescription = stringResource(R.string.a11y_set_do_date),
+            modifier = Modifier.size(16.dp),
+            tint = tint,
+        )
+        Spacer(Modifier.width(4.dp))
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            color = tint,
+        )
     }
 }
 
@@ -1462,10 +1579,14 @@ fun ReminderDetailScreen(
                 }
 
                 // User-set do date (when to work on it), independent of the deadline.
-                val doDateStr = if (doAtMs > 0L) {
-                    java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date(doAtMs))
-                } else stringResource(R.string.reminder_no_date)
-                val doTimeStr = if (doAtMs > 0L) {
+                val hasRealDoDate = SavedItem.hasPlannedDate(doAtMs)
+                val isSomeday = SavedItem.isSomeday(doAtMs)
+                val doDateStr = when {
+                    isSomeday -> stringResource(R.string.do_date_someday)
+                    hasRealDoDate -> java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date(doAtMs))
+                    else -> stringResource(R.string.reminder_no_date)
+                }
+                val doTimeStr = if (hasRealDoDate) {
                     java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date(doAtMs))
                 } else stringResource(R.string.reminder_no_time)
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1477,10 +1598,29 @@ fun ReminderDetailScreen(
                     TextButton(onClick = { showDoDatePicker = true }) {
                         Text(text = doDateStr, color = accent)
                     }
-                    if (doAtMs > 0L) {
+                    if (hasRealDoDate) {
                         TextButton(onClick = { showDoTimePicker = true }) {
                             Text(text = doTimeStr, color = accent)
                         }
+                    }
+                    // "Someday": intended eventually, no committed date. Toggles the sentinel.
+                    // A FilterChip (not plain text) so the selected state reads clearly.
+                    Spacer(Modifier.width(4.dp))
+                    FilterChip(
+                        selected = isSomeday,
+                        onClick = { doAtMs = if (isSomeday) 0L else SavedItem.DO_AT_SOMEDAY },
+                        label = { Text(stringResource(R.string.do_date_someday)) },
+                        leadingIcon = if (isSomeday) {
+                            {
+                                Icon(
+                                    painter = painterResource(R.drawable.check),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                )
+                            }
+                        } else null,
+                    )
+                    if (hasRealDoDate || isSomeday) {
                         IconButton(onClick = { doAtMs = 0L }) {
                             Icon(
                                 painterResource(R.drawable.delete),
@@ -1818,7 +1958,7 @@ fun ReminderDetailScreen(
     // Do-date pickers. Unset do dates default to 09:00 on the picked day (a work-start plan, not a 23:59 deadline).
     if (showDoDatePicker) {
         val doDatePickerState = rememberDatePickerState(
-            initialSelectedDateMillis = if (doAtMs > 0L) doAtMs else System.currentTimeMillis()
+            initialSelectedDateMillis = if (SavedItem.hasPlannedDate(doAtMs)) doAtMs else System.currentTimeMillis()
         )
         DatePickerDialog(
             onDismissRequest = { showDoDatePicker = false },
@@ -1827,7 +1967,7 @@ fun ReminderDetailScreen(
                     onClick = {
                         val selectedDate = doDatePickerState.selectedDateMillis
                         if (selectedDate != null) {
-                            val hadTime = doAtMs > 0L
+                            val hadTime = SavedItem.hasPlannedDate(doAtMs)
                             val existingCal = Calendar.getInstance().apply {
                                 timeInMillis = if (hadTime) doAtMs else System.currentTimeMillis()
                             }
@@ -1855,13 +1995,13 @@ fun ReminderDetailScreen(
     if (showDoTimePicker) {
         LaunchedEffect(showDoTimePicker) {
             val cal = Calendar.getInstance().apply {
-                timeInMillis = if (doAtMs > 0L) doAtMs else System.currentTimeMillis()
+                timeInMillis = if (SavedItem.hasPlannedDate(doAtMs)) doAtMs else System.currentTimeMillis()
             }
             TimePickerDialog(
                 context,
                 { _, hour, minute ->
                     val c = Calendar.getInstance().apply {
-                        timeInMillis = if (doAtMs > 0L) doAtMs else System.currentTimeMillis()
+                        timeInMillis = if (SavedItem.hasPlannedDate(doAtMs)) doAtMs else System.currentTimeMillis()
                         set(Calendar.HOUR_OF_DAY, hour)
                         set(Calendar.MINUTE, minute)
                         set(Calendar.SECOND, 0)

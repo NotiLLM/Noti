@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import kotlinx.coroutines.flow.Flow
 import org.muilab.notigpt.model.features.NotiLlmState
 
 /**
@@ -21,6 +22,10 @@ interface NotiLlmStateDao {
 
     @Query("SELECT * FROM noti_llm_state WHERE notiKey IN (:notiKeys)")
     fun getByKeys(notiKeys: List<String>): List<NotiLlmState>
+
+    /** All thread LLM state, for classifying the active drawer into Communication/Content on the home screen. */
+    @Query("SELECT * FROM noti_llm_state")
+    fun observeAll(): Flow<List<NotiLlmState>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun upsert(state: NotiLlmState)

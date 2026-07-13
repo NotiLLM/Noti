@@ -15,6 +15,9 @@ object ExtractionJournalEventType {
     const val UserEdited = "user_edited"
     const val ItemRestored = "item_restored"
 
+    /** User rejected a pending LLM update in review; the edit was rolled back. */
+    const val UserRevertedUpdate = "user_reverted_update"
+
     /** Model considered the thread and declined to extract; detail carries its reason. */
     const val NoExtraction = "no_extraction"
 }
