@@ -26,6 +26,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -62,6 +63,8 @@ fun HomeScreen(
     onOpenReview: () -> Unit,
     onOpenNotiCategory: (String) -> Unit,
     onOpenSavedList: (SavedListFilter) -> Unit,
+    dueReminderCount: Int = 0,
+    onOpenReminders: () -> Unit = {},
     homeViewModel: HomeViewModel = viewModel(),
 ) {
     val reviewCounts by homeViewModel.reviewCounts.collectAsState()
@@ -81,6 +84,11 @@ fun HomeScreen(
     ) {
         item {
             ReviewRow(counts = reviewCounts, onClick = onOpenReview)
+        }
+
+        // Slim, zero-cost-when-empty strip: due scheduled reminders the user hasn't seen yet.
+        if (dueReminderCount > 0) {
+            item { RemindersDueStrip(count = dueReminderCount, onClick = onOpenReminders) }
         }
 
         item { HomeSectionHeader(stringResource(R.string.home_section_notifications)) }
@@ -168,6 +176,46 @@ private fun ReviewRow(counts: ReviewCounts, onClick: () -> Unit) {
             if (counts.total > 0) {
                 CountBadge(counts.total, MaterialTheme.colorScheme.onPrimaryContainer, MaterialTheme.colorScheme.primaryContainer)
             }
+        }
+    }
+}
+
+/** Slim due-reminders strip (accent = due-soon). Opens the scheduled Reminders screen. */
+@Composable
+private fun RemindersDueStrip(count: Int, onClick: () -> Unit) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = Dimens.screenH, vertical = 4.dp)
+            .clickable(onClick = onClick),
+        shape = MaterialTheme.shapes.medium,
+        color = NotiTheme.semantic.dueSoonContainer,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = Dimens.cardInner, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.notifications_active),
+                contentDescription = null,
+                tint = NotiTheme.semantic.onDueSoonContainer,
+                modifier = Modifier.size(20.dp),
+            )
+            Spacer(Modifier.size(12.dp))
+            Text(
+                text = stringResource(R.string.home_reminders_due, count),
+                style = MaterialTheme.typography.titleSmall,
+                color = NotiTheme.semantic.onDueSoonContainer,
+                modifier = Modifier.weight(1f),
+            )
+            Icon(
+                painter = painterResource(R.drawable.keyboard_arrow_down),
+                contentDescription = null,
+                tint = NotiTheme.semantic.onDueSoonContainer,
+                modifier = Modifier
+                    .size(20.dp)
+                    .rotate(-90f),
+            )
         }
     }
 }

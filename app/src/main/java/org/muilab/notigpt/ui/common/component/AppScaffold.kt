@@ -425,6 +425,8 @@ fun AppScaffold(
                                 onOpenReview = { pushHome(HomeDestination.Review) },
                                 onOpenNotiCategory = { category -> pushHome(HomeDestination.NotiList(category)) },
                                 onOpenSavedList = { filter -> pushHome(HomeDestination.SavedList(filter)) },
+                                dueReminderCount = dueUnseenReminderCount,
+                                onOpenReminders = { openMenuScreen(AppMenuScreen.Reminders) },
                             )
                             HomeDestination.Review -> ReviewScreen(
                                 drawerViewModel = drawerViewModel,

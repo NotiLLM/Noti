@@ -191,7 +191,7 @@ fun ReminderDateTimeDialog(
         title = { Text(title) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Reminder time: ${getAbsoluteTimeStr(selectedAtMs)}")
+                Text(stringResource(R.string.scheduled_reminder_time, getAbsoluteTimeStr(selectedAtMs)))
                 Button(onClick = {
                     val pickerCal = Calendar.getInstance().apply { timeInMillis = selectedAtMs }
                     TimePickerDialog(
@@ -207,10 +207,10 @@ fun ReminderDateTimeDialog(
                         pickerCal.get(Calendar.MINUTE),
                         true,
                     ).show()
-                }) { Text("Pick time") }
+                }) { Text(stringResource(R.string.scheduled_pick_time)) }
             }
         },
-        confirmButton = { TextButton(onClick = { onConfirm(selectedAtMs) }) { Text("Save") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        confirmButton = { TextButton(onClick = { onConfirm(selectedAtMs) }) { Text(stringResource(R.string.ui_action_save)) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.ui_action_cancel)) } },
     )
 }
