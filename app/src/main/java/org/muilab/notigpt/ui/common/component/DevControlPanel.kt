@@ -1,7 +1,6 @@
 package org.muilab.notigpt.ui.common.component
 
 import android.content.Context
-import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -21,6 +20,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import org.muilab.notigpt.R
+import org.muilab.notigpt.ui.common.feedback.AppSnackbar
 import org.muilab.notigpt.ui.notification.component.AutoControlBar
 import org.muilab.notigpt.ui.notification.viewmodel.DrawerViewModel
 import org.muilab.notigpt.util.SharedPreferencesManager
@@ -65,12 +65,12 @@ fun DevControlPanel(context: Context, drawerViewModel: DrawerViewModel) {
 
                 AutoControlBar()
                 Button(onClick = {
-                    Toast.makeText(context, context.getString(R.string.ui_dev_sync_noti_status_toast), Toast.LENGTH_SHORT).show()
+                    AppSnackbar.show(context.getString(R.string.ui_dev_sync_noti_status_toast))
                 }) {
                     Text(stringResource(R.string.ui_dev_sync_noti_status))
                 }
                 Button(onClick = {
-                    Toast.makeText(context, context.getString(R.string.ui_dev_work_in_progress), Toast.LENGTH_SHORT).show()
+                    AppSnackbar.show(context.getString(R.string.ui_dev_work_in_progress))
                 }) {
                     Text(stringResource(R.string.ui_dev_update_user))
                 }
@@ -94,13 +94,11 @@ fun DevControlPanel(context: Context, drawerViewModel: DrawerViewModel) {
                         SharedPreferencesManager.init(context.applicationContext)
                         ReminderPeriodicWork.logStatus(context.applicationContext)
                         val t = SharedPreferencesManager.lastReminderPeriodicRunTime
-                        Toast.makeText(
-                            context,
-                            if (t == 0L) "Periodic worker hasn't run yet (or prefs cleared)" else "Last periodic run: $t",
-                            Toast.LENGTH_LONG
-                        ).show()
+                        AppSnackbar.show(
+                            if (t == 0L) "Periodic worker hasn't run yet (or prefs cleared)" else "Last periodic run: $t"
+                        )
                     } catch (e: Exception) {
-                        Toast.makeText(context, "Failed to query periodic work: ${e.message}", Toast.LENGTH_LONG).show()
+                        AppSnackbar.show("Failed to query periodic work: ${e.message}")
                     }
                 }) {
                     Text("Debug: periodic work status")

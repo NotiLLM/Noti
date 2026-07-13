@@ -1,13 +1,15 @@
 package org.muilab.notigpt.ui.common.component
 
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Badge
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.NavigationDrawerItem
+import androidx.compose.material3.NavigationDrawerItemDefaults
 import androidx.compose.material3.Text
-import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
@@ -16,11 +18,17 @@ import androidx.compose.ui.unit.dp
 import org.muilab.notigpt.R
 import org.muilab.notigpt.ui.common.navigation.AppMenuScreen
 import org.muilab.notigpt.ui.common.navigation.SavedListFilter
+import org.muilab.notigpt.ui.theme.Dimens
 
-/** Hamburger drawer content: back to the home overview plus the secondary app sections. */
+/**
+ * Hamburger drawer: an account header, then the home overview + Tasks/Keep collections, then the
+ * secondary sections. Each destination has a distinct icon (previously Tasks/Reminders/Preferences all
+ * reused the same glyph) and section labels group the two tiers.
+ */
 @Composable
 fun AppDrawerContent(
     isHome: Boolean,
+    accountEmail: String?,
     unresolvedConflictCount: Int,
     dueUnseenReminderCount: Int,
     activeTaskCount: Int,
@@ -30,42 +38,61 @@ fun AppDrawerContent(
     onMenuScreenSelected: (AppMenuScreen) -> Unit,
 ) {
     ModalDrawerSheet {
-        // The overview lives at the home root; the drawer just offers a way back to it plus the
-        // Tasks/Keep collections and the secondary sections (scheduled reminders, preferences,
-        // history, settings).
+        // Account header.
+        Column(modifier = Modifier.padding(horizontal = 28.dp, vertical = 24.dp)) {
+            Text(
+                text = stringResource(R.string.app_name),
+                style = MaterialTheme.typography.titleLarge,
+            )
+            if (!accountEmail.isNullOrBlank()) {
+                Text(
+                    text = accountEmail,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+
         NavigationDrawerItem(
+            modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
             label = { Text(stringResource(R.string.menu_home)) },
             icon = { Icon(painter = painterResource(R.drawable.home), contentDescription = null) },
             selected = isHome,
             onClick = onHomeSelected,
         )
+
+        DrawerSectionLabel(stringResource(R.string.menu_section_collections))
         // Tasks / Keep collections, with a live badge of the active (non-completed / non-archived) count.
         NavigationDrawerItem(
+            modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
             label = { Text(stringResource(R.string.home_collection_tasks)) },
-            icon = { Icon(painter = painterResource(R.drawable.task), contentDescription = null) },
+            icon = { Icon(painter = painterResource(R.drawable.checklist), contentDescription = null) },
             badge = { if (activeTaskCount > 0) Text(activeTaskCount.toString()) },
             selected = false,
             onClick = { onSavedListSelected(SavedListFilter.Tasks) },
         )
         NavigationDrawerItem(
+            modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
             label = { Text(stringResource(R.string.home_collection_keep)) },
-            icon = { Icon(painter = painterResource(R.drawable.keep), contentDescription = null) },
+            icon = { Icon(painter = painterResource(R.drawable.bookmark), contentDescription = null) },
             badge = { if (activeKeepCount > 0) Text(activeKeepCount.toString()) },
             selected = false,
             onClick = { onSavedListSelected(SavedListFilter.Keep) },
         )
 
         HorizontalDivider(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            modifier = Modifier.padding(horizontal = 28.dp, vertical = 8.dp),
             color = MaterialTheme.colorScheme.outlineVariant,
         )
 
+        DrawerSectionLabel(stringResource(R.string.menu_section_more))
         NavigationDrawerItem(
+            modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
             label = { Text(stringResource(R.string.menu_reminders)) },
-            icon = { Icon(painter = painterResource(R.drawable.task), contentDescription = null) },
+            icon = { Icon(painter = painterResource(R.drawable.schedule), contentDescription = null) },
             badge = {
                 if (dueUnseenReminderCount > 0) {
-                    Badge(containerColor = androidx.compose.ui.graphics.Color.Red) {
+                    Badge(containerColor = MaterialTheme.colorScheme.error) {
                         Text(dueUnseenReminderCount.toString())
                     }
                 }
@@ -74,8 +101,10 @@ fun AppDrawerContent(
             onClick = { onMenuScreenSelected(AppMenuScreen.Reminders) },
         )
         NavigationDrawerItem(
+            modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
             label = { Text(stringResource(R.string.tab_preferences)) },
-            icon = { Icon(painter = painterResource(R.drawable.task), contentDescription = null) },
+            // TODO(icon): replace `info` placeholder with a `tune` glyph (see icon request list).
+            icon = { Icon(painter = painterResource(R.drawable.info), contentDescription = null) },
             badge = {
                 if (unresolvedConflictCount > 0) {
                     Badge { Text(unresolvedConflictCount.toString()) }
@@ -85,16 +114,28 @@ fun AppDrawerContent(
             onClick = { onMenuScreenSelected(AppMenuScreen.Preferences) },
         )
         NavigationDrawerItem(
+            modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
             label = { Text(stringResource(R.string.menu_history)) },
             icon = { Icon(painter = painterResource(R.drawable.notifications), contentDescription = null) },
             selected = false,
             onClick = { onMenuScreenSelected(AppMenuScreen.History) },
         )
         NavigationDrawerItem(
+            modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
             label = { Text(stringResource(R.string.menu_settings)) },
             icon = { Icon(painter = painterResource(R.drawable.settings), contentDescription = null) },
             selected = false,
             onClick = { onMenuScreenSelected(AppMenuScreen.Settings) },
         )
     }
+}
+
+@Composable
+private fun DrawerSectionLabel(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(start = 28.dp, end = 28.dp, top = Dimens.element, bottom = 4.dp),
+    )
 }

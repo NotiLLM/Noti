@@ -5,8 +5,8 @@ import android.app.Application
 import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -19,11 +19,15 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -43,13 +47,15 @@ import org.muilab.notigpt.R
 import org.muilab.notigpt.data.repository.notification.NotiRepositoryProvider
 import org.muilab.notigpt.ui.notification.viewmodel.DrawerViewModel
 import org.muilab.notigpt.ui.notification.viewmodel.DrawerViewModelFactory
+import org.muilab.notigpt.ui.theme.Dimens
 import org.muilab.notigpt.util.SharedPreferencesManager
 
 /**
  * Settings route for runtime configuration, account integrations, and developer controls.
  *
- * Keep settings grouped by user-visible concern. Side effects should call platform/repository helpers rather than
- * being embedded as long-running work in composables.
+ * Grouped into iOS-style section cards (neutral surface, hairline dividers) rendered with Material
+ * [ListItem]s. Side effects call platform/repository helpers rather than embedding long-running work
+ * in composables.
  */
 @RequiresApi(Build.VERSION_CODES.S)
 @Composable
@@ -64,212 +70,183 @@ fun SettingsScreen() {
         )
     )
 
+    var useDynamicColor by remember { mutableStateOf(SharedPreferencesManager.useDynamicColor) }
+    var isLeftSwipe by remember { mutableStateOf(SharedPreferencesManager.swipeDeleteLeft) }
+    var extractionLanguage by remember { mutableStateOf(SharedPreferencesManager.targetExtractionLanguage) }
+    var showLanguagePicker by remember { mutableStateOf(false) }
+    var showExportDialog by remember { mutableStateOf(false) }
+    val originalLabel = stringResource(R.string.ui_settings_extraction_language_original)
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
+            .padding(bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        // --- Dynamic color (Material You) toggle ---
-        var useDynamicColor by remember { mutableStateOf(SharedPreferencesManager.useDynamicColor) }
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
-                Text(
-                    stringResource(R.string.ui_settings_dynamic_color),
-                    style = androidx.compose.material3.MaterialTheme.typography.titleMedium,
-                )
-                Text(
-                    stringResource(R.string.ui_settings_dynamic_color_desc),
-                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Switch(
-                checked = useDynamicColor,
-                onCheckedChange = {
-                    useDynamicColor = it
-                    SharedPreferencesManager.useDynamicColor = it
-                    // Re-run onCreate so NotiTheme re-reads the preference and re-applies the scheme.
-                    (context as? Activity)?.recreate()
+        // ── Appearance ──
+        SettingsSection(stringResource(R.string.settings_section_appearance)) {
+            ListItem(
+                headlineContent = { Text(stringResource(R.string.ui_settings_dynamic_color)) },
+                supportingContent = { Text(stringResource(R.string.ui_settings_dynamic_color_desc)) },
+                trailingContent = {
+                    Switch(
+                        checked = useDynamicColor,
+                        onCheckedChange = {
+                            useDynamicColor = it
+                            SharedPreferencesManager.useDynamicColor = it
+                            // Re-run onCreate so NotiTheme re-reads the preference and re-applies the scheme.
+                            (context as? Activity)?.recreate()
+                        },
+                    )
                 },
+                colors = transparentListItem(),
             )
-        }
-
-        Spacer(modifier = Modifier.size(12.dp))
-
-        var isLeftSwipe by remember { mutableStateOf(SharedPreferencesManager.swipeDeleteLeft) }
-
-        // Simple radio row to choose swipe-delete direction
-        Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(stringResource(R.string.ui_settings_delete_on_swipe), modifier = Modifier.padding(end = 8.dp))
-
-            // Left Option
-            Row(modifier = Modifier.selectable(
-                selected = isLeftSwipe,
-                onClick = {
-                    isLeftSwipe = true
-                    SharedPreferencesManager.swipeDeleteLeft = true
-                },
-                role = Role.RadioButton
-            )) {
-                RadioButton(
-                    selected = isLeftSwipe,
-                    onClick = {
-                        isLeftSwipe = true
-                        SharedPreferencesManager.swipeDeleteLeft = true
+            RowDivider()
+            ListItem(
+                headlineContent = { Text(stringResource(R.string.ui_settings_delete_on_swipe)) },
+                trailingContent = {
+                    androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                            selected = isLeftSwipe,
+                            onClick = { isLeftSwipe = true; SharedPreferencesManager.swipeDeleteLeft = true },
+                            label = { Text(stringResource(R.string.ui_settings_left)) },
+                        )
+                        FilterChip(
+                            selected = !isLeftSwipe,
+                            onClick = { isLeftSwipe = false; SharedPreferencesManager.swipeDeleteLeft = false },
+                            label = { Text(stringResource(R.string.ui_settings_right)) },
+                        )
                     }
-                )
-                Text(stringResource(R.string.ui_settings_left), modifier = Modifier.padding(start = 4.dp, top = 12.dp))
-            }
-
-            Spacer(modifier = Modifier.size(16.dp))
-
-            // Right Option
-            Row(modifier = Modifier.selectable(
-                selected = !isLeftSwipe,
-                onClick = {
-                    isLeftSwipe = false
-                    SharedPreferencesManager.swipeDeleteLeft = false
                 },
-                role = Role.RadioButton
-            )) {
-                RadioButton(
-                    selected = !isLeftSwipe,
-                    onClick = {
-                        isLeftSwipe = false
-                        SharedPreferencesManager.swipeDeleteLeft = false
-                    }
-                )
-                Text(stringResource(R.string.ui_settings_right), modifier = Modifier.padding(start = 4.dp, top = 12.dp))
-            }
-        }
-
-        Spacer(modifier = Modifier.size(12.dp))
-
-
-        // --- Extraction language preference ---
-        var extractionLanguage by remember { mutableStateOf(SharedPreferencesManager.targetExtractionLanguage) }
-        var showLanguagePicker by remember { mutableStateOf(false) }
-        val originalLabel = stringResource(R.string.ui_settings_extraction_language_original)
-
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { showLanguagePicker = true }
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-        ) {
-            Text(
-                stringResource(R.string.ui_settings_extraction_language),
-                style = androidx.compose.material3.MaterialTheme.typography.titleMedium,
-            )
-            Text(
-                extractionLanguageLabel(extractionLanguage, originalLabel),
-                style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
-                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                colors = transparentListItem(),
             )
         }
 
-        if (showLanguagePicker) {
-            ExtractionLanguagePickerDialog(
-                selected = extractionLanguage,
-                originalLabel = originalLabel,
-                onSelect = { value ->
-                    extractionLanguage = value
-                    SharedPreferencesManager.targetExtractionLanguage = value
-                    showLanguagePicker = false
-                },
-                onDismiss = { showLanguagePicker = false },
+        // ── Extraction ──
+        SettingsSection(stringResource(R.string.settings_section_extraction)) {
+            ListItem(
+                headlineContent = { Text(stringResource(R.string.ui_settings_extraction_language)) },
+                supportingContent = { Text(extractionLanguageLabel(extractionLanguage, originalLabel)) },
+                colors = transparentListItem(),
+                modifier = Modifier.clickable { showLanguagePicker = true },
             )
         }
 
-        Spacer(modifier = Modifier.size(24.dp))
+        // ── Data ──
+        SettingsSection(stringResource(R.string.settings_section_data)) {
+            ListItem(
+                headlineContent = { Text(stringResource(R.string.ui_settings_export_data)) },
+                supportingContent = { Text(stringResource(R.string.ui_settings_export_description)) },
+                colors = transparentListItem(),
+                modifier = Modifier.clickable { showExportDialog = true },
+            )
+        }
+    }
 
-        // --- Export Data Section ---
-        var showExportOptions by remember { mutableStateOf(false) }
-        var includeContext by remember { mutableStateOf(true) }
-        var includeDismissed by remember { mutableStateOf(false) }
-
-        Text(
-            stringResource(R.string.ui_settings_export_data),
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-            style = androidx.compose.material3.MaterialTheme.typography.titleMedium
+    if (showLanguagePicker) {
+        ExtractionLanguagePickerDialog(
+            selected = extractionLanguage,
+            originalLabel = originalLabel,
+            onSelect = { value ->
+                extractionLanguage = value
+                SharedPreferencesManager.targetExtractionLanguage = value
+                showLanguagePicker = false
+            },
+            onDismiss = { showLanguagePicker = false },
         )
+    }
 
-        Text(
-            stringResource(R.string.ui_settings_export_description),
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-            style = androidx.compose.material3.MaterialTheme.typography.bodySmall
+    if (showExportDialog) {
+        ExportDataDialog(
+            onDismiss = { showExportDialog = false },
+            onExport = { includeContext, includeDismissed ->
+                drawerViewModel.exportAllData(includeContext, includeDismissed)
+                showExportDialog = false
+            },
         )
+    }
+}
 
-        // Export options
-        if (!showExportOptions) {
-            Button(
-                onClick = { showExportOptions = true },
-                modifier = Modifier
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
-                    .fillMaxWidth()
-            ) {
-                Text(stringResource(R.string.ui_settings_export_data))
-            }
-        } else {
-            // Show options when expanded
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Checkbox(
+/** A titled group of settings rows rendered as one neutral card with hairline dividers. */
+@Composable
+private fun SettingsSection(title: String, content: @Composable () -> Unit) {
+    Text(
+        text = title,
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(start = 28.dp, end = 28.dp, top = Dimens.element, bottom = 6.dp),
+    )
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = Dimens.screenH),
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+    ) {
+        Column { content() }
+    }
+}
+
+@Composable
+private fun RowDivider() {
+    HorizontalDivider(
+        modifier = Modifier.padding(start = 16.dp),
+        color = MaterialTheme.colorScheme.outlineVariant,
+    )
+}
+
+@Composable
+private fun transparentListItem() =
+    ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+
+/** Export options as a confirm dialog (was an inline expanding section). */
+@Composable
+private fun ExportDataDialog(
+    onDismiss: () -> Unit,
+    onExport: (includeContext: Boolean, includeDismissed: Boolean) -> Unit,
+) {
+    var includeContext by remember { mutableStateOf(true) }
+    var includeDismissed by remember { mutableStateOf(false) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.ui_settings_export_data)) },
+        text = {
+            Column {
+                CheckRow(
                     checked = includeContext,
-                    onCheckedChange = { includeContext = it }
+                    onCheckedChange = { includeContext = it },
+                    label = stringResource(R.string.ui_settings_export_include_context),
                 )
-                Text(
-                    stringResource(R.string.ui_settings_export_include_context),
-                    modifier = Modifier.padding(start = 8.dp)
-                )
-            }
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Checkbox(
+                CheckRow(
                     checked = includeDismissed,
-                    onCheckedChange = { includeDismissed = it }
-                )
-                Text(
-                    stringResource(R.string.ui_settings_export_include_dismissed),
-                    modifier = Modifier.padding(start = 8.dp)
+                    onCheckedChange = { includeDismissed = it },
+                    label = stringResource(R.string.ui_settings_export_include_dismissed),
                 )
             }
+        },
+        confirmButton = {
+            TextButton(onClick = { onExport(includeContext, includeDismissed) }) {
+                Text(stringResource(R.string.ui_action_ok))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.ui_action_cancel)) }
+        },
+    )
+}
 
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)
-            ) {
-                Button(
-                    onClick = {
-                        drawerViewModel.exportAllData(includeContext, includeDismissed)
-                        showExportOptions = false
-                    },
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text(stringResource(R.string.ui_action_ok))
-                }
-                TextButton(
-                    onClick = { showExportOptions = false },
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text(stringResource(R.string.ui_action_cancel))
-                }
-            }
-        }
+@Composable
+private fun CheckRow(checked: Boolean, onCheckedChange: (Boolean) -> Unit, label: String) {
+    androidx.compose.foundation.layout.Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .selectable(selected = checked, onClick = { onCheckedChange(!checked) }, role = Role.Checkbox)
+            .padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Checkbox(checked = checked, onCheckedChange = onCheckedChange)
+        Text(label, modifier = Modifier.padding(start = 8.dp))
     }
 }
 
@@ -339,7 +316,7 @@ private fun ExtractionLanguagePickerDialog(
 
 @Composable
 private fun LanguageRow(label: String, selected: Boolean, onClick: () -> Unit) {
-    Row(
+    androidx.compose.foundation.layout.Row(
         modifier = Modifier
             .fillMaxWidth()
             .selectable(selected = selected, onClick = onClick, role = Role.RadioButton)
@@ -350,4 +327,3 @@ private fun LanguageRow(label: String, selected: Boolean, onClick: () -> Unit) {
         Text(label, modifier = Modifier.padding(start = 8.dp))
     }
 }
-

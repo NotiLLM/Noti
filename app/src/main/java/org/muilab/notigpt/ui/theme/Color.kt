@@ -8,6 +8,12 @@ import androidx.compose.ui.graphics.Color
  * The palette is intentionally neutral so that the *semantic* colors (section accents and deadline urgency,
  * see [NotiSemanticColors]) carry the meaning. A single calm indigo serves as the primary/selected-state hue.
  * Keep raw hex values here; map them into [androidx.compose.material3.ColorScheme] roles in Theme.kt.
+ *
+ * Surface-role policy (Apple-restraint direction): the app canvas is `surface` (the lightest role);
+ * list cards sit on `surfaceContainerLow` and the live NotiCard on `surfaceBright`, so cards separate
+ * from the canvas by a subtle step rather than by tinting. Fully tinted container fills
+ * (`primaryContainer`, task/keep containers) are reserved for at most one hero element per screen;
+ * elsewhere, meaning is carried by colored icons/accents/counts on neutral bodies.
  */
 
 // ── Light scheme — neutral chrome + indigo primary ───────────────────────────

@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilterChip
@@ -128,6 +127,7 @@ fun ReviewScreen(
                     val top = filtered.firstOrNull()
                     FilledIconButton(
                         onClick = { top?.let(reviewViewModel::reject) },
+                        modifier = Modifier.size(56.dp),
                         colors = IconButtonDefaults.filledIconButtonColors(
                             containerColor = MaterialTheme.colorScheme.errorContainer,
                             contentColor = MaterialTheme.colorScheme.onErrorContainer,
@@ -143,6 +143,7 @@ fun ReviewScreen(
                     }
                     FilledIconButton(
                         onClick = { top?.let(reviewViewModel::approve) },
+                        modifier = Modifier.size(56.dp),
                         colors = IconButtonDefaults.filledIconButtonColors(
                             containerColor = NotiTheme.semantic.keepContainer,
                             contentColor = NotiTheme.semantic.onKeepContainer,
@@ -236,10 +237,9 @@ private fun MinimalReviewCard(
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-        shadowElevation = 4.dp,
+        shape = MaterialTheme.shapes.extraLarge,
+        color = MaterialTheme.colorScheme.surfaceContainerLowest,
+        shadowElevation = 6.dp,
     ) {
         Box {
             Column(Modifier.padding(20.dp)) {
@@ -302,7 +302,7 @@ private fun androidx.compose.foundation.layout.BoxScope.SwipeGlyph(
             .align(alignment)
             .padding(16.dp)
             .graphicsLayer { this.alpha = alpha },
-        shape = RoundedCornerShape(8.dp),
+        shape = MaterialTheme.shapes.small,
         color = color.copy(alpha = 0.16f),
         border = androidx.compose.foundation.BorderStroke(2.dp, color),
     ) {

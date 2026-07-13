@@ -106,8 +106,11 @@ import org.muilab.notigpt.model.features.SavedSubItem
 import org.muilab.notigpt.data.export.asExportable
 import org.muilab.notigpt.ui.preference.component.PreferenceLearningBottomSheet
 import org.muilab.notigpt.ui.common.component.DueChip
+import org.muilab.notigpt.ui.common.feedback.AppSnackbar
 import org.muilab.notigpt.ui.reminder.component.ExportChooserDialog
 import org.muilab.notigpt.ui.theme.NotiTheme
+import org.muilab.notigpt.ui.theme.NotiType
+import org.muilab.notigpt.ui.theme.Dimens
 import org.muilab.notigpt.ui.notification.component.RelatedNotificationPreview
 import org.muilab.notigpt.ui.reminder.component.SavedSubItemRow
 import org.muilab.notigpt.ui.reminder.component.SavedSubItemListInCard
@@ -123,7 +126,6 @@ import java.util.Calendar
 import org.muilab.notigpt.ui.common.clipboard.AndroidClipboardController
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.snapshotFlow
@@ -237,19 +239,11 @@ fun RemindersScreen(
     LaunchedEffect(googleTasksExportResult) {
         when (val r = googleTasksExportResult) {
             is ReminderViewModel.GoogleTasksExportResult.Success -> {
-                android.widget.Toast.makeText(
-                    context,
-                    strGoogleTasksSuccess,
-                    android.widget.Toast.LENGTH_SHORT
-                ).show()
+                AppSnackbar.show(strGoogleTasksSuccess)
                 vm.clearGoogleTasksExportResult()
             }
             is ReminderViewModel.GoogleTasksExportResult.Error -> {
-                android.widget.Toast.makeText(
-                    context,
-                    strGoogleTasksErrorFmt.replace("%s", r.message ?: ""),
-                    android.widget.Toast.LENGTH_LONG
-                ).show()
+                AppSnackbar.show(strGoogleTasksErrorFmt.replace("%s", r.message ?: ""))
                 vm.clearGoogleTasksExportResult()
             }
             is ReminderViewModel.GoogleTasksExportResult.NotSignedIn -> {
@@ -769,11 +763,7 @@ fun RemindersScreen(
                 try {
                     context.startActivity(calIntent)
                 } catch (_: Exception) {
-                    android.widget.Toast.makeText(
-                        context,
-                        strGoogleCalendarNoApp,
-                        android.widget.Toast.LENGTH_SHORT
-                    ).show()
+                    AppSnackbar.show(strGoogleCalendarNoApp)
                 }
             },
         )
@@ -954,8 +944,8 @@ fun ReminderCard(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 6.dp),
-        shape = RoundedCornerShape(12.dp),
+            .padding(horizontal = Dimens.screenH, vertical = Dimens.cardOuterV),
+        shape = MaterialTheme.shapes.medium,
         color = if (selectionMode && selected) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.surfaceContainerLow,
         border = BorderStroke(
             if (selectionMode && selected) 1.5.dp else 0.5.dp,
@@ -1023,7 +1013,7 @@ fun ReminderCard(
                 // Review badge: stays until the user explicitly acknowledges in the detail view.
                 if (reminder.isNewLike && !selectionMode) {
                     Surface(
-                        shape = RoundedCornerShape(6.dp),
+                        shape = MaterialTheme.shapes.extraSmall,
                         color = MaterialTheme.colorScheme.secondaryContainer,
                         modifier = Modifier.padding(bottom = 2.dp),
                     ) {
@@ -1041,15 +1031,17 @@ fun ReminderCard(
 
                 // Title row
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    val titleStyle = if (reminder.isTask && reminder.isCompleted) {
-                        MaterialTheme.typography.titleMedium.copy(textDecoration = TextDecoration.LineThrough)
-                    } else MaterialTheme.typography.titleMedium
+                    val completed = reminder.isTask && reminder.isCompleted
+                    val titleStyle = if (completed) {
+                        NotiType.cardTitle.copy(textDecoration = TextDecoration.LineThrough)
+                    } else NotiType.cardTitle
 
                     Text(
                         text = reminder.title.ifBlank {
                             if (reminder.isTask) stringResource(R.string.ui_reminders_untitled_task) else stringResource(R.string.ui_reminders_untitled_memo)
                         },
                         style = titleStyle,
+                        color = if (completed) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
                         maxLines = if (expanded) Int.MAX_VALUE else 2,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f)
@@ -1295,7 +1287,7 @@ private fun DoDateBottomButton(
     val tint = if (hasDo) accent else MaterialTheme.colorScheme.onSurfaceVariant
     Row(
         modifier = Modifier
-            .clip(RoundedCornerShape(8.dp))
+            .clip(MaterialTheme.shapes.small)
             .clickable(onClick = onClick)
             .padding(horizontal = 8.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,

@@ -1,7 +1,6 @@
 package org.muilab.notigpt.ui.common.component
 
 import android.os.Build
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.Row
@@ -16,6 +15,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import org.muilab.notigpt.R
+import org.muilab.notigpt.ui.common.feedback.AppSnackbar
 import org.muilab.notigpt.ui.notification.viewmodel.DrawerViewModel
 
 /**
@@ -39,7 +39,7 @@ fun UserControlPanel(drawerViewModel: DrawerViewModel) {
         TextButton(
             onClick = {
                 drawerViewModel.deleteAllNotis()
-                Toast.makeText(context, context.getString(R.string.ui_user_all_notifications_deleted), Toast.LENGTH_SHORT).show()
+                AppSnackbar.show(context.getString(R.string.ui_user_all_notifications_deleted))
             },
         ) {
             Text(stringResource(R.string.ui_user_clear_all))

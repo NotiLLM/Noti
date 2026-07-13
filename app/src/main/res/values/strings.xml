@@ -40,6 +40,11 @@
     <string name="ui_settings_extraction_language_zhtw">繁體中文 (zh-TW)</string>
     <string name="ui_settings_extraction_language_search">Search languages</string>
 
+    <string name="scheduled_reminder_time">Reminder time: %1$s</string>
+    <string name="scheduled_pick_time">Pick time</string>
+    <string name="settings_section_appearance">Appearance</string>
+    <string name="settings_section_extraction">Extraction</string>
+    <string name="settings_section_data">Data</string>
     <string name="ui_settings_export_data">Export Data</string>
     <string name="ui_settings_export_description">Export all notifications and user actions</string>
     <string name="ui_settings_export_include_dismissed">Include dismissed notifications</string>
@@ -420,6 +425,11 @@
     <string name="menu_home">Home</string>
     <string name="menu_reminders">Reminders</string>
     <string name="menu_history">History</string>
+    <string name="menu_section_collections">Collections</string>
+    <string name="menu_section_more">More</string>
+    <string name="home_reminders_due">%1$d reminders due</string>
+    <string name="noti_clear_all_confirm_title">Clear notifications?</string>
+    <string name="noti_clear_all_confirm_message">This removes the notifications currently shown in this list. Pinned notifications are kept.</string>
     <string name="a11y_more_actions">More actions</string>
 
     <!-- New screen sections + triage -->

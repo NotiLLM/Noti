@@ -1,5 +1,26 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <style name="Theme.NotiTask" parent="android:Theme.Material.Light.NoActionBar" />
+    <!-- Launch theme: shows the app icon on a solid window background via the SplashScreen API,
+         then hands off to the post-splash theme. DayNight background (see values-night) so a
+         dark-mode cold start has no white flash. -->
+    <style name="Theme.NotiTask.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/splash_background</item>
+        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
+        <item name="postSplashScreenTheme">@style/Theme.NotiTask</item>
+    </style>
+
+    <!-- App theme: edge-to-edge, no title bar. Compose owns all UI colors; this platform DayNight
+         parent (no Material Components dependency needed) only provides a mode-correct window
+         background for pre-Compose frames. enableEdgeToEdge() in MainActivity handles the
+         transparent system bars and icon contrast. -->
+    <style name="Theme.NotiTask" parent="@android:style/Theme.DeviceDefault.DayNight">
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowActionBar">false</item>
+        <item name="android:windowBackground">@color/splash_background</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
+    </style>
+
 </resources>

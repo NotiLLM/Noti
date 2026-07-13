@@ -11,7 +11,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.AnchoredDraggableState
-import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.gestures.animateTo
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -38,15 +38,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import kotlinx.coroutines.launch
+import org.muilab.notigpt.R
 import org.muilab.notigpt.model.notifications.NotiDisplayUnit
 import org.muilab.notigpt.model.notifications.NotiRecord
 import org.muilab.notigpt.ui.notification.component.card.noticard.elements.NOTI_CARD_COLLAPSE_THRESHOLD_PX_DEFAULT
@@ -113,9 +116,11 @@ fun NotiCard(
 
     val backgroundColor = MaterialTheme.colorScheme.surfaceBright
 
-    val borderColor = MaterialTheme.colorScheme.outline
-
-    val borderWidth = if (notiUnit.sortPosition != -1) 3.dp else 1.dp
+    // A single hairline; a pinned/sorted card is marked by a primary-tinted 1.5dp edge instead of a
+    // heavy outline. (Previously an outline border plus a second rim border stacked on the card.)
+    val isHighlighted = notiUnit.sortPosition != -1
+    val borderColor = if (isHighlighted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
+    val borderWidth = if (isHighlighted) 1.5.dp else 1.dp
 
     // Expand state
     val maxHeightDp = 200.dp
@@ -186,6 +191,7 @@ fun NotiCard(
     }
 
     val coroutineScope = rememberCoroutineScope()
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
     val horizontalOffsetX = remember { Animatable(0f) }
     var endActionsWidth by remember { mutableFloatStateOf(0f) }
     var cardWidth by remember { mutableFloatStateOf(0f) }
@@ -201,22 +207,59 @@ fun NotiCard(
         swipeDeleteLeft = swipeDeleteLeft,
         excludedBounds = excludedBoundsRelativeToSurface,
         horizontalOffsetX = horizontalOffsetX,
-        onDismiss = { drawerViewModel.archiveNewNotificationCard(notiKey) },
+        onDismiss = {
+            org.muilab.notigpt.ui.common.feedback.Haptics.commit(haptic)
+            drawerViewModel.archiveNewNotificationCard(notiKey)
+        },
         scope = coroutineScope,
         onSwipeActiveChanged = { isSwipeActive = it },
     )
 
     val scaleValue by animateFloatAsState(if (isDragging) 1.02f else 1f)
-    val isDarkTheme = isSystemInDarkTheme()
 
-    val rimColor = if (isDarkTheme) Color.White.copy(alpha = 0.08f) else Color.Black.copy(alpha = 0.06f)
-    val surfaceBorderModifier = Modifier.border(1.dp, rimColor, shape = MaterialTheme.shapes.large)
     val targetLift = 0.dp
     val lift by animateDpAsState(targetLift, label = "lift")
 
+    // TalkBack custom actions mirror every gesture affordance (swipe/drag/long-press) so the card is
+    // fully operable without them. Labels resolved here since the semantics block is not composable.
+    val a11yArchive = stringResource(R.string.a11y_archive)
+    val a11yPin = stringResource(R.string.ui_noti_action_pin)
+    val a11yUnpin = stringResource(R.string.ui_noti_action_unpin)
+    val a11yExpand = stringResource(R.string.a11y_expand)
+    val a11yCollapse = stringResource(R.string.a11y_collapse)
+    val a11yExtract = stringResource(R.string.ui_action_extract_reminder)
+    val a11yCreateReminder = stringResource(R.string.ui_reminders_create_button)
+    val cardActions = buildList {
+        add(androidx.compose.ui.semantics.CustomAccessibilityAction(a11yArchive) {
+            org.muilab.notigpt.ui.common.feedback.Haptics.commit(haptic)
+            drawerViewModel.archiveNewNotificationCard(notiKey); true
+        })
+        add(androidx.compose.ui.semantics.CustomAccessibilityAction(if (isPinned) a11yUnpin else a11yPin) {
+            drawerViewModel.actOnNoti(notiKey, if (isPinned) "unpin" else "pin"); true
+        })
+        if (requiresExpansion) add(
+            androidx.compose.ui.semantics.CustomAccessibilityAction(
+                if (anchored.offset < collapseThreshold) a11yExpand else a11yCollapse
+            ) {
+                coroutineScope.launch {
+                    if (anchored.offset < 20f) anchored.animateTo(NotiExpandState.Opened)
+                    else anchored.animateTo(NotiExpandState.Collapsed)
+                }; true
+            }
+        )
+        add(androidx.compose.ui.semantics.CustomAccessibilityAction(a11yExtract) {
+            drawerViewModel.actOnNoti(notiKey, "extract_reminder"); true
+        })
+        onCreateReminder?.let { cb ->
+            add(androidx.compose.ui.semantics.CustomAccessibilityAction(a11yCreateReminder) {
+                cb(notiOverallTitle, notiRecords); true
+            })
+        }
+    }
+
     Box(
         modifier = Modifier
-            .padding(vertical = 1.dp, horizontal = 20.dp)
+            .padding(vertical = 3.dp, horizontal = org.muilab.notigpt.ui.theme.Dimens.screenH)
             .graphicsLayer {
                 scaleX = scaleValue
                 scaleY = scaleValue
@@ -271,7 +314,10 @@ fun NotiCard(
                         drawerViewModel.accessAndDismissNotification(notiUnit)
                     },
                     onLongClick = {
-                        if (!isSortingMode) showOptionsDialog = true
+                        if (!isSortingMode) {
+                            org.muilab.notigpt.ui.common.feedback.Haptics.longPress(haptic)
+                            showOptionsDialog = true
+                        }
                     },
                 )
                 // Swipe handler lives at the Surface level so the whole card is swipeable (except the
@@ -279,7 +325,7 @@ fun NotiCard(
                 // then in the same coordinate space as surfaceBoundsInWindow.
                 .then(if (isSortingMode) Modifier else swipeModifier)
                 .onGloballyPositioned { coords -> surfaceBoundsInWindow = coords.boundsInWindow() }
-                .then(surfaceBorderModifier),
+                .semantics { customActions = cardActions },
             shape = MaterialTheme.shapes.large,
             shadowElevation = 0.dp,
             color = backgroundColor,

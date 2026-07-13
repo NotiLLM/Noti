@@ -1,6 +1,6 @@
 package org.muilab.notigpt.ui.notification.screen
 
-import android.widget.Toast
+import org.muilab.notigpt.ui.common.feedback.AppSnackbar
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -14,19 +14,21 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -176,7 +178,7 @@ private fun HistoryGroupCard(
                     )
                 },
             ),
-        shape = RoundedCornerShape(12.dp),
+        shape = MaterialTheme.shapes.medium,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
         border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
@@ -226,7 +228,7 @@ private fun HistoryRecordCard(
                 onClick = {},
                 onLongClick = { onLongPress(record.toMenuTarget()) },
             ),
-        shape = RoundedCornerShape(12.dp),
+        shape = MaterialTheme.shapes.medium,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
         border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
@@ -267,6 +269,7 @@ private fun HistoryRecordContent(record: NotiRecord, onLongPress: (HistoryMenuTa
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun HistoryActionMenu(
     drawerViewModel: DrawerViewModel,
@@ -276,48 +279,34 @@ private fun HistoryActionMenu(
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.ui_noti_menu_title)) },
-        text = {
-            Column {
-                TextButton(
-                    onClick = {
-                        clipboard.setText(AnnotatedString(target.copyText))
-                        Toast.makeText(context, R.string.history_copied, Toast.LENGTH_SHORT).show()
-                        onDismiss()
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                        Icon(painterResource(R.drawable.copy), contentDescription = null, modifier = Modifier.size(22.dp))
-                        Spacer(Modifier.width(12.dp))
-                        Text(stringResource(R.string.history_action_copy))
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+        Column(Modifier.navigationBarsPadding()) {
+            ListItem(
+                headlineContent = { Text(stringResource(R.string.history_action_copy)) },
+                leadingContent = { Icon(painterResource(R.drawable.copy), contentDescription = null, modifier = Modifier.size(24.dp)) },
+                colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
+                modifier = Modifier.clickable {
+                    clipboard.setText(AnnotatedString(target.copyText))
+                    AppSnackbar.show(context.getString(R.string.history_copied))
+                    onDismiss()
+                },
+            )
+            ListItem(
+                headlineContent = { Text(stringResource(R.string.ui_action_extract_reminder)) },
+                leadingContent = { Icon(painterResource(R.drawable.task), contentDescription = null, modifier = Modifier.size(24.dp)) },
+                colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
+                modifier = Modifier.clickable {
+                    scope.launch {
+                        val idsJson = com.google.gson.Gson().toJson(target.recordIds.distinct())
+                        drawerViewModel.actOnNoti(target.notiKey, "extract_reminder_with_records::$idsJson")
+                        AppSnackbar.show(context.getString(R.string.history_extract_requested))
                     }
-                }
-                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-                TextButton(
-                    onClick = {
-                        scope.launch {
-                            val idsJson = com.google.gson.Gson().toJson(target.recordIds.distinct())
-                            drawerViewModel.actOnNoti(target.notiKey, "extract_reminder_with_records::$idsJson")
-                            Toast.makeText(context, R.string.history_extract_requested, Toast.LENGTH_SHORT).show()
-                        }
-                        onDismiss()
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                        Icon(painterResource(R.drawable.task), contentDescription = null, modifier = Modifier.size(22.dp))
-                        Spacer(Modifier.width(12.dp))
-                        Text(stringResource(R.string.ui_action_extract_reminder))
-                    }
-                }
-            }
-        },
-        confirmButton = {},
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.ui_action_cancel)) } },
-    )
+                    onDismiss()
+                },
+            )
+        }
+    }
 }
 
 private fun NotiRecord.toMenuTarget(): HistoryMenuTarget =
