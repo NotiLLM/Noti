@@ -4,16 +4,18 @@ import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -27,7 +29,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -40,6 +41,8 @@ import org.muilab.notigpt.ui.home.viewmodel.CategoryPreviewLine
 import org.muilab.notigpt.ui.home.viewmodel.HomeViewModel
 import org.muilab.notigpt.ui.home.viewmodel.ReviewCounts
 import org.muilab.notigpt.ui.notification.viewmodel.DrawerViewModel
+import org.muilab.notigpt.ui.theme.Dimens
+import org.muilab.notigpt.ui.theme.NotiType
 import org.muilab.notigpt.ui.theme.NotiTheme
 
 /**
@@ -48,6 +51,9 @@ import org.muilab.notigpt.ui.theme.NotiTheme
  * Ordered by the user's real workflow: (1) review new/updated generated items, (2) check recent
  * notifications by category, (3) browse saved items via planned-date smart filters and the
  * Tasks/Keep collections.
+ *
+ * Visual system (Apple-restraint): a single tinted hero (the Review row); everything else is a
+ * neutral card whose meaning comes from a small colored icon disc and a bold count.
  */
 @RequiresApi(Build.VERSION_CODES.S)
 @Composable
@@ -71,7 +77,7 @@ fun HomeScreen(
 
     LazyColumn(
         modifier = Modifier.fillMaxWidth(),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 24.dp),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 8.dp, bottom = 24.dp),
     ) {
         item {
             ReviewRow(counts = reviewCounts, onClick = onOpenReview)
@@ -115,23 +121,29 @@ private fun HomeSectionHeader(title: String) {
         text = title,
         style = MaterialTheme.typography.titleSmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 8.dp),
+        modifier = Modifier.padding(
+            start = 20.dp,
+            end = 20.dp,
+            top = Dimens.sectionTop,
+            bottom = Dimens.sectionHeaderBottom,
+        ),
     )
 }
 
 @Composable
 private fun ReviewRow(counts: ReviewCounts, onClick: () -> Unit) {
     val summary = reviewSummary(counts)
+    // The screen's single tinted hero.
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .padding(horizontal = Dimens.screenH, vertical = Dimens.inline)
             .clickable(enabled = counts.total > 0, onClick = onClick),
-        shape = RoundedCornerShape(16.dp),
+        shape = MaterialTheme.shapes.large,
         color = MaterialTheme.colorScheme.primaryContainer,
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
+            modifier = Modifier.padding(20.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(
@@ -144,8 +156,7 @@ private fun ReviewRow(counts: ReviewCounts, onClick: () -> Unit) {
             Column(Modifier.weight(1f)) {
                 Text(
                     text = stringResource(R.string.home_review_title),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
+                    style = NotiType.cardTitle,
                     color = MaterialTheme.colorScheme.onPrimaryContainer,
                 )
                 Text(
@@ -183,13 +194,15 @@ private fun NotiCategoryRow(iconRes: Int, title: String, preview: CategoryPrevie
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 6.dp)
+            .padding(horizontal = Dimens.screenH, vertical = Dimens.cardOuterV)
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(14.dp),
+        shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surfaceContainerLow,
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+            modifier = Modifier
+                .heightIn(min = 72.dp)
+                .padding(horizontal = Dimens.cardInner, vertical = 14.dp),
             verticalAlignment = Alignment.Top,
         ) {
             Icon(
@@ -200,7 +213,7 @@ private fun NotiCategoryRow(iconRes: Int, title: String, preview: CategoryPrevie
             )
             Spacer(Modifier.size(16.dp))
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(text = title, style = MaterialTheme.typography.titleMedium)
+                Text(text = title, style = NotiType.cardTitle)
                 if (preview.topLines.isEmpty()) {
                     Text(
                         text = stringResource(R.string.home_noti_none),
@@ -251,23 +264,25 @@ private fun SmartFilterGrid(
     onOpen: (SavedListFilter) -> Unit,
 ) {
     Column(
-        modifier = Modifier.padding(horizontal = 16.dp),
+        modifier = Modifier.padding(horizontal = Dimens.screenH),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             SmartFilterBox(
                 count = counts.todayEarlier,
                 label = stringResource(R.string.home_filter_today),
-                container = NotiTheme.semantic.taskContainer,
-                content = NotiTheme.semantic.onTaskContainer,
+                iconRes = R.drawable.ic_calendar_today,
+                discContainer = NotiTheme.semantic.taskContainer,
+                discContent = NotiTheme.semantic.taskAccent,
                 onClick = { onOpen(SavedListFilter.TodayEarlier) },
                 modifier = Modifier.weight(1f),
             )
             SmartFilterBox(
                 count = counts.upcoming,
                 label = stringResource(R.string.home_filter_upcoming),
-                container = NotiTheme.semantic.keepContainer,
-                content = NotiTheme.semantic.onKeepContainer,
+                iconRes = R.drawable.schedule,
+                discContainer = NotiTheme.semantic.keepContainer,
+                discContent = NotiTheme.semantic.keepAccent,
                 onClick = { onOpen(SavedListFilter.Upcoming) },
                 modifier = Modifier.weight(1f),
             )
@@ -276,27 +291,30 @@ private fun SmartFilterGrid(
             SmartFilterBox(
                 count = counts.someday,
                 label = stringResource(R.string.home_filter_someday),
-                container = MaterialTheme.colorScheme.surfaceContainerHighest,
-                content = MaterialTheme.colorScheme.onSurface,
+                iconRes = R.drawable.inbox,
+                discContainer = MaterialTheme.colorScheme.surfaceContainerHighest,
+                discContent = MaterialTheme.colorScheme.onSurfaceVariant,
                 onClick = { onOpen(SavedListFilter.Someday) },
                 modifier = Modifier.weight(1f),
             )
             SmartFilterBox(
                 count = counts.starred,
                 label = stringResource(R.string.home_filter_starred),
-                container = NotiTheme.semantic.dueSoonContainer,
-                content = NotiTheme.semantic.onDueSoonContainer,
+                iconRes = R.drawable.star_yes,
+                discContainer = NotiTheme.semantic.dueSoonContainer,
+                discContent = NotiTheme.semantic.dueSoon,
                 onClick = { onOpen(SavedListFilter.Starred) },
                 modifier = Modifier.weight(1f),
             )
         }
-        // Undetermined is the large unplanned-triage pool; give it its own full-width box, still a box
-        // (not a collection row) so it reads as a smart filter. Task-only, so it skips the type split.
+        // Undetermined is the large unplanned-triage pool; a full-width box, still a box (not a
+        // collection row) so it reads as a smart filter. Task-only, so it skips the type split.
         SmartFilterBox(
             count = counts.undetermined,
             label = stringResource(R.string.home_filter_undetermined),
-            container = MaterialTheme.colorScheme.surfaceContainerHigh,
-            content = MaterialTheme.colorScheme.onSurfaceVariant,
+            iconRes = R.drawable.assignment_late,
+            discContainer = MaterialTheme.colorScheme.surfaceContainerHighest,
+            discContent = MaterialTheme.colorScheme.onSurfaceVariant,
             onClick = { onOpen(SavedListFilter.Undetermined) },
             modifier = Modifier.fillMaxWidth(),
             fullWidth = true,
@@ -308,33 +326,35 @@ private fun SmartFilterGrid(
 private fun SmartFilterBox(
     count: org.muilab.notigpt.data.local.room.dao.BucketCount,
     label: String,
-    container: Color,
-    content: Color,
+    iconRes: Int,
+    discContainer: Color,
+    discContent: Color,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     fullWidth: Boolean = false,
 ) {
+    // Neutral body; meaning carried by the colored disc + count.
     Surface(
         modifier = modifier
-            .then(if (fullWidth) Modifier.height(72.dp) else Modifier.aspectRatio(1.7f))
+            .then(if (fullWidth) Modifier.height(72.dp) else Modifier.aspectRatio(1.6f))
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(16.dp),
-        color = container,
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
     ) {
         if (fullWidth) {
-            // Undetermined is task-only: the total already reflects tasks, so no type split here.
             Row(
                 modifier = Modifier.padding(horizontal = 20.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                FilterDisc(iconRes, discContainer, discContent)
+                Spacer(Modifier.size(16.dp))
                 Text(
                     text = count.total.toString(),
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = content,
+                    style = NotiType.statNumber,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
                 Spacer(Modifier.size(16.dp))
-                Text(text = label, style = MaterialTheme.typography.titleMedium, color = content)
+                Text(text = label, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
             }
         } else {
             Column(
@@ -343,17 +363,38 @@ private fun SmartFilterBox(
                     .padding(16.dp),
                 verticalArrangement = Arrangement.SpaceBetween,
             ) {
-                Text(
-                    text = count.total.toString(),
-                    style = MaterialTheme.typography.headlineLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = content,
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    FilterDisc(iconRes, discContainer, discContent)
+                    Text(
+                        text = count.total.toString(),
+                        style = NotiType.statNumber,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
                 Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Text(text = label, style = MaterialTheme.typography.titleSmall, color = content)
-                    TypeBreakdown(count = count, content = content)
+                    Text(text = label, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
+                    TypeBreakdown(count = count, content = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
+        }
+    }
+}
+
+/** Small colored icon disc — the sanctioned spot of section color on an otherwise neutral tile. */
+@Composable
+private fun FilterDisc(iconRes: Int, container: Color, content: Color) {
+    Surface(shape = CircleShape, color = container, modifier = Modifier.size(34.dp)) {
+        Box(contentAlignment = Alignment.Center) {
+            Icon(
+                painter = painterResource(iconRes),
+                contentDescription = null,
+                tint = content,
+                modifier = Modifier.size(18.dp),
+            )
         }
     }
 }
@@ -386,8 +427,7 @@ private fun TypeCountChip(value: Int, iconRes: Int, content: Color) {
     ) {
         Text(
             text = value.toString(),
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.SemiBold,
+            style = NotiType.metadata,
             color = content,
         )
         Icon(
@@ -401,11 +441,10 @@ private fun TypeCountChip(value: Int, iconRes: Int, content: Color) {
 
 @Composable
 private fun CountBadge(count: Int, contentColor: Color, containerColor: Color) {
-    Surface(shape = RoundedCornerShape(12.dp), color = containerColor) {
+    Surface(shape = MaterialTheme.shapes.extraSmall, color = containerColor) {
         Text(
             text = count.toString(),
             style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.SemiBold,
             color = contentColor,
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
         )
