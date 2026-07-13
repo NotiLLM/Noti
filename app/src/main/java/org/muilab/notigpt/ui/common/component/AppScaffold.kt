@@ -19,9 +19,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberTopAppBarState
@@ -116,6 +118,8 @@ fun AppScaffold(
 
     // A task/keep detail editor is open → hide the app bars (full-screen detail).
     var detailOpen by remember { mutableStateOf(false) }
+    // Category pending "clear all" confirmation (the clear is a hard delete, so we confirm first).
+    var clearConfirmCategory by remember { mutableStateOf<String?>(null) }
     // The home root uses a collapsing large-title bar; list screens use an enter-always small bar;
     // everything else has a pinned small bar (no scroll behavior).
     val listScrollEnabled = menuScreen == AppMenuScreen.History ||
@@ -356,7 +360,7 @@ fun AppScaffold(
                                 val enabled = clearableCount > 0
                                 IconButton(
                                     enabled = enabled,
-                                    onClick = { drawerViewModel.clearVisibleNotis(category) },
+                                    onClick = { clearConfirmCategory = category },
                                 ) {
                                     Icon(
                                         painter = painterResource(R.drawable.delete),
@@ -458,6 +462,30 @@ fun AppScaffold(
                 }
             }
         }
+    }
+
+    clearConfirmCategory?.let { category ->
+        AlertDialog(
+            onDismissRequest = { clearConfirmCategory = null },
+            title = { Text(stringResource(R.string.noti_clear_all_confirm_title)) },
+            text = { Text(stringResource(R.string.noti_clear_all_confirm_message)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    drawerViewModel.clearVisibleNotis(category)
+                    clearConfirmCategory = null
+                }) {
+                    Text(
+                        stringResource(R.string.ui_user_clear_all),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { clearConfirmCategory = null }) {
+                    Text(stringResource(R.string.ui_action_cancel))
+                }
+            },
+        )
     }
 }
 

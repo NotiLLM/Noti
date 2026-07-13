@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -137,7 +138,7 @@ fun NotiCardOverlayButtons(
                         if (isPinned) drawerViewModel.actOnNoti(notiKey, NotiActionType.Unpin)
                         else drawerViewModel.actOnNoti(notiKey, NotiActionType.Pin)
                     },
-                    if (isPinned) Color(76, 139, 245) else Color.Unspecified,
+                    if (isPinned) MaterialTheme.colorScheme.primary else Color.Unspecified,
                 )
             }
         }

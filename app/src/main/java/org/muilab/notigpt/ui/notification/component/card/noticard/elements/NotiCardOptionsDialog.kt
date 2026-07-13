@@ -2,19 +2,19 @@ package org.muilab.notigpt.ui.notification.component.card.noticard.elements
 
 import android.os.Build
 import androidx.annotation.RequiresApi
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -23,15 +23,16 @@ import org.muilab.notigpt.R
 import org.muilab.notigpt.ui.notification.viewmodel.DrawerViewModel
 
 /**
- * Options dialog and transient dialog state for one notification card.
- *
- * Keep dialog-local visibility and text input here. Persisted actions such as pinning, extraction, or feedback
- * should continue flowing through callbacks owned by the screen/ViewModel.
+ * Options for one notification card, shown as a Material bottom sheet of list items (was an
+ * AlertDialog of text buttons). Long-press on the card opens it. Every action the card exposes
+ * elsewhere is reachable here: pin/unpin, extract task, and — when available — create a scheduled
+ * reminder. Persisted actions flow through callbacks owned by the screen/ViewModel.
  */
 data class NotiCardOptionsState(
     val isPinned: Boolean,
 )
 
+@OptIn(ExperimentalMaterial3Api::class)
 @RequiresApi(Build.VERSION_CODES.S)
 @Composable
 fun NotiCardOptionsDialog(
@@ -44,106 +45,52 @@ fun NotiCardOptionsDialog(
 ) {
     if (!show) return
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.ui_noti_options_title)) },
-        text = {
-            Column {
-                TextButton(
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+        Column(Modifier.navigationBarsPadding()) {
+            OptionRow(
+                iconRes = if (state.isPinned) R.drawable.pin_yes else R.drawable.pin_no,
+                label = stringResource(if (state.isPinned) R.string.ui_noti_action_unpin else R.string.ui_noti_action_pin),
+                onClick = {
+                    drawerViewModel.actOnNoti(notiKey, if (state.isPinned) "unpin" else "pin")
+                    onDismiss()
+                },
+            )
+            OptionRow(
+                iconRes = R.drawable.task,
+                label = stringResource(R.string.ui_action_extract_reminder),
+                onClick = {
+                    drawerViewModel.actOnNoti(notiKey, "extract_reminder")
+                    onDismiss()
+                },
+            )
+            if (onCreateReminder != null) {
+                OptionRow(
+                    iconRes = R.drawable.schedule,
+                    label = stringResource(R.string.ui_reminders_create_button),
                     onClick = {
-                        drawerViewModel.actOnNoti(
-                            notiKey,
-                            if (state.isPinned) "unpin" else "pin",
-                        )
+                        onCreateReminder()
                         onDismiss()
                     },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Start,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Icon(
-                            painter = painterResource(if (state.isPinned) R.drawable.pin_yes else R.drawable.pin_no),
-                            contentDescription = stringResource(if (state.isPinned) R.string.ui_noti_action_unpin else R.string.ui_noti_action_pin),
-                            modifier = Modifier.size(24.dp),
-                        )
-                        Spacer(Modifier.width(12.dp))
-                        Text(stringResource(if (state.isPinned) R.string.ui_noti_action_unpin else R.string.ui_noti_action_pin))
-                    }
-                }
-//                TextButton(
-//                    onClick = {
-//                        drawerViewModel.actOnNoti(notiKey, "dismiss")
-//                        onDismiss()
-//                    },
-//                    modifier = Modifier.fillMaxWidth(),
-//                ) {
-//                    Row(
-//                        verticalAlignment = Alignment.CenterVertically,
-//                        horizontalArrangement = Arrangement.Start,
-//                        modifier = Modifier.fillMaxWidth(),
-//                    ) {
-//                        Icon(
-//                            painter = painterResource(R.drawable.close),
-//                            contentDescription = stringResource(R.string.ui_noti_action_dismiss),
-//                            modifier = Modifier.size(24.dp),
-//                        )
-//                        Spacer(Modifier.width(12.dp))
-//                        Text(stringResource(R.string.ui_noti_action_dismiss))
-//                    }
-//                }
-
-                TextButton(
-                    onClick = {
-                        drawerViewModel.actOnNoti(notiKey, "extract_reminder")
-                        onDismiss()
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Start,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Icon(
-                            painter = painterResource(R.drawable.task),
-                            contentDescription = stringResource(R.string.ui_action_extract_reminder),
-                            modifier = Modifier.size(24.dp),
-                        )
-                        Spacer(Modifier.width(12.dp))
-                        Text(stringResource(R.string.ui_action_extract_reminder))
-                    }
-                }
-
-                if (onCreateReminder != null) {
-                    TextButton(
-                        onClick = {
-                            onCreateReminder()
-                            onDismiss()
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Start,
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Icon(
-                                painter = painterResource(R.drawable.schedule),
-                                contentDescription = stringResource(R.string.ui_reminders_create_button),
-                                modifier = Modifier.size(24.dp),
-                            )
-                            Spacer(Modifier.width(12.dp))
-                            Text(stringResource(R.string.ui_reminders_create_button))
-                        }
-                    }
-                }
+                )
             }
+        }
+    }
+}
+
+@Composable
+private fun OptionRow(iconRes: Int, label: String, onClick: () -> Unit) {
+    ListItem(
+        headlineContent = { Text(label) },
+        leadingContent = {
+            Icon(
+                painter = painterResource(iconRes),
+                contentDescription = null,
+                modifier = Modifier.size(24.dp),
+            )
         },
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.ui_action_close)) }
-        },
+        colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
+        modifier = Modifier.clickable(onClick = onClick),
     )
 }

@@ -422,6 +422,8 @@
     <string name="menu_history">History</string>
     <string name="menu_section_collections">Collections</string>
     <string name="menu_section_more">More</string>
+    <string name="noti_clear_all_confirm_title">Clear notifications?</string>
+    <string name="noti_clear_all_confirm_message">This removes the notifications currently shown in this list. Pinned notifications are kept.</string>
     <string name="a11y_more_actions">More actions</string>
 
     <!-- New screen sections + triage -->
