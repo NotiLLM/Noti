@@ -242,6 +242,22 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
+    /**
+     * Opens the preference-learning bottom sheet immediately for [entryPoint], skipping the snackbar
+     * step. Used when the trigger is itself a deliberate tap (e.g. the review screen's "Tell it why").
+     */
+    fun startFlowSheet(
+        entryPoint: PreferenceEntryPoint,
+        reminder: SavedItem?,
+        reminderBefore: SavedItem? = null,
+        contextData: Map<String, Any?> = emptyMap(),
+    ) {
+        val enriched = buildContextData(reminder, reminderBefore, contextData)
+        _currentReminder = reminder
+        _currentReminderBefore = reminderBefore
+        _bottomSheetStep.value = BottomSheetStep.Scope(entryPoint, enriched)
+    }
+
     fun dismissBottomSheet() {
         _bottomSheetStep.value = BottomSheetStep.Hidden
         _currentReminder = null
@@ -630,6 +646,21 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
         }
         _pendingActions.value = updatedActions
         maybeAutoClearChat(updatedActions)
+    }
+
+    /** Batch controls for when the LLM proposes many rules at once (chat NL stays available). */
+    fun confirmAllProposedActions() {
+        _pendingActions.value
+            .filter { !it.confirmed && !it.dismissed }
+            .forEach { confirmProposedAction(it.actionId) }
+    }
+
+    fun dismissAllProposedActions() {
+        val updated = _pendingActions.value.map {
+            if (!it.confirmed && !it.dismissed) it.copy(dismissed = true) else it
+        }
+        _pendingActions.value = updated
+        maybeAutoClearChat(updated)
     }
 
     /**

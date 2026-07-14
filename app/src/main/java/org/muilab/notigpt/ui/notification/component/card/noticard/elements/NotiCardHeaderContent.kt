@@ -22,11 +22,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.core.graphics.scale
 import org.muilab.notigpt.model.notifications.NotiDisplayUnit
 import org.muilab.notigpt.util.time.getRelativeTimeStr
@@ -103,22 +101,22 @@ fun NotiCardHeaderContent(
         Column(Modifier.align(Alignment.CenterVertically).padding(start = 8.dp).weight(1f)) {
             Row(Modifier.fillMaxWidth()) {
                 if (isExpandedOffset > collapseThreshold) {
-                    Text(appName, fontSize = 12.sp)
+                    Text(appName, style = MaterialTheme.typography.labelMedium)
                     Spacer(Modifier.weight(1f))
                 } else {
                     Column(Modifier.wrapContentHeight().weight(1f)) {
                         Text(
                             notiOverallTitle.ifBlank { appName },
-                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.ExtraBold),
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.ExtraBold),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
-                            fontSize = 14.sp,
                             onTextLayout = { if (it.hasVisualOverflow) requiresExpansionSetter(true) },
                         )
                         if (hasSecondTitle) {
                             Text(
                                 notiSecondOverallTitle,
-                                style = MaterialTheme.typography.labelSmall.copy(fontStyle = FontStyle.Italic),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 overflow = TextOverflow.Ellipsis,
                                 maxLines = 1,
                                 onTextLayout = { if (it.hasVisualOverflow) requiresExpansionSetter(true) },
@@ -134,7 +132,7 @@ fun NotiCardHeaderContent(
                             .clip(CircleShape)
                             .background(MaterialTheme.colorScheme.secondaryContainer)
                             .padding(horizontal = 6.dp, vertical = 1.dp),
-                        fontSize = 11.sp,
+                        style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSecondaryContainer,
                     )
                 }
@@ -145,9 +143,9 @@ fun NotiCardHeaderContent(
                 Text(
                     relativeTime,
                     Modifier.padding(horizontal = 5.dp),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
-                    fontSize = 12.sp,
-                    fontStyle = FontStyle.Italic,
                 )
             }
 
@@ -157,14 +155,14 @@ fun NotiCardHeaderContent(
                         Column {
                             Text(
                                 notiOverallTitle,
-                                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.ExtraBold),
+                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.ExtraBold),
                                 overflow = TextOverflow.Ellipsis,
-                                fontSize = 14.sp,
                             )
                             if (hasSecondTitle) {
                                 Text(
                                     notiSecondOverallTitle,
-                                    style = MaterialTheme.typography.labelSmall.copy(fontStyle = FontStyle.Italic),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     overflow = TextOverflow.Ellipsis,
                                 )
                             }
@@ -173,10 +171,10 @@ fun NotiCardHeaderContent(
                         val notiContent = notiRecords.lastOrNull()?.content ?: ""
                         Text(
                             if (notiContent == "null") "" else unescapeUserText(notiContent),
+                            style = MaterialTheme.typography.bodyMedium,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             onTextLayout = { if (it.hasVisualOverflow) requiresExpansionSetter(true) },
-                            fontSize = 14.sp,
                         )
                     }
                 }
@@ -184,7 +182,7 @@ fun NotiCardHeaderContent(
                 Text(
                     summary,
                     modifier = Modifier.padding(horizontal = 5.dp),
-                    fontSize = 15.sp,
+                    style = MaterialTheme.typography.bodyLarge,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )

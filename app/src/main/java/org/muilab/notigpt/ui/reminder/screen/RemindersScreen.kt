@@ -18,6 +18,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -115,6 +116,7 @@ import org.muilab.notigpt.ui.notification.component.RelatedNotificationPreview
 import org.muilab.notigpt.ui.reminder.component.SavedSubItemRow
 import org.muilab.notigpt.ui.reminder.component.SavedSubItemListInCard
 import org.muilab.notigpt.ui.reminder.component.SavedSubItemDetailScreen
+import org.muilab.notigpt.ui.reminder.component.TaskCompletionToggle
 import org.muilab.notigpt.ui.notification.viewmodel.DrawerViewModel
 import org.muilab.notigpt.ui.notification.viewmodel.DrawerViewModelFactory
 import org.muilab.notigpt.ui.preference.viewmodel.PreferenceViewModel
@@ -941,6 +943,9 @@ fun ReminderCard(
     // Star tint follows the item's own type (fixes the previously hardcoded task accent on keep cards).
     val rowAccent = if (reminder.isTask) NotiTheme.semantic.taskAccent else NotiTheme.semantic.keepAccent
     val selectedBorder = sectionAccent ?: MaterialTheme.colorScheme.primary
+    // Left-edge accent: use the section accent in single-type lists, else fall back to the item's own
+    // type accent so Task (indigo) vs Keep (green) stays legible in mixed / smart-filter lists.
+    val edgeAccent = sectionAccent ?: rowAccent
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -953,14 +958,12 @@ fun ReminderCard(
         ),
     ) {
       Row(modifier = Modifier.height(IntrinsicSize.Min)) {
-        if (sectionAccent != null) {
-            Box(
-                modifier = Modifier
-                    .width(3.dp)
-                    .fillMaxHeight()
-                    .background(sectionAccent),
-            )
-        }
+        Box(
+            modifier = Modifier
+                .width(3.dp)
+                .fillMaxHeight()
+                .background(edgeAccent),
+        )
         Column(
             modifier = Modifier
                 .weight(1f)
@@ -983,12 +986,10 @@ fun ReminderCard(
                         colors = CheckboxDefaults.colors(checkedColor = selectedBorder),
                     )
                 } else if (reminder.isTask) {
-                    Checkbox(
+                    TaskCompletionToggle(
                         checked = reminder.isCompleted,
-                        onCheckedChange = {
-                            haptic.performHapticFeedback(if (it) HapticFeedbackType.ToggleOn else HapticFeedbackType.ToggleOff)
-                            onToggleCompleted(it)
-                        },
+                        accent = rowAccent,
+                        onCheckedChange = onToggleCompleted,
                     )
                 } else {
                     IconButton(
@@ -1243,8 +1244,10 @@ private fun CardDoDatePickerDialog(
                     }
                     val newCal = Calendar.getInstance().apply {
                         timeInMillis = selectedDate
-                        set(Calendar.HOUR_OF_DAY, if (hadTime) existingCal.get(Calendar.HOUR_OF_DAY) else 9)
-                        set(Calendar.MINUTE, if (hadTime) existingCal.get(Calendar.MINUTE) else 0)
+                        // Do-dates are date-only by default; end-of-day time-of-day so "today" stays
+                        // due through the day and timezone shifts don't bump the calendar day.
+                        set(Calendar.HOUR_OF_DAY, if (hadTime) existingCal.get(Calendar.HOUR_OF_DAY) else 23)
+                        set(Calendar.MINUTE, if (hadTime) existingCal.get(Calendar.MINUTE) else 59)
                         set(Calendar.SECOND, 0)
                         set(Calendar.MILLISECOND, 0)
                     }
@@ -1368,6 +1371,11 @@ fun ReminderDetailScreen(
     changeLog: kotlinx.coroutines.flow.Flow<List<org.muilab.notigpt.model.features.SavedItemChangeLog>>? = null,
     onAcknowledgeReview: (() -> Unit)? = null,
     onLoadSurroundingContext: ((String) -> Unit)? = null,
+    // Edit-in-review: replaces the inline "Got it" / export chips with a pinned Save&Approve / Delete
+    // footer. Editing an item during review is itself the accept (per product decision).
+    reviewMode: Boolean = false,
+    onSaveApprove: ((SavedItem) -> Unit)? = null,
+    onRejectDelete: (() -> Unit)? = null,
     // Sub-task parameters
     subTasks: List<SavedSubItem> = emptyList(),
     onAddSavedSubItem: () -> Unit = {},
@@ -1416,6 +1424,15 @@ fun ReminderDetailScreen(
     var showTimePicker by remember { mutableStateOf(false) }
     var showDoDatePicker by remember { mutableStateOf(false) }
     var showDoTimePicker by remember { mutableStateOf(false) }
+    // Do-time is opt-in: shown only if this item already carries a non-end-of-day time, or the user
+    // taps "Add time". Keeps the common path date-only.
+    var doTimeShown by remember(initial.savedItemId) {
+        val cal = Calendar.getInstance().apply { timeInMillis = initial.doAtMs }
+        mutableStateOf(
+            SavedItem.hasPlannedDate(initial.doAtMs) &&
+                !(cal.get(Calendar.HOUR_OF_DAY) == 23 && cal.get(Calendar.MINUTE) == 59)
+        )
+    }
     var headerMenuOpen by remember { mutableStateOf(false) }
 
     Column(Modifier.fillMaxSize()) {
@@ -1467,11 +1484,12 @@ fun ReminderDetailScreen(
             }
         }
 
-        // Make the content scrollable so related notifications are reachable.
+        // Make the content scrollable so related notifications are reachable. In review mode the
+        // content takes weight so the Save&Approve / Delete footer can pin below it.
         val scrollState = rememberScrollState()
         Column(
             modifier = Modifier
-                .fillMaxSize()
+                .then(if (reviewMode) Modifier.weight(1f) else Modifier.fillMaxSize())
                 .verticalScroll(scrollState)
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -1480,7 +1498,8 @@ fun ReminderDetailScreen(
             val changes by (changeLog ?: kotlinx.coroutines.flow.flowOf(emptyList()))
                 .collectAsState(initial = emptyList())
             var reviewAcknowledged by remember(initial.savedItemId) { mutableStateOf(false) }
-            if (!reviewAcknowledged && onAcknowledgeReview != null) {
+            // In edit-in-review the footer handles approval, so hide the inline "Got it" block.
+            if (!reviewMode && !reviewAcknowledged && onAcknowledgeReview != null) {
                 org.muilab.notigpt.ui.reminder.component.ReminderWhatsNewBlock(
                     reminder = initial,
                     changes = changes,
@@ -1522,18 +1541,6 @@ fun ReminderDetailScreen(
             }
 
             if (isTask) {
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                    Checkbox(
-                        checked = isCompleted,
-                        onCheckedChange = { isCompleted = it },
-                        colors = CheckboxDefaults.colors(checkedColor = accent),
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(stringResource(R.string.ui_reminders_editor_completed), style = MaterialTheme.typography.bodyMedium)
-                }
-
-                HorizontalDivider()
-
                 // Separate date and time pickers for deadline
                 val deadlineCal = remember(deadlineAtMs) {
                     if (deadlineAtMs > 0L) Calendar.getInstance().apply { timeInMillis = deadlineAtMs } else null
@@ -1548,28 +1555,6 @@ fun ReminderDetailScreen(
                 val deadlineColor = if (deadlineAtMs > 0L && deadlineAtMs < System.currentTimeMillis())
                     MaterialTheme.colorScheme.error else accent
 
-                // Deadline on two rows: Date / Time.
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        "${stringResource(R.string.reminder_pick_date)}:",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    TextButton(onClick = { showDatePicker = true }) {
-                        Text(text = deadlineDateStr, color = deadlineColor)
-                    }
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        "${stringResource(R.string.reminder_pick_time)}:",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    TextButton(onClick = { showTimePicker = true }) {
-                        Text(text = deadlineTimeStr, color = deadlineColor)
-                    }
-                }
-
                 // User-set do date (when to work on it), independent of the deadline.
                 val hasRealDoDate = SavedItem.hasPlannedDate(doAtMs)
                 val isSomeday = SavedItem.isSomeday(doAtMs)
@@ -1581,45 +1566,116 @@ fun ReminderDetailScreen(
                 val doTimeStr = if (hasRealDoDate) {
                     java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date(doAtMs))
                 } else stringResource(R.string.reminder_no_time)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        "${stringResource(R.string.ui_reminders_editor_do_date)}:",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    TextButton(onClick = { showDoDatePicker = true }) {
-                        Text(text = doDateStr, color = accent)
-                    }
-                    if (hasRealDoDate) {
-                        TextButton(onClick = { showDoTimePicker = true }) {
-                            Text(text = doTimeStr, color = accent)
-                        }
-                    }
-                    // "Someday": intended eventually, no committed date. Toggles the sentinel.
-                    // A FilterChip (not plain text) so the selected state reads clearly.
-                    Spacer(Modifier.width(4.dp))
-                    FilterChip(
-                        selected = isSomeday,
-                        onClick = { doAtMs = if (isSomeday) 0L else SavedItem.DO_AT_SOMEDAY },
-                        label = { Text(stringResource(R.string.do_date_someday)) },
-                        leadingIcon = if (isSomeday) {
-                            {
-                                Icon(
-                                    painter = painterResource(R.drawable.check),
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp),
-                                )
-                            }
-                        } else null,
-                    )
-                    if (hasRealDoDate || isSomeday) {
-                        IconButton(onClick = { doAtMs = 0L }) {
-                            Icon(
-                                painterResource(R.drawable.delete),
-                                contentDescription = stringResource(R.string.a11y_clear_do_date),
-                                modifier = Modifier.size(16.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+
+                // Grouped detail card (iOS Reminders style): completion / deadline / do-date rows share
+                // one rounded surface with hairline dividers, instead of loose top-level label:value rows.
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.large,
+                    color = MaterialTheme.colorScheme.surfaceContainerLow,
+                ) {
+                    Column {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+                        ) {
+                            TaskCompletionToggle(
+                                checked = isCompleted,
+                                accent = accent,
+                                onCheckedChange = { isCompleted = it },
                             )
+                            Spacer(Modifier.width(4.dp))
+                            Text(stringResource(R.string.ui_reminders_editor_completed), style = MaterialTheme.typography.bodyMedium)
+                        }
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
+                        // Deadline on two rows: Date / Time, value right-aligned.
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                        ) {
+                            Text(
+                                stringResource(R.string.reminder_pick_date),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                            Spacer(Modifier.weight(1f))
+                            TextButton(onClick = { showDatePicker = true }) {
+                                Text(text = deadlineDateStr, color = deadlineColor)
+                            }
+                        }
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                        ) {
+                            Text(
+                                stringResource(R.string.reminder_pick_time),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                            Spacer(Modifier.weight(1f))
+                            TextButton(onClick = { showTimePicker = true }) {
+                                Text(text = deadlineTimeStr, color = deadlineColor)
+                            }
+                        }
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp),
+                        ) {
+                            Text(
+                                stringResource(R.string.ui_reminders_editor_do_date),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                            Spacer(Modifier.weight(1f))
+                            TextButton(onClick = { showDoDatePicker = true }) {
+                                Text(text = doDateStr, color = accent)
+                            }
+                            if (hasRealDoDate) {
+                                if (doTimeShown) {
+                                    TextButton(onClick = { showDoTimePicker = true }) {
+                                        Text(text = doTimeStr, color = accent)
+                                    }
+                                } else {
+                                    // Optional, collapsed by default: reveal + open the time picker.
+                                    TextButton(onClick = { doTimeShown = true; showDoTimePicker = true }) {
+                                        Text(
+                                            text = stringResource(R.string.do_date_add_time),
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                }
+                            }
+                            // "Someday": intended eventually, no committed date. Toggles the sentinel.
+                            // A FilterChip (not plain text) so the selected state reads clearly.
+                            Spacer(Modifier.width(4.dp))
+                            FilterChip(
+                                selected = isSomeday,
+                                onClick = { doAtMs = if (isSomeday) 0L else SavedItem.DO_AT_SOMEDAY },
+                                label = { Text(stringResource(R.string.do_date_someday)) },
+                                leadingIcon = if (isSomeday) {
+                                    {
+                                        Icon(
+                                            painter = painterResource(R.drawable.check),
+                                            contentDescription = null,
+                                            modifier = Modifier.size(16.dp),
+                                        )
+                                    }
+                                } else null,
+                            )
+                            if (hasRealDoDate || isSomeday) {
+                                IconButton(onClick = { doAtMs = 0L }) {
+                                    Icon(
+                                        painterResource(R.drawable.delete),
+                                        contentDescription = stringResource(R.string.a11y_clear_do_date),
+                                        modifier = Modifier.size(16.dp),
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -1627,10 +1683,10 @@ fun ReminderDetailScreen(
 
             Text(stringResource(R.string.ui_reminders_editor_note), style = MaterialTheme.typography.titleMedium)
 
-            // Note-like editor (no outlined box)
+            // Note-like editor, grouped card to match the task-detail surface above.
             Surface(
-                tonalElevation = 0.dp,
-                shape = MaterialTheme.shapes.medium,
+                shape = MaterialTheme.shapes.large,
+                color = MaterialTheme.colorScheme.surfaceContainerLow,
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 BasicTextField(
@@ -1640,7 +1696,7 @@ fun ReminderDetailScreen(
                     cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(4.dp),
+                        .padding(12.dp),
                     decorationBox = { innerTextField ->
                         if (content.isBlank()) {
                             Text(
@@ -1713,7 +1769,8 @@ fun ReminderDetailScreen(
                 }
             }
 
-            // === Export to external apps (chips) ===
+            // === Export to external apps (chips) === (hidden during edit-in-review; export later)
+            if (!reviewMode) {
             HorizontalDivider(modifier = Modifier.padding(top = 8.dp))
 
             FlowRow(
@@ -1761,6 +1818,7 @@ fun ReminderDetailScreen(
                         Icon(painter = painterResource(R.drawable.share), contentDescription = stringResource(R.string.a11y_share_reminder), tint = accent, modifier = Modifier.size(16.dp))
                     },
                 )
+            }
             }
 
             // === Change history ===
@@ -1879,6 +1937,29 @@ fun ReminderDetailScreen(
                 }
             }
         }
+
+        // Edit-in-review footer: editing is itself the accept, so Save & Approve / Delete.
+        if (reviewMode) {
+            Surface(color = MaterialTheme.colorScheme.surface, shadowElevation = 8.dp) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    OutlinedButton(onClick = { onRejectDelete?.invoke() }) {
+                        Text(stringResource(R.string.a11y_delete), color = MaterialTheme.colorScheme.error)
+                    }
+                    Button(
+                        onClick = { onSaveApprove?.invoke(buildUpdated()) },
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text(stringResource(R.string.review_save_approve))
+                    }
+                }
+            }
+        }
     }
 
     // Separate date picker (only modifies the date component of deadlineAtMs)
@@ -1965,8 +2046,9 @@ fun ReminderDetailScreen(
                             }
                             val newCal = Calendar.getInstance().apply {
                                 timeInMillis = selectedDate
-                                set(Calendar.HOUR_OF_DAY, if (hadTime) existingCal.get(Calendar.HOUR_OF_DAY) else 9)
-                                set(Calendar.MINUTE, if (hadTime) existingCal.get(Calendar.MINUTE) else 0)
+                                // Date-only default → end-of-day (see CardDoDatePickerDialog).
+                                set(Calendar.HOUR_OF_DAY, if (hadTime) existingCal.get(Calendar.HOUR_OF_DAY) else 23)
+                                set(Calendar.MINUTE, if (hadTime) existingCal.get(Calendar.MINUTE) else 59)
                                 set(Calendar.SECOND, 0)
                                 set(Calendar.MILLISECOND, 0)
                             }

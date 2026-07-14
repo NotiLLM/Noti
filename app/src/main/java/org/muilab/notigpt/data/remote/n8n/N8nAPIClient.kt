@@ -29,7 +29,7 @@ object N8nAPIClient {
     // runtime permission (Local Network Protection) — declared in the manifest and requested in
     // MainActivity. Without it, connections here silently time out while internet access still works.
     // Swap to "https://n8n.udchen.tw/" (or whatever public host you settle on) once the workflows move.
-    private const val BASE_URL = "http://192.168.1.156:5678/"
+    private const val BASE_URL = "https://n8n.udchen.tw/"
 
     private fun createRetrofit(baseUrl: String = BASE_URL): Retrofit {
         val logging = HttpLoggingInterceptor().apply {

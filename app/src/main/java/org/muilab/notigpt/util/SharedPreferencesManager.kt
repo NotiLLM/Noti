@@ -116,6 +116,12 @@ object SharedPreferencesManager {
         get() = get(KEY_LOCAL_PREFS, KEY_USE_DYNAMIC_COLOR, false)
         set(value) = put(KEY_LOCAL_PREFS, KEY_USE_DYNAMIC_COLOR, value)
 
+    // --- Skip the "Clear all" confirmation dialog once the user opts out of seeing it ---
+    const val KEY_SKIP_CLEAR_ALL_CONFIRM = "skipClearAllConfirm"
+    var skipClearAllConfirm: Boolean
+        get() = get(KEY_LOCAL_PREFS, KEY_SKIP_CLEAR_ALL_CONFIRM, false)
+        set(value) = put(KEY_LOCAL_PREFS, KEY_SKIP_CLEAR_ALL_CONFIRM, value)
+
     // --- Task List Default Expanded ---
     const val KEY_TASK_LIST_DEFAULT_EXPANDED = "taskListDefaultExpanded"
     var taskListDefaultExpanded: Boolean

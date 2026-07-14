@@ -12,6 +12,8 @@
     <string name="a11y_set_do_date">設定執行日期</string>
 
     <!-- Settings -->
+    <string name="ui_settings_dynamic_color">使用系統顏色</string>
+    <string name="ui_settings_dynamic_color_desc">依桌布為中性介面上色（Material You）。分類與急迫程度的顏色維持不變。</string>
     <string name="ui_settings_delete_on_swipe">滑動刪除：</string>
     <string name="ui_settings_left">向左</string>
     <string name="ui_settings_right">向右</string>
@@ -30,6 +32,8 @@
     <string name="ui_reminders_filter_tasks">任務</string>
     <string name="ui_reminders_filter_memos">備忘</string>
     <string name="ui_reminders_filter_completed">已完成</string>
+    <string name="ui_reminders_filter_keep">保留</string>
+    <string name="ui_reminders_filter_archived">已封存</string>
     <string name="ui_reminders_filter_starred">已加星號</string>
     <string name="ui_reminders_search_placeholder">搜尋提醒（用 + 代表「且」）</string>
     <string name="ui_reminders_add_dialog_title">新增</string>
@@ -133,6 +137,10 @@
     <string name="ui_debug_invalid_integer">整數格式錯誤！</string>
     <string name="ui_debug_invalid_ip">IP 格式錯誤！</string>
 
+    <!-- Ongoing status / generation notifications -->
+    <string name="ongoing_status_idle">沒有新項目</string>
+    <string name="generating_saved_items">正在產生收藏項目…</string>
+
     <!-- Notifications screen (UI chrome only; not notification content) -->
     <string name="ui_notifications_new">新通知（%1$d）</string>
     <string name="ui_action_clear_unpinned_notifications">清除未釘選通知</string>
@@ -233,7 +241,7 @@
     <string name="pref_reason_other">其他（讓我說明）</string>
 
     <!-- Preference learning – BottomSheet reason (DELETE) -->
-    <string name="pref_reason_delete_title">為什麼這不值得保留為任務？</string>
+    <string name="pref_reason_delete_title">為什麼這不值得保留為任務或備忘？</string>
 
     <!-- Preference learning – BottomSheet reason (MANUAL_EXTRACT) -->
     <string name="pref_reason_extract_title">為什麼這類通知應該變成任務或備忘？</string>
@@ -298,6 +306,9 @@
     <string name="pref_action_dismiss">略過</string>
     <string name="pref_action_confirmed">✓ 已確認</string>
     <string name="pref_action_dismissed">已略過</string>
+    <string name="pref_batch_count">%1$d 項建議</string>
+    <string name="pref_batch_accept_all">全部接受</string>
+    <string name="pref_batch_dismiss_all">全部略過</string>
 
     <!-- Preference conflicts -->
     <string name="pref_conflict_count_one">⚠ 1 個未解決的衝突</string>
@@ -377,6 +388,7 @@
     <string name="a11y_regenerate">重新生成提醒</string>
     <string name="a11y_pin">釘選提醒</string>
     <string name="a11y_unpin">取消釘選提醒</string>
+    <string name="a11y_archive">封存</string>
     <string name="a11y_drag_handle">拖曳以重新排序</string>
 
     <!-- Separate date/time pickers -->
@@ -394,12 +406,25 @@
     <string name="menu_section_more">更多</string>
     <string name="scheduled_reminder_time">提醒時間：%1$s</string>
     <string name="scheduled_pick_time">選擇時間</string>
+    <string name="scheduled_reminders_title">排程提醒</string>
+    <string name="scheduled_reminders_subtitle">即將到來與已到期的提醒會顯示於此。已完成或已取消的提醒不會顯示。</string>
+    <string name="scheduled_reminders_empty">目前沒有進行中的排程提醒。</string>
+    <string name="scheduled_reminder_reschedule_title">重新排程提醒</string>
+    <string name="scheduled_reminder_untitled">提醒</string>
+    <string name="a11y_scheduled_mark_seen">標示為已讀</string>
+    <string name="a11y_scheduled_reschedule">重新排程</string>
+    <string name="a11y_scheduled_cancel">取消</string>
     <string name="settings_section_appearance">外觀</string>
     <string name="settings_section_extraction">擷取</string>
     <string name="settings_section_data">資料</string>
+    <string name="ui_settings_export_data">匯出資料</string>
+    <string name="ui_settings_export_description">匯出所有通知與使用者動作</string>
+    <string name="ui_settings_export_include_dismissed">包含已忽略的通知</string>
+    <string name="ui_settings_export_include_context">包含完整內容</string>
     <string name="home_reminders_due">%1$d 個提醒到期</string>
     <string name="noti_clear_all_confirm_title">清除通知？</string>
     <string name="noti_clear_all_confirm_message">這會移除目前清單中顯示的通知，已釘選的通知會保留。</string>
+    <string name="noti_clear_all_dont_show_again">不要再詢問我</string>
     <string name="a11y_more_actions">更多動作</string>
 
     <!-- New screen sections + triage -->
@@ -483,6 +508,13 @@
     <string name="review_approved_toast">已核准</string>
     <string name="review_rejected_toast">已拒絕</string>
     <string name="review_reverted_toast">已還原變更</string>
+    <string name="review_tell_why">告訴它原因</string>
+    <string name="review_dodate_offer_title">要設定執行日期嗎？</string>
+    <string name="review_dodate_offer_body">%1$d 項已核准的任務尚未設定執行日期，現在要設定嗎？</string>
+    <string name="review_dodate_offer_set">設定執行日期</string>
+    <string name="review_dodate_offer_skip">略過</string>
+    <string name="review_edit">編輯</string>
+    <string name="review_save_approve">儲存並核准</string>
     <string name="review_triggered_this">觸發此次編輯</string>
     <string name="review_previous_context">先前脈絡</string>
     <string name="a11y_review_approve">向右滑動以核准</string>
@@ -500,6 +532,7 @@
 
     <!-- Do date -->
     <string name="do_date_someday">將來某天</string>
+    <string name="do_date_add_time">新增時間</string>
     <string name="do_date_clear">清除</string>
 </resources>
 

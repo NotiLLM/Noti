@@ -100,15 +100,45 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
 
     private var pendingUndo: UndoableAction? = null
 
-    private val _snackbar = Channel<Int>(Channel.CONFLATED)
-    /** Emits a string res id when an action lands, so the screen can show a snackbar with Undo. */
-    val snackbar: Flow<Int> = _snackbar.receiveAsFlow()
+    /**
+     * One review action's snackbar. [item] is what was acted on (for "Tell it why"); [canTeach] is
+     * true for rejects/reverts — the moments where teaching a preference makes sense.
+     */
+    data class ReviewSnackbar(val messageRes: Int, val item: SavedItem?, val canTeach: Boolean)
+
+    private val _snackbar = Channel<ReviewSnackbar>(Channel.CONFLATED)
+    /** Emits when an action lands, so the screen can show a snackbar (Undo + optional Tell-it-why). */
+    val snackbar: Flow<ReviewSnackbar> = _snackbar.receiveAsFlow()
+
+    // ── This review pass: tasks approved that still have no planned (do) date ──
+    // Drives the end-of-stack "set do-dates?" offer. Reset when the screen is (re)entered.
+    private val approvedNeedingDoDate = linkedSetOf<String>()
+    fun approvedNeedingDoDateCount(): Int = approvedNeedingDoDate.size
+    fun resetReviewSession() = approvedNeedingDoDate.clear()
+
+    private fun noteApprovedForDoDate(item: SavedItem) {
+        if (item.isTask && !SavedItem.hasPlannedDate(item.doAtMs)) approvedNeedingDoDate.add(item.savedItemId)
+    }
 
     fun approve(item: SavedItem) {
         viewModelScope.launch {
             repo.acknowledgeReview(item.savedItemId, System.currentTimeMillis())
             pendingUndo = UndoableAction.Approve(item)
-            _snackbar.trySend(R.string.review_approved_toast)
+            noteApprovedForDoDate(item)
+            _snackbar.trySend(ReviewSnackbar(R.string.review_approved_toast, item, canTeach = false))
+        }
+    }
+
+    /** Edit-in-review "Save & Approve": persist the user's edits (which shields them from LLM) and
+     *  acknowledge the review in one step. Editing implies acceptance. */
+    fun saveApprove(edited: SavedItem) {
+        viewModelScope.launch {
+            val ts = System.currentTimeMillis()
+            repo.upsert(edited.copy(origin = "manual", userEdited = true, lastUpdateTimestamp = ts))
+            repo.acknowledgeReview(edited.savedItemId, ts)
+            noteApprovedForDoDate(edited)
+            pendingUndo = null
+            _snackbar.trySend(ReviewSnackbar(R.string.review_approved_toast, edited, canTeach = false))
         }
     }
 
@@ -119,7 +149,7 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
                 val outcome = repo.revertPendingLlmUpdates(item.savedItemId, ts)
                 if (outcome != null) {
                     pendingUndo = UndoableAction.RejectUpdated(outcome)
-                    _snackbar.trySend(R.string.review_reverted_toast)
+                    _snackbar.trySend(ReviewSnackbar(R.string.review_reverted_toast, item, canTeach = true))
                 }
             } else {
                 // New item → soft delete, capturing sub-task ids so undo can restore them.
@@ -127,7 +157,7 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
                 subTaskRepo.softDeleteByParentId(item.savedItemId, ts)
                 repo.deleteById(item.savedItemId, ts)
                 pendingUndo = UndoableAction.RejectNew(item, subTaskIds)
-                _snackbar.trySend(R.string.review_rejected_toast)
+                _snackbar.trySend(ReviewSnackbar(R.string.review_rejected_toast, item, canTeach = true))
             }
         }
     }
@@ -136,6 +166,7 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
         if (items.isEmpty()) return
         viewModelScope.launch {
             repo.acknowledgeReviewByIds(items.map { it.savedItemId }, System.currentTimeMillis())
+            items.forEach(::noteApprovedForDoDate)
             // Bulk approve isn't individually undoable; clear any stale single-action undo.
             pendingUndo = null
         }
@@ -147,7 +178,10 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             val ts = System.currentTimeMillis()
             when (action) {
-                is UndoableAction.Approve -> repo.upsert(action.item)
+                is UndoableAction.Approve -> {
+                    repo.upsert(action.item)
+                    approvedNeedingDoDate.remove(action.item.savedItemId)
+                }
                 is UndoableAction.RejectNew -> {
                     repo.upsert(action.item)
                     if (action.subTaskIds.isNotEmpty()) db.subTaskDao().restoreByIds(action.subTaskIds, ts)

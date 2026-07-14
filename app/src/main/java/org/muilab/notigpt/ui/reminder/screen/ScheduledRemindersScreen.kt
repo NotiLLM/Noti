@@ -64,16 +64,16 @@ fun ScheduledRemindersScreen(
     }
 
     Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Text("Scheduled reminders", style = MaterialTheme.typography.headlineSmall)
+        Text(stringResource(R.string.scheduled_reminders_title), style = MaterialTheme.typography.headlineSmall)
         Text(
-            "Upcoming reminders and any that are due appear here. Checked-off and cancelled reminders are hidden.",
+            stringResource(R.string.scheduled_reminders_subtitle),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 4.dp, bottom = 12.dp),
         )
 
         if (filteredReminders.isEmpty()) {
-            Text("No active scheduled reminders.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(stringResource(R.string.scheduled_reminders_empty), color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(filteredReminders, key = { it.reminderId }) { reminder ->
@@ -90,7 +90,7 @@ fun ScheduledRemindersScreen(
 
     rescheduleTarget?.let { target ->
         ReminderDateTimeDialog(
-            title = "Reschedule reminder",
+            title = stringResource(R.string.scheduled_reminder_reschedule_title),
             initialAtMs = target.remindAtMs,
             onDismiss = { rescheduleTarget = null },
             onConfirm = { remindAtMs ->
@@ -125,7 +125,7 @@ private fun ScheduledReminderCard(
         ) {
             if (isDue) {
                 IconButton(onClick = onSeen) {
-                    Icon(painterResource(R.drawable.check), contentDescription = "Mark seen", tint = accent, modifier = Modifier.size(22.dp))
+                    Icon(painterResource(R.drawable.check), contentDescription = stringResource(R.string.a11y_scheduled_mark_seen), tint = accent, modifier = Modifier.size(22.dp))
                 }
             } else {
                 Icon(
@@ -136,7 +136,7 @@ private fun ScheduledReminderCard(
                 )
             }
             Column(Modifier.weight(1f)) {
-                Text(reminder.title.ifBlank { "Reminder" }, style = MaterialTheme.typography.titleMedium)
+                Text(reminder.title.ifBlank { stringResource(R.string.scheduled_reminder_untitled) }, style = MaterialTheme.typography.titleMedium)
                 if (reminder.content.isNotBlank()) {
                     var contentExpanded by remember(reminder.reminderId) { mutableStateOf(false) }
                     var contentOverflows by remember(reminder.reminderId) { mutableStateOf(false) }
@@ -165,10 +165,10 @@ private fun ScheduledReminderCard(
                 )
             }
             IconButton(onClick = onReschedule) {
-                Icon(painterResource(R.drawable.schedule), contentDescription = "Reschedule", modifier = Modifier.size(20.dp))
+                Icon(painterResource(R.drawable.schedule), contentDescription = stringResource(R.string.a11y_scheduled_reschedule), modifier = Modifier.size(20.dp))
             }
             IconButton(onClick = onCancel) {
-                Icon(painterResource(R.drawable.close), contentDescription = "Cancel", modifier = Modifier.size(20.dp))
+                Icon(painterResource(R.drawable.close), contentDescription = stringResource(R.string.a11y_scheduled_cancel), modifier = Modifier.size(20.dp))
             }
         }
     }
@@ -176,7 +176,7 @@ private fun ScheduledReminderCard(
 
 @Composable
 fun ReminderDateTimeDialog(
-    title: String = "Create reminder",
+    title: String = stringResource(R.string.ui_reminders_create_button),
     initialAtMs: Long = System.currentTimeMillis(),
     onDismiss: () -> Unit,
     onConfirm: (Long) -> Unit,

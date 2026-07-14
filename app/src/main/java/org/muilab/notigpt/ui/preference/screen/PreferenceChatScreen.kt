@@ -33,15 +33,18 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -69,6 +72,7 @@ import org.muilab.notigpt.ui.preference.model.ProposedAction
 import org.muilab.notigpt.ui.preference.model.ProposedActionType
 import org.muilab.notigpt.model.features.UserContext
 import org.muilab.notigpt.ui.preference.viewmodel.PreferenceViewModel
+import org.muilab.notigpt.ui.theme.NotiTheme
 
 /**
  * Full Chat screen for preference rule authoring (Flow 4).
@@ -123,28 +127,14 @@ fun PreferenceChatScreen(
             }
         }
 
-        HorizontalDivider()
-
-        // ── Chat mode toggle ────────────────────────────────────
-        Row(
+        // ── Chat mode toggle — iOS-style segmented control ──────
+        ChatModeSegmentedControl(
+            selected = chatMode,
+            onSelect = { preferenceViewModel.switchChatMode(it) },
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            FilterChip(
-                selected = chatMode == "RULES",
-                onClick = { preferenceViewModel.switchChatMode("RULES") },
-                label = { Text(stringResource(R.string.pref_chat_mode_rules)) },
-            )
-            FilterChip(
-                selected = chatMode == "ABOUT_ME",
-                onClick = { preferenceViewModel.switchChatMode("ABOUT_ME") },
-                label = { Text(stringResource(R.string.pref_chat_mode_about_me)) },
-            )
-        }
-
-        HorizontalDivider()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+        )
 
         // ── Unresolved conflicts banner ─────────────────────────
         if (unresolvedConflicts.isNotEmpty()) {
@@ -153,32 +143,40 @@ fun PreferenceChatScreen(
                 onDismiss = { preferenceViewModel.dismissConflict(it.conflictId) },
                 onResolve = { preferenceViewModel.resolveConflictInChat(it) },
             )
-            HorizontalDivider()
         }
 
-        // ── Collapsible panels (relevant panel shown first based on mode) ──
-        if (chatMode == "ABOUT_ME") {
-            UserContextPanel(
-                contexts = activeContexts,
-                onDelete = { preferenceViewModel.deleteActiveContext(it.id) },
-            )
-            HorizontalDivider()
-            ActivePreferencesPanel(
-                preferences = activePreferences,
-                onDelete = { preferenceViewModel.deleteActivePreference(it.id) },
-            )
-        } else {
-            ActivePreferencesPanel(
-                preferences = activePreferences,
-                onDelete = { preferenceViewModel.deleteActivePreference(it.id) },
-            )
-            HorizontalDivider()
-            UserContextPanel(
-                contexts = activeContexts,
-                onDelete = { preferenceViewModel.deleteActiveContext(it.id) },
-            )
+        // ── Collapsible panels, grouped into a single card (relevant panel first) ──
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 4.dp),
+            shape = MaterialTheme.shapes.large,
+            color = MaterialTheme.colorScheme.surfaceContainerLow,
+        ) {
+            Column {
+                if (chatMode == "ABOUT_ME") {
+                    UserContextPanel(
+                        contexts = activeContexts,
+                        onDelete = { preferenceViewModel.deleteActiveContext(it.id) },
+                    )
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    ActivePreferencesPanel(
+                        preferences = activePreferences,
+                        onDelete = { preferenceViewModel.deleteActivePreference(it.id) },
+                    )
+                } else {
+                    ActivePreferencesPanel(
+                        preferences = activePreferences,
+                        onDelete = { preferenceViewModel.deleteActivePreference(it.id) },
+                    )
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    UserContextPanel(
+                        contexts = activeContexts,
+                        onDelete = { preferenceViewModel.deleteActiveContext(it.id) },
+                    )
+                }
+            }
         }
-        HorizontalDivider()
 
         // ── Flow context card (when redirected from edit/delete/extract) ──
         if (chatFlowContext != null) {
@@ -249,6 +247,38 @@ fun PreferenceChatScreen(
                 if (pendingActions.isNotEmpty()) {
                     item(key = "proposed_actions") {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            // Batch bar when the LLM proposes several rules at once. Per-card actions
+                            // stay below, and the chat input remains usable for natural-language replies.
+                            val unresolved = pendingActions.count { !it.confirmed && !it.dismissed }
+                            if (unresolved >= 2) {
+                                Surface(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = MaterialTheme.shapes.large,
+                                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    ) {
+                                        Text(
+                                            text = stringResource(R.string.pref_batch_count, unresolved),
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.weight(1f),
+                                        )
+                                        TextButton(onClick = { preferenceViewModel.dismissAllProposedActions() }) {
+                                            Text(stringResource(R.string.pref_batch_dismiss_all))
+                                        }
+                                        Button(
+                                            onClick = { preferenceViewModel.confirmAllProposedActions() },
+                                            shape = MaterialTheme.shapes.extraLarge,
+                                        ) {
+                                            Text(stringResource(R.string.pref_batch_accept_all))
+                                        }
+                                    }
+                                }
+                            }
                             pendingActions.forEach { action ->
                                 ProposedActionCard(
                                     action = action,
@@ -277,14 +307,14 @@ fun PreferenceChatScreen(
             }
         }
 
-        HorizontalDivider()
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
-        // ── Input row ───────────────────────────────────────────
+        // ── Input row — iMessage-style pill composer + circular send button ──
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
+            verticalAlignment = Alignment.Bottom,
         ) {
             OutlinedTextField(
                 value = inputText,
@@ -293,9 +323,17 @@ fun PreferenceChatScreen(
                 modifier = Modifier.weight(1f),
                 maxLines = 4,
                 enabled = !isLoading,
+                shape = MaterialTheme.shapes.extraLarge,
+                colors = TextFieldDefaults.colors(
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    unfocusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
+                    focusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
+                ),
             )
             Spacer(Modifier.width(8.dp))
-            IconButton(
+            val sendEnabled = inputText.isNotBlank() && !isLoading
+            FilledIconButton(
                 onClick = {
                     if (!isNetworkAvailable(context)) {
                         showNoNetworkAlert = true
@@ -304,7 +342,14 @@ fun PreferenceChatScreen(
                         inputText = ""
                     }
                 },
-                enabled = inputText.isNotBlank() && !isLoading,
+                enabled = sendEnabled,
+                modifier = Modifier.size(44.dp),
+                colors = IconButtonDefaults.filledIconButtonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                    disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                ),
             ) {
                 Icon(painterResource(R.drawable.send), contentDescription = stringResource(R.string.pref_chat_send_desc))
             }
@@ -345,6 +390,48 @@ fun PreferenceChatScreen(
                 }
             },
         )
+    }
+}
+
+// ── Chat mode segmented control (iOS-style) ─────────────────────
+
+@Composable
+private fun ChatModeSegmentedControl(
+    selected: String,
+    onSelect: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val segments = listOf(
+        "RULES" to R.string.pref_chat_mode_rules,
+        "ABOUT_ME" to R.string.pref_chat_mode_about_me,
+    )
+    Surface(
+        modifier = modifier.height(36.dp),
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+    ) {
+        Row(modifier = Modifier.padding(3.dp)) {
+            segments.forEach { (value, labelRes) ->
+                val isSelected = selected == value
+                Surface(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxSize()
+                        .clickable { onSelect(value) },
+                    shape = MaterialTheme.shapes.medium,
+                    color = if (isSelected) MaterialTheme.colorScheme.surface else androidx.compose.ui.graphics.Color.Transparent,
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text(
+                            stringResource(labelRes),
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                            color = if (isSelected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -412,15 +499,26 @@ private fun ProposedActionCard(
         }
     }
 
-    val cardColor = when {
-        action.confirmed -> MaterialTheme.colorScheme.tertiaryContainer
-        action.dismissed -> MaterialTheme.colorScheme.surfaceVariant
-        else -> MaterialTheme.colorScheme.secondaryContainer
+    val cardColor: androidx.compose.ui.graphics.Color
+    val cardContentColor: androidx.compose.ui.graphics.Color
+    when {
+        action.confirmed -> {
+            cardColor = NotiTheme.semantic.keepContainer
+            cardContentColor = NotiTheme.semantic.onKeepContainer
+        }
+        action.dismissed -> {
+            cardColor = MaterialTheme.colorScheme.surfaceVariant
+            cardContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+        }
+        else -> {
+            cardColor = MaterialTheme.colorScheme.secondaryContainer
+            cardContentColor = MaterialTheme.colorScheme.onSecondaryContainer
+        }
     }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = cardColor),
+        colors = CardDefaults.cardColors(containerColor = cardColor, contentColor = cardContentColor),
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             Text(
@@ -469,7 +567,7 @@ private fun ProposedActionCard(
                 Text(
                     stringResource(R.string.pref_action_confirmed),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.tertiary,
+                    color = NotiTheme.semantic.keepAccent,
                     fontWeight = FontWeight.Bold,
                 )
             } else if (action.dismissed) {
@@ -545,17 +643,17 @@ private fun ActivePreferencesPanel(
                     ) {
                         Text(
                             text = "• ${pref.statement}",
-                            style = MaterialTheme.typography.bodySmall,
+                            style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier.weight(1f),
                         )
                         IconButton(
                             onClick = { deleteTarget = pref },
-                            modifier = Modifier.size(24.dp),
+                            modifier = Modifier.size(40.dp),
                         ) {
                             Icon(
                                 painterResource(R.drawable.close),
                                 contentDescription = stringResource(R.string.pref_action_dismiss),
-                                modifier = Modifier.size(16.dp),
+                                modifier = Modifier.size(20.dp),
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
@@ -647,17 +745,17 @@ private fun UserContextPanel(
                     ) {
                         Text(
                             text = "• ${ctx.statement}",
-                            style = MaterialTheme.typography.bodySmall,
+                            style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier.weight(1f),
                         )
                         IconButton(
                             onClick = { deleteTarget = ctx },
-                            modifier = Modifier.size(24.dp),
+                            modifier = Modifier.size(40.dp),
                         ) {
                             Icon(
                                 painterResource(R.drawable.close),
                                 contentDescription = stringResource(R.string.pref_action_dismiss),
-                                modifier = Modifier.size(16.dp),
+                                modifier = Modifier.size(20.dp),
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
@@ -783,8 +881,10 @@ private fun ConflictsBanner(
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp)
+            .clip(MaterialTheme.shapes.large)
             .background(MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f))
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(horizontal = 16.dp, vertical = 10.dp),
     ) {
         Row(
             modifier = Modifier

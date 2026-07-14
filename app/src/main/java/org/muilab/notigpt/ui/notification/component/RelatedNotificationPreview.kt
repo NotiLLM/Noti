@@ -31,7 +31,6 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import org.muilab.notigpt.R
 import org.muilab.notigpt.model.notifications.NotiDisplayUnit
 import org.muilab.notigpt.ui.notification.component.info.ExpandedNotiRecord
@@ -104,10 +103,9 @@ fun RelatedNotificationPreview(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = displayTitle,
-                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.ExtraBold),
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.ExtraBold),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        fontSize = 14.sp,
                     )
                     if (hasSecondTitle) {
                         Text(
