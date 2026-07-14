@@ -41,6 +41,7 @@ fun ReviewDetailSheet(
     reviewViewModel: ReviewViewModel,
     onApprove: () -> Unit,
     onReject: () -> Unit,
+    onEdit: () -> Unit,
 ) {
     val changes by remember(item.savedItemId) { reviewViewModel.changeLogFlow(item.savedItemId) }
         .collectAsState(initial = emptyList())
@@ -91,6 +92,10 @@ fun ReviewDetailSheet(
             }
         }
 
+        // Edit opens the full editor in review mode (editing is itself the accept).
+        OutlinedButton(onClick = onEdit, modifier = Modifier.fillMaxWidth()) {
+            Text(stringResource(R.string.review_edit))
+        }
         Row(
             modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),

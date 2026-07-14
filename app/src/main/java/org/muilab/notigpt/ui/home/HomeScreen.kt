@@ -2,6 +2,7 @@ package org.muilab.notigpt.ui.home
 
 import android.os.Build
 import androidx.annotation.RequiresApi
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -80,10 +81,11 @@ fun HomeScreen(
 
     LazyColumn(
         modifier = Modifier.fillMaxWidth(),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 8.dp, bottom = 24.dp),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 4.dp, bottom = 24.dp),
     ) {
-        item {
-            ReviewRow(counts = reviewCounts, onClick = onOpenReview)
+        // The single call-to-action; hidden entirely when there's nothing to review.
+        if (reviewCounts.total > 0) {
+            item { ReviewRow(counts = reviewCounts, onClick = onOpenReview) }
         }
 
         // Slim, zero-cost-when-empty strip: due scheduled reminders the user hasn't seen yet.
@@ -124,6 +126,17 @@ fun HomeScreen(
 }
 
 @Composable
+private fun HomeTitle() {
+    Text(
+        text = stringResource(R.string.app_name),
+        style = MaterialTheme.typography.headlineLarge,
+        fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+        color = MaterialTheme.colorScheme.onSurface,
+        modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 8.dp),
+    )
+}
+
+@Composable
 private fun HomeSectionHeader(title: String) {
     Text(
         text = title,
@@ -141,41 +154,45 @@ private fun HomeSectionHeader(title: String) {
 @Composable
 private fun ReviewRow(counts: ReviewCounts, onClick: () -> Unit) {
     val summary = reviewSummary(counts)
-    // The screen's single tinted hero.
+    // Neutral card in the same family as the smart-filter tiles; meaning carried by a tinted disc and
+    // a big count, not a full colored slab.
     Surface(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = Dimens.screenH, vertical = Dimens.inline)
-            .clickable(enabled = counts.total > 0, onClick = onClick),
+            .clickable(onClick = onClick),
         shape = MaterialTheme.shapes.large,
-        color = MaterialTheme.colorScheme.primaryContainer,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
         Row(
-            modifier = Modifier.padding(20.dp),
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 18.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(
-                painter = painterResource(R.drawable.inbox),
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                modifier = Modifier.size(28.dp),
+            FilterDisc(
+                iconRes = R.drawable.inbox,
+                container = MaterialTheme.colorScheme.primaryContainer,
+                content = MaterialTheme.colorScheme.onPrimaryContainer,
             )
             Spacer(Modifier.size(16.dp))
             Column(Modifier.weight(1f)) {
                 Text(
                     text = stringResource(R.string.home_review_title),
                     style = NotiType.cardTitle,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
                 Text(
                     text = summary,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            if (counts.total > 0) {
-                CountBadge(counts.total, MaterialTheme.colorScheme.onPrimaryContainer, MaterialTheme.colorScheme.primaryContainer)
-            }
+            Spacer(Modifier.size(16.dp))
+            Text(
+                text = counts.total.toString(),
+                style = NotiType.statNumber,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
         }
     }
 }
@@ -246,6 +263,7 @@ private fun NotiCategoryRow(iconRes: Int, title: String, preview: CategoryPrevie
             .clickable(onClick = onClick),
         shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surfaceContainerLow,
+        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
         Row(
             modifier = Modifier
@@ -320,8 +338,8 @@ private fun SmartFilterGrid(
                 count = counts.todayEarlier,
                 label = stringResource(R.string.home_filter_today),
                 iconRes = R.drawable.ic_calendar_today,
-                discContainer = NotiTheme.semantic.taskContainer,
-                discContent = NotiTheme.semantic.taskAccent,
+                discContainer = NotiTheme.semantic.todayContainer,
+                discContent = NotiTheme.semantic.todayAccent,
                 onClick = { onOpen(SavedListFilter.TodayEarlier) },
                 modifier = Modifier.weight(1f),
             )
@@ -329,8 +347,8 @@ private fun SmartFilterGrid(
                 count = counts.upcoming,
                 label = stringResource(R.string.home_filter_upcoming),
                 iconRes = R.drawable.schedule,
-                discContainer = NotiTheme.semantic.keepContainer,
-                discContent = NotiTheme.semantic.keepAccent,
+                discContainer = NotiTheme.semantic.upcomingContainer,
+                discContent = NotiTheme.semantic.upcomingAccent,
                 onClick = { onOpen(SavedListFilter.Upcoming) },
                 modifier = Modifier.weight(1f),
             )
@@ -349,8 +367,8 @@ private fun SmartFilterGrid(
                 count = counts.starred,
                 label = stringResource(R.string.home_filter_starred),
                 iconRes = R.drawable.star_yes,
-                discContainer = NotiTheme.semantic.dueSoonContainer,
-                discContent = NotiTheme.semantic.dueSoon,
+                discContainer = NotiTheme.semantic.starredContainer,
+                discContent = NotiTheme.semantic.starred,
                 onClick = { onOpen(SavedListFilter.Starred) },
                 modifier = Modifier.weight(1f),
             )
@@ -388,6 +406,7 @@ private fun SmartFilterBox(
             .clickable(onClick = onClick),
         shape = MaterialTheme.shapes.large,
         color = MaterialTheme.colorScheme.surfaceContainerLow,
+        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
         if (fullWidth) {
             Row(
@@ -397,12 +416,19 @@ private fun SmartFilterBox(
                 FilterDisc(iconRes, discContainer, discContent)
                 Spacer(Modifier.size(16.dp))
                 Text(
+                    text = label,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f),
+                )
+                Spacer(Modifier.size(16.dp))
+                // Count on the right, matching every other smart-filter tile (icon-then-count reads
+                // top-right there too).
+                Text(
                     text = count.total.toString(),
                     style = NotiType.statNumber,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
-                Spacer(Modifier.size(16.dp))
-                Text(text = label, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
             }
         } else {
             Column(

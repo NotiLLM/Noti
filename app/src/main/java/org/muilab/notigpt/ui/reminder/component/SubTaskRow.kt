@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.AssistChip
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -38,6 +37,7 @@ import org.json.JSONArray
 import org.muilab.notigpt.R
 import org.muilab.notigpt.model.features.SavedSubItem
 import org.muilab.notigpt.ui.common.clipboard.AndroidClipboardController
+import org.muilab.notigpt.ui.theme.NotiTheme
 
 /**
  * A single sub-task row used in both ReminderCard (list) and ReminderDetailScreen.
@@ -88,10 +88,10 @@ fun SavedSubItemRow(
                 .padding(start = 16.dp, end = 8.dp, top = 2.dp, bottom = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Checkbox(
+            TaskCompletionToggle(
                 checked = subTask.isCompleted,
+                accent = NotiTheme.semantic.taskAccent,
                 onCheckedChange = onToggleCompleted,
-                modifier = Modifier.size(32.dp),
             )
             Spacer(Modifier.width(4.dp))
 

@@ -119,8 +119,13 @@ fun NotiCard(
     // A single hairline; a pinned/sorted card is marked by a primary-tinted 1.5dp edge instead of a
     // heavy outline. (Previously an outline border plus a second rim border stacked on the card.)
     val isHighlighted = notiUnit.sortPosition != -1
+    val isDarkTheme = androidx.compose.foundation.isSystemInDarkTheme()
     val borderColor = if (isHighlighted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
-    val borderWidth = if (isHighlighted) 1.5.dp else 1.dp
+    // Dark canvas is true black, so a hairline is the only way a card reads as separate; light canvas
+    // is grey, so a soft shadow does that job instead (iOS notification-banner convention) and the
+    // hairline would just look muddy on top of it.
+    val borderWidth = if (isHighlighted) 1.5.dp else if (isDarkTheme) 1.dp else 0.dp
+    val cardShadowElevation = if (isHighlighted || isDarkTheme) 0.dp else 2.dp
 
     // Expand state
     val maxHeightDp = 200.dp
@@ -327,7 +332,7 @@ fun NotiCard(
                 .onGloballyPositioned { coords -> surfaceBoundsInWindow = coords.boundsInWindow() }
                 .semantics { customActions = cardActions },
             shape = MaterialTheme.shapes.large,
-            shadowElevation = 0.dp,
+            shadowElevation = cardShadowElevation,
             color = backgroundColor,
         ) {
             Box(modifier = Modifier.fillMaxWidth().padding(vertical = 7.dp)) {

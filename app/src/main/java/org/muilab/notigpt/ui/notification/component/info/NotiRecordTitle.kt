@@ -7,7 +7,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 
 /**
  * Title renderer for notification record rows.
@@ -22,9 +21,6 @@ fun NotiInfoTitle(notiTitle: String, modifier: Modifier = Modifier) {
             .padding(start = 16.dp, top = 8.dp)
             .then(modifier),
         text = if (notiTitle == "null") "" else notiTitle,
-        style = MaterialTheme.typography.bodySmall.copy(
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Bold
-        )
+        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
     )
 }

@@ -2,6 +2,9 @@ package org.muilab.notigpt.ui.review
 
 import android.os.Build
 import androidx.annotation.RequiresApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -33,6 +36,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.painterResource
@@ -63,7 +67,10 @@ import org.muilab.notigpt.ui.theme.NotiTheme
 fun ReviewScreen(
     drawerViewModel: DrawerViewModel,
     reminderViewModel: ReminderViewModel,
+    preferenceViewModel: org.muilab.notigpt.ui.preference.viewmodel.PreferenceViewModel,
     onBack: () -> Unit,
+    onOpenUndetermined: () -> Unit,
+    onDetailOpenChange: (Boolean) -> Unit = {},
     reviewViewModel: ReviewViewModel = viewModel(),
 ) {
     val allNew by reviewViewModel.newItems.collectAsState()
@@ -71,24 +78,50 @@ fun ReviewScreen(
 
     val filtered = remember(allNew, filter) { allNew.filter { reviewViewModel.matchesFilter(it, filter) } }
 
-    // Undo snackbar.
     val context = androidx.compose.ui.platform.LocalContext.current
-    val snackbarHostState = remember { androidx.compose.material3.SnackbarHostState() }
-    val undoLabel = stringResource(R.string.review_undo)
+
+    // Custom snackbar: Undo + (on rejects) "Tell it why". A single state holds the current one, so a
+    // fresh action supersedes the previous snackbar rather than queueing behind it.
+    var reviewSnackbar by remember { mutableStateOf<ReviewViewModel.ReviewSnackbar?>(null) }
     androidx.compose.runtime.LaunchedEffect(Unit) {
-        reviewViewModel.snackbar.collect { msgResId ->
-            val result = snackbarHostState.showSnackbar(
-                message = context.getString(msgResId),
-                actionLabel = undoLabel,
-                duration = androidx.compose.material3.SnackbarDuration.Short,
-            )
-            if (result == androidx.compose.material3.SnackbarResult.ActionPerformed) reviewViewModel.undoLast()
+        reviewViewModel.resetReviewSession()
+        reviewViewModel.snackbar.collect { reviewSnackbar = it }
+    }
+    // Longer-lived than a default snackbar so the "Tell it why" affordance is catchable.
+    androidx.compose.runtime.LaunchedEffect(reviewSnackbar) {
+        if (reviewSnackbar != null) {
+            kotlinx.coroutines.delay(6000)
+            reviewSnackbar = null
+        }
+    }
+
+    // End-of-stack offer: once the last item is reviewed, if any approved tasks lack a do-date, offer
+    // to go set them in the Undetermined list.
+    var showDoDateOffer by remember { mutableStateOf(false) }
+    var offerCount by remember { mutableStateOf(0) }
+    var everHadItems by remember { mutableStateOf(false) }
+    androidx.compose.runtime.LaunchedEffect(allNew.size) {
+        if (allNew.isNotEmpty()) {
+            everHadItems = true
+        } else if (everHadItems) {
+            everHadItems = false
+            val count = reviewViewModel.approvedNeedingDoDateCount()
+            if (count > 0) {
+                offerCount = count
+                showDoDateOffer = true
+            }
         }
     }
 
     // Detail bottom sheet.
     var expanded by remember { mutableStateOf<SavedItem?>(null) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    // Edit-in-review: hosts the full editor as a full-screen overlay; signal AppScaffold to hide its
+    // bars (the editor has its own header) just like the list editor does.
+    var editingItem by remember { mutableStateOf<SavedItem?>(null) }
+    androidx.compose.runtime.LaunchedEffect(editingItem) { onDetailOpenChange(editingItem != null) }
+    val subtasksByReminder by reminderViewModel.allSavedSubItemsByReminder.collectAsState()
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
@@ -155,9 +188,52 @@ fun ReviewScreen(
             }
         }
 
-        androidx.compose.material3.SnackbarHost(
-            hostState = snackbarHostState,
-            modifier = Modifier.align(Alignment.BottomCenter),
+        reviewSnackbar?.let { data ->
+            val undoLabel = stringResource(R.string.review_undo)
+            val tellWhyLabel = stringResource(R.string.review_tell_why)
+            androidx.compose.material3.Snackbar(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(start = 12.dp, end = 12.dp, bottom = 96.dp),
+                action = {
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        if (data.canTeach && data.item != null) {
+                            TextButton(onClick = {
+                                preferenceViewModel.startFlowSheet(
+                                    org.muilab.notigpt.ui.preference.model.PreferenceEntryPoint.DELETE,
+                                    data.item,
+                                )
+                                reviewSnackbar = null
+                            }) { Text(tellWhyLabel) }
+                        }
+                        TextButton(onClick = {
+                            reviewViewModel.undoLast()
+                            reviewSnackbar = null
+                        }) { Text(undoLabel) }
+                    }
+                },
+            ) { Text(context.getString(data.messageRes)) }
+        }
+    }
+
+    if (showDoDateOffer) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showDoDateOffer = false; reviewViewModel.resetReviewSession() },
+            title = { Text(stringResource(R.string.review_dodate_offer_title)) },
+            text = { Text(stringResource(R.string.review_dodate_offer_body, offerCount)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    showDoDateOffer = false
+                    reviewViewModel.resetReviewSession()
+                    onOpenUndetermined()
+                }) { Text(stringResource(R.string.review_dodate_offer_set)) }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showDoDateOffer = false
+                    reviewViewModel.resetReviewSession()
+                }) { Text(stringResource(R.string.review_dodate_offer_skip)) }
+            },
         )
     }
 
@@ -171,6 +247,37 @@ fun ReviewScreen(
                 reviewViewModel = reviewViewModel,
                 onApprove = { reviewViewModel.approve(item); expanded = null },
                 onReject = { reviewViewModel.reject(item); expanded = null },
+                onEdit = { editingItem = item; expanded = null },
+            )
+        }
+    }
+
+    // Full-screen editor overlay (review mode: Save & Approve / Delete footer).
+    editingItem?.let { item ->
+        androidx.compose.foundation.layout.Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+                .clickable(
+                    indication = null,
+                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                    onClick = {},
+                ),
+        ) {
+            org.muilab.notigpt.ui.reminder.screen.ReminderDetailScreen(
+                initial = item,
+                drawerViewModel = drawerViewModel,
+                onBack = { editingItem = null },
+                onDelete = { reviewViewModel.reject(item); editingItem = null },
+                onSave = {},
+                reviewMode = true,
+                onSaveApprove = { updated -> reviewViewModel.saveApprove(updated); editingItem = null },
+                onRejectDelete = { reviewViewModel.reject(item); editingItem = null },
+                changeLog = reviewViewModel.changeLogFlow(item.savedItemId),
+                subTasks = subtasksByReminder[item.savedItemId] ?: emptyList(),
+                onAddSavedSubItem = { reminderViewModel.addSavedSubItem(item.savedItemId) },
+                onSavedSubItemToggle = { stId, checked -> reminderViewModel.toggleSavedSubItemCompleted(stId, checked) },
+                onSavedSubItemDelete = { st -> reminderViewModel.deleteSavedSubItem(st.savedSubItemId) },
             )
         }
     }
@@ -273,46 +380,62 @@ private fun MinimalReviewCard(
                     )
                 }
             }
-            // Approve/reject glyphs fade in with drag progress.
-            SwipeGlyph(
-                text = stringResource(R.string.review_approve),
-                color = NotiTheme.semantic.keepAccent,
-                alpha = approveProgress,
-                alignment = Alignment.TopStart,
-            )
-            SwipeGlyph(
-                text = stringResource(R.string.review_reject),
-                color = MaterialTheme.colorScheme.error,
-                alpha = rejectProgress,
-                alignment = Alignment.TopEnd,
+            // Whole-card approve/reject wash that grows with drag progress (not a corner badge).
+            SwipeOverlay(
+                approveText = stringResource(R.string.review_approve),
+                rejectText = stringResource(R.string.review_reject),
+                approveColor = NotiTheme.semantic.keepAccent,
+                rejectColor = MaterialTheme.colorScheme.error,
+                approveProgress = approveProgress,
+                rejectProgress = rejectProgress,
             )
         }
     }
 }
 
+/**
+ * Full-card tint + large label that intensifies with drag. Approve/reject are mutually exclusive
+ * (only one progress is > 0 at a time), so a single overlay covers the whole card in the active color.
+ */
 @Composable
-private fun androidx.compose.foundation.layout.BoxScope.SwipeGlyph(
-    text: String,
-    color: Color,
-    alpha: Float,
-    alignment: Alignment,
+private fun androidx.compose.foundation.layout.BoxScope.SwipeOverlay(
+    approveText: String,
+    rejectText: String,
+    approveColor: Color,
+    rejectColor: Color,
+    approveProgress: Float,
+    rejectProgress: Float,
 ) {
-    Surface(
+    val approving = approveProgress >= rejectProgress
+    val progress = if (approving) approveProgress else rejectProgress
+    if (progress <= 0f) return
+    val color = if (approving) approveColor else rejectColor
+    val label = if (approving) approveText else rejectText
+    val alignment = if (approving) Alignment.CenterStart else Alignment.CenterEnd
+
+    Box(
         modifier = Modifier
-            .align(alignment)
-            .padding(16.dp)
-            .graphicsLayer { this.alpha = alpha },
-        shape = MaterialTheme.shapes.small,
-        color = color.copy(alpha = 0.16f),
-        border = androidx.compose.foundation.BorderStroke(2.dp, color),
+            .matchParentSize()
+            .clip(MaterialTheme.shapes.extraLarge)
+            .graphicsLayer { alpha = progress }
+            .background(color.copy(alpha = 0.20f))
+            .border(3.dp, color.copy(alpha = 0.9f), MaterialTheme.shapes.extraLarge),
     ) {
-        Text(
-            text = text.uppercase(),
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
+        Surface(
+            modifier = Modifier
+                .align(alignment)
+                .padding(24.dp),
+            shape = MaterialTheme.shapes.small,
             color = color,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-        )
+        ) {
+            Text(
+                text = label.uppercase(),
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            )
+        }
     }
 }
 

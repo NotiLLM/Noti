@@ -14,12 +14,17 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -49,6 +54,7 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -120,6 +126,7 @@ fun AppScaffold(
     var detailOpen by remember { mutableStateOf(false) }
     // Category pending "clear all" confirmation (the clear is a hard delete, so we confirm first).
     var clearConfirmCategory by remember { mutableStateOf<String?>(null) }
+    var clearConfirmDontShowAgain by remember { mutableStateOf(false) }
     // The home root uses a collapsing large-title bar; list screens use an enter-always small bar;
     // everything else has a pinned small bar (no scroll behavior).
     val listScrollEnabled = menuScreen == AppMenuScreen.History ||
@@ -360,7 +367,14 @@ fun AppScaffold(
                                 val enabled = clearableCount > 0
                                 IconButton(
                                     enabled = enabled,
-                                    onClick = { clearConfirmCategory = category },
+                                    onClick = {
+                                        if (org.muilab.notigpt.util.SharedPreferencesManager.skipClearAllConfirm) {
+                                            drawerViewModel.clearVisibleNotis(category)
+                                        } else {
+                                            clearConfirmDontShowAgain = false
+                                            clearConfirmCategory = category
+                                        }
+                                    },
                                 ) {
                                     Icon(
                                         painter = painterResource(R.drawable.delete),
@@ -431,7 +445,13 @@ fun AppScaffold(
                             HomeDestination.Review -> ReviewScreen(
                                 drawerViewModel = drawerViewModel,
                                 reminderViewModel = reminderViewModel,
+                                preferenceViewModel = preferenceViewModel,
                                 onBack = popBack,
+                                onOpenUndetermined = {
+                                    popBack()
+                                    pushHome(HomeDestination.SavedList(SavedListFilter.Undetermined))
+                                },
+                                onDetailOpenChange = { detailOpen = it },
                             )
                             is HomeDestination.NotiList -> NotiCategoryScreen(
                                 category = dest.category,
@@ -470,9 +490,29 @@ fun AppScaffold(
         AlertDialog(
             onDismissRequest = { clearConfirmCategory = null },
             title = { Text(stringResource(R.string.noti_clear_all_confirm_title)) },
-            text = { Text(stringResource(R.string.noti_clear_all_confirm_message)) },
+            text = {
+                Column {
+                    Text(stringResource(R.string.noti_clear_all_confirm_message))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp)
+                            .clickable { clearConfirmDontShowAgain = !clearConfirmDontShowAgain },
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Checkbox(
+                            checked = clearConfirmDontShowAgain,
+                            onCheckedChange = { clearConfirmDontShowAgain = it },
+                        )
+                        Text(stringResource(R.string.noti_clear_all_dont_show_again))
+                    }
+                }
+            },
             confirmButton = {
                 TextButton(onClick = {
+                    if (clearConfirmDontShowAgain) {
+                        org.muilab.notigpt.util.SharedPreferencesManager.skipClearAllConfirm = true
+                    }
                     drawerViewModel.clearVisibleNotis(category)
                     clearConfirmCategory = null
                 }) {

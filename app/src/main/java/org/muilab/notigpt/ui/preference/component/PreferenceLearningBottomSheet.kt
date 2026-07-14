@@ -1,5 +1,6 @@
 package org.muilab.notigpt.ui.preference.component
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -10,9 +11,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -21,6 +23,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import org.muilab.notigpt.R
 import org.muilab.notigpt.ui.preference.model.PreferenceEntryPoint
@@ -69,12 +72,12 @@ private fun ScopeContent(
         R.string.pref_scope_just_this_one,
         R.string.pref_scope_remember,
         R.string.pref_scope_make_rule,
-        R.string.pref_scope_not_now,
     )
 
     OptionList(
         titleResId = titleResId,
         optionResIds = options,
+        cancelResId = R.string.pref_scope_not_now,
         onSelect = { vm.selectScope(it) },
     )
 }
@@ -106,29 +109,67 @@ private fun SyncingContent() {
     }
 }
 
+/**
+ * iOS action-sheet-style option list: a single rounded, hairline-divided group of rows for the primary
+ * choices, plus (when [cancelResId] is given) a visually separated group below for the "cancel" option —
+ * mirroring how UIAlertController groups its cancel action apart from the rest.
+ */
 @Composable
 private fun OptionList(
     titleResId: Int,
     optionResIds: List<Int>,
     onSelect: (Int) -> Unit,
+    cancelResId: Int? = null,
 ) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 24.dp, vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+            .padding(horizontal = 16.dp, vertical = 16.dp),
     ) {
-        Text(stringResource(titleResId), style = MaterialTheme.typography.titleMedium)
-        Spacer(Modifier.height(8.dp))
-        optionResIds.forEach { resId ->
-            OutlinedButton(
-                onClick = { onSelect(resId) },
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(stringResource(resId))
-            }
+        Text(
+            stringResource(titleResId),
+            style = MaterialTheme.typography.titleLarge,
+            modifier = Modifier.padding(horizontal = 8.dp),
+        )
+        Spacer(Modifier.height(16.dp))
+        OptionGroup(optionResIds, onSelect)
+        if (cancelResId != null) {
+            Spacer(Modifier.height(8.dp))
+            OptionGroup(listOf(cancelResId), onSelect, emphasized = true)
         }
         Spacer(Modifier.height(16.dp))
+    }
+}
+
+@Composable
+private fun OptionGroup(
+    optionResIds: List<Int>,
+    onSelect: (Int) -> Unit,
+    emphasized: Boolean = false,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+    ) {
+        Column {
+            optionResIds.forEachIndexed { index, resId ->
+                Text(
+                    text = stringResource(resId),
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = if (emphasized) FontWeight.Bold else FontWeight.Normal,
+                    color = if (emphasized) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onSelect(resId) }
+                        .padding(vertical = 16.dp, horizontal = 16.dp),
+                )
+                if (index != optionResIds.lastIndex) {
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                }
+            }
+        }
     }
 }
