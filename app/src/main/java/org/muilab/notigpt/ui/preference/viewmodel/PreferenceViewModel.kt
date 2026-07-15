@@ -3,6 +3,7 @@ package org.muilab.notigpt.ui.preference.viewmodel
 import android.app.Application
 import android.util.Log
 import org.muilab.notigpt.ui.common.feedback.AppSnackbar
+import org.muilab.notigpt.ui.common.feedback.AppSnackbarMessage
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
@@ -136,16 +137,14 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
     fun promoteSnackbarToFlow() {
         val event = _snackbarEvent.value ?: return
         _snackbarEvent.value = null
-        _currentReminder = event.reminder
-        _currentReminderBefore = event.reminderBefore
-        _bottomSheetStep.value = BottomSheetStep.Scope(event.entryPoint, event.contextData)
+        promoteSnackbarToFlow(event)
     }
 
     /** Channel-based overload: event is passed directly, StateFlow already cleared. */
     fun promoteSnackbarToFlow(event: SnackbarEvent) {
         _currentReminder = event.reminder
         _currentReminderBefore = event.reminderBefore
-        _bottomSheetStep.value = BottomSheetStep.Scope(event.entryPoint, event.contextData)
+        _bottomSheetStep.value = BottomSheetStep.Chips(event.entryPoint, event.contextData, getChipOptions(event.entryPoint))
     }
 
     // ══════════════════════════════════════════════════════════════════
@@ -154,10 +153,17 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
 
     sealed interface BottomSheetStep {
         object Hidden : BottomSheetStep
-        data class Scope(val entryPoint: PreferenceEntryPoint, val contextData: Map<String, Any?>) : BottomSheetStep
-        data class RuleSelection(val entryPoint: PreferenceEntryPoint, val contextData: Map<String, Any?>, val scope: Int, val ruleOptions: List<Int>) : BottomSheetStep
-        /** Syncing in progress after user completed selections. */
-        data class Syncing(val entryPoint: PreferenceEntryPoint) : BottomSheetStep
+
+        /**
+         * Single-step chip prompt: one tap picks the reason (which also implies "make a rule"). The
+         * old Scope → RuleSelection → Syncing progression collapsed here — sync runs in the background
+         * and the sheet closes immediately on tap, so there's no in-sheet syncing state.
+         */
+        data class Chips(
+            val entryPoint: PreferenceEntryPoint,
+            val contextData: Map<String, Any?>,
+            val options: List<Int>,
+        ) : BottomSheetStep
     }
 
     private val _bottomSheetStep = MutableStateFlow<BottomSheetStep>(BottomSheetStep.Hidden)
@@ -227,7 +233,7 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
                 // Opens BottomSheet immediately (user is in detail screen)
                 _currentReminder = reminder
                 _currentReminderBefore = reminderBefore
-                _bottomSheetStep.value = BottomSheetStep.Scope(entryPoint, enriched)
+                _bottomSheetStep.value = BottomSheetStep.Chips(entryPoint, enriched, getChipOptions(entryPoint))
             }
             PreferenceEntryPoint.DELETE,
             PreferenceEntryPoint.MANUAL_EXTRACT -> {
@@ -255,7 +261,7 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
         val enriched = buildContextData(reminder, reminderBefore, contextData)
         _currentReminder = reminder
         _currentReminderBefore = reminderBefore
-        _bottomSheetStep.value = BottomSheetStep.Scope(entryPoint, enriched)
+        _bottomSheetStep.value = BottomSheetStep.Chips(entryPoint, enriched, getChipOptions(entryPoint))
     }
 
     fun dismissBottomSheet() {
@@ -264,76 +270,56 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
         _currentReminderBefore = null
     }
 
-    fun selectScope(scopeResId: Int) {
-        val current = _bottomSheetStep.value
-        if (current !is BottomSheetStep.Scope) return
-
-        when (scopeResId) {
-            R.string.pref_scope_just_this_one, R.string.pref_scope_not_now -> {
-                // Terminal choice — no learning needed
-                dismissBottomSheet()
-            }
-            else -> {
-                val ruleOptions = getRuleOptions(current.entryPoint)
-                _bottomSheetStep.value = BottomSheetStep.RuleSelection(
-                    entryPoint = current.entryPoint,
-                    contextData = current.contextData,
-                    scope = scopeResId,
-                    ruleOptions = ruleOptions,
-                )
-            }
-        }
-    }
-
     /**
-     * Returns the concrete rule options for a given entry point.
+     * One-step chip set per entry point: a "just this once" terminal option, the concrete reason
+     * chips, and an "Other" escape to chat. The reason chip both scopes ("make a rule") and states
+     * the reason, so there's no separate scope step. Broken chips from the old two-step flow
+     * (delete_group / extract_wording / edit_responsibility, and the redundant scope chips) are gone.
      */
-    private fun getRuleOptions(entryPoint: PreferenceEntryPoint): List<Int> {
-        return when (entryPoint) {
+    private fun getChipOptions(entryPoint: PreferenceEntryPoint): List<Int> {
+        val reasons = when (entryPoint) {
             PreferenceEntryPoint.DELETE -> listOf(
                 R.string.pref_rule_delete_sender,
-                R.string.pref_rule_delete_group,
                 R.string.pref_rule_delete_info,
                 R.string.pref_rule_delete_topic,
                 R.string.pref_rule_delete_app,
-                R.string.pref_reason_other,
             )
             PreferenceEntryPoint.MANUAL_EXTRACT -> listOf(
                 R.string.pref_rule_extract_sender,
                 R.string.pref_rule_extract_thread,
-                R.string.pref_rule_extract_wording,
                 R.string.pref_rule_extract_situational,
-                R.string.pref_reason_other,
             )
             PreferenceEntryPoint.EDIT -> listOf(
                 R.string.pref_rule_edit_context,
                 R.string.pref_rule_edit_urgency,
-                R.string.pref_rule_edit_responsibility,
                 R.string.pref_rule_edit_granularity,
-                R.string.pref_reason_other,
             )
+        }
+        return listOf(R.string.pref_scope_just_this_one) + reasons + R.string.pref_reason_other
+    }
+
+    /** Single-step chip selection: terminal "just this once", "Other" → chat, else fire the sync. */
+    fun selectChip(chipResId: Int) {
+        val current = _bottomSheetStep.value
+        if (current !is BottomSheetStep.Chips) return
+
+        when (chipResId) {
+            R.string.pref_scope_just_this_one -> dismissBottomSheet()
+            R.string.pref_reason_other -> openChatFromFlow(current.entryPoint, current.contextData)
+            else -> {
+                val ctx = getApplication<Application>()
+                fireQuickSync(current.entryPoint, current.contextData, "rule", ctx.getString(chipResId), null)
+            }
         }
     }
 
     /**
-     * Called when user selects a concrete rule from the RuleSelection step.
+     * Non-blocking quick-sync: the sheet closes immediately and the round-trip runs in the
+     * background. Created and updated rules auto-apply; deletion *proposals* never auto-apply — they
+     * park as confirm-before-delete conflicts. A "Rules updated" snackbar offers a Review action to
+     * confirm/veto each change; ignoring it leaves the applied creates/updates standing and the
+     * parked deletions waiting.
      */
-    fun selectRule(ruleResId: Int) {
-        val current = _bottomSheetStep.value
-        if (current !is BottomSheetStep.RuleSelection) return
-
-        if (ruleResId == R.string.pref_reason_other) {
-            openChatFromFlow(current.entryPoint, current.contextData)
-            return
-        }
-
-        val ctx = getApplication<Application>()
-        fireQuickSync(
-            current.entryPoint, current.contextData,
-            ctx.getString(current.scope), ctx.getString(ruleResId), null,
-        )
-    }
-
     private fun fireQuickSync(
         entryPoint: PreferenceEntryPoint,
         contextData: Map<String, Any?>,
@@ -341,14 +327,18 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
         reason: String,
         subReason: String?,
     ) {
-        _bottomSheetStep.value = BottomSheetStep.Syncing(entryPoint)
+        // Close the sheet right away — the user can navigate anywhere while the sync runs.
+        _bottomSheetStep.value = BottomSheetStep.Hidden
+        _currentReminder = null
+        _currentReminderBefore = null
 
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val prefs = prefDao.getAllPreferences()
-                val prefsPayload = prefs.map { p ->
+                val prefsBefore = prefDao.getAllPreferences()
+                val prefsPayload = prefsBefore.map { p ->
                     mapOf("id" to p.id, "statement" to p.statement, "type" to p.preferenceType)
                 }
+                val beforeById = prefsBefore.associateBy { it.id }
 
                 val contexts = userContextDao.getAllContexts()
                 val contextsPayload = contexts.map { c ->
@@ -366,40 +356,124 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
                 )
 
                 val result = PreferenceQuickSyncClient.sync(request)
-                if (result != null) {
-                    val now = System.currentTimeMillis()
-                    val newPrefs = result.updatedPreferences.map { p ->
-                        ExtractionPreference(
-                            id = p.id,
-                            statement = p.statement,
-                            preferenceType = p.type,
-                            createdAt = now,
-                            updatedAt = now,
-                        )
-                    }
-                    prefDao.replacePreferences(newPrefs)
-                    pushPrefsToCloud()
-
-                    // Persist any conflicts detected by the backend
-                    persistConflicts(result.conflicts, "QUICK_SYNC")
-
-                    val toast = result.toastMessage
-                    if (!toast.isNullOrBlank()) {
-                        AppSnackbar.show(toast)
-                    }
-                } else {
+                if (result == null) {
                     AppSnackbar.show(getApplication<Application>().getString(R.string.pref_sync_failed))
+                    return@launch
+                }
+
+                val now = System.currentTimeMillis()
+                val reviewRules = mutableListOf<ReviewRule>()
+
+                // Created + updated rules apply immediately.
+                result.createdRules.filter { it.id.isNotBlank() }.forEach { p ->
+                    prefDao.upsertPreference(
+                        ExtractionPreference(id = p.id, statement = p.statement, preferenceType = p.type, createdAt = now, updatedAt = now)
+                    )
+                    reviewRules += ReviewRule(p.id, p.statement, p.type, ReviewRule.Kind.Created)
+                }
+                result.updatedRules.filter { it.id.isNotBlank() }.forEach { p ->
+                    val before = beforeById[p.id]
+                    prefDao.upsertPreference(
+                        ExtractionPreference(
+                            id = p.id, statement = p.statement, preferenceType = p.type,
+                            createdAt = before?.createdAt ?: now, updatedAt = now,
+                        )
+                    )
+                    reviewRules += ReviewRule(p.id, p.statement, p.type, ReviewRule.Kind.Updated, previousStatement = before?.statement)
+                }
+
+                // Deletion proposals do NOT auto-apply: park each as a confirm-before-delete conflict.
+                val deletions = result.deletedRuleIds.mapNotNull { beforeById[it] }
+                if (deletions.isNotEmpty()) {
+                    conflictDao.insertAll(
+                        deletions.map { p ->
+                            PreferenceConflict(
+                                conflictId = "delete_${p.id}",
+                                description = getApplication<Application>().getString(R.string.pref_delete_proposal, p.statement),
+                                involvedPreferenceIds = p.id,
+                                source = "QUICK_SYNC_DELETE",
+                                createdAt = now,
+                            )
+                        }
+                    )
+                    deletions.forEach { reviewRules += ReviewRule(it.id, it.statement, it.preferenceType, ReviewRule.Kind.Deleted) }
+                }
+
+                pushPrefsToCloud()
+                persistConflicts(result.conflicts, "QUICK_SYNC")
+
+                if (reviewRules.isEmpty()) {
+                    result.toastMessage?.takeIf { it.isNotBlank() }?.let { AppSnackbar.show(it) }
+                } else {
+                    val review = QuickSyncReview(reviewRules)
+                    AppSnackbar.show(
+                        AppSnackbarMessage(
+                            text = result.toastMessage?.takeIf { it.isNotBlank() }
+                                ?: getApplication<Application>().getString(R.string.pref_rules_updated),
+                            actionLabel = getApplication<Application>().getString(R.string.pref_review),
+                            onAction = { _quickSyncReview.value = review },
+                        )
+                    )
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Quick-sync error", e)
                 AppSnackbar.show(getApplication<Application>().getString(R.string.pref_sync_error))
-            } finally {
-                withContext(Dispatchers.Main) {
-                    _bottomSheetStep.value = BottomSheetStep.Hidden
-                    _currentReminder = null
-                    _currentReminderBefore = null
+            }
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════════════
+    //  Quick-sync review (confirm/veto applied creates/updates + parked deletions)
+    // ══════════════════════════════════════════════════════════════════
+
+    /** One rule surfaced in the review dialog, with the change kind and (for updates) its prior text. */
+    data class ReviewRule(
+        val id: String,
+        val statement: String,
+        val type: String,
+        val kind: Kind,
+        val previousStatement: String? = null,
+    ) {
+        enum class Kind { Created, Updated, Deleted }
+    }
+
+    data class QuickSyncReview(val rules: List<ReviewRule>)
+
+    private val _quickSyncReview = MutableStateFlow<QuickSyncReview?>(null)
+    val quickSyncReview: StateFlow<QuickSyncReview?> = _quickSyncReview
+
+    fun dismissQuickSyncReview() {
+        _quickSyncReview.value = null
+    }
+
+    /**
+     * Applies the user's confirm/veto decisions from the review dialog. [confirmedIds] are the rule
+     * ids the user kept checked: created/updated stay applied (unchecked reverts them), and deletions
+     * go through only when confirmed (unchecked keeps the rule). Either way the parked deletion
+     * conflict is resolved.
+     */
+    fun applyReviewDecisions(review: QuickSyncReview, confirmedIds: Set<String>) {
+        _quickSyncReview.value = null
+        viewModelScope.launch(Dispatchers.IO) {
+            val now = System.currentTimeMillis()
+            review.rules.forEach { rule ->
+                val confirmed = rule.id in confirmedIds
+                when (rule.kind) {
+                    ReviewRule.Kind.Created -> if (!confirmed) prefDao.deletePreference(rule.id)
+                    ReviewRule.Kind.Updated -> if (!confirmed) {
+                        rule.previousStatement?.let { prev ->
+                            prefDao.upsertPreference(
+                                ExtractionPreference(id = rule.id, statement = prev, preferenceType = rule.type, createdAt = now, updatedAt = now)
+                            )
+                        } ?: prefDao.deletePreference(rule.id)
+                    }
+                    ReviewRule.Kind.Deleted -> {
+                        if (confirmed) prefDao.deletePreference(rule.id)
+                        conflictDao.deleteConflict("delete_${rule.id}")
+                    }
                 }
             }
+            pushPrefsToCloud()
         }
     }
 
@@ -748,8 +822,8 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
                     )
                 }
 
-                // Current visible reminders
-                val reminders = reminderListDao.getAllVisible()
+                // Current saved items
+                val reminders = reminderListDao.getAll()
                 val remindersPayload = reminders.map { r ->
                     mapOf(
                         "title" to r.title,

@@ -154,6 +154,8 @@ fun RemindersScreen(
     listMode: ReminderViewModel.ListMode = ReminderViewModel.ListMode.All,
     /** When set, this screen shows a home smart-filter list (planned-date bucket or starred) instead of the tab chips. */
     smartFilter: org.muilab.notigpt.ui.common.navigation.SavedListFilter? = null,
+    /** When set, opens this item's detail screen as soon as it's loaded (e.g. jumping in from a notification's linked-items sheet). Consumed once. */
+    initialDetailItemId: String? = null,
     onDetailOpenChange: (Boolean) -> Unit = {},
 ) {
     val vm: ReminderViewModel = reminderViewModel ?: viewModel()
@@ -180,7 +182,20 @@ fun RemindersScreen(
     val strGoogleCalendarNoApp = stringResource(R.string.google_calendar_no_app)
 
     val reminders by vm.reminders.collectAsState()
+    val pendingPreviews by vm.pendingPreviews.collectAsState()
     val filter by vm.filter.collectAsState()
+
+    // Smart-filter pages (Today/Upcoming/… mixing tasks and keeps) get an in-page task/keep filter,
+    // but only when the page actually contains both types. null = show all. Reset when the page changes.
+    var smartTypeFilter by remember(smartFilter) { mutableStateOf<String?>(null) }
+    val smartHasTask = smartFilter != null && reminders.any { it.isTask }
+    val smartHasKeep = smartFilter != null && reminders.any { !it.isTask }
+    val smartShowTypeChips = smartHasTask && smartHasKeep
+    val displayedReminders = if (smartFilter != null && smartTypeFilter != null) {
+        reminders.filter { it.itemType == smartTypeFilter }
+    } else {
+        reminders
+    }
 
     // Flash the destination filter chip when a card changes status (e.g. completed -> Completed chip).
     var flashTarget by remember { mutableStateOf<ReminderViewModel.FilterTab?>(null) }
@@ -208,20 +223,44 @@ fun RemindersScreen(
     var lastEditing by remember { mutableStateOf<SavedItem?>(null) }
     var editingId by remember { mutableStateOf<String?>(null) }
     var editingInitialSnapshot by remember { mutableStateOf<SavedItem?>(null) }
+    var pendingEditRequest by remember { mutableStateOf<SavedItem?>(null) }
 
     // Sub-task editing (overlaid on top of reminder detail)
     var editingSavedSubItem by remember { mutableStateOf<SavedSubItem?>(null) }
     var editingSavedSubItemInitial by remember { mutableStateOf<SavedSubItem?>(null) }
 
+    fun openEditor(item: SavedItem, subItem: SavedSubItem? = null) {
+        editing = item
+        editingId = item.savedItemId
+        editingInitialSnapshot = item
+        editingSavedSubItem = subItem
+        editingSavedSubItemInitial = subItem
+    }
+
+    fun requestEdit(item: SavedItem, subItem: SavedSubItem? = null) {
+        if (pendingPreviews[item.savedItemId] != null) {
+            pendingEditRequest = item
+        } else {
+            openEditor(item, subItem)
+        }
+    }
+
+    // Auto-open a specific item's detail once it shows up in the loaded list (consumed once so
+    // re-composition or manually closing the detail doesn't reopen it).
+    var consumedInitialDetailItemId by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(initialDetailItemId, reminders) {
+        if (initialDetailItemId != null && initialDetailItemId != consumedInitialDetailItemId) {
+            reminders.find { it.savedItemId == initialDetailItemId }?.let { match ->
+                requestEdit(match)
+                consumedInitialDetailItemId = initialDetailItemId
+            }
+        }
+    }
+
     // Bulk sub-task observation (one DB query for all reminders)
     val allSavedSubItemsByReminder by vm.allSavedSubItemsByReminder.collectAsState()
 
-    // Long-press feedback dialog
-    var feedbackDialogReminder by remember { mutableStateOf<SavedItem?>(null) }
     var reminderDialogSavedItem by remember { mutableStateOf<SavedItem?>(null) }
-
-    // Regenerate-all confirmation dialog
-    var showRegenerateAllDialog by remember { mutableStateOf(false) }
 
     // ===== Google Tasks integration =====
     val googleTasksExportResult by vm.googleTasksExportResult.collectAsState()
@@ -321,16 +360,14 @@ fun RemindersScreen(
                     }
                 }
 
-                Spacer(Modifier.weight(1f))
+                // Smart-filter pages get task/keep chips only when both types are present.
+                if (smartShowTypeChips) {
+                    ReminderFilterChip(stringResource(R.string.ui_reminders_filter_all), smartTypeFilter == null, { smartTypeFilter = null })
+                    ReminderFilterChip(stringResource(R.string.ui_reminders_filter_tasks), smartTypeFilter == SavedItemType.Task, { smartTypeFilter = SavedItemType.Task }, leadingIconRes = R.drawable.check_box_unchecked, iconTint = NotiTheme.semantic.taskAccent)
+                    ReminderFilterChip(stringResource(R.string.ui_reminders_filter_keep), smartTypeFilter == SavedItemType.Keep, { smartTypeFilter = SavedItemType.Keep }, leadingIconRes = R.drawable.bookmark, iconTint = NotiTheme.semantic.keepAccent)
+                }
 
-                // Regenerate-all is hidden for now (kept for easy restore).
-                // IconButton(onClick = { showRegenerateAllDialog = true }) {
-                //     Icon(
-                //         painter = painterResource(R.drawable.refresh),
-                //         contentDescription = stringResource(R.string.a11y_refresh_all),
-                //         modifier = Modifier.size(20.dp),
-                //     )
-                // }
+                Spacer(Modifier.weight(1f))
             }
 
             // Offline banner: extraction requests are failing and records are queued locally.
@@ -363,10 +400,14 @@ fun RemindersScreen(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 96.dp)
             ) {
-                items(reminders, key = { it.savedItemId }, contentType = { "reminderCard" }) { reminder ->
+                items(displayedReminders, key = { it.savedItemId }, contentType = { "reminderCard" }) { reminder ->
+                    val pendingPreview = pendingPreviews[reminder.savedItemId]
                     ReminderCard(
                         reminder = reminder,
-                        subTasks = allSavedSubItemsByReminder[reminder.savedItemId] ?: emptyList(),
+                        subTasks = pendingPreview?.subItems
+                            ?: allSavedSubItemsByReminder[reminder.savedItemId].orEmpty(),
+                        pendingReview = pendingPreview != null,
+                        pendingMergeSourceCount = pendingPreview?.mergeSourceItemIds?.size ?: 0,
                         onDelete = {
                             vm.delete(reminder.savedItemId)
                             if (reminder.origin.contains("llm")) {
@@ -381,13 +422,10 @@ fun RemindersScreen(
                             flashChip(if (completed) ReminderViewModel.FilterTab.Completed else ReminderViewModel.FilterTab.Pending)
                         },
                         onEdit = {
-                            editing = reminder
-                            editingId = reminder.savedItemId
-                            editingInitialSnapshot = reminder
+                            requestEdit(reminder)
                         },
                         onToggleStarred = { vm.toggleStarred(reminder) },
                         onSetDoDate = { vm.setDoDate(reminder.savedItemId, it) },
-                        onLongPress = { feedbackDialogReminder = reminder },
                         onCreateReminder = { reminderDialogSavedItem = reminder },
                         sectionAccent = tabAccent,
                         onArchive = {
@@ -397,23 +435,21 @@ fun RemindersScreen(
                         // Export is available on both task and keep cards (users may push kept info to Tasks/Calendar).
                         onQuickExportTasks = { openExportDialog(reminder, ExportType.GOOGLE_TASKS) },
                         onQuickExportCalendar = { openExportDialog(reminder, ExportType.GOOGLE_CALENDAR) },
-                        onSavedSubItemToggle = { stId, checked -> vm.toggleSavedSubItemCompleted(stId, checked) },
+                        onSavedSubItemToggle = { stId, checked ->
+                            if (pendingPreview != null) requestEdit(reminder)
+                            else vm.toggleSavedSubItemCompleted(stId, checked)
+                        },
                         onSavedSubItemClick = { st ->
                             // Open parent reminder detail first, then navigate to sub-task detail
-                            editing = reminder
-                            editingId = reminder.savedItemId
-                            editingInitialSnapshot = reminder
-                            editingSavedSubItem = st
-                            editingSavedSubItemInitial = st
+                            requestEdit(reminder, st)
                         },
                         onSavedSubItemEdit = { st ->
-                            editing = reminder
-                            editingId = reminder.savedItemId
-                            editingInitialSnapshot = reminder
-                            editingSavedSubItem = st
-                            editingSavedSubItemInitial = st
+                            requestEdit(reminder, st)
                         },
-                        onSavedSubItemDelete = { st -> vm.deleteSavedSubItem(st.savedSubItemId) },
+                        onSavedSubItemDelete = { st ->
+                            if (pendingPreview != null) requestEdit(reminder)
+                            else vm.deleteSavedSubItem(st.savedSubItemId)
+                        },
                         onSavedSubItemExportGoogleTasks = { st -> vm.exportToGoogleTasks(st.asExportable()) },
                         onSavedSubItemExportGoogleCalendar = { st ->
                             val calIntent = Intent(Intent.ACTION_INSERT).apply {
@@ -442,6 +478,41 @@ fun RemindersScreen(
             )
         }
 
+        pendingEditRequest?.let { target ->
+            val pending = pendingPreviews[target.savedItemId]
+            val mergeCount = pending?.mergeSourceItemIds?.size ?: 0
+            AlertDialog(
+                onDismissRequest = { pendingEditRequest = null },
+                title = { Text(stringResource(R.string.pending_review_edit_title)) },
+                text = {
+                    Text(
+                        if (mergeCount > 0) {
+                            stringResource(R.string.pending_review_merge_message, mergeCount)
+                        } else {
+                            stringResource(R.string.pending_review_edit_message)
+                        }
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            pendingEditRequest = null
+                            vm.approvePendingForEdit(target.savedItemId) { approved ->
+                                openEditor(approved)
+                            }
+                        },
+                    ) {
+                        Text(stringResource(R.string.pending_review_edit_accept))
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { pendingEditRequest = null }) {
+                        Text(stringResource(R.string.pending_review_edit_cancel))
+                    }
+                },
+            )
+        }
+
         FloatingActionButton(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
@@ -458,10 +529,8 @@ fun RemindersScreen(
                     state = SavedItemState.Saved,
                     lastUpdateTimestamp = System.currentTimeMillis(),
                     deadlineAtMs = 0L,
-                    estimatedCompletionTime = 0L,
                     origin = "manual",
                     humanEditCount = 0,
-                    deletedAtMs = null,
                     userEdited = true,
                 )
                 editing = empty
@@ -513,8 +582,7 @@ fun RemindersScreen(
                                 base.content != updatedOrNull.content ||
                                 base.isTask != updatedOrNull.isTask ||
                                 base.isCompleted != updatedOrNull.isCompleted ||
-                                base.deadlineAtMs != updatedOrNull.deadlineAtMs ||
-                                base.estimatedCompletionTime != updatedOrNull.estimatedCompletionTime
+                                base.deadlineAtMs != updatedOrNull.deadlineAtMs
                         )
 
                         if (updatedOrNull != null) {
@@ -587,8 +655,7 @@ fun RemindersScreen(
                                 base.content != updated.content ||
                                 base.isTask != updated.isTask ||
                                 base.isCompleted != updated.isCompleted ||
-                                base.deadlineAtMs != updated.deadlineAtMs ||
-                                base.estimatedCompletionTime != updated.estimatedCompletionTime
+                                base.deadlineAtMs != updated.deadlineAtMs
                         )
 
                         val emptyNow = updated.title.isBlank() && updated.content.isBlank()
@@ -773,62 +840,6 @@ fun RemindersScreen(
 
     // Preference learning BottomSheet (Flows 1-3)
     PreferenceLearningBottomSheet(preferenceViewModel = prefVm)
-
-    // Regenerate-all confirmation dialog
-    if (showRegenerateAllDialog) {
-        AlertDialog(
-            onDismissRequest = { showRegenerateAllDialog = false },
-            title = { Text(stringResource(R.string.dialog_regenerate_all_title)) },
-            text  = { Text(stringResource(R.string.dialog_regenerate_all_message)) },
-            confirmButton = {
-                TextButton(onClick = {
-                    showRegenerateAllDialog = false
-                    vm.regenerateAll()
-                }) { Text(stringResource(R.string.dialog_regenerate_all_confirm)) }
-            },
-            dismissButton = {
-                TextButton(onClick = { showRegenerateAllDialog = false }) {
-                    Text(stringResource(R.string.ui_action_cancel))
-                }
-            },
-        )
-    }
-
-    // Long-press feedback dialog
-    feedbackDialogReminder?.let { reminder ->
-        AlertDialog(
-            onDismissRequest = { feedbackDialogReminder = null },
-            title = { Text(stringResource(R.string.reminder_feedback_title)) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        onClick = {
-                            vm.submitFeedback(reminder.savedItemId, "USER_FEEDBACK_IMPORTANT")
-                            feedbackDialogReminder = null
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(stringResource(R.string.reminder_feedback_important))
-                    }
-                    OutlinedButton(
-                        onClick = {
-                            vm.submitFeedback(reminder.savedItemId, "USER_FEEDBACK_HANDLE_LATER")
-                            feedbackDialogReminder = null
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(stringResource(R.string.reminder_feedback_handle_later))
-                    }
-                }
-            },
-            confirmButton = {},
-            dismissButton = {
-                TextButton(onClick = { feedbackDialogReminder = null }) {
-                    Text(stringResource(R.string.ui_action_cancel))
-                }
-            },
-        )
-    }
 }
 
 @Composable
@@ -890,6 +901,8 @@ private fun ReminderFilterChip(
 fun ReminderCard(
     reminder: SavedItem,
     subTasks: List<SavedSubItem> = emptyList(),
+    pendingReview: Boolean = false,
+    pendingMergeSourceCount: Int = 0,
     onDelete: () -> Unit,
     onToggleCompleted: (Boolean) -> Unit,
     onEdit: () -> Unit,
@@ -1011,20 +1024,26 @@ fun ReminderCard(
 
             // Right content column
             Column(modifier = Modifier.weight(1f)) {
-                // Review badge: stays until the user explicitly acknowledges in the detail view.
-                if (reminder.isNewLike && !selectionMode) {
+                // Review badge: staged previews remain gated until the user explicitly accepts them.
+                if ((reminder.isNewLike || pendingReview) && !selectionMode) {
+                    val badgeText = when {
+                        pendingReview && pendingMergeSourceCount > 0 ->
+                            stringResource(R.string.pending_review_merge_badge, pendingMergeSourceCount)
+                        pendingReview -> stringResource(R.string.pending_review_badge)
+                        reminder.state == SavedItemState.New -> stringResource(R.string.reminder_badge_new)
+                        else -> stringResource(R.string.reminder_badge_updated)
+                    }
                     Surface(
                         shape = MaterialTheme.shapes.extraSmall,
-                        color = MaterialTheme.colorScheme.secondaryContainer,
+                        color = if (pendingReview) MaterialTheme.colorScheme.tertiaryContainer
+                        else MaterialTheme.colorScheme.secondaryContainer,
                         modifier = Modifier.padding(bottom = 2.dp),
                     ) {
                         Text(
-                            text = stringResource(
-                                if (reminder.state == SavedItemState.New) R.string.reminder_badge_new
-                                else R.string.reminder_badge_updated
-                            ),
+                            text = badgeText,
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            color = if (pendingReview) MaterialTheme.colorScheme.onTertiaryContainer
+                            else MaterialTheme.colorScheme.onSecondaryContainer,
                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                         )
                     }
@@ -1396,7 +1415,6 @@ fun ReminderDetailScreen(
     var isCompleted by remember(initial.savedItemId) { mutableStateOf(initial.isCompleted) }
     var deadlineAtMs by remember(initial.savedItemId) { mutableStateOf(initial.deadlineAtMs) }
     var doAtMs by remember(initial.savedItemId) { mutableStateOf(initial.doAtMs) }
-    var ectMinutes by remember(initial.savedItemId) { mutableStateOf(initial.estimatedCompletionTime) }
 
     // Per-type accent: indigo for Task, green for Keep.
     val accent = if (isTask) NotiTheme.semantic.taskAccent else NotiTheme.semantic.keepAccent
@@ -1410,8 +1428,7 @@ fun ReminderDetailScreen(
             itemType = if (isTask) SavedItemType.Task else SavedItemType.Keep,
             state = if (isTask && isCompleted) SavedItemState.Completed else SavedItemState.Saved,
             deadlineAtMs = if (isTask) deadlineAtMs else 0L,
-            doAtMs = if (isTask) doAtMs else 0L,
-            estimatedCompletionTime = if (isTask) ectMinutes else 0L,
+            doAtMs = doAtMs,
         )
     }
 
@@ -1555,20 +1572,8 @@ fun ReminderDetailScreen(
                 val deadlineColor = if (deadlineAtMs > 0L && deadlineAtMs < System.currentTimeMillis())
                     MaterialTheme.colorScheme.error else accent
 
-                // User-set do date (when to work on it), independent of the deadline.
-                val hasRealDoDate = SavedItem.hasPlannedDate(doAtMs)
-                val isSomeday = SavedItem.isSomeday(doAtMs)
-                val doDateStr = when {
-                    isSomeday -> stringResource(R.string.do_date_someday)
-                    hasRealDoDate -> java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date(doAtMs))
-                    else -> stringResource(R.string.reminder_no_date)
-                }
-                val doTimeStr = if (hasRealDoDate) {
-                    java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date(doAtMs))
-                } else stringResource(R.string.reminder_no_time)
-
-                // Grouped detail card (iOS Reminders style): completion / deadline / do-date rows share
-                // one rounded surface with hairline dividers, instead of loose top-level label:value rows.
+                // Grouped detail card (iOS Reminders style): completion / deadline rows share one
+                // rounded surface with hairline dividers, instead of loose top-level label:value rows.
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
                     shape = MaterialTheme.shapes.large,
@@ -1619,62 +1624,82 @@ fun ReminderDetailScreen(
                                 Text(text = deadlineTimeStr, color = deadlineColor)
                             }
                         }
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    }
+                }
+            }
 
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp),
-                        ) {
-                            Text(
-                                stringResource(R.string.ui_reminders_editor_do_date),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurface,
-                            )
-                            Spacer(Modifier.weight(1f))
-                            TextButton(onClick = { showDoDatePicker = true }) {
-                                Text(text = doDateStr, color = accent)
-                            }
-                            if (hasRealDoDate) {
-                                if (doTimeShown) {
-                                    TextButton(onClick = { showDoTimePicker = true }) {
-                                        Text(text = doTimeStr, color = accent)
-                                    }
-                                } else {
-                                    // Optional, collapsed by default: reveal + open the time picker.
-                                    TextButton(onClick = { doTimeShown = true; showDoTimePicker = true }) {
-                                        Text(
-                                            text = stringResource(R.string.do_date_add_time),
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
-                                    }
+            // User-set do date (when to work on it), independent of the deadline. Available for
+            // tasks and keeps alike — a keep's do-date is when the user intends to revisit it.
+            run {
+                val hasRealDoDate = SavedItem.hasPlannedDate(doAtMs)
+                val isSomeday = SavedItem.isSomeday(doAtMs)
+                val doDateStr = when {
+                    isSomeday -> stringResource(R.string.do_date_someday)
+                    hasRealDoDate -> java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date(doAtMs))
+                    else -> stringResource(R.string.reminder_no_date)
+                }
+                val doTimeStr = if (hasRealDoDate) {
+                    java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date(doAtMs))
+                } else stringResource(R.string.reminder_no_time)
+
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.large,
+                    color = MaterialTheme.colorScheme.surfaceContainerLow,
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                    ) {
+                        Text(
+                            stringResource(R.string.ui_reminders_editor_do_date),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Spacer(Modifier.weight(1f))
+                        TextButton(onClick = { showDoDatePicker = true }) {
+                            Text(text = doDateStr, color = accent)
+                        }
+                        if (hasRealDoDate) {
+                            if (doTimeShown) {
+                                TextButton(onClick = { showDoTimePicker = true }) {
+                                    Text(text = doTimeStr, color = accent)
                                 }
-                            }
-                            // "Someday": intended eventually, no committed date. Toggles the sentinel.
-                            // A FilterChip (not plain text) so the selected state reads clearly.
-                            Spacer(Modifier.width(4.dp))
-                            FilterChip(
-                                selected = isSomeday,
-                                onClick = { doAtMs = if (isSomeday) 0L else SavedItem.DO_AT_SOMEDAY },
-                                label = { Text(stringResource(R.string.do_date_someday)) },
-                                leadingIcon = if (isSomeday) {
-                                    {
-                                        Icon(
-                                            painter = painterResource(R.drawable.check),
-                                            contentDescription = null,
-                                            modifier = Modifier.size(16.dp),
-                                        )
-                                    }
-                                } else null,
-                            )
-                            if (hasRealDoDate || isSomeday) {
-                                IconButton(onClick = { doAtMs = 0L }) {
-                                    Icon(
-                                        painterResource(R.drawable.delete),
-                                        contentDescription = stringResource(R.string.a11y_clear_do_date),
-                                        modifier = Modifier.size(16.dp),
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            } else {
+                                // Optional, collapsed by default: reveal + open the time picker.
+                                TextButton(onClick = { doTimeShown = true; showDoTimePicker = true }) {
+                                    Text(
+                                        text = stringResource(R.string.do_date_add_time),
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                 }
+                            }
+                        }
+                        // "Someday": intended eventually, no committed date. Toggles the sentinel.
+                        // A FilterChip (not plain text) so the selected state reads clearly.
+                        Spacer(Modifier.width(4.dp))
+                        FilterChip(
+                            selected = isSomeday,
+                            onClick = { doAtMs = if (isSomeday) 0L else SavedItem.DO_AT_SOMEDAY },
+                            label = { Text(stringResource(R.string.do_date_someday)) },
+                            leadingIcon = if (isSomeday) {
+                                {
+                                    Icon(
+                                        painter = painterResource(R.drawable.check),
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp),
+                                    )
+                                }
+                            } else null,
+                        )
+                        if (hasRealDoDate || isSomeday) {
+                            IconButton(onClick = { doAtMs = 0L }) {
+                                Icon(
+                                    painterResource(R.drawable.delete),
+                                    contentDescription = stringResource(R.string.a11y_clear_do_date),
+                                    modifier = Modifier.size(16.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
                             }
                         }
                     }

@@ -69,11 +69,10 @@ class MainActivity : ComponentActivity() {
         // Android 16+ (API 36) Local Network Protection: LAN/RFC-1918 hosts (e.g. the dev n8n server)
         // are unreachable until this runtime permission is granted, even though internet access works.
         maybeRequestLocalNetworkPermission()
-        // Identity: signed-in Firebase UID keys Firestore and n8n payloads; the device id is only
-        // a pre-login placeholder (extraction is gated behind sign-in anyway).
+        // Identity is always the signed-in Firebase UID. Keep it blank before sign-in; the device
+        // ID is not an account identity and must never be used for Firestore or n8n payloads.
         SharedPreferencesManager.userId =
-            org.muilab.notigpt.data.remote.auth.GoogleAuthManager.currentUser()?.uid
-                ?: Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
+            org.muilab.notigpt.data.remote.auth.GoogleAuthManager.currentUser()?.uid.orEmpty()
         org.muilab.notigpt.data.remote.n8n.ExtractionStatusStore.restore()
 
         // Periodic safety-net for reminder scan/extraction — only once signed in.

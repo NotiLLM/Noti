@@ -22,10 +22,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.scale
+import org.muilab.notigpt.R
 import org.muilab.notigpt.model.notifications.NotiDisplayUnit
 import org.muilab.notigpt.util.time.getRelativeTimeStr
 import org.muilab.notigpt.util.unescapeUserText
@@ -46,7 +48,9 @@ fun NotiCardHeaderContent(
     showSummary: Boolean,
     requiresExpansionSetter: (Boolean) -> Unit,
     collapseThreshold: Float,
-    isExpandedOffset: Float
+    isExpandedOffset: Float,
+    linkedTaskCount: Int = 0,
+    linkedKeepCount: Int = 0,
 ) {
     val notiUnit = notiDisplayUnit.notiUnit
     val notiRecords = remember(notiDisplayUnit.notiRecords) { notiDisplayUnit.notiRecords.sortedBy { it.time } }
@@ -123,6 +127,47 @@ fun NotiCardHeaderContent(
                             )
                         }
                     }
+                }
+                // Cross-link badge: "N ⟨task⟩ M ⟨keep⟩" for saved items this thread produced.
+                if (linkedTaskCount > 0 || linkedKeepCount > 0) {
+                    Row(
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.secondaryContainer)
+                            .padding(horizontal = 6.dp, vertical = 1.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        if (linkedTaskCount > 0) {
+                            Text(
+                                text = linkedTaskCount.toString(),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            )
+                            Spacer(Modifier.size(2.dp))
+                            Icon(
+                                painter = painterResource(R.drawable.task),
+                                contentDescription = null,
+                                modifier = Modifier.size(12.dp),
+                                tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                            )
+                        }
+                        if (linkedKeepCount > 0) {
+                            if (linkedTaskCount > 0) Spacer(Modifier.size(5.dp))
+                            Text(
+                                text = linkedKeepCount.toString(),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            )
+                            Spacer(Modifier.size(2.dp))
+                            Icon(
+                                painter = painterResource(R.drawable.bookmark),
+                                contentDescription = null,
+                                modifier = Modifier.size(12.dp),
+                                tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                            )
+                        }
+                    }
+                    Spacer(Modifier.size(4.dp))
                 }
                 val visibleRecordCount = notiRecords.size
                 if (visibleRecordCount > 1) {

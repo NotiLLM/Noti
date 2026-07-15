@@ -96,6 +96,7 @@ object GoogleAuthManager {
     /** User declined the account switch: sign the new account back out, keeping local data intact. */
     fun abortAccountSwitch() {
         FirebaseAuth.getInstance().signOut()
+        SharedPreferencesManager.userId = ""
     }
 
     private suspend fun finalizeSignIn(context: Context, user: FirebaseUser) {
@@ -106,7 +107,7 @@ object GoogleAuthManager {
         } catch (_: Exception) {
         }
         try {
-            FirestoreRestoreRepository(context.applicationContext).restoreIfLocalEmpty()
+            FirestoreRestoreRepository(context.applicationContext).reconcileAfterSignIn()
         } catch (t: Throwable) {
             Log.w(TAG, "Restore after sign-in failed (continuing)", t)
         }
@@ -117,6 +118,8 @@ object GoogleAuthManager {
         // saved_item cascades noti_saved_item_link + saved_item_change_log via FK.
         db.reminderListDao().deleteAllForAccountSwitch()
         db.subTaskDao().deleteAllForAccountSwitch()
+        db.pendingOpDao().deleteAllForAccountSwitch()
+        db.rejectedMergeDao().deleteAllForAccountSwitch()
         db.extractionJournalDao().deleteAllEntries()
         db.extractionJournalDao().deleteAllSummaries()
         db.notiLlmStateDao().deleteAll()

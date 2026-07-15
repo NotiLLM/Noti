@@ -37,9 +37,9 @@ class FirestoreSyncRepository(
     private val zoneId: ZoneId
         get() = ZoneId.systemDefault()
 
-    // Firestore data is partitioned per Google account; without a signed-in user every sync is a no-op.
-    private fun userId(): String = FirebaseAuth.getInstance().currentUser?.uid
-        ?: SharedPreferencesManager.userId.takeIf { it.isNotBlank() }.orEmpty()
+    // Firestore data is partitioned per Firebase account; without a signed-in user every sync is a no-op.
+    // Never fall back to a device identifier or a stale cached value.
+    private fun userId(): String = FirebaseAuth.getInstance().currentUser?.uid.orEmpty()
 
     private fun usersDoc() = firestore
         .collection(FirestorePaths.COLLECTION_USERS)
@@ -65,6 +65,7 @@ class FirestoreSyncRepository(
                 ),
                 SetOptions.merge()
             ).await()
+            Log.d(tag, "incrementNotiRecordCount succeeded uid=${userId()}")
         } catch (t: Throwable) {
             Log.w(tag, "incrementNotiRecordCount failed", t)
         }
@@ -89,8 +90,30 @@ class FirestoreSyncRepository(
                 "schemaVersion" to 2,
             )
             usersDoc().set(payload, SetOptions.merge()).await()
+            Log.d(tag, "ensureUserDoc succeeded uid=${userId()}")
         } catch (t: Throwable) {
             Log.w(tag, "ensureUserDoc failed", t)
+        }
+    }
+
+    /**
+     * Marks the Firestore mirror of a hard-deleted item as deleted. Local deletion is a real row
+     * delete, but the research record keeps the doc with a deletion marker; restore skips it.
+     */
+    suspend fun markReminderDeleted(savedItemId: String, ts: Long) = withContext(Dispatchers.IO) {
+        if (userId().isBlank()) return@withContext
+        try {
+            reminderDoc(savedItemId).set(
+                mapOf(
+                    "deleted" to true,
+                    "deletedAt" to TimeFormatters.toLocalIso(ts, zoneId),
+                    "deletedAtMsEpoch" to ts,
+                ),
+                SetOptions.merge()
+            ).await()
+            Log.d(tag, "markReminderDeleted succeeded savedItemId=$savedItemId uid=${userId()}")
+        } catch (t: Throwable) {
+            Log.w(tag, "markReminderDeleted failed savedItemId=$savedItemId", t)
         }
     }
 
@@ -116,7 +139,6 @@ class FirestoreSyncRepository(
             "deadlineAtMs" to (if (reminder.deadlineAtMs > 0L) TimeFormatters.toLocalIso(reminder.deadlineAtMs, zoneId) else ""),
             "startAtMs" to (if (reminder.startAtMs > 0L) TimeFormatters.toLocalIso(reminder.startAtMs, zoneId) else ""),
             "endAtMs" to (if (reminder.endAtMs > 0L) TimeFormatters.toLocalIso(reminder.endAtMs, zoneId) else ""),
-            "estimatedCompletionTime" to reminder.estimatedCompletionTime,
             "sourceNotiRecordIds" to linkedRecordIds,
             "sourceNotiRecordIdsCount" to linkedRecordIds.size,
             "isStarred" to reminder.isStarred,
@@ -129,13 +151,9 @@ class FirestoreSyncRepository(
             },
             "state" to reminder.state,
             "lastViewedChangeAt" to (if (reminder.lastViewedChangeAt > 0L) TimeFormatters.toLocalIso(reminder.lastViewedChangeAt, zoneId) else ""),
-            "isVisible" to reminder.isVisible,
-            "deletedAt" to (reminder.deletedAtMs?.let { TimeFormatters.toLocalIso(it, zoneId) } ?: ""),
             "lastUpdateTimestamp" to TimeFormatters.toLocalIso(reminder.lastUpdateTimestamp, zoneId),
             "buttons" to reminder.buttons,
             "isViewed" to reminder.isViewed,
-            "sortScore" to reminder.sortScore,
-            "reRankHistory" to reminder.reRankHistory,
             "syncedAt" to TimeFormatters.toLocalIso(now, zoneId),
             // Raw epoch values: the ISO fields above are for human/analysis reads; restore uses these.
             "deadlineAtMsEpoch" to reminder.deadlineAtMs,
@@ -144,14 +162,19 @@ class FirestoreSyncRepository(
             "doAtMsEpoch" to reminder.doAtMs,
             "lastUpdateTimestampEpoch" to reminder.lastUpdateTimestamp,
             "lastViewedChangeAtEpoch" to reminder.lastViewedChangeAt,
-            "deletedAtMsEpoch" to (reminder.deletedAtMs ?: 0L),
             "itemType" to reminder.itemType,
             "subTasks" to subTasksPayload(reminder.savedItemId),
-            "schemaVersion" to 5,
+            // A normal sync is also the resurrection path for a locally edited item that was
+            // previously marked deleted in Firestore.
+            "deleted" to false,
+            "deletedAt" to FieldValue.delete(),
+            "deletedAtMsEpoch" to FieldValue.delete(),
+            "schemaVersion" to 6,
         )
 
         try {
             reminderDoc(reminder.savedItemId).set(payload, SetOptions.merge()).await()
+            Log.d(tag, "syncReminder succeeded savedItemId=${reminder.savedItemId} uid=${userId()}")
         } catch (t: Throwable) {
             Log.w(tag, "syncReminder failed savedItemId=${reminder.savedItemId}", t)
             return@withContext
@@ -209,6 +232,7 @@ class FirestoreSyncRepository(
                 )
 
                 reminderNotiDoc(reminder.savedItemId, key).set(notiPayload, SetOptions.merge()).await()
+                Log.d(tag, "syncReminder noti succeeded savedItemId=${reminder.savedItemId} notiKey=$key uid=${userId()}")
             }
 
         } catch (t: Throwable) {
@@ -235,6 +259,30 @@ class FirestoreSyncRepository(
         }
     } catch (_: Exception) {
         emptyList()
+    }
+
+    /**
+     * Replays the complete local mirror to Firestore.
+     *
+     * This is used for first-time bootstrap and as a periodic retry after a device has been offline.
+     * Individual writes remain best-effort so a transient failure does not block the local app; the
+     * next run replays the complete current Room snapshot.
+     */
+    suspend fun syncAllLocalData() = withContext(Dispatchers.IO) {
+        if (userId().isBlank()) return@withContext
+
+        syncAllLocalReminders()
+        syncPreferencesAndContexts()
+    }
+
+    /** Uploads the local reminder mirror without replacing cloud-owned preference/context state. */
+    suspend fun syncAllLocalReminders() = withContext(Dispatchers.IO) {
+        if (userId().isBlank()) return@withContext
+
+        ensureUserDoc()
+        val items = db.reminderListDao().getAll()
+        items.forEach { syncReminder(it) }
+        Log.i(tag, "syncAllLocalReminders complete uid=${userId()} reminders=${items.size}")
     }
 
     /**
@@ -272,6 +320,7 @@ class FirestoreSyncRepository(
                 ),
                 SetOptions.merge(),
             ).await()
+            Log.d(tag, "syncPreferencesAndContexts succeeded uid=${userId()}")
         } catch (t: Throwable) {
             Log.w(tag, "syncPreferencesAndContexts failed", t)
         }

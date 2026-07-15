@@ -49,17 +49,16 @@ fun PreferenceLearningBottomSheet(
         sheetState = sheetState,
     ) {
         when (val s = step) {
-            is BottomSheetStep.Scope -> ScopeContent(s.entryPoint, preferenceViewModel)
-            is BottomSheetStep.RuleSelection -> RuleSelectionContent(s.ruleOptions, preferenceViewModel)
-            is BottomSheetStep.Syncing -> SyncingContent()
+            is BottomSheetStep.Chips -> ChipsContent(s.entryPoint, s.options, preferenceViewModel)
             is BottomSheetStep.Hidden -> { /* handled above */ }
         }
     }
 }
 
 @Composable
-private fun ScopeContent(
+private fun ChipsContent(
     entryPoint: PreferenceEntryPoint,
+    options: List<Int>,
     vm: PreferenceViewModel,
 ) {
     val titleResId = when (entryPoint) {
@@ -67,46 +66,13 @@ private fun ScopeContent(
         PreferenceEntryPoint.DELETE -> R.string.pref_scope_title_delete
         PreferenceEntryPoint.MANUAL_EXTRACT -> R.string.pref_scope_title_extract
     }
-
-    val options = listOf(
-        R.string.pref_scope_just_this_one,
-        R.string.pref_scope_remember,
-        R.string.pref_scope_make_rule,
-    )
-
+    // First option is the "just this once" terminal choice, grouped apart like a cancel action.
     OptionList(
         titleResId = titleResId,
-        optionResIds = options,
-        cancelResId = R.string.pref_scope_not_now,
-        onSelect = { vm.selectScope(it) },
+        optionResIds = options.drop(1),
+        cancelResId = options.firstOrNull(),
+        onSelect = { vm.selectChip(it) },
     )
-}
-
-@Composable
-private fun RuleSelectionContent(
-    ruleOptions: List<Int>,
-    vm: PreferenceViewModel,
-) {
-    OptionList(
-        titleResId = R.string.pref_rule_title,
-        optionResIds = ruleOptions,
-        onSelect = { vm.selectRule(it) },
-    )
-}
-
-@Composable
-private fun SyncingContent() {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        CircularProgressIndicator()
-        Spacer(Modifier.height(16.dp))
-        Text(stringResource(R.string.pref_syncing), style = MaterialTheme.typography.bodyMedium)
-        Spacer(Modifier.height(24.dp))
-    }
 }
 
 /**

@@ -25,6 +25,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import org.muilab.notigpt.R
 import org.muilab.notigpt.data.repository.notification.NotiClassificationRepository
+import org.muilab.notigpt.model.features.SavedItem
 import org.muilab.notigpt.model.notifications.NotiDisplayUnit
 import org.muilab.notigpt.model.notifications.NotiRecord
 import org.muilab.notigpt.ui.common.component.EmptyState
@@ -49,6 +50,7 @@ fun NotiCategoryScreen(
     drawerViewModel: DrawerViewModel,
     scheduledReminderViewModel: ScheduledReminderViewModel,
     searchQuery: String,
+    onOpenSavedItem: (SavedItem) -> Unit = {},
 ) {
     val context = LocalContext.current
     val newUnits by drawerViewModel.newNotificationUnits.collectAsState()
@@ -61,7 +63,7 @@ fun NotiCategoryScreen(
     // Pending "create reminder" from a card's records → opens the date-time dialog.
     var pendingReminder by remember { mutableStateOf<PendingReminder?>(null) }
 
-    val cutoff = System.currentTimeMillis() - HomeViewModel.NEW_NOTI_WINDOW_MS
+    val cutoff = System.currentTimeMillis() - HomeViewModel.newNotiWindowMs()
 
     // The category's units with records filtered only by the search query (the time chip is applied
     // per-count below), reused for both the chip counts and the visible list.
@@ -132,6 +134,7 @@ fun NotiCategoryScreen(
                                 recordIds = records.map { it.notiRecordId },
                             )
                         },
+                        onOpenSavedItem = onOpenSavedItem,
                     )
                 }
             }

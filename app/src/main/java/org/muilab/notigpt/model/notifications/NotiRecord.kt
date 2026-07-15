@@ -6,7 +6,6 @@ import android.os.Build
 import android.service.notification.StatusBarNotification
 import androidx.annotation.RequiresApi
 import androidx.room.Entity
-import androidx.room.ColumnInfo
 import androidx.room.Index
 
 /**
@@ -47,19 +46,6 @@ data class NotiRecord (
     // STATUS
     /** True when this record has been removed from the active notification drawer. */
     var isDismissed: Boolean = false,
-
-    // TASK DETECTION/EXTRACTION FLAGS
-    @ColumnInfo(defaultValue = "0")
-    var taskScanned: Boolean = false,
-    @ColumnInfo(defaultValue = "0")
-    var taskExtracted: Boolean = false,
-
-    /** Claim flag for atomically reserving records during extraction and avoiding duplicate work. */
-    @ColumnInfo(defaultValue = "0")
-    var taskExtractionClaimed: Boolean = false,
-    // Timestamp when record was claimed for extraction (millis since epoch). 0 means not claimed.
-    @ColumnInfo(defaultValue = "0")
-    var taskExtractionClaimedAt: Long = 0L,
 ) {
 
     companion object {

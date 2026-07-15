@@ -32,8 +32,16 @@ class ReminderRelatedNotificationsRepository(context: Context) {
 
     suspend fun getRelatedNotifications(reminder: SavedItem): RelatedNotifications = withContext(Dispatchers.IO) {
         val links = db.notiSavedItemLinkDao().getBySavedItemId(reminder.savedItemId)
-        val recordIds = links.map { it.notiRecordId }.filter { it.isNotBlank() }.distinct()
-        val wantedKeys = links.map { it.notiKey }.filter { it.isNotBlank() }.distinct()
+        getByRecordIds(links.map { it.notiRecordId })
+    }
+
+    /**
+     * Evidence context by explicit record ids — used for staged pending ops, which cite evidence
+     * in their payload and have no link rows until the user accepts them.
+     */
+    suspend fun getByRecordIds(evidenceRecordIds: Collection<String>): RelatedNotifications = withContext(Dispatchers.IO) {
+        val recordIds = evidenceRecordIds.filter { it.isNotBlank() }.distinct()
+        val wantedKeys = recordIds.map { it.substringBeforeLast("_") }.filter { it.isNotBlank() }.distinct()
 
         if (recordIds.isEmpty() || wantedKeys.isEmpty()) {
             return@withContext RelatedNotifications.Empty

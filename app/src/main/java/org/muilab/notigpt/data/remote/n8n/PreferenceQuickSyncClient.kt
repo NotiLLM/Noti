@@ -54,15 +54,20 @@ object PreferenceQuickSyncClient {
             val status = root["status"]?.toString() ?: "unknown"
             val toastMessage = root["toastMessage"]?.toString()
 
-            @Suppress("UNCHECKED_CAST")
-            val prefsRaw = root["updatedPreferences"] as? List<Map<String, Any>> ?: emptyList()
-            val prefs = prefsRaw.map { m ->
-                N8nPreferencePlainDto(
-                    id = m["id"]?.toString() ?: "",
-                    statement = m["statement"]?.toString() ?: "",
-                    type = m["type"]?.toString() ?: "",
-                )
+            fun parseRules(key: String): List<N8nPreferencePlainDto> {
+                @Suppress("UNCHECKED_CAST")
+                val raw = root[key] as? List<Map<String, Any>> ?: emptyList()
+                return raw.map { m ->
+                    N8nPreferencePlainDto(
+                        id = m["id"]?.toString() ?: "",
+                        statement = m["statement"]?.toString() ?: "",
+                        type = m["type"]?.toString() ?: "",
+                    )
+                }
             }
+
+            val deletedRuleIds = (root["deletedRuleIds"] as? List<*>)?.mapNotNull { it?.toString()?.takeIf(String::isNotBlank) }
+                ?: emptyList()
 
             @Suppress("UNCHECKED_CAST")
             val conflictsRaw = root["conflicts"] as? List<Map<String, Any?>> ?: emptyList()
@@ -78,7 +83,9 @@ object PreferenceQuickSyncClient {
 
             N8nQuickSyncResponseDto(
                 status = status,
-                updatedPreferences = prefs,
+                createdRules = parseRules("createdRules"),
+                updatedRules = parseRules("updatedRules"),
+                deletedRuleIds = deletedRuleIds,
                 toastMessage = toastMessage,
                 conflicts = conflicts,
             )

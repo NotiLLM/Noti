@@ -25,8 +25,10 @@ object SavedItemState {
  * Room entity for durable content saved by the user or extracted by the LLM.
  *
  * A SavedItem is not an active scheduled reminder. It is the local source of truth for
- * task/keep content, visibility, completion state, and ranking metadata. Scheduled push
- * notifications use [Reminder] and link back to saved items or notification records.
+ * task/keep content and completion state. Scheduled push notifications use [Reminder] and
+ * link back to saved items or notification records. Rows only exist once the user approved
+ * the item (or created it manually): LLM proposals stage as [PendingOp]s until reviewed,
+ * and user deletion is a hard delete.
  */
 @Entity(tableName = "saved_item", primaryKeys = ["savedItemId"])
 data class SavedItem(
@@ -52,9 +54,6 @@ data class SavedItem(
     @ColumnInfo(defaultValue = "0")
     val endAtMs: Long = 0L,
 
-    // Estimated completion time in minutes
-    val estimatedCompletionTime: Long,
-
     /**
      * Analytics provenance label.
      * - "manual": user created from empty template
@@ -66,14 +65,8 @@ data class SavedItem(
     /** Number of human save events where title/content changed. */
     val humanEditCount: Int = 0,
 
-    /** Soft-delete timestamp (ms since epoch). Null means not deleted. */
-    val deletedAtMs: Long? = null,
-
     // Whether user has edited this saved item
     val userEdited: Boolean = false,
-
-    /** Soft-delete flag. If false, the row remains in DB but is hidden from list queries. */
-    val isVisible: Boolean = true,
 
     // JSON array of button objects: [{buttonText, intent, type}].
     @ColumnInfo(defaultValue = "[]")
@@ -82,14 +75,6 @@ data class SavedItem(
     /** Whether the user has fully seen this generated item at least once since creation/regeneration. */
     @ColumnInfo(defaultValue = "1")
     val isViewed: Boolean = true,
-
-    /** Sort score (0f–100f). Higher = higher position within the scored section. */
-    @ColumnInfo(defaultValue = "50.0")
-    val sortScore: Float = 50f,
-
-    /** JSON array of rerank history records. */
-    @ColumnInfo(defaultValue = "[]")
-    val reRankHistory: String = "[]",
 
     /** User-set star. User-owned: never touched by LLM flows. */
     @ColumnInfo(defaultValue = "0")
@@ -144,14 +129,14 @@ data class SavedItem(
          * filter in `ReminderViewModel`. [startOfTomorrowMs] is the local midnight boundary, so
          * "Today & earlier" absorbs overdue planned dates.
          *
-         * Keeps carry no do-date (the editor forces their [doAtMs] to 0), so they are never
-         * "Undetermined" — they all default into [DoDateBucket.Someday]. Only tasks can land in the
-         * date-driven buckets, which is why "Undetermined" reads as "尚未安排的任務" (unscheduled tasks).
+         * Keeps can carry a real do-date (set from the reminder card's do-date affordance), and when
+         * they do, they land in the same date-driven buckets as tasks. A keep with no do-date has
+         * nothing to schedule by, so it defaults into [DoDateBucket.Someday] rather than
+         * "Undetermined" — that bucket is task-only, where it reads as "尚未安排的任務" (unscheduled tasks).
          */
         fun plannedBucket(doAtMs: Long, startOfTomorrowMs: Long, isTask: Boolean = true): DoDateBucket = when {
-            !isTask -> DoDateBucket.Someday
             doAtMs == DO_AT_SOMEDAY -> DoDateBucket.Someday
-            doAtMs <= 0L -> DoDateBucket.Undetermined
+            doAtMs <= 0L -> if (isTask) DoDateBucket.Undetermined else DoDateBucket.Someday
             doAtMs < startOfTomorrowMs -> DoDateBucket.TodayEarlier
             else -> DoDateBucket.Upcoming
         }

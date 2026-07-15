@@ -10,11 +10,9 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import org.muilab.notigpt.BuildConfig
 import org.muilab.notigpt.data.remote.n8n.workers.N8nAPIWorker
-import org.muilab.notigpt.util.Constants.Companion.N8N_TASK_SCAN
-import org.muilab.notigpt.util.Constants.Companion.N8N_TASK_EXTRACTION
+import org.muilab.notigpt.util.Constants.Companion.N8N_EXTRACTION_PIPELINE
+import org.muilab.notigpt.util.Constants.Companion.N8N_REFLECTION_PIPELINE
 import org.muilab.notigpt.util.Constants.Companion.N8N_REGENERATE_ONE
-import org.muilab.notigpt.util.Constants.Companion.N8N_REGENERATE_ALL
-import org.muilab.notigpt.util.Constants.Companion.N8N_RERANK
 import org.muilab.notigpt.util.Constants.Companion.DIFY_POST_NOTIFICATION_ACTION
 import java.util.concurrent.TimeUnit
 import androidx.work.ExistingWorkPolicy
@@ -68,129 +66,85 @@ fun enqueueNotificationAction(
     WorkManager.getInstance(context).enqueueUniqueWork(uniqueName, ExistingWorkPolicy.KEEP, workerRequest)
 }
 
-/**
- * Queues reminder scan for one notification key.
- *
- * A per-key KEEP policy bounds scheduler growth and lets an in-flight scan finish before another identical scan
- * is added. Extraction is scheduled separately after scan acceptance.
- */
 private fun isSignedIn(): Boolean =
     com.google.firebase.auth.FirebaseAuth.getInstance().currentUser != null
 
-fun enqueueTaskScan(context: Context, notiKey: String, forceReclassify: Boolean = false) {
-    if (!isSignedIn()) {
-        Log.d("N8nAPI", "Skipping task scan: not signed in")
-        return
-    }
-    Log.d("N8nAPI", "enqueueTaskScan: key=$notiKey forceReclassify=$forceReclassify")
-     val inputData = Data.Builder()
-         .putString("api_type", N8N_TASK_SCAN)
-         .putString("noti_key", notiKey)
-         .putBoolean("force_reclassify", forceReclassify)
-         .putString("webhook_path", BuildConfig.N8N_TASK_SCAN_PATH)
-         .build()
-
-     val constraints = Constraints.Builder()
-         .setRequiredNetworkType(NetworkType.CONNECTED)
-         .build()
-
-     val workerRequest = OneTimeWorkRequestBuilder<N8nAPIWorker>()
-         .setBackoffCriteria(BackoffPolicy.LINEAR, 1, TimeUnit.MINUTES)
-         .setConstraints(constraints)
-         .setInputData(inputData)
-         .build()
-
-     // Use per-key unique name to prevent unbounded job accumulation in JobScheduler.
-     // KEEP: if a scan for this key is already pending/running, don't restart it.
-     // Forced re-classification uses its own slot so it never collides with a pending normal scan.
-     val uniqueName = if (forceReclassify) "n8n_task_scan_reclass_$notiKey" else "n8n_task_scan_$notiKey"
-     WorkManager.getInstance(context)
-         .enqueueUniqueWork(uniqueName, ExistingWorkPolicy.KEEP, workerRequest)
- }
+/** Per-notiKey extraction work slot; forced and auto runs share it so they never overlap. */
+private fun extractionWorkName(notiKey: String) = "n8n_extraction_${notiKey}"
 
 /**
- * Queues reminder extraction for a set of notification keys or visible record ids.
+ * Queues the per-notiKey extraction pipeline (contract v3).
  *
- * Extraction uses a single REPLACE slot so the latest selected/eligible context wins and the worker queue remains
- * bounded. Use visibleRecordIds for user-triggered extraction from explicit UI context.
+ * One worker job runs the pipeline stages sequentially — auto runs start at scan (A), then
+ * item-extraction (B), summary fold (C), merge shortlist (D1) and merge resolution (E1); a forced
+ * run (manual "extract" from a notification) skips scan and starts at B. Staged ops land in
+ * `pending_op` for review.
+ *
+ * The slot is per-key: an auto run KEEPs (an in-flight run for the key is left to finish), while a
+ * forced run REPLACEs so a manual trigger preempts any pending auto run for the same thread.
  */
-fun enqueueTaskExtraction(
-    context: Context,
-    notiKeys: List<String>,
-    userTriggered: Boolean = false,
-    visibleRecordIds: List<String> = emptyList(),
-) {
+fun enqueueExtractionPipeline(context: Context, notiKey: String, forced: Boolean = false) {
     if (!isSignedIn()) {
-        Log.d("N8nAPI", "Skipping task extraction: not signed in")
+        Log.d("N8nAPI", "Skipping extraction pipeline: not signed in")
         return
     }
-    Log.d("N8nAPI", "enqueueTaskExtraction: keys=${notiKeys.size} ${notiKeys.take(5)} userTriggered=$userTriggered visibleRecordIds=${visibleRecordIds.size}")
-    val inputDataBuilder = Data.Builder()
-        .putString("api_type", N8N_TASK_EXTRACTION)
-        .putString("webhook_path", BuildConfig.N8N_TASK_EXTRACTION_PATH)
-        .putBoolean("user_triggered", userTriggered)
-
-    val gson = com.google.gson.Gson()
-    inputDataBuilder.putString("noti_keys_json", gson.toJson(notiKeys))
-
-    if (visibleRecordIds.isNotEmpty()) {
-        inputDataBuilder.putString("visible_record_ids_json", gson.toJson(visibleRecordIds))
-    }
-
-    val inputData = inputDataBuilder.build()
+    if (notiKey.isBlank()) return
+    Log.d("N8nAPI", "enqueueExtractionPipeline: key=$notiKey forced=$forced")
+    val inputData = Data.Builder()
+        .putString("api_type", N8N_EXTRACTION_PIPELINE)
+        // The pipeline calls several stage webhooks; each stage picks its own path from BuildConfig.
+        .putString("webhook_path", BuildConfig.N8N_EXTRACT_A_SCAN_PATH)
+        .putString("noti_key", notiKey)
+        .putBoolean("forced", forced)
+        .build()
 
     val constraints = Constraints.Builder()
         .setRequiredNetworkType(NetworkType.CONNECTED)
         .build()
 
     val workerRequest = OneTimeWorkRequestBuilder<N8nAPIWorker>()
-        // Exponential: extraction retries during an outage back off instead of hammering every minute.
+        .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
+        .setConstraints(constraints)
+        .setInputData(inputData)
+        .addTag(EXTRACTION_WORK_TAG)
+        .build()
+
+    val policy = if (forced) ExistingWorkPolicy.REPLACE else ExistingWorkPolicy.KEEP
+    WorkManager.getInstance(context)
+        .enqueueUniqueWork(extractionWorkName(notiKey), policy, workerRequest)
+}
+
+/** Shared tag on every per-notiKey extraction job, so the UI can observe "any extraction running". */
+const val EXTRACTION_WORK_TAG = "n8n_extraction"
+
+/**
+ * Queues the periodic reflection pass (cross-thread merge): grouping (D2) then merge resolution
+ * (E2), staged for review. A single KEEP slot bounds scheduler growth.
+ */
+fun enqueueReflectionPipeline(context: Context) {
+    if (!isSignedIn()) {
+        Log.d("N8nAPI", "Skipping reflection pipeline: not signed in")
+        return
+    }
+    Log.d("N8nAPI", "enqueueReflectionPipeline")
+    val inputData = Data.Builder()
+        .putString("api_type", N8N_REFLECTION_PIPELINE)
+        .putString("webhook_path", BuildConfig.N8N_EXTRACT_D2_GROUPING_PATH)
+        .build()
+
+    val constraints = Constraints.Builder()
+        .setRequiredNetworkType(NetworkType.CONNECTED)
+        .build()
+
+    val workerRequest = OneTimeWorkRequestBuilder<N8nAPIWorker>()
         .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
         .setConstraints(constraints)
         .setInputData(inputData)
         .build()
 
-    // Single unique slot for all extraction work: REPLACE so newer key lists win and the
-    // job count stays bounded. Consistent with enqueueDelayedTaskExtraction.
     WorkManager.getInstance(context)
-        .enqueueUniqueWork("n8n_task_extraction", ExistingWorkPolicy.REPLACE, workerRequest)
- }
-
-/**
- * Queues delayed extraction after scan/capture activity settles.
- *
- * This shares the extraction unique-work slot with immediate extraction. A newer extraction intent restarts the
- * debounce timer and prevents overlapping backend jobs.
- */
-fun enqueueDelayedTaskExtraction(context: Context, delaySeconds: Long, userTriggered: Boolean = false) {
-    if (!isSignedIn()) {
-        Log.d("N8nAPI", "Skipping delayed task extraction: not signed in")
-        return
-    }
-    Log.d("N8nAPI", "enqueueDelayedTaskExtraction: delaySeconds=$delaySeconds userTriggered=$userTriggered")
-     val inputData = Data.Builder()
-         .putString("api_type", N8N_TASK_EXTRACTION)
-         .putString("webhook_path", BuildConfig.N8N_TASK_EXTRACTION_PATH)
-         .putBoolean("user_triggered", userTriggered)
-         // No noti_keys_json passed -> worker will query DB for shouldExtractTask==true
-         .putString("noti_keys_json", "[]")
-         .build()
-
-     val constraints = Constraints.Builder()
-         .setRequiredNetworkType(NetworkType.CONNECTED)
-         .build()
-
-     val workerRequest = OneTimeWorkRequestBuilder<N8nAPIWorker>()
-         .setInitialDelay(delaySeconds, TimeUnit.SECONDS)
-         .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
-         .setConstraints(constraints)
-         .setInputData(inputData)
-         .build()
-
-     // Use a unique name so subsequent triggers replace the scheduled work, restarting the timer.
-     WorkManager.getInstance(context)
-         .enqueueUniqueWork("n8n_task_extraction_debounce", ExistingWorkPolicy.REPLACE, workerRequest)
- }
+        .enqueueUniqueWork("n8n_reflection_pipeline", ExistingWorkPolicy.KEEP, workerRequest)
+}
 
 /** Queues regeneration for one reminder from its stored notification context. */
 fun enqueueRegenerateOne(context: Context, savedItemId: String) {
@@ -212,52 +166,6 @@ fun enqueueRegenerateOne(context: Context, savedItemId: String) {
         .build()
 
     val uniqueName = "n8n_regenerate_one_$savedItemId"
-    WorkManager.getInstance(context).enqueueUniqueWork(uniqueName, ExistingWorkPolicy.REPLACE, workerRequest)
- }
-
-/** Queues regeneration for all currently visible reminders. */
-fun enqueueRegenerateAll(context: Context) {
-    Log.d("N8nAPI", "enqueueRegenerateAll")
-    val inputData = Data.Builder()
-        .putString("api_type", N8N_REGENERATE_ALL)
-        .putString("webhook_path", BuildConfig.N8N_REGENERATE_ALL_PATH)
-        .build()
-
-    val constraints = Constraints.Builder()
-        .setRequiredNetworkType(NetworkType.CONNECTED)
-        .build()
-
-    val workerRequest = OneTimeWorkRequestBuilder<N8nAPIWorker>()
-        .setBackoffCriteria(BackoffPolicy.LINEAR, 1, TimeUnit.MINUTES)
-        .setConstraints(constraints)
-        .setInputData(inputData)
-        .build()
-
-    WorkManager.getInstance(context)
-        .enqueueUniqueWork("n8n_regenerate_all", ExistingWorkPolicy.REPLACE, workerRequest)
- }
-
-/** Queues reminder reranking for one feedback-triggered reminder update. */
-fun enqueueRerank(context: Context, savedItemId: String, trigger: String) {
-    Log.d("N8nAPI", "enqueueRerank: savedItemId=$savedItemId trigger=$trigger")
-    val inputData = Data.Builder()
-        .putString("api_type", N8N_RERANK)
-        .putString("webhook_path", BuildConfig.N8N_RERANK_PATH)
-        .putString("reminder_id", savedItemId)
-        .putString("trigger", trigger)
-        .build()
-
-    val constraints = Constraints.Builder()
-        .setRequiredNetworkType(NetworkType.CONNECTED)
-        .build()
-
-    val workerRequest = OneTimeWorkRequestBuilder<N8nAPIWorker>()
-        .setBackoffCriteria(BackoffPolicy.LINEAR, 1, TimeUnit.MINUTES)
-        .setConstraints(constraints)
-        .setInputData(inputData)
-        .build()
-
-    val uniqueName = "n8n_rerank_${savedItemId}_$trigger"
     WorkManager.getInstance(context).enqueueUniqueWork(uniqueName, ExistingWorkPolicy.REPLACE, workerRequest)
  }
 

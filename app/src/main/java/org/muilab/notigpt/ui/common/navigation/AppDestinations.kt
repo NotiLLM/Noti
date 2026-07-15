@@ -16,8 +16,12 @@ sealed interface HomeDestination {
     /** A full-screen NotiCard list for one notification category ([category] = NotiCategory.*). */
     data class NotiList(val category: String) : HomeDestination
 
-    /** A filtered saved-item list (a smart filter, or the Tasks/Keep collections). */
-    data class SavedList(val filter: SavedListFilter) : HomeDestination
+    /**
+     * A filtered saved-item list (a smart filter, or the Tasks/Keep collections). [focusItemId], when
+     * set, opens that item's detail screen immediately on top of the list (e.g. jumping in from a
+     * notification's linked-items sheet).
+     */
+    data class SavedList(val filter: SavedListFilter, val focusItemId: String? = null) : HomeDestination
 }
 
 /**

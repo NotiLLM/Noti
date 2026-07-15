@@ -141,9 +141,33 @@ class ExtractionJournalRepository(private val journalDao: ExtractionJournalDao) 
                 summaryText = newSummary,
                 lastFoldedAt = System.currentTimeMillis(),
                 foldedEntryCount = (existing?.foldedEntryCount ?: 0) + request.entriesToFold.size,
+                lastFoldedPostTime = existing?.lastFoldedPostTime ?: 0L,
             )
         )
         journalDao.deleteEntries(request.entriesToFold.map { it.entryId })
+    }
+
+    /** Current record fold watermark (postTime) for a notiKey; 0 when nothing has folded yet. */
+    suspend fun getWatermark(notiKey: String): Long = withContext(Dispatchers.IO) {
+        journalDao.getSummary(notiKey)?.lastFoldedPostTime ?: 0L
+    }
+
+    /**
+     * Stage C result: replaces the rolling content summary and advances the fold watermark so the
+     * folded records stop riding along in later scan/extraction requests. A blank summary keeps the
+     * prior text (the fold still advances the watermark).
+     */
+    suspend fun foldRecordsIntoSummary(notiKey: String, newSummary: String, newWatermark: Long) = withContext(Dispatchers.IO) {
+        val existing = journalDao.getSummary(notiKey)
+        journalDao.upsertSummary(
+            ExtractionJournalSummary(
+                notiKey = notiKey,
+                summaryText = newSummary.ifBlank { existing?.summaryText ?: "" },
+                lastFoldedAt = System.currentTimeMillis(),
+                foldedEntryCount = existing?.foldedEntryCount ?: 0,
+                lastFoldedPostTime = maxOf(newWatermark, existing?.lastFoldedPostTime ?: 0L),
+            )
+        )
     }
 
     companion object {

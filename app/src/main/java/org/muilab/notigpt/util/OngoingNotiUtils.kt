@@ -117,8 +117,17 @@ fun postOngoingNotification(context: Context) {
         val savedItemDao = appDatabase.reminderListDao()
 
         val allNotiCount = drawerDao.getActiveNotiCount()
-        val newTaskCount = savedItemDao.countNewByType(SavedItemType.Task)
-        val newKeepCount = savedItemDao.countNewByType(SavedItemType.Keep)
+        // Item-level review counts: staged proposals plus legacy new/updated rows, one per eventual
+        // item (an existing item covered by a staged group isn't double-counted).
+        val pendingOps = appDatabase.pendingOpDao().getAll()
+        val stagedTargets = pendingOps.filter { it.targetItemId.isNotBlank() }.mapTo(mutableSetOf()) { it.targetItemId }
+        val legacyNew = savedItemDao.getNewItems().filter { it.savedItemId !in stagedTargets }
+        fun countFor(type: String): Int =
+            pendingOps.count { it.itemType == type && it.targetItemId.isBlank() } +
+                pendingOps.filter { it.itemType == type && it.targetItemId.isNotBlank() }.distinctBy { it.targetItemId }.size +
+                legacyNew.count { it.itemType == type }
+        val newTaskCount = countFor(SavedItemType.Task)
+        val newKeepCount = countFor(SavedItemType.Keep)
         val notiTitle = "$allNotiCount notifications"
         val smallIcon = createCountIcon(context, allNotiCount, false)
 

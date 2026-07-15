@@ -47,6 +47,17 @@ interface SavedSubItemDao {
     @Query("UPDATE saved_sub_item SET isVisible = 1, lastUpdateTimestamp = :ts WHERE savedSubItemId IN (:ids)")
     suspend fun restoreByIds(ids: List<String>, ts: Long)
 
+    /** Hard-delete all sub-tasks of a parent: rides parent hard deletes (the FK doesn't cascade). */
+    @Query("DELETE FROM saved_sub_item WHERE parentSavedItemId = :savedItemId")
+    suspend fun hardDeleteByParentId(savedItemId: String)
+
+    /** Hard-delete specific sub-tasks, e.g. undoing an accepted op that inserted them. */
+    @Query("DELETE FROM saved_sub_item WHERE savedSubItemId IN (:ids)")
+    suspend fun hardDeleteByIds(ids: List<String>)
+
+    @Query("DELETE FROM saved_sub_item WHERE parentSavedItemId IN (:savedItemIds)")
+    suspend fun hardDeleteByParentIds(savedItemIds: List<String>)
+
     /** Account-switch wipe. */
     @Query("DELETE FROM saved_sub_item")
     suspend fun deleteAllForAccountSwitch()

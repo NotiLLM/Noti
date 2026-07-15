@@ -10,9 +10,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import org.muilab.notigpt.data.remote.n8n.enqueueDelayedTaskExtraction
-import org.muilab.notigpt.data.remote.n8n.enqueueTaskExtraction
-import org.muilab.notigpt.data.remote.n8n.enqueueTaskScan
+import org.muilab.notigpt.data.remote.n8n.enqueueExtractionPipeline
 import org.muilab.notigpt.data.local.room.dao.NotiDrawerDao
 import org.muilab.notigpt.data.local.room.dao.NotiLlmStateDao
 import org.muilab.notigpt.data.local.room.dao.NotiRecordDao
@@ -39,7 +37,6 @@ class NotiActionsRepository(
 
     private val detectionCounters = mutableMapOf<String, Int>()
     private val detectionJobs = mutableMapOf<String, Job?>()
-    private val extractionCounters = mutableMapOf<String, Int>()
 
     private val scope = CoroutineScope(Dispatchers.IO)
 
@@ -109,6 +106,10 @@ class NotiActionsRepository(
         registerNewRecordForNotiUnit(notiRecord.notiKey)
     }
 
+    /**
+     * Debounces the per-notiKey extraction pipeline after new records arrive: a burst of records
+     * coalesces into one pipeline run (scan → extract), and a large burst fires immediately.
+     */
     private fun registerNewRecordForNotiUnit(notiKey: String) {
         val newCount = (detectionCounters[notiKey] ?: 0) + 1
         detectionCounters[notiKey] = newCount
@@ -117,40 +118,14 @@ class NotiActionsRepository(
         val job = scope.launch {
             val waitSeconds = SharedPreferencesManager.waitSecondsBeforeNotiUnitSync
             val maxRecords = SharedPreferencesManager.maxRecordsBeforeNotiSync
-            if (newCount >= maxRecords) {
-                enqueueTaskScan(appContext, notiKey)
-                detectionCounters.remove(notiKey)
-                detectionJobs.remove(notiKey)
-                return@launch
+            if (newCount < maxRecords) {
+                delay(waitSeconds * 1000L)
             }
-            delay(waitSeconds * 1000L)
-            enqueueTaskScan(appContext, notiKey)
+            enqueueExtractionPipeline(appContext, notiKey)
             detectionCounters.remove(notiKey)
             detectionJobs.remove(notiKey)
         }
         detectionJobs[notiKey] = job
-    }
-
-    private fun registerShouldExtractForNotiUnit(notiKey: String) {
-        synchronized(extractionCounters) {
-            extractionCounters[notiKey] = (extractionCounters[notiKey] ?: 0) + 1
-        }
-        val totalPending = synchronized(extractionCounters) { extractionCounters.values.sum() }
-        val maxCount = SharedPreferencesManager.maxRecordsBeforeDrawerSync
-        val waitSeconds = SharedPreferencesManager.waitSecondsBeforeDrawerSync
-
-        if (totalPending >= maxCount) {
-            val candidateKeys: List<String> = synchronized(extractionCounters) { extractionCounters.keys.toList() }
-            val toSubmit = candidateKeys.filter { k -> notiLlmStateDao.getByKey(k)?.shouldExtractReminder == true }
-            if (toSubmit.isNotEmpty()) {
-                notiLlmStateDao.setShouldExtractByKeys(toSubmit, false, System.currentTimeMillis())
-                enqueueTaskExtraction(appContext, toSubmit)
-            }
-            synchronized(extractionCounters) { extractionCounters.clear() }
-            return
-        }
-
-        enqueueDelayedTaskExtraction(appContext, waitSeconds.toLong())
     }
 
     suspend fun markNotiRead(notiKey: String) {
@@ -158,25 +133,11 @@ class NotiActionsRepository(
     }
 
     suspend fun actOnNotiLegacy(notiKey: String, action: String) {
-        // Special-case actions that carry payload after ::
+        // Special-case actions that carry payload after :: (record ids are no longer used — the
+        // forced pipeline extracts from the thread's unprocessed records).
         if (action.startsWith("extract_reminder_with_records")) {
             notiDrawerDao.getByNotiKey(notiKey) ?: return
-            promoteShouldExtract(notiKey)
-
-            val parts = action.split("::", limit = 2)
-            val json = parts.getOrNull(1).orEmpty()
-            val ids: List<String> = try {
-                com.google.gson.Gson().fromJson(json, Array<String>::class.java).toList()
-            } catch (_: Exception) {
-                emptyList()
-            }
-
-            enqueueTaskExtraction(
-                appContext,
-                listOf(notiKey),
-                userTriggered = true,
-                visibleRecordIds = ids,
-            )
+            enqueueExtractionPipeline(appContext, notiKey, forced = true)
             return
         }
 
@@ -205,12 +166,9 @@ class NotiActionsRepository(
             "pin" -> setPinnedState(notiKey, true)
             "mark_read" -> markNotiRead(notiKey)
             "extract_reminder" -> {
-                // Legacy path: still allows triggering extraction, but without explicit record IDs we
-                // fall back to previous behavior.
+                // User-triggered manual extraction: run the forced pipeline for this thread.
                 notiDrawerDao.getByNotiKey(notiKey) ?: return
-                promoteShouldExtract(notiKey)
-
-                enqueueTaskExtraction(appContext, listOf(notiKey), userTriggered = true)
+                enqueueExtractionPipeline(appContext, notiKey, forced = true)
             }
         }
     }
@@ -218,54 +176,5 @@ class NotiActionsRepository(
     suspend fun setPinnedState(notiKey: String, pinned: Boolean? = null) {
         if (pinned == null) notiDrawerDao.flipPin(notiKey)
         else notiDrawerDao.setPinned(notiKey, pinned)
-    }
-
-    suspend fun setHasTask(notiKey: String, hasTask: Boolean) {
-        notiDrawerDao.getByNotiKey(notiKey) ?: return
-        val state = llmStateOrDefault(notiKey)
-        notiLlmStateDao.upsert(state.copy(hasTask = hasTask, updatedAt = System.currentTimeMillis()))
-
-        // Never demote the flag once it's true.
-        if (!state.shouldExtractReminder && hasTask) {
-            Log.d("NotiActionsRepository", "Setting shouldExtractReminder to true for $notiKey")
-            promoteShouldExtract(notiKey)
-            registerShouldExtractForNotiUnit(notiKey)
-        }
-    }
-
-    suspend fun setHasMemo(notiKey: String, hasMemo: Boolean) {
-        notiDrawerDao.getByNotiKey(notiKey) ?: return
-        val state = llmStateOrDefault(notiKey)
-        notiLlmStateDao.upsert(state.copy(hasMemo = hasMemo, updatedAt = System.currentTimeMillis()))
-
-        // Never demote the flag once it's true.
-        if (!state.shouldExtractReminder && hasMemo) {
-            Log.d("NotiActionsRepository", "Setting shouldExtractReminder to true for $notiKey")
-            promoteShouldExtract(notiKey)
-            registerShouldExtractForNotiUnit(notiKey)
-        }
-    }
-
-    suspend fun setHasEvent(notiKey: String, hasEvent: Boolean) {
-        notiDrawerDao.getByNotiKey(notiKey) ?: return
-        val state = llmStateOrDefault(notiKey)
-        notiLlmStateDao.upsert(state.copy(hasEvent = hasEvent, updatedAt = System.currentTimeMillis()))
-
-        // Never demote the flag once it's true.
-        if (!state.shouldExtractReminder && hasEvent) {
-            Log.d("NotiActionsRepository", "Setting shouldExtractReminder to true for $notiKey")
-            promoteShouldExtract(notiKey)
-            registerShouldExtractForNotiUnit(notiKey)
-        }
-    }
-
-    private fun llmStateOrDefault(notiKey: String): NotiLlmState =
-        notiLlmStateDao.getByKey(notiKey) ?: NotiLlmState(notiKey = notiKey)
-
-    /** Sets shouldExtractReminder without disturbing the other thread-state fields. */
-    private fun promoteShouldExtract(notiKey: String) {
-        val state = llmStateOrDefault(notiKey)
-        if (state.shouldExtractReminder) return
-        notiLlmStateDao.upsert(state.copy(shouldExtractReminder = true, updatedAt = System.currentTimeMillis()))
     }
 }
