@@ -5,19 +5,19 @@ import android.content.Intent
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
 import org.muilab.notigpt.data.local.room.AppDatabase
-import org.muilab.notigpt.data.remote.n8n.enqueueRegenerateAll
 import org.muilab.notigpt.data.remote.n8n.enqueueRegenerateOne
-import org.muilab.notigpt.data.remote.n8n.enqueueRerank
 import org.muilab.notigpt.data.export.ExportableItem
 import org.muilab.notigpt.model.features.DoDateBucket
 import org.muilab.notigpt.model.features.SavedItem
@@ -31,6 +31,7 @@ import kotlinx.coroutines.flow.Flow
 import org.muilab.notigpt.model.features.SavedItemChangeLog
 import org.muilab.notigpt.data.repository.reminder.SavedItemChangeLogRepository
 import org.muilab.notigpt.data.repository.reminder.SavedItemRepository
+import org.muilab.notigpt.data.repository.reminder.PendingOpRepository
 import org.muilab.notigpt.data.repository.reminder.ReminderRelatedNotificationsRepository
 import org.muilab.notigpt.data.repository.reminder.SavedSubItemRepository
 import org.muilab.notigpt.data.remote.googletasks.GoogleTasksAuthManager
@@ -46,6 +47,14 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
 
     enum class FilterTab { All, Pending, Tasks, Memos, Completed, Keep, Archived, Starred }
     enum class ListMode { All, Tasks, Keep }
+
+    /** A staged update/merge rendered in the saved-item lists before it is accepted. */
+    data class PendingListPreview(
+        val item: SavedItem,
+        val subItems: List<SavedSubItem>,
+        val mergeSourceItemIds: Set<String> = emptySet(),
+        val reason: String = "",
+    )
 
     /**
      * Result of Google Tasks export operation.
@@ -63,6 +72,7 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
     private val googleTasksRepo: GoogleTasksRepository
     private val relatedNotificationsRepo: ReminderRelatedNotificationsRepository
     private val changeLogRepo: SavedItemChangeLogRepository
+    private val pendingOpRepo: PendingOpRepository
 
     /** Extraction pipeline health, for the "server unreachable" banner. */
     val extractionStatus: StateFlow<org.muilab.notigpt.data.remote.n8n.ExtractionStatusStore.Status> =
@@ -78,13 +88,20 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
         googleTasksRepo = GoogleTasksRepository(application.applicationContext)
         relatedNotificationsRepo = ReminderRelatedNotificationsRepository(application.applicationContext)
         changeLogRepo = SavedItemChangeLogRepository(db.savedItemChangeLogDao())
+        pendingOpRepo = PendingOpRepository(application.applicationContext)
         pendingExtractionCount = db.recordDao().observePendingExtractionCount()
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
     }
 
-    /** Manual retry from the offline banner: re-enqueues periodic extraction immediately. */
+    /** Manual retry from the offline banner: re-drives the extraction pipeline for pending threads. */
     fun retryExtraction() {
-        org.muilab.notigpt.data.remote.n8n.enqueueTaskExtraction(getApplication(), emptyList(), userTriggered = false)
+        viewModelScope.launch {
+            val db = AppDatabase.getInstance(getApplication<Application>().applicationContext)
+            val keys = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                db.notiLlmStateDao().getActiveShouldExtractKeys()
+            }
+            keys.forEach { org.muilab.notigpt.data.remote.n8n.enqueueExtractionPipeline(getApplication(), it) }
+        }
     }
 
     private val _filter = MutableStateFlow(FilterTab.All)
@@ -128,6 +145,46 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
     private val completedFlow = repo.observeCompletedTasks()
     private val newItemsFlow = repo.observeNewItems()
 
+    /**
+     * Presentation-only previews for staged updates/merges. The persisted item remains unchanged
+     * until the user accepts the staged group.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val pendingPreviews: StateFlow<Map<String, PendingListPreview>> = combine(
+        pendingOpRepo.observePending(),
+        allFlow,
+    ) { ops, _ -> ops }
+        .mapLatest { ops ->
+            pendingOpRepo.groupOps(ops)
+                .filter { !it.isCreate }
+                .mapNotNull { group ->
+                    val preview = pendingOpRepo.buildPreview(group) ?: return@mapNotNull null
+                    val current = repo.getById(group.targetItemId!!) ?: return@mapNotNull null
+                    val sourceIds = group.ops.flatMap { pending ->
+                        try {
+                            val arr = JSONArray(pending.mergeSourceItemIds)
+                            buildList {
+                                for (i in 0 until arr.length()) {
+                                    arr.optString(i).takeIf { it.isNotBlank() }?.let(::add)
+                                }
+                            }
+                        } catch (_: Exception) {
+                            emptyList()
+                        }
+                    }.toSet()
+                    PendingListPreview(
+                        // Keep completed/archived list membership stable while replacing only the
+                        // content fields with the staged preview.
+                        item = preview.item.copy(state = current.state),
+                        subItems = preview.subItems,
+                        mergeSourceItemIds = sourceIds,
+                        reason = group.reason,
+                    )
+                }
+                .associateBy { it.item.savedItemId }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
+
     val allReminders: StateFlow<List<SavedItem>> = allFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
@@ -141,7 +198,7 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
      * lists without changing persisted reminder data.
      */
     val reminders: StateFlow<List<SavedItem>> = combine(
-        _filter, _searchQuery, _listMode, _smartFilter, allFlow, tasksFlow, memosFlow, completedFlow, activeKeepsFlow, archivedKeepsFlow
+        _filter, _searchQuery, _listMode, _smartFilter, allFlow, tasksFlow, memosFlow, completedFlow, activeKeepsFlow, archivedKeepsFlow, pendingPreviews
     ) { values ->
         val f = values[0] as FilterTab
         @Suppress("UNCHECKED_CAST")
@@ -160,6 +217,8 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
         val activeKeeps = values[8] as List<SavedItem>
         @Suppress("UNCHECKED_CAST")
         val archivedKeeps = values[9] as List<SavedItem>
+        @Suppress("UNCHECKED_CAST")
+        val pendingPreviews = values[10] as Map<String, PendingListPreview>
 
         val baseList = if (smart != null) {
             // Home smart filters: planned-date buckets (or starred), mixing tasks and keeps, over the
@@ -174,7 +233,16 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
                 SavedListFilter.Starred -> scoped.filter { it.isStarred }
                 // Tasks/Keep collections are never routed through smart filters.
                 SavedListFilter.Tasks, SavedListFilter.Keep -> scoped
-            }
+            }.sortedWith(
+                compareBy<SavedItem> {
+                    when(smart) {
+                        SavedListFilter.TodayEarlier -> it.doAtMs
+                        SavedListFilter.Upcoming -> it.doAtMs
+                        else -> -it.lastUpdateTimestamp
+                    }
+                }
+                    .thenBy { it.lastUpdateTimestamp }
+            )
         } else when (mode) {
             ListMode.Keep -> when (f) {
                 FilterTab.Keep -> activeKeeps
@@ -199,16 +267,25 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
                     else -> all // All
                 }
             }
-        }
+        }.sortedBy { -it.lastUpdateTimestamp }
+
+        val mergeSourceIds = pendingPreviews.values
+            .flatMap { it.mergeSourceItemIds }
+            .toSet()
+        val displayList = baseList
+            // A merge preview replaces the eventual survivor in the list; source rows remain
+            // durable until acceptance but are hidden here to avoid showing duplicate cards.
+            .filter { it.savedItemId !in mergeSourceIds || it.savedItemId in pendingPreviews }
+            .map { pendingPreviews[it.savedItemId]?.item ?: it }
 
         if (query.isBlank()) {
-            baseList
+            displayList
         } else {
             val terms = query.split("+").map { it.trim().lowercase() }.filter { it.isNotBlank() }
             if (terms.isEmpty()) {
-                baseList
+                displayList
             } else {
-                baseList.filter { reminder ->
+                displayList.filter { reminder ->
                     val searchable = "${reminder.title} ${reminder.content}".lowercase()
                     terms.all { term -> searchable.contains(term) }
                 }
@@ -275,23 +352,34 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
 
     fun deleteByIds(savedItemIds: List<String>) {
         viewModelScope.launch {
-            val ts = System.currentTimeMillis()
-            savedItemIds.forEach { subTaskRepo.softDeleteByParentId(it, ts) }
-            repo.deleteByIds(savedItemIds, ts)
+            // Hard delete: the repository removes sub-items, links, and change logs with the row.
+            repo.deleteByIds(savedItemIds, System.currentTimeMillis())
         }
     }
 
     fun delete(savedItemId: String) {
         viewModelScope.launch {
-            val ts = System.currentTimeMillis()
-            subTaskRepo.softDeleteByParentId(savedItemId, ts)
-            repo.deleteById(savedItemId, ts)
+            repo.deleteById(savedItemId, System.currentTimeMillis())
         }
     }
 
     fun upsert(reminder: SavedItem) {
         viewModelScope.launch {
             repo.upsert(reminder.copy(lastUpdateTimestamp = System.currentTimeMillis()))
+        }
+    }
+
+    /** Accepts a staged update/merge, then opens the now-current item for manual editing. */
+    fun approvePendingForEdit(savedItemId: String, onApproved: (SavedItem) -> Unit) {
+        viewModelScope.launch {
+            val group = pendingOpRepo.groupOps(pendingOpRepo.getPending())
+                .firstOrNull { it.targetItemId == savedItemId }
+            if (group == null) {
+                repo.getById(savedItemId)?.let(onApproved)
+                return@launch
+            }
+            val outcome = pendingOpRepo.applyGroup(group) ?: return@launch
+            repo.getById(outcome.appliedItemId)?.let(onApproved)
         }
     }
 
@@ -307,10 +395,8 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
             state = SavedItemState.Saved,
             lastUpdateTimestamp = now,
             deadlineAtMs = 0L,
-            estimatedCompletionTime = 0L,
             origin = "manual",
             humanEditCount = 0,
-            deletedAtMs = null,
             userEdited = false,
         )
         upsert(reminder)
@@ -405,8 +491,6 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    // ========== Sorting / Ranking ==========
-
     fun markViewed(savedItemId: String) {
         viewModelScope.launch {
             repo.setViewed(savedItemId)
@@ -421,20 +505,10 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    fun submitFeedback(savedItemId: String, trigger: String) {
-        viewModelScope.launch {
-            enqueueRerank(getApplication(), savedItemId, trigger)
-        }
-    }
-
     // ========== Regeneration ==========
 
     fun regenerateOne(savedItemId: String) {
         enqueueRegenerateOne(getApplication(), savedItemId)
-    }
-
-    fun regenerateAll() {
-        enqueueRegenerateAll(getApplication())
     }
 
     // ========== Buttons ==========

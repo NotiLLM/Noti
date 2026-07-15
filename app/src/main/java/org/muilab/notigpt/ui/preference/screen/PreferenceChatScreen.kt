@@ -120,7 +120,10 @@ fun PreferenceChatScreen(
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.weight(1f),
             )
-            if (messages.isNotEmpty()) {
+            // Also shown with an empty chat when a flow-context banner is pinned (e.g. from quick
+            // sync): otherwise a user who leaves without sending a message has no way to clear stale
+            // context before it leaks into an unrelated rule added later.
+            if (messages.isNotEmpty() || chatFlowContext != null) {
                 IconButton(onClick = { showClearConfirm = true }) {
                     Icon(painterResource(R.drawable.delete), contentDescription = stringResource(R.string.pref_chat_clear_desc))
                 }

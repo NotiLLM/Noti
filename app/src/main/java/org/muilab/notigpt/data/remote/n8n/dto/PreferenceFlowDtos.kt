@@ -24,9 +24,16 @@ data class N8nQuickSyncRequestDto(
     val userContexts: List<Map<String, String>>? = null,
 )
 
+/**
+ * Explicit-diff quick-sync response (contract v2): the backend proposes creations, updates, and
+ * deletions separately. Omission never deletes — only ids in [deletedRuleIds] are deletion proposals,
+ * and those are confirmed by the user before anything is removed locally.
+ */
 data class N8nQuickSyncResponseDto(
     val status: String,
-    val updatedPreferences: List<N8nPreferencePlainDto>,
+    val createdRules: List<N8nPreferencePlainDto> = emptyList(),
+    val updatedRules: List<N8nPreferencePlainDto> = emptyList(),
+    val deletedRuleIds: List<String> = emptyList(),
     val toastMessage: String?,
     val conflicts: List<N8nConflictDto> = emptyList(),
 )

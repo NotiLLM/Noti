@@ -255,6 +255,7 @@ fun AppScaffold(
     }
 
     PreferenceLearningBottomSheet(preferenceViewModel = preferenceViewModel)
+    org.muilab.notigpt.ui.preference.component.PreferenceQuickSyncReviewDialog(preferenceViewModel = preferenceViewModel)
 
     // ── Navigation helpers ──
     fun clearSearch() {
@@ -458,6 +459,14 @@ fun AppScaffold(
                                 drawerViewModel = drawerViewModel,
                                 scheduledReminderViewModel = scheduledReminderViewModel,
                                 searchQuery = appSearchQuery,
+                                onOpenSavedItem = { item ->
+                                    pushHome(
+                                        HomeDestination.SavedList(
+                                            filter = if (item.isTask) SavedListFilter.Tasks else SavedListFilter.Keep,
+                                            focusItemId = item.savedItemId,
+                                        )
+                                    )
+                                },
                             )
                             is HomeDestination.SavedList -> {
                                 val listMode = when (dest.filter) {
@@ -476,6 +485,7 @@ fun AppScaffold(
                                     preferenceViewModel = preferenceViewModel,
                                     listMode = listMode,
                                     smartFilter = smart,
+                                    initialDetailItemId = dest.focusItemId,
                                     onDetailOpenChange = { detailOpen = it },
                                 )
                             }

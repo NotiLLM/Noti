@@ -4,7 +4,11 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import kotlinx.coroutines.flow.Flow
 import org.muilab.notigpt.model.features.NotiSavedItemLink
+
+/** Per-notiKey count of linked active saved items by type, for the notification card badge. */
+data class LinkedTypeCount(val notiKey: String, val taskCount: Int, val keepCount: Int)
 
 /**
  * Local access layer for the noti-to-saved-item join table.
@@ -37,6 +41,26 @@ interface NotiSavedItemLinkDao {
 
     @Query("SELECT DISTINCT savedItemId FROM noti_saved_item_link WHERE notiKey = :notiKey")
     suspend fun getSavedItemIdsByNotiKey(notiKey: String): List<String>
+
+    /**
+     * Live per-notiKey task/keep counts of linked *active* saved items (excludes completed/archived),
+     * de-duplicated so a saved item linked via several records counts once. Drives the card badge.
+     */
+    @Query(
+        """
+        SELECT notiKey AS notiKey,
+            SUM(CASE WHEN itemType = 'task' THEN 1 ELSE 0 END) AS taskCount,
+            SUM(CASE WHEN itemType = 'keep' THEN 1 ELSE 0 END) AS keepCount
+        FROM (
+            SELECT DISTINCT l.notiKey AS notiKey, l.savedItemId AS savedItemId, s.itemType AS itemType
+            FROM noti_saved_item_link l
+            JOIN saved_item s ON s.savedItemId = l.savedItemId
+            WHERE s.state != 'archived' AND s.state != 'completed'
+        )
+        GROUP BY notiKey
+        """
+    )
+    fun observeLinkedTypeCounts(): Flow<List<LinkedTypeCount>>
 
     @Query("SELECT DISTINCT savedItemId FROM noti_saved_item_link WHERE notiKey IN (:notiKeys)")
     suspend fun getSavedItemIdsByNotiKeys(notiKeys: List<String>): List<String>

@@ -73,7 +73,7 @@ fun ReviewScreen(
     onDetailOpenChange: (Boolean) -> Unit = {},
     reviewViewModel: ReviewViewModel = viewModel(),
 ) {
-    val allNew by reviewViewModel.newItems.collectAsState()
+    val allNew by reviewViewModel.entries.collectAsState()
     val filter by reviewViewModel.filter.collectAsState()
 
     val filtered = remember(allNew, filter) { allNew.filter { reviewViewModel.matchesFilter(it, filter) } }
@@ -114,12 +114,12 @@ fun ReviewScreen(
     }
 
     // Detail bottom sheet.
-    var expanded by remember { mutableStateOf<SavedItem?>(null) }
+    var expanded by remember { mutableStateOf<ReviewViewModel.ReviewEntry?>(null) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     // Edit-in-review: hosts the full editor as a full-screen overlay; signal AppScaffold to hide its
     // bars (the editor has its own header) just like the list editor does.
-    var editingItem by remember { mutableStateOf<SavedItem?>(null) }
+    var editingItem by remember { mutableStateOf<ReviewViewModel.ReviewEntry?>(null) }
     androidx.compose.runtime.LaunchedEffect(editingItem) { onDetailOpenChange(editingItem != null) }
     val subtasksByReminder by reminderViewModel.allSavedSubItemsByReminder.collectAsState()
 
@@ -144,8 +144,8 @@ fun ReviewScreen(
                     onApprove = reviewViewModel::approve,
                     onReject = reviewViewModel::reject,
                     onExpand = { expanded = it },
-                    minimalCard = { item, approveProgress, rejectProgress ->
-                        MinimalReviewCard(item, approveProgress, rejectProgress, reviewViewModel)
+                    minimalCard = { entry, approveProgress, rejectProgress ->
+                        MinimalReviewCard(entry, approveProgress, rejectProgress, reviewViewModel)
                     },
                 )
 
@@ -237,23 +237,27 @@ fun ReviewScreen(
         )
     }
 
-    expanded?.let { item ->
+    expanded?.let { entry ->
         ModalBottomSheet(
             onDismissRequest = { expanded = null },
             sheetState = sheetState,
         ) {
             ReviewDetailSheet(
-                item = item,
+                entry = entry,
                 reviewViewModel = reviewViewModel,
-                onApprove = { reviewViewModel.approve(item); expanded = null },
-                onReject = { reviewViewModel.reject(item); expanded = null },
-                onEdit = { editingItem = item; expanded = null },
+                onApprove = { reviewViewModel.approve(entry); expanded = null },
+                onReject = { reviewViewModel.reject(entry); expanded = null },
+                onEdit = { editingItem = entry; expanded = null },
             )
         }
     }
 
     // Full-screen editor overlay (review mode: Save & Approve / Delete footer).
-    editingItem?.let { item ->
+    editingItem?.let { entry ->
+        val item = entry.preview
+        // Staged entries have no DB rows yet: sub-tasks come from the preview and editing them
+        // waits until the group is applied. Legacy entries edit real rows as before.
+        val staged = entry.group != null
         androidx.compose.foundation.layout.Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -268,16 +272,16 @@ fun ReviewScreen(
                 initial = item,
                 drawerViewModel = drawerViewModel,
                 onBack = { editingItem = null },
-                onDelete = { reviewViewModel.reject(item); editingItem = null },
+                onDelete = { reviewViewModel.reject(entry); editingItem = null },
                 onSave = {},
                 reviewMode = true,
-                onSaveApprove = { updated -> reviewViewModel.saveApprove(updated); editingItem = null },
-                onRejectDelete = { reviewViewModel.reject(item); editingItem = null },
+                onSaveApprove = { updated -> reviewViewModel.saveApprove(entry, updated); editingItem = null },
+                onRejectDelete = { reviewViewModel.reject(entry); editingItem = null },
                 changeLog = reviewViewModel.changeLogFlow(item.savedItemId),
-                subTasks = subtasksByReminder[item.savedItemId] ?: emptyList(),
-                onAddSavedSubItem = { reminderViewModel.addSavedSubItem(item.savedItemId) },
-                onSavedSubItemToggle = { stId, checked -> reminderViewModel.toggleSavedSubItemCompleted(stId, checked) },
-                onSavedSubItemDelete = { st -> reminderViewModel.deleteSavedSubItem(st.savedSubItemId) },
+                subTasks = if (staged) entry.previewSubItems else subtasksByReminder[item.savedItemId] ?: emptyList(),
+                onAddSavedSubItem = { if (!staged) reminderViewModel.addSavedSubItem(item.savedItemId) },
+                onSavedSubItemToggle = { stId, checked -> if (!staged) reminderViewModel.toggleSavedSubItemCompleted(stId, checked) },
+                onSavedSubItemDelete = { st -> if (!staged) reminderViewModel.deleteSavedSubItem(st.savedSubItemId) },
             )
         }
     }
@@ -285,14 +289,14 @@ fun ReviewScreen(
 
 @Composable
 private fun ReviewFilterChips(
-    items: List<SavedItem>,
+    items: List<ReviewViewModel.ReviewEntry>,
     selected: ReviewViewModel.ReviewFilter,
     onSelect: (ReviewViewModel.ReviewFilter) -> Unit,
 ) {
-    val newTasks = items.count { it.isTask && it.state == SavedItemState.New }
-    val updatedTasks = items.count { it.isTask && it.state == SavedItemState.Updated }
-    val newKeeps = items.count { !it.isTask && it.state == SavedItemState.New }
-    val updatedKeeps = items.count { !it.isTask && it.state == SavedItemState.Updated }
+    val newTasks = items.count { it.preview.isTask && it.isNewLike }
+    val updatedTasks = items.count { it.preview.isTask && !it.isNewLike }
+    val newKeeps = items.count { !it.preview.isTask && it.isNewLike }
+    val updatedKeeps = items.count { !it.preview.isTask && !it.isNewLike }
 
     Row(
         modifier = Modifier
@@ -331,15 +335,16 @@ private fun ReviewFilterChips(
 
 @Composable
 private fun MinimalReviewCard(
-    item: SavedItem,
+    entry: ReviewViewModel.ReviewEntry,
     approveProgress: Float,
     rejectProgress: Float,
     reviewViewModel: ReviewViewModel,
 ) {
-    // Updated items surface the LLM's one-line "what changed"; new items show a content preview.
-    var changeSummary by remember(item.savedItemId) { mutableStateOf<String?>(null) }
-    androidx.compose.runtime.LaunchedEffect(item.savedItemId) {
-        if (item.state == SavedItemState.Updated) changeSummary = reviewViewModel.latestChangeSummary(item)
+    val item = entry.preview
+    // Updated items surface the pipeline's one-line "what changed"; new items show a content preview.
+    var changeSummary by remember(entry.key) { mutableStateOf<String?>(null) }
+    androidx.compose.runtime.LaunchedEffect(entry.key) {
+        if (!entry.isNewLike) changeSummary = reviewViewModel.latestChangeSummary(entry)
     }
 
     Surface(
@@ -351,7 +356,7 @@ private fun MinimalReviewCard(
         Box {
             Column(Modifier.padding(20.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    ReviewBadge(item)
+                    ReviewBadge(isNew = entry.isNewLike)
                     Spacer(Modifier.weight(1f))
                     Text(
                         text = if (item.isTask) stringResource(R.string.home_collection_tasks)
@@ -440,14 +445,14 @@ private fun androidx.compose.foundation.layout.BoxScope.SwipeOverlay(
 }
 
 @Composable
-private fun ReviewBadge(item: SavedItem) {
+private fun ReviewBadge(isNew: Boolean) {
     Surface(
         shape = CircleShape,
         color = MaterialTheme.colorScheme.secondaryContainer,
     ) {
         Text(
             text = stringResource(
-                if (item.state == SavedItemState.New) R.string.reminder_badge_new
+                if (isNew) R.string.reminder_badge_new
                 else R.string.reminder_badge_updated
             ),
             style = MaterialTheme.typography.labelMedium,

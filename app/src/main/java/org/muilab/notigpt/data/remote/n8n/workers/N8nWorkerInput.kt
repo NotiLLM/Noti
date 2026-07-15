@@ -3,12 +3,10 @@ package org.muilab.notigpt.data.remote.n8n.workers
 import androidx.work.Data
 import org.muilab.notigpt.util.Constants.Companion.DIFY_POST_NOTIFICATION_ACTION
 import org.muilab.notigpt.util.Constants.Companion.DIFY_UPDATE_NOTIFICATION
-import org.muilab.notigpt.util.Constants.Companion.N8N_TASK_EXTRACTION
-import org.muilab.notigpt.util.Constants.Companion.N8N_TASK_SCAN
+import org.muilab.notigpt.util.Constants.Companion.N8N_EXTRACTION_PIPELINE
+import org.muilab.notigpt.util.Constants.Companion.N8N_REFLECTION_PIPELINE
 import org.muilab.notigpt.util.Constants.Companion.N8N_PREFERENCE_QUICK_SYNC
 import org.muilab.notigpt.util.Constants.Companion.N8N_REGENERATE_ONE
-import org.muilab.notigpt.util.Constants.Companion.N8N_REGENERATE_ALL
-import org.muilab.notigpt.util.Constants.Companion.N8N_RERANK
 
 /**
  * Typed view of WorkManager input data for N8nAPIWorker.
@@ -24,14 +22,16 @@ sealed interface N8nWorkerInput {
         val notiKey: String,
     ) : N8nWorkerInput
 
-    data class ReminderScan(
+    /** Per-notiKey extraction pipeline (A→B→C→D1→E1). [forced] skips scan and starts at B. */
+    data class ExtractionPipeline(
         override val webhookPath: String,
         val notiKey: String,
+        val forced: Boolean,
     ) : N8nWorkerInput
 
-    data class ReminderExtraction(
+    /** Periodic cross-thread reflection merge (D2→E2). */
+    data class ReflectionPipeline(
         override val webhookPath: String,
-        val notiKeysJson: String,
     ) : N8nWorkerInput
 
     data class PostNotificationAction(
@@ -53,18 +53,6 @@ sealed interface N8nWorkerInput {
         val savedItemId: String,
     ) : N8nWorkerInput
 
-    /** Regenerate all visible reminders. */
-    data class RegenerateAll(
-        override val webhookPath: String,
-    ) : N8nWorkerInput
-
-    /** Rerank a single reminder (triggered by user feedback, etc.). */
-    data class Rerank(
-        override val webhookPath: String,
-        val savedItemId: String,
-        val trigger: String,
-    ) : N8nWorkerInput
-
     companion object {
         /** Parses WorkManager Data keys into a typed worker input. */
         fun from(input: Data): N8nWorkerInput? {
@@ -77,14 +65,14 @@ sealed interface N8nWorkerInput {
                     notiKey = input.getString("noti_key") ?: "",
                 )
 
-                N8N_TASK_SCAN -> ReminderScan(
+                N8N_EXTRACTION_PIPELINE -> ExtractionPipeline(
                     webhookPath = webhookPath,
                     notiKey = input.getString("noti_key") ?: return null,
+                    forced = input.getBoolean("forced", false),
                 )
 
-                N8N_TASK_EXTRACTION -> ReminderExtraction(
+                N8N_REFLECTION_PIPELINE -> ReflectionPipeline(
                     webhookPath = webhookPath,
-                    notiKeysJson = input.getString("noti_keys_json") ?: "[]",
                 )
 
                 DIFY_POST_NOTIFICATION_ACTION -> PostNotificationAction(
@@ -102,16 +90,6 @@ sealed interface N8nWorkerInput {
                 N8N_REGENERATE_ONE -> RegenerateOne(
                     webhookPath = webhookPath,
                     savedItemId = input.getString("reminder_id") ?: return null,
-                )
-
-                N8N_REGENERATE_ALL -> RegenerateAll(
-                    webhookPath = webhookPath,
-                )
-
-                N8N_RERANK -> Rerank(
-                    webhookPath = webhookPath,
-                    savedItemId = input.getString("reminder_id") ?: return null,
-                    trigger = input.getString("trigger") ?: return null,
                 )
 
                 else -> null

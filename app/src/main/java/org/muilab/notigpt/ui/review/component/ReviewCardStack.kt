@@ -21,7 +21,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
-import org.muilab.notigpt.model.features.SavedItem
+import org.muilab.notigpt.ui.review.viewmodel.ReviewViewModel
 import org.muilab.notigpt.ui.common.feedback.Haptics
 import org.muilab.notigpt.ui.theme.MotionSpecs
 
@@ -36,12 +36,12 @@ private const val MAX_ROTATION_DEG = 10f
  */
 @Composable
 fun ReviewCardStack(
-    items: List<SavedItem>,
-    onApprove: (SavedItem) -> Unit,
-    onReject: (SavedItem) -> Unit,
-    onExpand: (SavedItem) -> Unit,
+    items: List<ReviewViewModel.ReviewEntry>,
+    onApprove: (ReviewViewModel.ReviewEntry) -> Unit,
+    onReject: (ReviewViewModel.ReviewEntry) -> Unit,
+    onExpand: (ReviewViewModel.ReviewEntry) -> Unit,
     modifier: Modifier = Modifier,
-    minimalCard: @Composable (item: SavedItem, approveProgress: Float, rejectProgress: Float) -> Unit,
+    minimalCard: @Composable (item: ReviewViewModel.ReviewEntry, approveProgress: Float, rejectProgress: Float) -> Unit,
 ) {
     BoxWithConstraints(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         val density = LocalDensity.current
@@ -53,7 +53,7 @@ fun ReviewCardStack(
         visible.reversed().forEachIndexed { indexFromBack, item ->
             val depth = visible.lastIndex - indexFromBack // 0 = top
             if (depth == 0) {
-                key(item.savedItemId) {
+                key(item.key) {
                     TopCard(
                         item = item,
                         commitThreshold = commitThreshold,
@@ -85,13 +85,13 @@ fun ReviewCardStack(
 
 @Composable
 private fun TopCard(
-    item: SavedItem,
+    item: ReviewViewModel.ReviewEntry,
     commitThreshold: Float,
     screenWidthPx: Float,
-    onApprove: (SavedItem) -> Unit,
-    onReject: (SavedItem) -> Unit,
-    onExpand: (SavedItem) -> Unit,
-    minimalCard: @Composable (item: SavedItem, approveProgress: Float, rejectProgress: Float) -> Unit,
+    onApprove: (ReviewViewModel.ReviewEntry) -> Unit,
+    onReject: (ReviewViewModel.ReviewEntry) -> Unit,
+    onExpand: (ReviewViewModel.ReviewEntry) -> Unit,
+    minimalCard: @Composable (item: ReviewViewModel.ReviewEntry, approveProgress: Float, rejectProgress: Float) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val haptic = LocalHapticFeedback.current
@@ -108,7 +108,7 @@ private fun TopCard(
                 translationX = offsetX.value
                 rotationZ = (offsetX.value / screenWidthPx) * MAX_ROTATION_DEG
             }
-            .pointerInput(item.savedItemId) {
+            .pointerInput(item.key) {
                 // `acc` is the source of truth for both threshold ticks and the commit decision;
                 // offsetX mirrors it for rendering. `wasPast` ticks the haptic once per crossing.
                 var acc = 0f
@@ -143,7 +143,7 @@ private fun TopCard(
                     },
                 )
             }
-            .pointerInput(item.savedItemId) {
+            .pointerInput(item.key) {
                 detectTapGestures(onTap = { onExpand(item) })
             },
     ) {

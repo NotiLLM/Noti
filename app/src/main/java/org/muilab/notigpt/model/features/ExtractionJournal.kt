@@ -18,6 +18,9 @@ object ExtractionJournalEventType {
     /** User rejected a pending LLM update in review; the edit was rolled back. */
     const val UserRevertedUpdate = "user_reverted_update"
 
+    /** User rejected a staged proposal (create/update/merge) in review; it was discarded unapplied. */
+    const val UserRejectedProposal = "user_rejected_proposal"
+
     /** Model considered the thread and declined to extract; detail carries its reason. */
     const val NoExtraction = "no_extraction"
 }
@@ -70,4 +73,11 @@ data class ExtractionJournalSummary(
     val lastFoldedAt: Long = 0L,
     @ColumnInfo(defaultValue = "0")
     val foldedEntryCount: Int = 0,
+    /**
+     * Fold watermark: postTime of the newest notification record already folded into
+     * [summaryText]. Records after this are "unprocessed" — they ride along in scan/extraction
+     * requests until a summary-generation run folds them and advances the watermark.
+     */
+    @ColumnInfo(defaultValue = "0")
+    val lastFoldedPostTime: Long = 0L,
 )

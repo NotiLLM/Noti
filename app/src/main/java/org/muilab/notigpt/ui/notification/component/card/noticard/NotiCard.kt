@@ -68,6 +68,14 @@ import sh.calvin.reorderable.ReorderableCollectionItemScope
 import kotlin.math.max
 
 /**
+ * Both swipe directions dismiss (archive) the card, so the swipe-revealed background action row
+ * ([NotiCardBackgroundActions]) is unreachable. Kept switchable rather than deleting the
+ * single-direction dismiss + reveal-actions path; flip back off to restore it (and re-enable the
+ * settings-page swipe-direction picker in SettingScreen.kt).
+ */
+private const val BIDIRECTIONAL_SWIPE_DISMISS = true
+
+/**
  * Renders one live drawer notification and exposes all user actions as callbacks.
  *
  * This component assembles header, actions, expansion, swipe, and overlay controls. The card may manage
@@ -92,6 +100,7 @@ fun NotiCard(
     onReorderDrag: (Offset) -> Unit = {},
     onStopReorderDrag: () -> Unit = {},
     onCreateReminder: ((String, List<NotiRecord>) -> Unit)? = null,
+    onOpenSavedItem: (org.muilab.notigpt.model.features.SavedItem) -> Unit = {},
 ) {
     // These are part of the shared NotiCard API even if not used in this implementation yet.
     @Suppress("UNUSED_VARIABLE")
@@ -108,6 +117,10 @@ fun NotiCard(
     val notiUnit = notiDisplayUnit.notiUnit
     val notiRecords = remember(notiDisplayUnit.notiRecords) { notiDisplayUnit.notiRecords.sortedBy { it.time } }
     val notiKey = notiUnit.notiKey
+
+    // Cross-link badge: how many task/keep items this thread has produced (active only).
+    val linkedCountsByKey by drawerViewModel.linkedItemCountsByKey.collectAsState()
+    val linkedCounts = linkedCountsByKey[notiKey] ?: (0 to 0)
 
     val isPinned = notiUnit.isPinned
 
@@ -218,6 +231,7 @@ fun NotiCard(
         },
         scope = coroutineScope,
         onSwipeActiveChanged = { isSwipeActive = it },
+        bidirectionalDismiss = BIDIRECTIONAL_SWIPE_DISMISS,
     )
 
     val scaleValue by animateFloatAsState(if (isDragging) 1.02f else 1f)
@@ -276,31 +290,34 @@ fun NotiCard(
             }
             .clip(MaterialTheme.shapes.large),
     ) {
-        // Background Actions
-        NotiCardBackgroundActions(
-            modifier = Modifier
-                .align(if (swipeDeleteLeft) Alignment.CenterStart else Alignment.CenterEnd)
-                .fillMaxHeight()
-                .padding(horizontal = 16.dp)
-                .zIndex(0f),
-            endActionsWidthPx = endActionsWidth,
-            horizontalOffsetX = horizontalOffsetX.value,
-            swipeDeleteLeft = swipeDeleteLeft,
-            notiUnit = notiUnit,
-            drawerViewModel = drawerViewModel,
-            onCollapseActions = {
-                coroutineScope.launch {
-                    horizontalOffsetX.animateTo(
-                        0f,
-                        tween(200)
-                    )
-                }
-            },
-            onMeasuredEndActionsWidthPx = { measured ->
-                endActionsWidth = measured
-            },
-            actionsEnabled = !isSwipeActive,
-        )
+        // Background Actions — unreachable while bidirectional swipe-dismiss is on (see
+        // BIDIRECTIONAL_SWIPE_DISMISS); kept so a switch back to single-direction dismiss still works.
+        if (!BIDIRECTIONAL_SWIPE_DISMISS) {
+            NotiCardBackgroundActions(
+                modifier = Modifier
+                    .align(if (swipeDeleteLeft) Alignment.CenterStart else Alignment.CenterEnd)
+                    .fillMaxHeight()
+                    .padding(horizontal = 16.dp)
+                    .zIndex(0f),
+                endActionsWidthPx = endActionsWidth,
+                horizontalOffsetX = horizontalOffsetX.value,
+                swipeDeleteLeft = swipeDeleteLeft,
+                notiUnit = notiUnit,
+                drawerViewModel = drawerViewModel,
+                onCollapseActions = {
+                    coroutineScope.launch {
+                        horizontalOffsetX.animateTo(
+                            0f,
+                            tween(200)
+                        )
+                    }
+                },
+                onMeasuredEndActionsWidthPx = { measured ->
+                    endActionsWidth = measured
+                },
+                actionsEnabled = !isSwipeActive,
+            )
+        }
 
         Surface(
             modifier = Modifier
@@ -351,6 +368,8 @@ fun NotiCard(
                                 requiresExpansionSetter = { requiresExpansion = requiresExpansion || it },
                                 collapseThreshold = collapseThreshold,
                                 isExpandedOffset = anchored.offset,
+                                linkedTaskCount = linkedCounts.first,
+                                linkedKeepCount = linkedCounts.second,
                             )
                             Spacer(modifier = Modifier.width(10.dp))
                         }
@@ -430,5 +449,7 @@ fun NotiCard(
         onCreateReminder = onCreateReminder?.let { callback ->
             { callback(notiOverallTitle, notiRecords) }
         },
+        onOpenSavedItem = onOpenSavedItem,
     )
 }
+

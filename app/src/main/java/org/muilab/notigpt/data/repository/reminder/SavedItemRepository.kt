@@ -16,7 +16,7 @@ import org.muilab.notigpt.model.features.SavedItemChangeLog
 import org.muilab.notigpt.model.features.SavedItemChangeType
 import org.muilab.notigpt.model.features.SavedItemState
 import org.muilab.notigpt.data.remote.firestore.FirestoreSyncRepository
-import org.muilab.notigpt.data.remote.n8n.workers.handlers.ReminderExtractionHandler
+import org.muilab.notigpt.data.remote.n8n.N8nOpParsing
 import org.muilab.notigpt.domain.reminder.SavedItemRevertLogic
 import org.muilab.notigpt.util.SharedPreferencesManager
 import org.json.JSONArray
@@ -42,6 +42,8 @@ class SavedItemRepository(
     }
     private val changeLogDao by lazy { AppDatabase.getInstance(appContext.applicationContext).savedItemChangeLogDao() }
     private val subTaskDao by lazy { AppDatabase.getInstance(appContext.applicationContext).subTaskDao() }
+    private val pendingOpDao by lazy { AppDatabase.getInstance(appContext.applicationContext).pendingOpDao() }
+    private val rejectedMergeDao by lazy { AppDatabase.getInstance(appContext.applicationContext).rejectedMergeDao() }
 
     /** Returns visible reminders in the canonical list order used by the reminders screen. */
     fun observeAll(): Flow<List<SavedItem>> = reminderListDao.observeAll()
@@ -52,7 +54,10 @@ class SavedItemRepository(
     fun observeCompletedTasks(): Flow<List<SavedItem>> = reminderListDao.observeCompletedTasks()
     fun observeNewItems(): Flow<List<SavedItem>> = reminderListDao.observeNewItems()
 
-    suspend fun getAllVisible(): List<SavedItem> = withContext(Dispatchers.IO) { reminderListDao.getAllVisible() }
+    suspend fun getAll(): List<SavedItem> = withContext(Dispatchers.IO) { reminderListDao.getAll() }
+
+    /** Active (non-completed/archived) items — the merge stages' candidate pool. */
+    suspend fun getAllActive(): List<SavedItem> = withContext(Dispatchers.IO) { reminderListDao.getAllActive() }
 
     /**
      * Upserts a reminder locally and mirrors the resulting row to Firestore.
@@ -95,15 +100,20 @@ class SavedItemRepository(
         firestoreSync.syncReminder(reminder)
     }
 
+    /**
+     * User deletion is a hard delete: the row and its sub-items go away for good (links and
+     * change logs cascade via FK). The journal entry is written first — it's the only trace the
+     * pipeline keeps, so future extractions know the user discarded this item. The Firestore
+     * mirror is marked deleted rather than removed, preserving the research record.
+     */
     suspend fun deleteById(savedItemId: String, ts: Long) = withContext(Dispatchers.IO) {
         journalUserEvent(savedItemId, ExtractionJournalEventType.UserDeleted)
-
-        // Persist deletedAtMs before flipping visibility.
-        reminderListDao.setDeletedAt(savedItemId, ts)
-        reminderListDao.softDeleteById(savedItemId, ts)
-
-        val updated = reminderListDao.getById(savedItemId) ?: return@withContext
-        firestoreSync.syncReminder(updated)
+        firestoreSync.markReminderDeleted(savedItemId, ts)
+        subTaskDao.hardDeleteByParentId(savedItemId)
+        reminderListDao.hardDeleteById(savedItemId)
+        // Staged ops against a gone item are unreviewable; merge cool-downs are moot too.
+        pendingOpDao.deleteByTargetItemId(savedItemId)
+        rejectedMergeDao.deleteForItem(savedItemId)
     }
 
     suspend fun setCompleted(savedItemId: String, completed: Boolean, ts: Long) = withContext(Dispatchers.IO) {
@@ -135,9 +145,16 @@ class SavedItemRepository(
 
     suspend fun deleteByIds(savedItemIds: List<String>, ts: Long) = withContext(Dispatchers.IO) {
         if (savedItemIds.isEmpty()) return@withContext
-        savedItemIds.forEach { journalUserEvent(it, ExtractionJournalEventType.UserDeleted) }
-        reminderListDao.softDeleteByIds(savedItemIds, ts)
-        savedItemIds.mapNotNull { reminderListDao.getById(it) }.forEach { firestoreSync.syncReminder(it) }
+        savedItemIds.forEach {
+            journalUserEvent(it, ExtractionJournalEventType.UserDeleted)
+            firestoreSync.markReminderDeleted(it, ts)
+        }
+        subTaskDao.hardDeleteByParentIds(savedItemIds)
+        reminderListDao.hardDeleteByIds(savedItemIds)
+        savedItemIds.forEach {
+            pendingOpDao.deleteByTargetItemId(it)
+            rejectedMergeDao.deleteForItem(it)
+        }
     }
 
     /**
@@ -240,7 +257,6 @@ class SavedItemRepository(
         var deadline = item.deadlineAtMs
         var start = item.startAtMs
         var end = item.endAtMs
-        var estimate = item.estimatedCompletionTime
         val hiddenSubTaskIds = mutableListOf<String>()
         val restoredSubTaskIds = mutableListOf<String>()
 
@@ -269,10 +285,6 @@ class SavedItemRepository(
                     end, startEndMsFromIso(obj.optString("new", "-1")), startEndMsFromIso(obj.optString("old", "-1")),
                 )
             }
-            changed.optJSONObject("estimatedCompletionMinutes")?.let { obj ->
-                estimate = SavedItemRevertLogic.revertField(estimate, obj.optLong("new", estimate), obj.optLong("old", estimate))
-            }
-
             parseSubTaskIds(row.addedSubTasksJson).forEach { id ->
                 subTaskDao.softDeleteById(id, ts)
                 hiddenSubTaskIds += id
@@ -291,7 +303,6 @@ class SavedItemRepository(
             deadlineAtMs = deadline,
             startAtMs = start,
             endAtMs = end,
-            estimatedCompletionTime = estimate,
             lastViewedChangeAt = ts,
             lastUpdateTimestamp = ts,
         )
@@ -327,11 +338,11 @@ class SavedItemRepository(
         firestoreSync.syncReminder(outcome.previousItem)
     }
 
-    private fun deadlineMsFromIso(iso: String): Long = ReminderExtractionHandler.isoToUnixMillis(iso)
+    private fun deadlineMsFromIso(iso: String): Long = N8nOpParsing.isoToUnixMillis(iso)
 
     /** start/end use 0 (not -1) as their "unset" sentinel, mirroring how update ops are applied. */
     private fun startEndMsFromIso(iso: String): Long =
-        ReminderExtractionHandler.isoToUnixMillis(iso).let { if (it == -1L) 0L else it }
+        N8nOpParsing.isoToUnixMillis(iso).let { if (it == -1L) 0L else it }
 
     private fun String.toJsonObjectOrEmpty(): JSONObject =
         try { JSONObject(this) } catch (_: Exception) { JSONObject() }
@@ -400,12 +411,6 @@ class SavedItemRepository(
         linkDao.getBySavedItemIds(savedItemIds)
             .groupBy { it.savedItemId }
             .mapValues { (_, links) -> links.map { it.notiRecordId }.distinct() }
-    }
-
-    suspend fun updateSortScoreAndHistory(savedItemId: String, sortScore: Float, reRankHistory: String) = withContext(Dispatchers.IO) {
-        reminderListDao.updateSortScoreAndHistory(savedItemId, sortScore, reRankHistory)
-        val updated = reminderListDao.getById(savedItemId) ?: return@withContext
-        firestoreSync.syncReminder(updated)
     }
 
     suspend fun updateButtons(savedItemId: String, buttons: String) = withContext(Dispatchers.IO) {

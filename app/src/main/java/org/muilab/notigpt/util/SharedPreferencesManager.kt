@@ -165,6 +165,12 @@ object SharedPreferencesManager {
         get() = get(KEY_LOCAL_PREFS, KEY_LAST_REMINDER_PERIODIC_RUN_TIME, 0L)
         set(value) = put(KEY_LOCAL_PREFS, KEY_LAST_REMINDER_PERIODIC_RUN_TIME, value)
 
+    /** Last time the cross-thread reflection merge pass ran; gates the daily cadence. */
+    const val KEY_LAST_REFLECTION_RUN_TIME = "lastReflectionRunTime"
+    var lastReflectionRunTime: Long
+        get() = get(KEY_LOCAL_PREFS, KEY_LAST_REFLECTION_RUN_TIME, 0L)
+        set(value) = put(KEY_LOCAL_PREFS, KEY_LAST_REFLECTION_RUN_TIME, value)
+
     const val KEY_MAX_PAST_CONTEXT = "maxPastContext"
     var maxPastContext: Int
         get() = get(KEY_LOCAL_PREFS, KEY_MAX_PAST_CONTEXT, 0)
@@ -175,6 +181,28 @@ object SharedPreferencesManager {
     var journalIdleFoldDays: Int
         get() = get(KEY_LOCAL_PREFS, KEY_JOURNAL_IDLE_FOLD_DAYS, 7)
         set(value) = put(KEY_LOCAL_PREFS, KEY_JOURNAL_IDLE_FOLD_DAYS, value)
+
+    // --- Extraction compaction guards ---
+    // Chatty threads that never yield items still accumulate unfolded records; either guard
+    // tripping forces a summary-fold (C) run to cap the raw-record payload. Negative disables.
+
+    /** Minutes without a new record before unfolded records get compacted. */
+    const val KEY_EXTRACTION_QUIET_WINDOW_MINUTES = "extractionQuietWindowMinutes"
+    var extractionQuietWindowMinutes: Int
+        get() = get(KEY_LOCAL_PREFS, KEY_EXTRACTION_QUIET_WINDOW_MINUTES, 720)
+        set(value) = put(KEY_LOCAL_PREFS, KEY_EXTRACTION_QUIET_WINDOW_MINUTES, value)
+
+    /** Unfolded-record count that forces compaction regardless of quiet time. */
+    const val KEY_EXTRACTION_MAX_UNPROCESSED_RECORDS = "extractionMaxUnprocessedRecords"
+    var extractionMaxUnprocessedRecords: Int
+        get() = get(KEY_LOCAL_PREFS, KEY_EXTRACTION_MAX_UNPROCESSED_RECORDS, 500)
+        set(value) = put(KEY_LOCAL_PREFS, KEY_EXTRACTION_MAX_UNPROCESSED_RECORDS, value)
+
+    /** Home "Past X hours" recency window for notification previews/counts. Positive hours only. */
+    const val KEY_HOME_NOTI_WINDOW_HOURS = "homeNotiWindowHours"
+    var homeNotiWindowHours: Int
+        get() = get(KEY_LOCAL_PREFS, KEY_HOME_NOTI_WINDOW_HOURS, 24).coerceAtLeast(1)
+        set(value) = put(KEY_LOCAL_PREFS, KEY_HOME_NOTI_WINDOW_HOURS, value.coerceAtLeast(1))
 
     private const val KEY_INSTALL_TIMESTAMP_MS = "installTimestampMs"
 

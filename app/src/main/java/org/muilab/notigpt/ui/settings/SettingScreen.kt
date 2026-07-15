@@ -1,6 +1,5 @@
 package org.muilab.notigpt.ui.settings
 
-import android.app.Activity
 import android.app.Application
 import android.os.Build
 import androidx.annotation.RequiresApi
@@ -8,6 +7,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -21,14 +22,12 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -50,6 +49,9 @@ import org.muilab.notigpt.ui.notification.viewmodel.DrawerViewModelFactory
 import org.muilab.notigpt.ui.theme.Dimens
 import org.muilab.notigpt.util.SharedPreferencesManager
 
+/** Flip back on if NotiCard ever returns to single-direction swipe-to-dismiss. */
+private const val SHOW_SWIPE_DIRECTION_SETTING = false
+
 /**
  * Settings route for runtime configuration, account integrations, and developer controls.
  *
@@ -70,11 +72,12 @@ fun SettingsScreen() {
         )
     )
 
-    var useDynamicColor by remember { mutableStateOf(SharedPreferencesManager.useDynamicColor) }
     var isLeftSwipe by remember { mutableStateOf(SharedPreferencesManager.swipeDeleteLeft) }
     var extractionLanguage by remember { mutableStateOf(SharedPreferencesManager.targetExtractionLanguage) }
     var showLanguagePicker by remember { mutableStateOf(false) }
     var showExportDialog by remember { mutableStateOf(false) }
+    var homeWindowHours by remember { mutableStateOf(SharedPreferencesManager.homeNotiWindowHours) }
+    var showHomeWindowDialog by remember { mutableStateOf(false) }
     val originalLabel = stringResource(R.string.ui_settings_extraction_language_original)
 
     Column(
@@ -85,42 +88,29 @@ fun SettingsScreen() {
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         // ── Appearance ──
-        SettingsSection(stringResource(R.string.settings_section_appearance)) {
-            ListItem(
-                headlineContent = { Text(stringResource(R.string.ui_settings_dynamic_color)) },
-                supportingContent = { Text(stringResource(R.string.ui_settings_dynamic_color_desc)) },
-                trailingContent = {
-                    Switch(
-                        checked = useDynamicColor,
-                        onCheckedChange = {
-                            useDynamicColor = it
-                            SharedPreferencesManager.useDynamicColor = it
-                            // Re-run onCreate so NotiTheme re-reads the preference and re-applies the scheme.
-                            (context as? Activity)?.recreate()
-                        },
-                    )
-                },
-                colors = transparentListItem(),
-            )
-            RowDivider()
-            ListItem(
-                headlineContent = { Text(stringResource(R.string.ui_settings_delete_on_swipe)) },
-                trailingContent = {
-                    androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilterChip(
-                            selected = isLeftSwipe,
-                            onClick = { isLeftSwipe = true; SharedPreferencesManager.swipeDeleteLeft = true },
-                            label = { Text(stringResource(R.string.ui_settings_left)) },
-                        )
-                        FilterChip(
-                            selected = !isLeftSwipe,
-                            onClick = { isLeftSwipe = false; SharedPreferencesManager.swipeDeleteLeft = false },
-                            label = { Text(stringResource(R.string.ui_settings_right)) },
-                        )
-                    }
-                },
-                colors = transparentListItem(),
-            )
+        // Swipe-dismiss now works both directions, so the swipe-direction setting below is hidden
+        // (not deleted — flip SHOW_SWIPE_DIRECTION_SETTING back on if single-direction swipe returns).
+        if (SHOW_SWIPE_DIRECTION_SETTING) {
+            SettingsSection(stringResource(R.string.settings_section_appearance)) {
+                ListItem(
+                    headlineContent = { Text(stringResource(R.string.ui_settings_delete_on_swipe)) },
+                    trailingContent = {
+                        androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FilterChip(
+                                selected = isLeftSwipe,
+                                onClick = { isLeftSwipe = true; SharedPreferencesManager.swipeDeleteLeft = true },
+                                label = { Text(stringResource(R.string.ui_settings_left)) },
+                            )
+                            FilterChip(
+                                selected = !isLeftSwipe,
+                                onClick = { isLeftSwipe = false; SharedPreferencesManager.swipeDeleteLeft = false },
+                                label = { Text(stringResource(R.string.ui_settings_right)) },
+                            )
+                        }
+                    },
+                    colors = transparentListItem(),
+                )
+            }
         }
 
         // ── Extraction ──
@@ -130,6 +120,23 @@ fun SettingsScreen() {
                 supportingContent = { Text(extractionLanguageLabel(extractionLanguage, originalLabel)) },
                 colors = transparentListItem(),
                 modifier = Modifier.clickable { showLanguagePicker = true },
+            )
+        }
+
+        // ── Home ──
+        SettingsSection(stringResource(R.string.settings_section_home)) {
+            ListItem(
+                headlineContent = { Text(stringResource(R.string.ui_settings_home_window)) },
+                supportingContent = { Text(stringResource(R.string.ui_settings_home_window_desc)) },
+                trailingContent = {
+                    Text(
+                        text = stringResource(R.string.home_noti_window_hours, homeWindowHours),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                },
+                colors = transparentListItem(),
+                modifier = Modifier.clickable { showHomeWindowDialog = true },
             )
         }
 
@@ -166,6 +173,54 @@ fun SettingsScreen() {
             },
         )
     }
+
+    if (showHomeWindowDialog) {
+        HomeWindowDialog(
+            current = homeWindowHours,
+            onConfirm = { hours ->
+                homeWindowHours = hours
+                SharedPreferencesManager.homeNotiWindowHours = hours
+                showHomeWindowDialog = false
+            },
+            onDismiss = { showHomeWindowDialog = false },
+        )
+    }
+}
+
+/** Numeric entry for the home "Past X hours" window. Positive integers only (no zero / "All"). */
+@Composable
+private fun HomeWindowDialog(current: Int, onConfirm: (Int) -> Unit, onDismiss: () -> Unit) {
+    var text by remember { mutableStateOf(current.toString()) }
+    val parsed = text.toIntOrNull()
+    val valid = parsed != null && parsed >= 1
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.ui_settings_home_window)) },
+        text = {
+            Column {
+                Text(
+                    stringResource(R.string.ui_settings_home_window_desc),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.size(12.dp))
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { new -> text = new.filter { it.isDigit() }.take(4) },
+                    singleLine = true,
+                    isError = !valid,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    label = { Text(stringResource(R.string.ui_settings_home_window_label)) },
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = valid, onClick = { parsed?.let(onConfirm) }) {
+                Text(stringResource(R.string.ui_action_ok))
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.ui_action_cancel)) } },
+    )
 }
 
 /** A titled group of settings rows rendered as one neutral card with hairline dividers. */
@@ -186,14 +241,6 @@ private fun SettingsSection(title: String, content: @Composable () -> Unit) {
     ) {
         Column { content() }
     }
-}
-
-@Composable
-private fun RowDivider() {
-    HorizontalDivider(
-        modifier = Modifier.padding(start = 16.dp),
-        color = MaterialTheme.colorScheme.outlineVariant,
-    )
 }
 
 @Composable

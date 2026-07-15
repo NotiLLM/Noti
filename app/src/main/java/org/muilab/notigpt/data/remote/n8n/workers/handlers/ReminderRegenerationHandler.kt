@@ -10,6 +10,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
+import org.muilab.notigpt.data.remote.n8n.N8nOpParsing
 import org.muilab.notigpt.data.remote.n8n.formatter.N8nRecordFormatter
 import org.muilab.notigpt.data.remote.n8n.context.N8nWorkerContext
 import org.muilab.notigpt.model.features.ExtractionJournalEntry
@@ -26,10 +27,11 @@ import java.util.Locale
 import java.util.TimeZone
 
 /**
- * Worker handler for regenerating reminder content from stored notification context.
+ * Worker handler for regenerating one reminder's content from its stored notification context.
  *
- * Use this when an existing reminder needs fresh backend output without re-running scan selection. Keep payload
- * building here and shared snapshot/status rules in the reminder domain helpers.
+ * Use this when an existing reminder needs fresh backend output without re-running the extraction
+ * pipeline. Keep payload building here and shared snapshot/status rules in the reminder domain
+ * helpers.
  */
 internal object ReminderRegenerationHandler {
 
@@ -66,41 +68,6 @@ internal object ReminderRegenerationHandler {
         )
 
         return postAndApply(ctx, webhookPath, payload, trigger = "REGENERATE_ONE")
-    }
-
-    /**
-     * Regenerates every visible reminder in one remote request.
-     *
-     * Keep this path batch-oriented so global reranking/regeneration can see the current reminder set
-     * together instead of applying isolated single-reminder edits.
-     */
-    suspend fun handleAll(ctx: N8nWorkerContext, inputData: Data): ListenableWorker.Result {
-        val webhookPath = inputData.getString("webhook_path") ?: run {
-            Log.e(TAG, "No webhook_path for regenerate_all")
-            return ctx.failure()
-        }
-
-        val allReminders = ctx.reminderRepository.getAllVisible()
-        if (allReminders.isEmpty()) {
-            Log.d(TAG, "No visible reminders to regenerate")
-            return ctx.success()
-        }
-
-        val notiContextMap = mutableMapOf<String, List<Map<String, Any>>>()
-        for (r in allReminders) {
-            notiContextMap[r.savedItemId] = buildNotiContextForReminder(ctx, r)
-        }
-
-        val payload = buildPayload(
-            reminders = allReminders,
-            notiContextMap = notiContextMap,
-            linkedByItem = ctx.reminderRepository.getLinkedRecordIdsFor(allReminders.map { it.savedItemId }),
-            trigger = "REGENERATE_ALL",
-            extractionPreferences = ctx.getExtractionPreferencesPayload(),
-            userContexts = ctx.getUserContextsPayload(),
-        )
-
-        return postAndApply(ctx, webhookPath, payload, trigger = "REGENERATE_ALL")
     }
 
     /**
@@ -160,12 +127,9 @@ internal object ReminderRegenerationHandler {
                 "deadlineTimeString" to deadlineIso,
                 "startAtMsString" to startAtMsIso,
                 "endAtMsString" to endAtMsIso,
-                "estimatedCompletionMinutes" to r.estimatedCompletionTime,
                 "sourceNotiRecordIds" to (linkedByItem[r.savedItemId] ?: emptyList()),
                 "userEdited" to r.userEdited,
                 "buttons" to r.buttons,
-                "sortScore" to r.sortScore,
-                "reRankHistory" to r.reRankHistory,
                 "notiContext" to (notiContextMap[r.savedItemId] ?: emptyList<Any>()),
             )
         }
@@ -177,6 +141,7 @@ internal object ReminderRegenerationHandler {
             "currentTime" to sdf.format(Date()),
             "targetExtractionLanguage" to SharedPreferencesManager.targetExtractionLanguage,
             "trigger" to trigger,
+            "contractVersion" to 3,
             "reminders" to remindersPayload,
             "extractionPreferences" to extractionPreferences,
             "userContexts" to userContexts,
@@ -220,47 +185,23 @@ internal object ReminderRegenerationHandler {
             val arr = JSONArray(bodyStr)
             for (i in 0 until arr.length()) {
                 val obj = arr.getJSONObject(i)
-                val savedItemId = ReminderExtractionHandler.savedItemIdFrom(obj)
+                val savedItemId = N8nOpParsing.savedItemIdFrom(obj)
                 if (savedItemId.isBlank()) continue
 
                 val existing = ctx.reminderRepository.getById(savedItemId)
                 val now = System.currentTimeMillis()
 
-                val title = ReminderExtractionHandler.titleFrom(obj, existing?.title ?: "")
-                val content = ReminderExtractionHandler.contentFrom(obj, existing?.content ?: "")
+                val title = N8nOpParsing.titleFrom(obj, existing?.title ?: "")
+                val content = N8nOpParsing.contentFrom(obj, existing?.content ?: "")
                 val isTask = obj.optBoolean("isTask", existing?.isTask ?: true)
-                val isEvent = obj.optBoolean("isEvent", existing?.isEvent ?: false)
-                val deadlineMs = ReminderExtractionHandler.isoToUnixMillis(obj.optString("deadlineTimeString", "-1"))
-                val startAtMsMs = ReminderExtractionHandler.startAtMsFrom(obj)
-                val endAtMsMs = ReminderExtractionHandler.endAtMsFrom(obj)
-                val estimate = obj.optLong("estimatedCompletionTime", obj.optLong("estimatedCompletionMinutes", existing?.estimatedCompletionTime ?: 0L))
+                val deadlineMs = N8nOpParsing.isoToUnixMillis(obj.optString("deadlineTimeString", "-1"))
+                val startAtMsMs = N8nOpParsing.startAtMsFrom(obj)
+                val endAtMsMs = N8nOpParsing.endAtMsFrom(obj)
                 val isCompleted = obj.optBoolean("isCompleted", existing?.isCompleted ?: false)
 
                 // Parse buttons
                 val buttonsArr = obj.optJSONArray("buttons")
                 val buttons = buttonsArr?.toString() ?: existing?.buttons ?: "[]"
-
-                // Parse sortScore
-                val sortScore = obj.optDouble("sortScore", (existing?.sortScore ?: 50f).toDouble()).toFloat()
-
-                // Parse reRankRecord and append to history
-                val reRankRecord = obj.optJSONObject("reRankRecord")
-                val existingHistory = try {
-                    JSONArray(existing?.reRankHistory ?: "[]")
-                } catch (_: Exception) {
-                    JSONArray()
-                }
-                if (reRankRecord != null) {
-                    existingHistory.put(reRankRecord)
-                } else {
-                    // Auto-generate a record
-                    existingHistory.put(JSONObject().apply {
-                        put("rankedAt", System.currentTimeMillis())
-                        put("trigger", trigger)
-                        put("newScore", sortScore)
-                        put("scoreExplanation", "Regenerated by $trigger")
-                    })
-                }
 
                 // Regeneration is user-initiated, so it must NOT drop the item into the review queue
                 // (an unrevertible wholesale rewrite has no place in the swipe-to-reject flow). A brand
@@ -283,16 +224,13 @@ internal object ReminderRegenerationHandler {
                     deadlineAtMs = deadlineMs,
                     startAtMs = startAtMsMs,
                     endAtMs = endAtMsMs,
-                    estimatedCompletionTime = estimate,
                     origin = existing?.origin ?: "llm_auto_extraction",
                     humanEditCount = existing?.humanEditCount ?: 0,
-                    deletedAtMs = null,
-                    userEdited = false,
-                    isVisible = true,
+                    // Preserve manual-edit provenance; this flag no longer blocks model updates
+                    // or Firestore reconciliation.
+                    userEdited = existing?.userEdited ?: false,
                     buttons = buttons,
                     isViewed = false,
-                    sortScore = sortScore,
-                    reRankHistory = existingHistory.toString(),
                     // User-owned fields: regeneration must never reset them.
                     isStarred = existing?.isStarred ?: false,
                     doAtMs = existing?.doAtMs ?: 0L,
@@ -304,7 +242,7 @@ internal object ReminderRegenerationHandler {
                 ctx.reminderRepository.upsert(unit)
                 // Regeneration rewrites content from the item's existing noti context; it neither
                 // adds nor removes provenance, so links stay untouched.
-                ReminderExtractionHandler.persistReturnedSubTasks(ctx, savedItemId, obj, now)
+                persistReturnedSubTasks(ctx, savedItemId, obj, now)
 
                 // Record the rewrite in the change history (regeneration is the one flow allowed
                 // to replace text wholesale — the user explicitly asked for it) and the journal.
@@ -352,5 +290,16 @@ internal object ReminderRegenerationHandler {
 
         return ctx.success()
     }
-}
 
+    /**
+     * Persists child items from a full `subTasks` response array.
+     *
+     * The array is treated as the complete visible child list for that parent. Existing omitted children are
+     * soft-deleted by the repository; if the field is absent, the existing children are left untouched.
+     */
+    private suspend fun persistReturnedSubTasks(ctx: N8nWorkerContext, parentSavedItemId: String, obj: JSONObject, ts: Long) {
+        if (!obj.has("subTasks")) return
+        val subTasks = N8nOpParsing.parseSubTasks(obj.optJSONArray("subTasks"), parentSavedItemId, ts, baseSortOrder = 0)
+        ctx.savedSubItemRepository.replaceVisibleForParent(parentSavedItemId, subTasks, ts)
+    }
+}

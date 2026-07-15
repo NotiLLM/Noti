@@ -12,8 +12,6 @@
     <string name="a11y_set_do_date">設定執行日期</string>
 
     <!-- Settings -->
-    <string name="ui_settings_dynamic_color">使用系統顏色</string>
-    <string name="ui_settings_dynamic_color_desc">依桌布為中性介面上色（Material You）。分類與急迫程度的顏色維持不變。</string>
     <string name="ui_settings_delete_on_swipe">滑動刪除：</string>
     <string name="ui_settings_left">向左</string>
     <string name="ui_settings_right">向右</string>
@@ -51,6 +49,13 @@
     <string name="reminder_update_section_label">更新</string>
     <string name="reminder_badge_new">新項目</string>
     <string name="reminder_badge_updated">已更新</string>
+    <string name="pending_review_badge">待檢視</string>
+    <string name="pending_review_merge_badge">待合併（%1$d 項）</string>
+    <string name="pending_review_edit_title">編輯前先檢視變更</string>
+    <string name="pending_review_edit_message">此項目有尚未檢視的更新。要先接受變更再手動編輯嗎？</string>
+    <string name="pending_review_merge_message">此項目有尚未檢視的更新，接受後會與另外 %1$d 項合併。要先接受變更再編輯嗎？</string>
+    <string name="pending_review_edit_accept">接受並編輯</string>
+    <string name="pending_review_edit_cancel">稍後</string>
     <string name="reminder_whats_new">最新變更</string>
     <string name="reminder_whats_new_generic">此項目正等待你確認。</string>
     <string name="reminder_acknowledge">知道了</string>
@@ -155,6 +160,7 @@
     <!-- Noti record context menu -->
     <string name="ui_noti_menu_title">選項</string>
     <string name="ui_action_extract_reminder">擷取提醒</string>
+    <string name="ui_noti_linked_items">此通知產生的項目</string>
     <string name="ui_noti_show_more_context">顯示更多內容</string>
     <string name="ui_noti_hide_more_context">隱藏更多內容</string>
 
@@ -271,6 +277,13 @@
     <!-- Preference learning – syncing -->
     <string name="pref_syncing">正在儲存您的偏好…</string>
     <string name="pref_sync_failed">同步偏好失敗，請再試一次。</string>
+    <string name="pref_rules_updated">規則已更新</string>
+    <string name="pref_review">檢視</string>
+    <string name="pref_review_title">檢視規則變更</string>
+    <string name="pref_review_kind_created">新規則</string>
+    <string name="pref_review_kind_updated">更新規則</string>
+    <string name="pref_review_kind_deleted">刪除規則</string>
+    <string name="pref_delete_proposal">刪除規則：%s</string>
     <string name="pref_sync_error">同步偏好時發生錯誤。</string>
 
     <!-- Preference Chat screen -->
@@ -416,7 +429,11 @@
     <string name="a11y_scheduled_cancel">取消</string>
     <string name="settings_section_appearance">外觀</string>
     <string name="settings_section_extraction">擷取</string>
+    <string name="settings_section_home">首頁</string>
     <string name="settings_section_data">資料</string>
+    <string name="ui_settings_home_window">通知時間範圍</string>
+    <string name="ui_settings_home_window_desc">首頁通知預覽與數量往回顯示的時間長度。</string>
+    <string name="ui_settings_home_window_label">小時</string>
     <string name="ui_settings_export_data">匯出資料</string>
     <string name="ui_settings_export_description">匯出所有通知與使用者動作</string>
     <string name="ui_settings_export_include_dismissed">包含已忽略的通知</string>
@@ -474,6 +491,7 @@
     <string name="home_noti_communication">通訊</string>
     <string name="home_noti_content">內容</string>
     <string name="home_noti_none">沒有新通知</string>
+    <string name="home_noti_window_hours">近 %d 小時</string>
     <string name="home_section_saved">已儲存</string>
     <string name="home_filter_today">今天及更早</string>
     <string name="home_filter_upcoming">即將到來</string>
@@ -535,5 +553,4 @@
     <string name="do_date_add_time">新增時間</string>
     <string name="do_date_clear">清除</string>
 </resources>
-
 

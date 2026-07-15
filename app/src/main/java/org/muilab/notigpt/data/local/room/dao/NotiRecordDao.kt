@@ -91,69 +91,47 @@ interface NotiRecordDao {
     @Insert
     fun insertAllRecords(notiRecords: List<NotiRecord>)
 
-    // --- Task detection/extraction flags ---
-    @Query("UPDATE noti_record SET taskScanned = 1 WHERE notiRecordId IN (:notiRecordIds)")
-    fun setRecordsTaskScannedByIds(notiRecordIds: List<String>)
+    // --- Per-notiKey pipeline: fold-watermark based record selection ---
+    // "Unprocessed" records are those posted after the notiKey's fold watermark
+    // (extraction_journal_summary.lastFoldedPostTime); they ride along in scan/extraction
+    // requests until a summary-generation (fold) run advances the watermark past them.
 
-    @Query("UPDATE noti_record SET taskExtracted = 1 WHERE notiRecordId IN (:notiRecordIds)")
-    fun setRecordsTaskExtractedByIds(notiRecordIds: List<String>)
+    @Query("SELECT * FROM noti_record WHERE notiKey = :notiKey AND postTime > :afterPostTime ORDER BY CASE WHEN whenTime != 0 THEN whenTime ELSE postTime END ASC")
+    fun getRecordsByKeyAfter(notiKey: String, afterPostTime: Long): List<NotiRecord>
 
-    @Query("UPDATE noti_record SET taskScanned = 1 WHERE notiKey = :notiKey AND whenTime > :sinceTime")
-    fun setRecordsTaskScannedByKeySince(notiKey: String, sinceTime: Long)
+    @Query("SELECT COUNT(*) FROM noti_record WHERE notiKey = :notiKey AND postTime > :afterPostTime")
+    fun getRecordCountByKeyAfter(notiKey: String, afterPostTime: Long): Int
 
-    @Query("UPDATE noti_record SET taskExtracted = 1 WHERE notiKey = :notiKey AND whenTime > :sinceTime")
-    fun setRecordsTaskExtractedByKeySince(notiKey: String, sinceTime: Long)
-
-    @Query("UPDATE noti_record SET taskScanned = 1, taskExtracted = 1")
-    fun setAllScannedAndExtractedTrue()
-
-    @Query("SELECT * FROM noti_record WHERE notiKey = :notiKey AND taskScanned = 0")
-    fun getUnscannedRecordsByKey(notiKey: String): List<NotiRecord>
-
-    @Query("SELECT * FROM noti_record WHERE notiKey = :notiKey AND taskExtracted = 0")
-    fun getUnextractedRecordsByKey(notiKey: String): List<NotiRecord>
-
-    @Query("SELECT * FROM noti_record WHERE notiKey = :notiKey AND taskScanned = 1 ORDER BY whenTime DESC LIMIT :limit")
-    fun getLastScannedRecordsByKey(notiKey: String, limit: Int): List<NotiRecord>
-
-    @Query("SELECT * FROM noti_record WHERE notiKey = :notiKey AND taskExtracted = 1 ORDER BY whenTime DESC LIMIT :limit")
-    fun getLastExtractedRecordsByKey(notiKey: String, limit: Int): List<NotiRecord>
-
-    // --- Claiming helpers (for robust extraction) ---
-    @Query("UPDATE noti_record SET taskExtractionClaimed = 1, taskExtractionClaimedAt = :ts WHERE notiRecordId IN (:ids) AND taskExtracted = 0 AND taskExtractionClaimed = 0")
-    fun claimRecordsForExtractionWithTs(ids: List<String>, ts: Long): Int
-
-    @Query("SELECT * FROM noti_record WHERE notiRecordId IN (:ids) AND taskExtractionClaimed = 1 AND taskExtracted = 0")
-    fun getClaimedRecordsByIds(ids: List<String>): List<NotiRecord>
-
-    @Query("UPDATE noti_record SET taskExtracted = 1, taskExtractionClaimed = 0, taskExtractionClaimedAt = 0 WHERE notiRecordId IN (:ids)")
-    fun setClaimedRecordsExtracted(ids: List<String>)
-
-    @Query("UPDATE noti_record SET taskExtractionClaimed = 0, taskExtractionClaimedAt = 0 WHERE notiRecordId IN (:ids)")
-    fun clearClaimedRecords(ids: List<String>)
-
-    @Query("UPDATE noti_record SET taskExtractionClaimed = 0, taskExtractionClaimedAt = 0 WHERE taskExtractionClaimed = 1 AND (:ts - taskExtractionClaimedAt) > :staleMs")
-    fun reclaimStaleClaims(ts: Long, staleMs: Long)
-
-    @Query("SELECT * FROM noti_record WHERE taskExtractionClaimed = 0 AND taskExtracted = 0 AND notiKey = :notiKey ORDER BY whenTime ASC")
-    fun getUnclaimedUnextractedByKey(notiKey: String): List<NotiRecord>
+    /** Already-folded records (at or before the watermark), newest first — sent as past context. */
+    @Query("SELECT * FROM noti_record WHERE notiKey = :notiKey AND postTime <= :atPostTime ORDER BY CASE WHEN whenTime != 0 THEN whenTime ELSE postTime END DESC LIMIT :limit")
+    fun getRecordsByKeyBeforeOrAt(notiKey: String, atPostTime: Long, limit: Int): List<NotiRecord>
 
     @Query("SELECT COUNT(*) FROM noti_record WHERE notiKey = :notiKey")
     fun getRecordCountByKey(notiKey: String): Int
+
+    /** Newest post time for a key; null when the key has no records. Drives compaction/idle checks. */
+    @Query("SELECT MAX(postTime) FROM noti_record WHERE notiKey = :notiKey")
+    fun getLastRecordPostTimeByKey(notiKey: String): Long?
 
     /** Newest record time for a key; null when the key has no records. Drives idle-thread checks. */
     @Query("SELECT MAX(whenTime) FROM noti_record WHERE notiKey = :notiKey")
     fun getLastRecordTimeByKey(notiKey: String): Long?
 
-    /** Live count of records still waiting for extraction; drives the offline/pending banner. */
+    /**
+     * Live count of unprocessed records for active extraction threads; drives the offline/pending
+     * banner. A record is unprocessed while its postTime is beyond the key's fold watermark.
+     */
     @Query(
         """
-        SELECT COUNT(*) FROM noti_record
-        WHERE taskExtracted = 0 AND taskExtractionClaimed = 0
-        AND notiKey IN (
+        SELECT COUNT(*) FROM noti_record r
+        WHERE r.notiKey IN (
             SELECT s.notiKey FROM noti_llm_state s
             JOIN noti_drawer d ON d.notiKey = s.notiKey
             WHERE d.isDismissed = 0 AND s.shouldExtractReminder = 1
+        )
+        AND r.postTime > COALESCE(
+            (SELECT j.lastFoldedPostTime FROM extraction_journal_summary j WHERE j.notiKey = r.notiKey),
+            0
         )
         """
     )

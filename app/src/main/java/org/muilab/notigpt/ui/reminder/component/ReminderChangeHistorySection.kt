@@ -189,7 +189,8 @@ private fun ChangeRow(change: SavedItemChangeLog, showDivider: Boolean = false) 
                     "deadlineTimeString", "deadlineAtMs" -> stringResource(R.string.change_field_deadline)
                     "startTimeString" -> stringResource(R.string.change_field_start)
                     "endTimeString" -> stringResource(R.string.change_field_end)
-                    "estimatedCompletionMinutes" -> stringResource(R.string.change_field_estimate)
+                    // Estimated-time was removed from the app; legacy rows still carry it — hide.
+                    "estimatedCompletionMinutes" -> null
                     "content" -> null // regeneration rewrites; the summary line covers it
                     else -> field
                 }

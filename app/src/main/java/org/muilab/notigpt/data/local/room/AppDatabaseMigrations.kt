@@ -1210,4 +1210,197 @@ object AppDatabaseMigrations {
         }
     }
 
+    /**
+     * Per-notiKey pipeline redesign (contract v3):
+     * 1. saved_item: user deletion becomes a hard delete — soft-deleted rows (isVisible = 0) are
+     *    purged with their sub-items/links/change-logs, then the table is rebuilt without
+     *    isVisible/deletedAtMs (soft delete), estimatedCompletionTime (feature removed), and
+     *    sortScore/reRankHistory (rerank pipeline removed; ordering is date-based now).
+     * 2. noti_llm_state: drops the old scan gate flags (hasTask/hasMemo/hasEvent) — the new
+     *    per-thread scan stage only decides shouldExtract + category.
+     * 3. pending_op: staged pipeline instructions awaiting review (fully-staged model).
+     * 4. rejected_merge: merge-rejection cool-down pairs.
+     * 5. extraction_journal_summary gains the record fold watermark (lastFoldedPostTime).
+     */
+    val MIGRATION_44_45 = object : Migration(44, 45) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            // 1a. Purge soft-deleted items and their children before the rebuild drops the flag.
+            db.execSQL(
+                """
+                DELETE FROM `saved_sub_item` WHERE `parentSavedItemId` IN
+                    (SELECT `savedItemId` FROM `saved_item` WHERE `isVisible` = 0)
+                """.trimIndent()
+            )
+            db.execSQL(
+                """
+                DELETE FROM `noti_saved_item_link` WHERE `savedItemId` IN
+                    (SELECT `savedItemId` FROM `saved_item` WHERE `isVisible` = 0)
+                """.trimIndent()
+            )
+            db.execSQL(
+                """
+                DELETE FROM `saved_item_change_log` WHERE `savedItemId` IN
+                    (SELECT `savedItemId` FROM `saved_item` WHERE `isVisible` = 0)
+                """.trimIndent()
+            )
+            db.execSQL("DELETE FROM `saved_item` WHERE `isVisible` = 0")
+
+            // 1b. Rebuild without the dropped columns.
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `saved_item_new` (
+                    `savedItemId` TEXT NOT NULL,
+                    `title` TEXT NOT NULL,
+                    `content` TEXT NOT NULL,
+                    `itemType` TEXT NOT NULL DEFAULT 'task',
+                    `state` TEXT NOT NULL DEFAULT 'saved',
+                    `lastUpdateTimestamp` INTEGER NOT NULL,
+                    `deadlineAtMs` INTEGER NOT NULL,
+                    `startAtMs` INTEGER NOT NULL DEFAULT 0,
+                    `endAtMs` INTEGER NOT NULL DEFAULT 0,
+                    `origin` TEXT NOT NULL,
+                    `humanEditCount` INTEGER NOT NULL,
+                    `userEdited` INTEGER NOT NULL,
+                    `buttons` TEXT NOT NULL DEFAULT '[]',
+                    `isViewed` INTEGER NOT NULL DEFAULT 1,
+                    `isStarred` INTEGER NOT NULL DEFAULT 0,
+                    `doAtMs` INTEGER NOT NULL DEFAULT 0,
+                    `lastViewedChangeAt` INTEGER NOT NULL DEFAULT 0,
+                    PRIMARY KEY(`savedItemId`)
+                )
+                """.trimIndent()
+            )
+            db.execSQL(
+                """
+                INSERT INTO `saved_item_new` (
+                    savedItemId, title, content, itemType, state, lastUpdateTimestamp,
+                    deadlineAtMs, startAtMs, endAtMs, origin, humanEditCount, userEdited,
+                    buttons, isViewed, isStarred, doAtMs, lastViewedChangeAt
+                )
+                SELECT
+                    savedItemId, title, content, itemType, state, lastUpdateTimestamp,
+                    deadlineAtMs, startAtMs, endAtMs, origin, humanEditCount, userEdited,
+                    buttons, isViewed, isStarred, doAtMs, lastViewedChangeAt
+                FROM `saved_item`
+                """.trimIndent()
+            )
+            db.execSQL("DROP TABLE `saved_item`")
+            db.execSQL("ALTER TABLE `saved_item_new` RENAME TO `saved_item`")
+
+            // 2. noti_llm_state without the old gate flags.
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `noti_llm_state_new` (
+                    `notiKey` TEXT NOT NULL,
+                    `shouldExtractReminder` INTEGER NOT NULL DEFAULT 0,
+                    `categories` TEXT NOT NULL DEFAULT '[]',
+                    `categoryReason` TEXT NOT NULL DEFAULT '',
+                    `categorySource` TEXT NOT NULL DEFAULT '',
+                    `lastClassifiedAt` INTEGER NOT NULL DEFAULT 0,
+                    `lastClassifiedRecordCount` INTEGER NOT NULL DEFAULT 0,
+                    `updatedAt` INTEGER NOT NULL DEFAULT 0,
+                    PRIMARY KEY(`notiKey`)
+                )
+                """.trimIndent()
+            )
+            db.execSQL(
+                """
+                INSERT INTO `noti_llm_state_new` (
+                    notiKey, shouldExtractReminder, categories, categoryReason, categorySource,
+                    lastClassifiedAt, lastClassifiedRecordCount, updatedAt
+                )
+                SELECT
+                    notiKey, shouldExtractReminder, categories, categoryReason, categorySource,
+                    lastClassifiedAt, lastClassifiedRecordCount, updatedAt
+                FROM `noti_llm_state`
+                """.trimIndent()
+            )
+            db.execSQL("DROP TABLE `noti_llm_state`")
+            db.execSQL("ALTER TABLE `noti_llm_state_new` RENAME TO `noti_llm_state`")
+
+            // 3. Staged pipeline instructions.
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `pending_op` (
+                    `opId` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    `notiKey` TEXT NOT NULL DEFAULT '',
+                    `opType` TEXT NOT NULL,
+                    `payload` TEXT NOT NULL,
+                    `targetItemId` TEXT NOT NULL DEFAULT '',
+                    `mergeSourceItemIds` TEXT NOT NULL DEFAULT '[]',
+                    `evidenceRecordIds` TEXT NOT NULL DEFAULT '[]',
+                    `reason` TEXT NOT NULL DEFAULT '',
+                    `itemType` TEXT NOT NULL DEFAULT 'task',
+                    `batchId` TEXT NOT NULL DEFAULT '',
+                    `createdAt` INTEGER NOT NULL
+                )
+                """.trimIndent()
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_pending_op_targetItemId` ON `pending_op` (`targetItemId`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_pending_op_batchId` ON `pending_op` (`batchId`)")
+
+            // 4. Merge-rejection cool-down pairs.
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `rejected_merge` (
+                    `itemIdA` TEXT NOT NULL,
+                    `itemIdB` TEXT NOT NULL,
+                    `rejectedAt` INTEGER NOT NULL,
+                    PRIMARY KEY(`itemIdA`, `itemIdB`)
+                )
+                """.trimIndent()
+            )
+
+            // 5. Record fold watermark for the per-thread rolling summary.
+            db.execSQL("ALTER TABLE `extraction_journal_summary` ADD COLUMN `lastFoldedPostTime` INTEGER NOT NULL DEFAULT 0")
+
+            // 6. Drop the old-pipeline per-record processing flags (scan/extract markers and the
+            //    claim/lease columns). The per-notiKey pipeline tracks progress with the fold
+            //    watermark on extraction_journal_summary instead.
+            db.execSQL("DROP VIEW IF EXISTS `VisibleNotiRecord`")
+            db.execSQL("DROP INDEX IF EXISTS `idx_record_notiKey_whenTime`")
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `noti_record_new` (
+                    `notiRecordId` TEXT NOT NULL,
+                    `notiKey` TEXT NOT NULL,
+                    `whenTime` INTEGER NOT NULL,
+                    `postTime` INTEGER NOT NULL,
+                    `person` TEXT NOT NULL,
+                    `extraTitle` TEXT NOT NULL,
+                    `extraBigTitle` TEXT NOT NULL,
+                    `extraConversationTitle` TEXT NOT NULL,
+                    `extraBigText` TEXT NOT NULL,
+                    `extraText` TEXT NOT NULL,
+                    `extraTextLines` TEXT NOT NULL,
+                    `extraSummaryText` TEXT NOT NULL,
+                    `extraInfoText` TEXT NOT NULL,
+                    `extraSubText` TEXT NOT NULL,
+                    `isDismissed` INTEGER NOT NULL DEFAULT 0,
+                    PRIMARY KEY(`notiRecordId`)
+                )
+                """.trimIndent()
+            )
+            db.execSQL(
+                """
+                INSERT INTO `noti_record_new` (
+                    notiRecordId, notiKey, whenTime, postTime, person,
+                    extraTitle, extraBigTitle, extraConversationTitle,
+                    extraBigText, extraText, extraTextLines, extraSummaryText,
+                    extraInfoText, extraSubText, isDismissed
+                )
+                SELECT
+                    notiRecordId, notiKey, whenTime, postTime, person,
+                    extraTitle, extraBigTitle, extraConversationTitle,
+                    extraBigText, extraText, extraTextLines, extraSummaryText,
+                    extraInfoText, extraSubText, isDismissed
+                FROM `noti_record`
+                """.trimIndent()
+            )
+            db.execSQL("DROP TABLE `noti_record`")
+            db.execSQL("ALTER TABLE `noti_record_new` RENAME TO `noti_record`")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `idx_record_notiKey_whenTime` ON `noti_record` (`notiKey`, `whenTime`)")
+        }
+    }
+
 }

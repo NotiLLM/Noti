@@ -105,12 +105,6 @@ class NotiRepository(
 
     fun getNewRecords(): List<NotiRecord> = notiRecordDao.getNewRecords()
 
-    suspend fun setScanStates(notiKey: String, hasTask: Boolean, hasMemo: Boolean, hasEvent: Boolean) = withContext(Dispatchers.IO) {
-        actionsRepo.setHasTask(notiKey, hasTask)
-        actionsRepo.setHasMemo(notiKey, hasMemo)
-        actionsRepo.setHasEvent(notiKey, hasEvent)
-    }
-
     suspend fun setPinnedState(notiKey: String, pinned: Boolean) = withContext(Dispatchers.IO) {
         actionsRepo.setPinnedState(notiKey, pinned)
     }

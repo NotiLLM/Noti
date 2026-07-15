@@ -17,12 +17,12 @@ import org.muilab.notigpt.model.features.SavedSubItem
 import org.muilab.notigpt.model.features.UserContext
 
 /**
- * Restore-on-login: pulls the signed-in account's saved items (with sub-tasks), extraction
- * preferences, and user contexts from Firestore into Room.
+ * Login/periodic reconciliation for the signed-in account's saved items, extraction preferences,
+ * and user contexts.
  *
- * Room remains the source of truth after restore — every local mutation pushes back up via
- * [FirestoreSyncRepository]. Restore only runs when the local saved_item table is empty (fresh
- * install, or right after an account-switch wipe), so it never merges into existing local data.
+ * The newer snapshot wins for rows present on both sides. Local-only rows are uploaded so a device
+ * that was offline for a long time can bootstrap its cloud mirror. [SavedItem.userEdited] remains
+ * provenance/audit metadata; it is not a sync conflict veto.
  * Notification links/journal are device-bound and are not restored.
  */
 class FirestoreRestoreRepository(
@@ -33,28 +33,58 @@ class FirestoreRestoreRepository(
 
     private val tag = "FirestoreRestore"
 
-    suspend fun restoreIfLocalEmpty() = withContext(Dispatchers.IO) {
+    /** Backward-compatible entry point; sign-in now performs reconciliation rather than a one-way restore. */
+    suspend fun restoreIfLocalEmpty() = reconcileAfterSignIn()
+
+    /**
+     * Reconciles local Room state with the signed-in account's Firestore mirror.
+     *
+     * - Empty local + populated cloud: restore cloud data.
+     * - Populated local + empty cloud: backfill the cloud mirror from Room.
+     * - Both populated: the newer item snapshot wins; local-only items are uploaded.
+     */
+    suspend fun reconcileAfterSignIn() = withContext(Dispatchers.IO) {
         val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return@withContext
-        val hasLocal = try {
-            db.reminderListDao().getAllVisible().isNotEmpty()
-        } catch (_: Exception) {
-            true // if in doubt, never clobber
-        }
-        if (hasLocal) {
-            Log.d(tag, "Local data present; skipping restore")
-            return@withContext
-        }
 
         try {
-            restoreReminders(uid)
-            restorePreferencesAndContexts(uid)
-            Log.d(tag, "Restore complete for uid=$uid")
+            val remoteDocs = fetchReminderDocs(uid)
+            val localItems = db.reminderListDao().getAll()
+            val sync = FirestoreSyncRepository(appContext)
+
+            when {
+                localItems.isEmpty() -> {
+                    restoreReminders(remoteDocs)
+                    val cloudHasUserState = restorePreferencesAndContexts(uid)
+                    if (remoteDocs.isEmpty()) {
+                        sync.syncAllLocalReminders()
+                        if (!cloudHasUserState) sync.syncPreferencesAndContexts()
+                    } else if (!cloudHasUserState) {
+                        sync.syncPreferencesAndContexts()
+                    }
+                }
+
+                remoteDocs.isEmpty() -> {
+                    // This is the important first-connect/backfill path for existing local data.
+                    val cloudHasUserState = restorePreferencesAndContexts(uid)
+                    sync.syncAllLocalReminders()
+                    if (!cloudHasUserState) sync.syncPreferencesAndContexts()
+                }
+
+                else -> {
+                    reconcileReminders(remoteDocs, localItems, sync)
+                    if (!restorePreferencesAndContexts(uid)) {
+                        sync.syncPreferencesAndContexts()
+                    }
+                }
+            }
+
+            Log.i(tag, "Reconciliation complete uid=$uid local=${localItems.size} cloud=${remoteDocs.size}")
         } catch (t: Throwable) {
-            Log.w(tag, "Restore failed", t)
+            Log.w(tag, "Reconciliation failed uid=$uid", t)
         }
     }
 
-    private suspend fun restoreReminders(uid: String) {
+    private suspend fun fetchReminderDocs(uid: String): List<DocumentSnapshot> {
         val docs = firestore
             .collection(FirestorePaths.COLLECTION_REMINDERS_ROOT)
             .document(uid)
@@ -62,21 +92,88 @@ class FirestoreRestoreRepository(
             .get()
             .await()
             .documents
+        Log.d(tag, "Fetched ${docs.size} cloud reminder docs uid=$uid")
+        return docs
+    }
 
-        for (doc in docs) {
-            val item = savedItemFrom(doc) ?: continue
-            db.reminderListDao().upsert(item)
-            subItemsFrom(doc, item.savedItemId).forEach { db.subTaskDao().upsert(it) }
-        }
+    private suspend fun restoreReminders(docs: List<DocumentSnapshot>) {
+        for (doc in docs) restoreOneReminder(doc)
         Log.d(tag, "Restored ${docs.size} reminder docs")
     }
+
+    private suspend fun restoreOneReminder(doc: DocumentSnapshot) {
+        val item = savedItemFrom(doc) ?: return
+        // Remove stale local sub-items before applying the cloud snapshot.
+        db.subTaskDao().hardDeleteByParentId(item.savedItemId)
+        db.reminderListDao().upsert(item)
+        subItemsFrom(doc, item.savedItemId).forEach { db.subTaskDao().upsert(it) }
+    }
+
+    private suspend fun reconcileReminders(
+        remoteDocs: List<DocumentSnapshot>,
+        localItems: List<SavedItem>,
+        sync: FirestoreSyncRepository,
+    ) {
+        val localById = localItems.associateBy { it.savedItemId }
+        val remoteIds = mutableSetOf<String>()
+
+        for (doc in remoteDocs) {
+            val id = doc.getString("savedItemId") ?: doc.id
+            if (id.isBlank()) continue
+            remoteIds += id
+
+            val local = localById[id]
+            when {
+                local == null && !isCloudDeleted(doc) -> restoreOneReminder(doc)
+                local != null && isCloudDeleted(doc) -> {
+                    val cloudDeletedAt = cloudDeletionTimestamp(doc)
+                    if (cloudDeletedAt <= 0L || cloudDeletedAt >= local.lastUpdateTimestamp) {
+                        db.subTaskDao().hardDeleteByParentId(id)
+                        db.reminderListDao().hardDeleteById(id)
+                        Log.i(tag, "Removed locally deleted cloud item savedItemId=$id")
+                    } else {
+                        // A newer local edit intentionally resurrects the cloud mirror.
+                        sync.syncReminder(local)
+                    }
+                }
+                local != null -> {
+                    val cloudUpdatedAt = cloudUpdateTimestamp(doc)
+                    when {
+                        cloudUpdatedAt > local.lastUpdateTimestamp -> restoreOneReminder(doc)
+                        local.lastUpdateTimestamp > cloudUpdatedAt -> sync.syncReminder(local)
+                        else -> restoreOneReminder(doc)
+                    }
+                }
+            }
+        }
+
+        // A document absent from the cloud may simply be a local item created while offline.
+        localItems
+            .filter { it.savedItemId !in remoteIds }
+            .forEach { sync.syncReminder(it) }
+    }
+
+    private fun isCloudDeleted(doc: DocumentSnapshot): Boolean =
+        doc.getBoolean("deleted") == true ||
+            doc.getBoolean("isVisible") == false ||
+            (doc.getLong("deletedAtMsEpoch") ?: 0L) > 0L
+
+    /** Missing legacy timestamps sort before any current local item, preserving local data. */
+    private fun cloudUpdateTimestamp(doc: DocumentSnapshot): Long =
+        doc.getLong("lastUpdateTimestampEpoch") ?: 0L
+
+    /** A deletion without an epoch marker is still authoritative for safety. */
+    private fun cloudDeletionTimestamp(doc: DocumentSnapshot): Long =
+        doc.getLong("deletedAtMsEpoch") ?: 0L
 
     private fun savedItemFrom(doc: DocumentSnapshot): SavedItem? {
         val id = doc.getString("savedItemId") ?: doc.id
         if (id.isBlank()) return null
         // Deleted items stay in the cloud for analysis but are not resurrected locally.
+        // "deleted" is the current marker; "isVisible == false" covers docs from schema <= 5.
+        if (doc.getBoolean("deleted") == true) return null
         if (doc.getBoolean("isVisible") == false) return null
-        val deletedAt = doc.getLong("deletedAtMsEpoch") ?: 0L
+        if ((doc.getLong("deletedAtMsEpoch") ?: 0L) > 0L) return null
         return SavedItem(
             savedItemId = id,
             title = doc.getString("title").orEmpty(),
@@ -88,16 +185,11 @@ class FirestoreRestoreRepository(
             deadlineAtMs = doc.getLong("deadlineAtMsEpoch") ?: -1L,
             startAtMs = doc.getLong("startAtMsEpoch") ?: 0L,
             endAtMs = doc.getLong("endAtMsEpoch") ?: 0L,
-            estimatedCompletionTime = doc.getLong("estimatedCompletionTime") ?: 0L,
             origin = doc.getString("origin") ?: "manual",
             humanEditCount = (doc.getLong("humanEditCount") ?: 0L).toInt(),
-            deletedAtMs = if (deletedAt > 0L) deletedAt else null,
             userEdited = doc.getBoolean("userEdited") ?: false,
-            isVisible = true,
             buttons = doc.getString("buttons") ?: "[]",
             isViewed = doc.getBoolean("isViewed") ?: true,
-            sortScore = (doc.getDouble("sortScore") ?: 50.0).toFloat(),
-            reRankHistory = doc.getString("reRankHistory") ?: "[]",
             isStarred = doc.getBoolean("isStarred") ?: false,
             doAtMs = doc.getLong("doAtMsEpoch") ?: 0L,
             lastViewedChangeAt = doc.getLong("lastViewedChangeAtEpoch") ?: 0L,
@@ -129,36 +221,47 @@ class FirestoreRestoreRepository(
     }
 
     @Suppress("UNCHECKED_CAST")
-    private suspend fun restorePreferencesAndContexts(uid: String) {
+    private suspend fun restorePreferencesAndContexts(uid: String): Boolean {
         val userDoc = firestore
             .collection(FirestorePaths.COLLECTION_USERS)
             .document(uid)
             .get()
             .await()
 
-        (userDoc.get("extractionPreferences") as? List<Map<String, Any?>>)?.forEach { m ->
-            val id = m["id"] as? String ?: return@forEach
-            db.extractionPreferenceDao().upsertPreference(
-                ExtractionPreference(
-                    id = id,
-                    statement = m["statement"] as? String ?: "",
-                    preferenceType = m["preferenceType"] as? String ?: "",
-                    createdAt = (m["createdAt"] as? Number)?.toLong() ?: System.currentTimeMillis(),
-                    updatedAt = (m["updatedAt"] as? Number)?.toLong() ?: System.currentTimeMillis(),
+        val hasCloudState = userDoc.contains("extractionPreferences") || userDoc.contains("userContexts")
+
+        if (userDoc.contains("extractionPreferences")) {
+            val preferences = (userDoc.get("extractionPreferences") as? List<Map<String, Any?>>).orEmpty()
+            db.extractionPreferenceDao().deleteAll()
+            preferences.forEach { m ->
+                val id = m["id"] as? String ?: return@forEach
+                db.extractionPreferenceDao().upsertPreference(
+                    ExtractionPreference(
+                        id = id,
+                        statement = m["statement"] as? String ?: "",
+                        preferenceType = m["preferenceType"] as? String ?: "",
+                        createdAt = (m["createdAt"] as? Number)?.toLong() ?: System.currentTimeMillis(),
+                        updatedAt = (m["updatedAt"] as? Number)?.toLong() ?: System.currentTimeMillis(),
+                    )
                 )
-            )
+            }
         }
-        (userDoc.get("userContexts") as? List<Map<String, Any?>>)?.forEach { m ->
-            val id = m["id"] as? String ?: return@forEach
-            db.userContextDao().upsertContext(
-                UserContext(
-                    id = id,
-                    statement = m["statement"] as? String ?: "",
-                    category = m["category"] as? String ?: "",
-                    createdAt = (m["createdAt"] as? Number)?.toLong() ?: System.currentTimeMillis(),
-                    updatedAt = (m["updatedAt"] as? Number)?.toLong() ?: System.currentTimeMillis(),
+        if (userDoc.contains("userContexts")) {
+            val contexts = (userDoc.get("userContexts") as? List<Map<String, Any?>>).orEmpty()
+            db.userContextDao().deleteAll()
+            contexts.forEach { m ->
+                val id = m["id"] as? String ?: return@forEach
+                db.userContextDao().upsertContext(
+                    UserContext(
+                        id = id,
+                        statement = m["statement"] as? String ?: "",
+                        category = m["category"] as? String ?: "",
+                        createdAt = (m["createdAt"] as? Number)?.toLong() ?: System.currentTimeMillis(),
+                        updatedAt = (m["updatedAt"] as? Number)?.toLong() ?: System.currentTimeMillis(),
+                    )
                 )
-            )
+            }
         }
+        return hasCloudState
     }
 }

@@ -123,10 +123,6 @@ class NotiRecordDaoInstrumentedTest {
             extraInfoText = "",
             extraSubText = "",
             isDismissed = !visible,
-            taskScanned = false,
-            taskExtracted = false,
-            taskExtractionClaimed = false,
-            taskExtractionClaimedAt = 0L,
         )
     }
 }

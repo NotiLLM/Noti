@@ -74,7 +74,7 @@ fun HomeScreen(
     val newUnits by drawerViewModel.newNotificationUnits.collectAsState()
 
     val previews = remember(newUnits, llmByKey) {
-        HomeViewModel.buildPreviews(newUnits, llmByKey, System.currentTimeMillis() - HomeViewModel.NEW_NOTI_WINDOW_MS)
+        HomeViewModel.buildPreviews(newUnits, llmByKey, System.currentTimeMillis() - HomeViewModel.newNotiWindowMs())
     }
     val commPreview = previews[NotiCategory.Communication] ?: CategoryPreview()
     val contentPreview = previews[NotiCategory.Content] ?: CategoryPreview()
@@ -290,8 +290,21 @@ private fun NotiCategoryRow(iconRes: Int, title: String, preview: CategoryPrevie
                     preview.topLines.forEach { line -> CategoryPreviewLineRow(line) }
                 }
             }
-            if (badgeCount > 0) {
-                CountBadge(badgeCount, MaterialTheme.colorScheme.onSurface, MaterialTheme.colorScheme.surfaceContainerHighest)
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                if (badgeCount > 0) {
+                    Text(
+                        text = stringResource(
+                            R.string.home_noti_window_hours,
+                            org.muilab.notigpt.util.SharedPreferencesManager.homeNotiWindowHours,
+                        ),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    CountBadge(badgeCount, MaterialTheme.colorScheme.onSurface, MaterialTheme.colorScheme.surfaceContainerHighest)
+                }
             }
         }
     }
@@ -315,12 +328,15 @@ private fun CategoryPreviewLineRow(line: CategoryPreviewLine) {
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f, fill = false),
         )
-        Spacer(Modifier.size(8.dp))
-        Text(
-            text = line.count.toString(),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        // A single-record line carries no useful count; only show it once there's more than one.
+        if (line.count > 1) {
+            Spacer(Modifier.size(8.dp))
+            Text(
+                text = line.count.toString(),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
 

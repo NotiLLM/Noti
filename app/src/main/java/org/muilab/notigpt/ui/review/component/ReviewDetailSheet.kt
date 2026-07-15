@@ -37,18 +37,19 @@ import org.muilab.notigpt.ui.review.viewmodel.ReviewViewModel
 @RequiresApi(Build.VERSION_CODES.S)
 @Composable
 fun ReviewDetailSheet(
-    item: SavedItem,
+    entry: ReviewViewModel.ReviewEntry,
     reviewViewModel: ReviewViewModel,
     onApprove: () -> Unit,
     onReject: () -> Unit,
     onEdit: () -> Unit,
 ) {
-    val changes by remember(item.savedItemId) { reviewViewModel.changeLogFlow(item.savedItemId) }
+    val item = entry.preview
+    val changes by remember(entry.key) { reviewViewModel.changeLogFlow(item.savedItemId) }
         .collectAsState(initial = emptyList())
     val related by reviewViewModel.related.collectAsState()
 
-    androidx.compose.runtime.LaunchedEffect(item.savedItemId) {
-        reviewViewModel.loadRelated(item)
+    androidx.compose.runtime.LaunchedEffect(entry.key) {
+        reviewViewModel.loadRelated(entry)
     }
 
     Column(
@@ -68,6 +69,25 @@ fun ReviewDetailSheet(
             Text(text = item.content.trim(), style = MaterialTheme.typography.bodyLarge)
         }
 
+        // The pipeline's explanation for this proposal — the staged model's "why you're seeing this".
+        if (entry.reason.isNotBlank()) {
+            Text(
+                text = entry.reason,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
+        // Staged creates propose sub-tasks that don't exist in the DB yet; list them for review.
+        if (entry.group?.isCreate == true && entry.previewSubItems.isNotEmpty()) {
+            entry.previewSubItems.forEach { sub ->
+                Text(
+                    text = "•  ${sub.title}",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+        }
+
         // Reuse the existing "what's new" block; its "Got it" acts as approve here.
         ReminderWhatsNewBlock(
             reminder = item,
@@ -77,7 +97,7 @@ fun ReviewDetailSheet(
 
         // Related notifications, evidence highlighted (the records that triggered this item/edit).
         val relatedValue = related.value
-        if (related.savedItemId == item.savedItemId && relatedValue.recordsByKey.isNotEmpty()) {
+        if (related.entryKey == entry.key && relatedValue.recordsByKey.isNotEmpty()) {
             Text(
                 text = stringResource(R.string.review_triggered_this),
                 style = MaterialTheme.typography.titleSmall,

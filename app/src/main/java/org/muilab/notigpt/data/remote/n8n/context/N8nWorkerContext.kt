@@ -8,6 +8,7 @@ import org.muilab.notigpt.data.repository.notification.NotiLlmStateRepository
 import org.muilab.notigpt.data.repository.notification.NotiRepository
 import org.muilab.notigpt.data.repository.notification.NotiRepositoryProvider
 import org.muilab.notigpt.data.repository.reminder.ExtractionJournalRepository
+import org.muilab.notigpt.data.repository.reminder.PendingOpRepository
 import org.muilab.notigpt.data.repository.reminder.SavedItemChangeLogRepository
 import org.muilab.notigpt.data.repository.reminder.SavedItemRepository
 import org.muilab.notigpt.data.repository.reminder.SavedSubItemRepository
@@ -45,6 +46,10 @@ internal class N8nWorkerContext(
     val changeLogRepository: SavedItemChangeLogRepository by lazy {
         SavedItemChangeLogRepository(database.savedItemChangeLogDao())
     }
+
+    private val pendingOpRepository: PendingOpRepository by lazy { PendingOpRepository(appContext) }
+
+    fun pendingOpRepository(): PendingOpRepository = pendingOpRepository
 
 /**
  * Shared dependency and payload helper context for n8n worker handlers.

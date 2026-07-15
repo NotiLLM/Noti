@@ -37,10 +37,13 @@ fun Modifier.notiCardSwipeHandler(
     onDismiss: () -> Unit,
     scope: CoroutineScope,
     onSwipeActiveChanged: (Boolean) -> Unit = {},
+    // Both directions dismiss instead of one dismissing and the other revealing the background
+    // action row. Kept switchable rather than deleting the single-direction path (see NotiCard.kt).
+    bidirectionalDismiss: Boolean = false,
 ): Modifier {
     if (!enabled) return this
 
-    return this.pointerInput(endActionsWidth, cardWidth, swipeDeleteLeft) {
+    return this.pointerInput(endActionsWidth, cardWidth, swipeDeleteLeft, bidirectionalDismiss) {
         val density = this
         val extraPx = with(density) { ACTIONS_REVEAL_EXTRA_DP.dp.toPx() }
         val maxActionsOffset = endActionsWidth + extraPx
@@ -107,7 +110,11 @@ fun Modifier.notiCardSwipeHandler(
                                     if (dx == 0f) break
 
                                     val base = horizontalOffsetX.value
-                                    val newOffset = (base + dx).coerceIn(-cardWidth, maxActionsOffset)
+                                    val newOffset = if (bidirectionalDismiss) {
+                                        (base + dx).coerceIn(-cardWidth, cardWidth)
+                                    } else {
+                                        (base + dx).coerceIn(-cardWidth, maxActionsOffset)
+                                    }
                                     horizontalOffsetX.snapTo(newOffset)
                                 }
                             }
@@ -145,6 +152,20 @@ fun Modifier.notiCardSwipeHandler(
                         val actionsThresholdPx = max(48f, endActionsWidth * 0.18f)
 
                         val currentOffsetVal = horizontalOffsetX.value
+
+                        if (bidirectionalDismiss) {
+                            val minOffsetForFling = swipeThresholdPx * 0.5f
+                            val flungPastMin = abs(flingVelocityX) > flingThreshold && abs(currentOffsetVal) > minOffsetForFling
+                            if (flungPastMin || abs(currentOffsetVal) >= dismissThresholdPx) {
+                                val dir = if (currentOffsetVal < 0f) -1 else 1
+                                horizontalOffsetX.animateTo(dir * cardWidth, tween(250))
+                                onDismiss()
+                                horizontalOffsetX.snapTo(0f)
+                            } else {
+                                horizontalOffsetX.animateTo(0f, tween(200))
+                            }
+                            return@launch
+                        }
 
                         // If fling: keep the existing fling behavior.
                         if (abs(flingVelocityX) > flingThreshold) {

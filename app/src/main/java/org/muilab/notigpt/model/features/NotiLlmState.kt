@@ -25,12 +25,6 @@ data class NotiLlmState(
     /** Scan verdict: thread flagged for reminder extraction. Never demoted once true until consumed. */
     @ColumnInfo(defaultValue = "0")
     val shouldExtractReminder: Boolean = false,
-    @ColumnInfo(defaultValue = "0")
-    val hasTask: Boolean = false,
-    @ColumnInfo(defaultValue = "0")
-    val hasMemo: Boolean = false,
-    @ColumnInfo(defaultValue = "0")
-    val hasEvent: Boolean = false,
     /** JSON string array of [NotiCategory] values, e.g. `["communication"]`. */
     @ColumnInfo(defaultValue = "'[]'")
     val categories: String = "[]",

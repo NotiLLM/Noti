@@ -80,10 +80,10 @@ class DrawerViewModel(
     val isTargetLoading: StateFlow<Boolean> = filters.isTargetLoading
     val isSortingMode: StateFlow<Boolean> = filters.isSortingMode
 
-    /** True while the n8n task-extraction WorkManager job is actively running. */
+    /** True while any per-notiKey extraction pipeline job is actively running. */
     val isExtracting: StateFlow<Boolean> =
         androidx.work.WorkManager.getInstance(application)
-            .getWorkInfosForUniqueWorkFlow("n8n_task_extraction")
+            .getWorkInfosByTagFlow(org.muilab.notigpt.data.remote.n8n.EXTRACTION_WORK_TAG)
             .map { infos -> infos.any { it.state == androidx.work.WorkInfo.State.RUNNING } }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
@@ -96,6 +96,16 @@ class DrawerViewModel(
         org.muilab.notigpt.data.local.room.AppDatabase.getInstance(application.applicationContext)
             .notiLlmStateDao().observeAll()
             .map { list -> list.associateBy { it.notiKey } }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
+
+    /**
+     * Per-notiKey counts of linked active saved items (task to keep), for the card cross-link badge.
+     * Empty pair means no linked items; the card omits the badge then.
+     */
+    val linkedItemCountsByKey: StateFlow<Map<String, Pair<Int, Int>>> =
+        org.muilab.notigpt.data.local.room.AppDatabase.getInstance(application.applicationContext)
+            .notiSavedItemLinkDao().observeLinkedTypeCounts()
+            .map { rows -> rows.associate { it.notiKey to (it.taskCount to it.keepCount) } }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
 
     /**
@@ -221,7 +231,7 @@ class DrawerViewModel(
      */
     val clearableVisibleCountByCategory: StateFlow<Map<String, Int>> =
         combine(newNotificationUnits, llmStatesByKey, _notiLast24hOnly) { units, llm, last24hOnly ->
-            val cutoff = System.currentTimeMillis() - HomeViewModel.NEW_NOTI_WINDOW_MS
+            val cutoff = System.currentTimeMillis() - HomeViewModel.newNotiWindowMs()
             units.filter { du -> !du.notiUnit.isPinned && (!last24hOnly || du.notiRecords.any { it.time >= cutoff }) }
                 .groupingBy { du -> NotiClassificationRepository.categoryOf(du.notiUnit, llm[du.notiKey]) }
                 .eachCount()
@@ -371,7 +381,7 @@ class DrawerViewModel(
     @RequiresApi(Build.VERSION_CODES.S)
     fun clearVisibleNotis(category: String) {
         viewModelScope.launch(Dispatchers.IO) {
-            val cutoff = System.currentTimeMillis() - HomeViewModel.NEW_NOTI_WINDOW_MS
+            val cutoff = System.currentTimeMillis() - HomeViewModel.newNotiWindowMs()
             val llm = llmStatesByKey.value
             val last24hOnly = _notiLast24hOnly.value
             val keys = newNotificationUnits.value

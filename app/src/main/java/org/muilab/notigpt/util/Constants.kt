@@ -10,7 +10,7 @@ class Constants {
     companion object {
         const val DIFY_UPDATE_NOTIFICATION = "update_notification"
         const val DIFY_POST_NOTIFICATION_ACTION = "post_notification_action"
-        const val NOTI_REMOVE_DELAY = 10 * 1000L
+        const val NOTI_REMOVE_DELAY = 20 * 1000L
 
         const val NOTI_CATEGORY_GENERAL = "General"
         const val NOTI_CATEGORY_TODO = "To-Do"
@@ -79,12 +79,12 @@ class Constants {
         // The maximum number of read, expired notification records to keep visible per key
         const val MAX_EXPIRED_RECORDS_PER_KEY = 5
 
-        // n8n task API types
-        const val N8N_TASK_SCAN = "task_scan"
-        const val N8N_TASK_EXTRACTION = "task_extraction"
+        // n8n task API types. The per-notiKey extraction pipeline runs its stages (A→B→C→D1→E1)
+        // sequentially inside one worker job, so it needs a single api_type; the reflection pass
+        // (D2→E2) is a separate scheduled job.
+        const val N8N_EXTRACTION_PIPELINE = "extraction_pipeline"
+        const val N8N_REFLECTION_PIPELINE = "reflection_pipeline"
         const val N8N_REGENERATE_ONE = "regenerate_one"
-        const val N8N_REGENERATE_ALL = "regenerate_all"
-        const val N8N_RERANK = "rerank"
 
         // n8n preference API types
         const val N8N_PREFERENCE_QUICK_SYNC = "preference_quick_sync"

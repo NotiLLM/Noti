@@ -12,12 +12,16 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.combine
 import org.muilab.notigpt.data.local.room.AppDatabase
 import org.muilab.notigpt.data.local.room.dao.SmartFilterCounts
-import org.muilab.notigpt.data.local.room.dao.TypeStateCount
 import org.muilab.notigpt.data.repository.notification.NotiClassificationRepository
 import org.muilab.notigpt.model.features.NotiCategory
 import org.muilab.notigpt.model.features.NotiLlmState
+import org.muilab.notigpt.model.features.PendingOp
+import org.muilab.notigpt.model.features.PendingOpType
+import org.muilab.notigpt.model.features.SavedItem
+import org.muilab.notigpt.model.features.SavedItemState
 import org.muilab.notigpt.model.features.SavedItemType
 import org.muilab.notigpt.model.notifications.NotiDisplayUnit
 import org.muilab.notigpt.util.time.DayBoundaries
@@ -42,7 +46,7 @@ data class CategoryPreviewLine(
 /**
  * Preview for one notification category row on the home screen: the top few senders/apps by recency
  * with their new-notification counts, plus totals for the badge. Only records inside the recency
- * window ([HomeViewModel.NEW_NOTI_WINDOW_MS]) are counted.
+ * window ([HomeViewModel.newNotiWindowMs]) are counted.
  */
 data class CategoryPreview(
     val topLines: List<CategoryPreviewLine> = emptyList(),
@@ -60,8 +64,16 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val db = AppDatabase.getInstance(application.applicationContext)
     private val savedItemDao = db.reminderListDao()
 
-    val reviewCounts: StateFlow<ReviewCounts> = savedItemDao.observeReviewCounts()
-        .map { rows -> aggregateReviewCounts(rows) }
+    /**
+     * Item-level review counts: users count the eventual items they'll review, not atomic pipeline
+     * instructions. Staged creates are "new"; distinct existing items with staged changes are
+     * "updated"; legacy new/updated rows (single-item regeneration) count unless a staged group
+     * already covers them.
+     */
+    val reviewCounts: StateFlow<ReviewCounts> = combine(
+        db.pendingOpDao().observeAll(),
+        savedItemDao.observeNewItems(),
+    ) { ops, legacyItems -> aggregateReviewCounts(ops, legacyItems) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ReviewCounts())
 
     /** Re-evaluates the "today" boundary at each local midnight so the buckets stay correct while idle. */
@@ -87,16 +99,24 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun aggregateReviewCounts(rows: List<TypeStateCount>): ReviewCounts {
+    private fun aggregateReviewCounts(ops: List<PendingOp>, legacyItems: List<SavedItem>): ReviewCounts {
         var nt = 0; var ut = 0; var nk = 0; var uk = 0
-        rows.forEach { r ->
-            val isTask = r.itemType == SavedItemType.Task
-            val isNew = r.state == org.muilab.notigpt.model.features.SavedItemState.New
+        ops.filter { it.opType == PendingOpType.Create }.forEach { op ->
+            if (op.itemType == SavedItemType.Task) nt++ else nk++
+        }
+        val targeted = ops.filter { it.targetItemId.isNotBlank() }
+        targeted.distinctBy { it.targetItemId }.forEach { op ->
+            if (op.itemType == SavedItemType.Task) ut++ else uk++
+        }
+        val targetedIds = targeted.mapTo(mutableSetOf()) { it.targetItemId }
+        legacyItems.filter { it.savedItemId !in targetedIds }.forEach { item ->
+            val isTask = item.itemType == SavedItemType.Task
+            val isNew = item.state == SavedItemState.New
             when {
-                isTask && isNew -> nt = r.cnt
-                isTask && !isNew -> ut = r.cnt
-                !isTask && isNew -> nk = r.cnt
-                else -> uk = r.cnt
+                isTask && isNew -> nt++
+                isTask && !isNew -> ut++
+                !isTask && isNew -> nk++
+                else -> uk++
             }
         }
         return ReviewCounts(nt, ut, nk, uk)
@@ -105,8 +125,12 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     companion object {
         private const val MAX_PREVIEW_LABELS = 3
 
-        /** Recency window shared by the home previews and the category screens' time chip. */
-        const val NEW_NOTI_WINDOW_MS = 24L * 60 * 60 * 1000
+        /**
+         * Recency window shared by the home previews and the category screens' time chip, derived
+         * from the user-editable "Past X hours" setting (positive hours only).
+         */
+        fun newNotiWindowMs(): Long =
+            org.muilab.notigpt.util.SharedPreferencesManager.homeNotiWindowHours * 60L * 60 * 1000
 
         /**
          * Splits the active drawer's new-notification units into Communication and Content previews.
