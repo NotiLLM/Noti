@@ -21,6 +21,7 @@
     <string name="ui_action_back">Back</string>
     <string name="ui_action_cancel">Cancel</string>
     <string name="ui_action_clear">Clear</string>
+    <string name="ui_action_continue">Continue</string>
     <string name="ui_action_delete">Delete</string>
     <string name="ui_action_ok">OK</string>
     <string name="ui_action_save">Save</string>
@@ -49,9 +50,21 @@
     <string name="a11y_scheduled_reschedule">Reschedule</string>
     <string name="a11y_scheduled_cancel">Cancel</string>
     <string name="settings_section_appearance">Appearance</string>
+    <string name="settings_section_account">Account</string>
     <string name="settings_section_extraction">Extraction</string>
     <string name="settings_section_home">Home</string>
     <string name="settings_section_data">Data</string>
+    <string name="ui_settings_signed_in_as">Signed in as</string>
+    <string name="ui_settings_switch_account">Switch account</string>
+    <string name="ui_settings_switch_account_desc">Choose another Google account and decide what happens to this device’s notification history</string>
+    <string name="ui_settings_switch_prepare_message">You will remain signed in to the current account if you close the Google account chooser. If you select a different account, choose what happens to this device’s notification history.</string>
+    <string name="ui_settings_switch_cancelled">Account switch cancelled. Still signed in as %1$s.</string>
+    <string name="ui_settings_switch_failed">Couldn’t switch accounts. Your existing data has not been deleted.</string>
+    <string name="ui_settings_switch_complete">Account switched.</string>
+    <string name="ui_settings_sign_out">Sign out</string>
+    <string name="ui_settings_sign_out_desc">Keep data on this device and return to the sign-in screen</string>
+    <string name="ui_settings_sign_out_confirm_title">Sign out?</string>
+    <string name="ui_settings_sign_out_confirm_message">Your notification history and generated items stay on this device. You can sign back in later.</string>
     <string name="ui_settings_home_window">Notification window</string>
     <string name="ui_settings_home_window_desc">How far back the home notification previews and counts look.</string>
     <string name="ui_settings_home_window_label">Hours</string>
@@ -59,6 +72,17 @@
     <string name="ui_settings_export_description">Export all notifications and user actions</string>
     <string name="ui_settings_export_include_dismissed">Include dismissed notifications</string>
     <string name="ui_settings_export_include_context">Include full context</string>
+    <string name="ui_settings_delete_cloud_data">Delete cloud data</string>
+    <string name="ui_settings_delete_cloud_data_desc">Permanently delete generated tasks, keeps, preferences, and their local copies</string>
+    <string name="ui_settings_clear_notification_history">Clear notification history</string>
+    <string name="ui_settings_clear_notification_history_desc">Permanently delete raw notification history from this device only</string>
+    <string name="ui_settings_delete_cloud_confirm_title">Delete cloud data?</string>
+    <string name="ui_settings_delete_cloud_confirm_message">This permanently deletes generated data from Firestore and this device. Notification history remains on this device.</string>
+    <string name="ui_settings_clear_history_confirm_title">Clear notification history?</string>
+    <string name="ui_settings_clear_history_confirm_message">This permanently deletes raw notification history from this device. Generated tasks and keeps remain.</string>
+    <string name="ui_settings_delete_cloud_done">Cloud and local generated data deleted</string>
+    <string name="ui_settings_clear_history_done">Notification history cleared</string>
+    <string name="ui_settings_delete_failed">Couldn’t delete data. Check your connection and try again.</string>
 
     <!-- Reminders -->
     <string name="ui_reminders_filter_all">All</string>
@@ -119,8 +143,12 @@
     <string name="sign_in_with_google">Sign in with Google</string>
     <string name="sign_in_failed">Sign-in failed. Please try again.</string>
     <string name="account_switch_title">Switch account?</string>
-    <string name="account_switch_message">You signed in as %1$s, which is different from the account previously used on this device. Continuing will remove the local tasks, keeps, and preferences and load this account\'s data instead.</string>
+    <string name="account_switch_message">You signed in as %1$s. Local tasks, keeps, and preferences will switch to this account. Choose what happens to this device\'s notification history.</string>
     <string name="account_switch_confirm">Switch and reload</string>
+    <string name="account_switch_keep_history">Keep notification history</string>
+    <string name="account_switch_keep_history_warning">Existing notification text stays on this device and may be processed under the new account.</string>
+    <string name="account_switch_start_clean">Start clean</string>
+    <string name="account_switch_start_clean_warning">Permanently deletes device-local notification history before loading the new account. It cannot be restored from Firestore.</string>
     <string name="ui_reminders_do_date_chip">Do %1$s</string>
     <string name="ui_reminders_editor_ect_label">Estimated completion time (minutes)</string>
     <string name="ui_reminders_editor_note">Note</string>
@@ -176,7 +204,23 @@
     <string name="ui_debug_invalid_ip">Invalid IP!</string>
 
     <!-- Ongoing status / generation notifications -->
-    <string name="ongoing_status_idle">No new items</string>
+    <string name="ongoing_status_title">Noti is active</string>
+    <string name="ongoing_status_nothing_new">Nothing new at the moment.</string>
+    <string name="ongoing_status_recent_window">Past %1$d h: %2$s</string>
+    <string name="ongoing_status_awaiting_review">Awaiting review: </string>
+    <string name="ongoing_status_join_string">%1$s · %2$s</string>
+    <plurals name="ongoing_status_notification_count">
+        <item quantity="one">%1$d notification</item>
+        <item quantity="other">%1$d notifications</item>
+    </plurals>
+    <plurals name="ongoing_status_task_count">
+        <item quantity="one">%1$d task</item>
+        <item quantity="other">%1$d tasks</item>
+    </plurals>
+    <plurals name="ongoing_status_keep_count">
+        <item quantity="one">%1$d keep</item>
+        <item quantity="other">%1$d keeps</item>
+    </plurals>
     <string name="generating_saved_items">Generating saved items…</string>
 
     <!-- Notifications screen (UI chrome only; not notification content) -->
@@ -509,6 +553,7 @@
     <string name="home_noti_content">Content</string>
     <string name="home_noti_none">No new notifications</string>
     <string name="home_noti_window_hours">Past %dh</string>
+    <string name="home_noti_older">Older</string>
     <string name="home_section_saved">Saved</string>
     <string name="home_filter_today">Today &amp; earlier</string>
     <string name="home_filter_upcoming">Upcoming</string>
@@ -520,9 +565,8 @@
 
     <!-- Notification category pages -->
     <string name="noti_filter_all">All</string>
-    <string name="noti_filter_last_24h">Last 24 hrs</string>
-    <string name="noti_filter_all_count">All · %1$d</string>
-    <string name="noti_filter_last_24h_count">Last 24 hrs · %1$d</string>
+    <string name="noti_filter_recent_count">Last %1$d hrs · %2$d</string>
+    <string name="noti_filter_older_count">Older notifications · %1$d</string>
     <string name="noti_category_empty">No notifications here</string>
 
     <!-- Expandable text -->

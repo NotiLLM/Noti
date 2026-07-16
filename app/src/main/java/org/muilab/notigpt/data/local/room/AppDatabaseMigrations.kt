@@ -1403,4 +1403,54 @@ object AppDatabaseMigrations {
         }
     }
 
+    /** Adds the payload-free, account-scoped Firestore retry queue. */
+    val MIGRATION_45_46 = object : Migration(45, 46) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `firestore_outbox` (
+                    `operationKey` TEXT NOT NULL,
+                    `uid` TEXT NOT NULL,
+                    `kind` TEXT NOT NULL,
+                    `entityId` TEXT NOT NULL,
+                    `createdAt` INTEGER NOT NULL,
+                    `attemptCount` INTEGER NOT NULL,
+                    `lastError` TEXT NOT NULL,
+                    PRIMARY KEY(`operationKey`)
+                )
+                """.trimIndent()
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_firestore_outbox_uid_createdAt` " +
+                    "ON `firestore_outbox` (`uid`, `createdAt`)"
+            )
+        }
+    }
+
+    /** Persists complete generated proposals and their user decision without source notification text. */
+    val MIGRATION_46_47 = object : Migration(46, 47) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `generated_proposal` (
+                    `proposalId` TEXT NOT NULL,
+                    `uid` TEXT NOT NULL,
+                    `opId` INTEGER NOT NULL,
+                    `batchId` TEXT NOT NULL,
+                    `opType` TEXT NOT NULL,
+                    `payload` TEXT NOT NULL,
+                    `targetItemId` TEXT NOT NULL,
+                    `itemType` TEXT NOT NULL,
+                    `decision` TEXT NOT NULL,
+                    `createdAt` INTEGER NOT NULL,
+                    `decisionAt` INTEGER NOT NULL,
+                    PRIMARY KEY(`proposalId`)
+                )
+                """.trimIndent()
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_generated_proposal_uid_createdAt` ON `generated_proposal` (`uid`, `createdAt`)")
+            db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_generated_proposal_opId` ON `generated_proposal` (`opId`)")
+        }
+    }
+
 }

@@ -29,6 +29,16 @@ interface ReminderDao {
     @Query("DELETE FROM reminder_noti_record_ref WHERE reminderId = :reminderId")
     suspend fun deleteNotiRecordRefs(reminderId: String)
 
+    @Query("DELETE FROM reminder_noti_record_ref")
+    suspend fun deleteAllNotiRecordRefs()
+
+    /** Removes alarms whose source item belongs to the generated/account-owned data set. */
+    @Query("DELETE FROM reminder WHERE sourceType = 'saved_item'")
+    suspend fun deleteAllSavedItemReminders()
+
+    @Query("DELETE FROM reminder_saved_item_ref")
+    suspend fun deleteAllSavedItemRefs()
+
     @Query("SELECT * FROM reminder WHERE status IN ('scheduled', 'due_unseen') ORDER BY remindAtMs ASC, createdAtMs ASC")
     fun observeActive(): Flow<List<Reminder>>
 

@@ -3,8 +3,8 @@ package org.muilab.notigpt.model.notifications
 import android.app.Notification
 import android.app.Person
 import android.os.Build
+import android.os.Bundle
 import android.service.notification.StatusBarNotification
-import androidx.annotation.RequiresApi
 import androidx.room.Entity
 import androidx.room.Index
 
@@ -49,19 +49,34 @@ data class NotiRecord (
 ) {
 
     companion object {
-        @RequiresApi(Build.VERSION_CODES.S)
         private fun fetchPerson(sbn: StatusBarNotification): String {
             val messages = sbn.notification?.extras?.getParcelableArray(Notification.EXTRA_MESSAGES)
             if (messages != null) {
-                Notification.MessagingStyle.Message.getMessagesFromBundleArray(messages).lastOrNull()?.senderPerson?.name.let {
-                    if (it != null)
-                        return it.toString()
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    Notification.MessagingStyle.Message.getMessagesFromBundleArray(messages)
+                        .lastOrNull()?.senderPerson?.name?.let { return it.toString() }
+                } else {
+                    // Android 10 stores MessagingStyle messages as Bundles. The public array parser
+                    // is annotated API 30, so read only the sender fields needed by this app.
+                    messages.indices.reversed().forEach { index ->
+                        val bundle = messages[index] as? Bundle ?: return@forEach
+                        val person = bundle.getParcelable("sender_person") as? Person
+                        person?.name?.takeIf { it.isNotBlank() }?.let { return it.toString() }
+                        bundle.getCharSequence("sender")
+                            ?.takeIf { it.isNotBlank() }
+                            ?.let { return it.toString() }
+                    }
                 }
             }
 
-            val callPerson = sbn.notification?.extras?.get(Notification.EXTRA_CALL_PERSON)
-            if (callPerson != null && !(callPerson as Person).name.isNullOrBlank())
-                return callPerson.name.toString()
+            // CallStyle and EXTRA_CALL_PERSON were added in Android 12. MessagingStyle sender
+            // extraction above remains available on every supported version (Android 10+).
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val callPerson = sbn.notification?.extras?.get(Notification.EXTRA_CALL_PERSON) as? Person
+                if (callPerson != null && !callPerson.name.isNullOrBlank()) {
+                    return callPerson.name.toString()
+                }
+            }
 
             return ""
         }
@@ -86,7 +101,6 @@ data class NotiRecord (
         val senderInTitle = setOf<String>()
     }
 
-    @RequiresApi(Build.VERSION_CODES.S)
     constructor (sbn: StatusBarNotification): this(
         notiRecordId = "${sbn.key}_${sbn.postTime}",
         notiKey = sbn.key,

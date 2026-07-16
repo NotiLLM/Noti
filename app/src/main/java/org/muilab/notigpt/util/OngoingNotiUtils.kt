@@ -13,7 +13,6 @@ import android.graphics.Paint
 import android.graphics.Typeface
 import android.os.Build
 import android.util.TypedValue
-import androidx.annotation.RequiresApi
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.createBitmap
@@ -104,11 +103,10 @@ fun createCountIcon(context: Context, number: Int, hasNotRead: Boolean): Bitmap 
 }
 
 /**
- * Posts or refreshes the persistent app status notification with active/unread counts.
+ * Posts or refreshes the persistent app status notification with recent and review counts.
  *
  * Keep count reads here lightweight; any richer business state should be computed before this utility is called.
  */
-@RequiresApi(Build.VERSION_CODES.S)
 fun postOngoingNotification(context: Context) {
 
     CoroutineScope(Dispatchers.IO).launch {
@@ -116,7 +114,9 @@ fun postOngoingNotification(context: Context) {
         val drawerDao = appDatabase.drawerDao()
         val savedItemDao = appDatabase.reminderListDao()
 
-        val allNotiCount = drawerDao.getActiveNotiCount()
+        val windowHours = SharedPreferencesManager.homeNotiWindowHours.coerceAtLeast(1)
+        val cutoffMs = System.currentTimeMillis() - windowHours * 60L * 60L * 1000L
+        val recentNotiCount = drawerDao.getActiveNotiCountSince(cutoffMs)
         // Item-level review counts: staged proposals plus legacy new/updated rows, one per eventual
         // item (an existing item covered by a staged group isn't double-counted).
         val pendingOps = appDatabase.pendingOpDao().getAll()
@@ -128,19 +128,59 @@ fun postOngoingNotification(context: Context) {
                 legacyNew.count { it.itemType == type }
         val newTaskCount = countFor(SavedItemType.Task)
         val newKeepCount = countFor(SavedItemType.Keep)
-        val notiTitle = "$allNotiCount notifications"
-        val smallIcon = createCountIcon(context, allNotiCount, false)
-
-        // Summary body: "X new tasks, Y new keep, Z new notifications", omitting any zero clause.
-        val clauses = buildList {
-            if (newTaskCount > 0) add("$newTaskCount new tasks")
-            if (newKeepCount > 0) add("$newKeepCount new keep")
-            if (allNotiCount > 0) add("$allNotiCount new notifications")
-        }
-        val notiContent = if (clauses.isEmpty()) {
-            context.getString(R.string.ongoing_status_idle)
+        val notiTitle = context.getString(R.string.ongoing_status_title)
+        val smallIcon = createCountIcon(context, recentNotiCount, false)
+        val notificationCount = context.resources.getQuantityString(
+            R.plurals.ongoing_status_notification_count,
+            recentNotiCount,
+            recentNotiCount,
+        )
+        val taskCount = context.resources.getQuantityString(
+            R.plurals.ongoing_status_task_count,
+            newTaskCount,
+            newTaskCount,
+        )
+        val keepCount = context.resources.getQuantityString(
+            R.plurals.ongoing_status_keep_count,
+            newKeepCount,
+            newKeepCount,
+        )
+        val recentSummary = if (recentNotiCount > 0) {
+            context.getString(
+                R.string.ongoing_status_recent_window,
+                windowHours,
+                notificationCount,
+            )
         } else {
-            clauses.joinToString(", ")
+            ""
+        }
+        val reviewPrefix = context.getString(R.string.ongoing_status_awaiting_review)
+        val reviewCounts = context.getString(
+            R.string.ongoing_status_join_string,
+            taskCount,
+            keepCount,
+        )
+        val reviewSummary = if (newTaskCount > 0 && newKeepCount > 0) {
+            reviewPrefix + reviewCounts
+        } else if (newTaskCount > 0) {
+            reviewPrefix + taskCount
+        } else if (newKeepCount > 0) {
+            reviewPrefix + keepCount
+        } else {
+            ""
+        }
+        val notiContent = if (recentSummary.isNotBlank() && reviewSummary.isNotBlank()) {
+            context.getString(
+                R.string.ongoing_status_join_string,
+                recentSummary,
+                reviewSummary,
+            )
+        } else if (recentSummary.isNotBlank()) {
+            recentSummary
+        } else if (reviewSummary.isNotBlank()) {
+            reviewSummary
+        } else {
+            context.getString(R.string.ongoing_status_nothing_new)
         }
         val bigTextStyle = NotificationCompat.BigTextStyle()
         bigTextStyle.bigText(notiContent)

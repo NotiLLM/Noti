@@ -137,7 +137,8 @@ internal object ReminderRegenerationHandler {
         return mapOf(
             "userId" to SharedPreferencesManager.userId,
             "language" to Locale.getDefault().toLanguageTag(),
-            "timezone" to TimeZone.getDefault().displayName,
+            // Send the stable IANA zone ID so n8n can interpret local calendar values reliably.
+            "timezone" to TimeZone.getDefault().id,
             "currentTime" to sdf.format(Date()),
             "targetExtractionLanguage" to SharedPreferencesManager.targetExtractionLanguage,
             "trigger" to trigger,
@@ -158,7 +159,7 @@ internal object ReminderRegenerationHandler {
         val jsonPayload = gson.toJson(payload)
         val requestBody = jsonPayload.toRequestBody("application/json; charset=utf-8".toMediaType())
 
-        Log.d(TAG, "Payload ($trigger): $jsonPayload")
+        Log.d(TAG, "Payload ($trigger) bytes=${jsonPayload.length}")
 
         val response = try {
             ctx.n8nApiService.postToWebhook(webhookPath, requestBody)
@@ -174,7 +175,7 @@ internal object ReminderRegenerationHandler {
         }
 
         val bodyStr = response.body()?.string() ?: return ctx.success()
-        Log.d(TAG, "Response ($trigger): $bodyStr")
+        Log.d(TAG, "Response ($trigger) bytes=${bodyStr.length}")
 
         try {
             // NonCancellable: a response is already in hand at this point. A concurrent REPLACE of

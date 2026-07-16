@@ -79,11 +79,6 @@ object SharedPreferencesManager {
         get() = get(KEY_LOCAL_PREFS, KEY_AUTO_DELETE, false)
         set(value) = put(KEY_LOCAL_PREFS, KEY_AUTO_DELETE, value)
 
-    const val KEY_TRACK_PIN = "trackPin"
-    var trackPin: Boolean
-        get() = get(KEY_LOCAL_PREFS, KEY_TRACK_PIN, false)
-        set(value) = put(KEY_LOCAL_PREFS, KEY_TRACK_PIN, value)
-
     const val KEY_WAIT_SECONDS_BEFORE_NOTI_UNIT_SYNC = "waitSecondsBeforeNotiUnitSync"
     var waitSecondsBeforeNotiUnitSync: Int
         get() = get(KEY_LOCAL_PREFS, KEY_WAIT_SECONDS_BEFORE_NOTI_UNIT_SYNC, 3 * 60)

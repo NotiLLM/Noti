@@ -23,7 +23,7 @@ object PreferenceContextDiscoverClient {
     suspend fun discover(request: N8nContextDiscoverRequestDto): N8nChatInteractResponseDto? {
         val gson = Gson()
         val json = gson.toJson(request)
-        Log.d(TAG, "Request: $json")
+        Log.d(TAG, "Request bytes=${json.length}")
 
         val requestBody = json.toRequestBody("application/json; charset=utf-8".toMediaType())
         val webhookPath = BuildConfig.N8N_CONTEXT_DISCOVER_PATH
@@ -46,7 +46,7 @@ object PreferenceContextDiscoverClient {
             return null
         }
 
-        Log.d(TAG, "Response: $bodyStr")
+        Log.d(TAG, "Response bytes=${bodyStr.length}")
 
         return try {
             val root = gson.fromJson(bodyStr, Map::class.java)
@@ -88,4 +88,3 @@ object PreferenceContextDiscoverClient {
         }
     }
 }
-

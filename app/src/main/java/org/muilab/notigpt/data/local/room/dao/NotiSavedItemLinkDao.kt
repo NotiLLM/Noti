@@ -73,4 +73,7 @@ interface NotiSavedItemLinkDao {
 
     @Query("DELETE FROM noti_saved_item_link WHERE notiRecordId = :notiRecordId")
     suspend fun deleteByNotiRecordId(notiRecordId: String)
+
+    @Query("DELETE FROM noti_saved_item_link")
+    suspend fun deleteAll()
 }

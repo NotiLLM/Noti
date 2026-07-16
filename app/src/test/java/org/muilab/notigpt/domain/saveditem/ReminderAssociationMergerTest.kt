@@ -1,4 +1,4 @@
-package org.muilab.notigpt.domain.reminder
+package org.muilab.notigpt.domain.saveditem
 
 import org.junit.Assert.assertEquals
 import org.junit.Test

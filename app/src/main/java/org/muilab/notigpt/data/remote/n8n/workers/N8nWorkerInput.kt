@@ -1,7 +1,6 @@
 package org.muilab.notigpt.data.remote.n8n.workers
 
 import androidx.work.Data
-import org.muilab.notigpt.util.Constants.Companion.DIFY_POST_NOTIFICATION_ACTION
 import org.muilab.notigpt.util.Constants.Companion.DIFY_UPDATE_NOTIFICATION
 import org.muilab.notigpt.util.Constants.Companion.N8N_EXTRACTION_PIPELINE
 import org.muilab.notigpt.util.Constants.Companion.N8N_REFLECTION_PIPELINE
@@ -32,13 +31,6 @@ sealed interface N8nWorkerInput {
     /** Periodic cross-thread reflection merge (D2→E2). */
     data class ReflectionPipeline(
         override val webhookPath: String,
-    ) : N8nWorkerInput
-
-    data class PostNotificationAction(
-        override val webhookPath: String,
-        val notiKey: String,
-        val actionType: String,
-        val actionTime: Long,
     ) : N8nWorkerInput
 
     /** Fires a quick-sync of preference selections to the backend. */
@@ -73,13 +65,6 @@ sealed interface N8nWorkerInput {
 
                 N8N_REFLECTION_PIPELINE -> ReflectionPipeline(
                     webhookPath = webhookPath,
-                )
-
-                DIFY_POST_NOTIFICATION_ACTION -> PostNotificationAction(
-                    webhookPath = webhookPath,
-                    notiKey = input.getString("noti_key") ?: return null,
-                    actionType = input.getString("action_type") ?: return null,
-                    actionTime = input.getLong("action_time", -1L),
                 )
 
                 N8N_PREFERENCE_QUICK_SYNC -> PreferenceQuickSync(

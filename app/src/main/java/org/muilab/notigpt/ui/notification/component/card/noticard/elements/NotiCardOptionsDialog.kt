@@ -1,7 +1,5 @@
 package org.muilab.notigpt.ui.notification.component.card.noticard.elements
 
-import android.os.Build
-import androidx.annotation.RequiresApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -45,7 +43,6 @@ data class NotiCardOptionsState(
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
-@RequiresApi(Build.VERSION_CODES.S)
 @Composable
 fun NotiCardOptionsDialog(
     show: Boolean,

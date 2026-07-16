@@ -20,6 +20,8 @@ import org.muilab.notigpt.model.features.ReminderSavedItemRef
 import org.muilab.notigpt.model.features.SavedItem
 import org.muilab.notigpt.model.features.SavedSubItem
 import org.muilab.notigpt.model.features.UserContext
+import org.muilab.notigpt.model.features.FirestoreOutboxOp
+import org.muilab.notigpt.model.features.GeneratedProposal
 import org.muilab.notigpt.model.notifications.NotiAction
 import org.muilab.notigpt.model.notifications.NotiRecord
 import org.muilab.notigpt.model.notifications.NotiUnit
@@ -38,6 +40,8 @@ import org.muilab.notigpt.data.local.room.dao.ReminderDao
 import org.muilab.notigpt.data.local.room.dao.SavedItemDao
 import org.muilab.notigpt.data.local.room.dao.SavedSubItemDao
 import org.muilab.notigpt.data.local.room.dao.UserContextDao
+import org.muilab.notigpt.data.local.room.dao.FirestoreOutboxDao
+import org.muilab.notigpt.data.local.room.dao.GeneratedProposalDao
 
 /**
  * Room database entry point for local app state.
@@ -65,9 +69,11 @@ import org.muilab.notigpt.data.local.room.dao.UserContextDao
         ExtractionPreference::class,
         PreferenceConflict::class,
         UserContext::class,
+        FirestoreOutboxOp::class,
+        GeneratedProposal::class,
     ],
-    version = 45,
-    exportSchema = false
+    version = 47,
+    exportSchema = true
 )
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
@@ -87,6 +93,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun extractionPreferenceDao(): ExtractionPreferenceDao
     abstract fun preferenceConflictDao(): PreferenceConflictDao
     abstract fun userContextDao(): UserContextDao
+    abstract fun firestoreOutboxDao(): FirestoreOutboxDao
+    abstract fun generatedProposalDao(): GeneratedProposalDao
 
     companion object {
         @Volatile
@@ -144,6 +152,8 @@ abstract class AppDatabase : RoomDatabase() {
                 .addMigrations(AppDatabaseMigrations.MIGRATION_42_43)
                 .addMigrations(AppDatabaseMigrations.MIGRATION_43_44)
                 .addMigrations(AppDatabaseMigrations.MIGRATION_44_45)
+                .addMigrations(AppDatabaseMigrations.MIGRATION_45_46)
+                .addMigrations(AppDatabaseMigrations.MIGRATION_46_47)
                 .setJournalMode(JournalMode.TRUNCATE)
                 .build()
         }

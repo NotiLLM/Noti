@@ -1,7 +1,5 @@
 package org.muilab.notigpt.ui.common.appbar
 
-import android.os.Build
-import androidx.annotation.RequiresApi
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.ExperimentalAnimationApi
 import androidx.compose.animation.core.tween
@@ -34,7 +32,6 @@ import org.muilab.notigpt.ui.notification.viewmodel.DrawerViewModel
  * screen title on pushed destinations. Search is offered only where [showSearch] is set.
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalAnimationApi::class)
-@RequiresApi(Build.VERSION_CODES.S)
 @Composable
 fun AppTopBar(
     drawerViewModel: DrawerViewModel,
@@ -77,7 +74,7 @@ fun AppTopBar(
     if (large) {
         LargeTopAppBar(
             scrollBehavior = scrollBehavior,
-            colors = TopAppBarDefaults.largeTopAppBarColors(
+            colors = TopAppBarDefaults.topAppBarColors(
                 containerColor = MaterialTheme.colorScheme.surface,
                 scrolledContainerColor = MaterialTheme.colorScheme.surface,
             ),

@@ -2,7 +2,10 @@ package org.muilab.notigpt.data.remote.auth
 
 import android.content.Context
 import android.util.Log
+import androidx.room.withTransaction
+import androidx.credentials.ClearCredentialStateRequest
 import androidx.credentials.CredentialManager
+import androidx.credentials.exceptions.GetCredentialCancellationException
 import androidx.credentials.GetCredentialRequest
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
@@ -37,12 +40,37 @@ object GoogleAuthManager {
         /** Signed in as a different account than last time; confirm before wiping local data. */
         data class AccountSwitchRequired(val user: FirebaseUser, val previousUid: String) : SignInOutcome()
 
+        /** The user closed the system credential chooser; the existing Firebase session is unchanged. */
+        data object Cancelled : SignInOutcome()
+
         data class Failed(val error: Throwable) : SignInOutcome()
     }
 
     fun currentUser(): FirebaseUser? = FirebaseAuth.getInstance().currentUser
 
     fun isSignedIn(): Boolean = currentUser() != null
+
+    /**
+     * Ends the Firebase session without deleting local or cloud data.
+     *
+     * Keep [KEY_LAST_UID] so the next sign-in can distinguish returning to the same account from
+     * switching to a different one. Credential Manager state is cleared so the next sign-in offers
+     * the full account chooser instead of silently preferring the previous credential.
+     */
+    suspend fun signOut(context: Context) {
+        FirebaseAuth.getInstance().signOut()
+        SharedPreferencesManager.userId = ""
+        try {
+            FirebaseCrashlytics.getInstance().setUserId("")
+        } catch (_: Exception) {
+        }
+        clearCredentialProviderState(context)
+    }
+
+    /** Clears chooser preference without signing Firebase out, so cancelling a switch changes nothing. */
+    suspend fun prepareAccountSwitch(context: Context) {
+        clearCredentialProviderState(context)
+    }
 
     /**
      * Runs the Credential Manager Google Sign-In flow and signs into Firebase.
@@ -81,15 +109,29 @@ object GoogleAuthManager {
                 finalizeSignIn(activityContext, user)
                 SignInOutcome.SignedIn(user)
             }
+        } catch (_: GetCredentialCancellationException) {
+            SignInOutcome.Cancelled
         } catch (t: Throwable) {
             Log.e(TAG, "Sign-in failed", t)
             SignInOutcome.Failed(t)
         }
     }
 
-    /** User confirmed the account switch: wipe local LLM-owned data, then restore from the new account. */
-    suspend fun completeAccountSwitch(context: Context, user: FirebaseUser) {
-        wipeLocalAccountData(context)
+    /** User confirmed the account switch and explicitly chose whether device notification history survives. */
+    suspend fun completeAccountSwitch(
+        context: Context,
+        user: FirebaseUser,
+        keepNotificationHistory: Boolean,
+    ) {
+        val db = AppDatabase.getInstance(context.applicationContext)
+        val previousUid = SharedPreferencesManager.get(PREFS, KEY_LAST_UID, "")
+        if (keepNotificationHistory) {
+            wipeLocalAccountData(db, previousUid)
+        } else {
+            // "Start clean" is intentionally broader: all Room-backed state is removed before the
+            // new account is restored. Shared device settings remain unchanged.
+            db.clearAllTables()
+        }
         finalizeSignIn(context, user)
     }
 
@@ -113,18 +155,34 @@ object GoogleAuthManager {
         }
     }
 
-    private suspend fun wipeLocalAccountData(context: Context) {
-        val db = AppDatabase.getInstance(context.applicationContext)
-        // saved_item cascades noti_saved_item_link + saved_item_change_log via FK.
-        db.reminderListDao().deleteAllForAccountSwitch()
-        db.subTaskDao().deleteAllForAccountSwitch()
-        db.pendingOpDao().deleteAllForAccountSwitch()
-        db.rejectedMergeDao().deleteAllForAccountSwitch()
-        db.extractionJournalDao().deleteAllEntries()
-        db.extractionJournalDao().deleteAllSummaries()
-        db.notiLlmStateDao().deleteAll()
-        db.extractionPreferenceDao().deleteAll()
-        db.userContextDao().deleteAll()
+    private suspend fun clearCredentialProviderState(context: Context) {
+        try {
+            CredentialManager.create(context.applicationContext)
+                .clearCredentialState(ClearCredentialStateRequest())
+        } catch (t: Throwable) {
+            // This state only controls chooser prioritization. Authentication and local data remain valid.
+            Log.w(TAG, "Credential-provider state could not be cleared", t)
+        }
+    }
+
+    private suspend fun wipeLocalAccountData(db: AppDatabase, previousUid: String) {
+        db.withTransaction {
+            // saved_item cascades noti_saved_item_link + saved_item_change_log via FK.
+            db.reminderListDao().deleteAllForAccountSwitch()
+            db.subTaskDao().deleteAllForAccountSwitch()
+            db.pendingOpDao().deleteAllForAccountSwitch()
+            db.rejectedMergeDao().deleteAllForAccountSwitch()
+            db.extractionJournalDao().deleteAllEntries()
+            db.extractionJournalDao().deleteAllSummaries()
+            db.notiLlmStateDao().deleteAll()
+            db.extractionPreferenceDao().deleteAll()
+            db.preferenceConflictDao().deleteAll()
+            db.userContextDao().deleteAll()
+            if (previousUid.isNotBlank()) db.generatedProposalDao().deleteForAccount(previousUid)
+            db.reminderDao().deleteAllSavedItemRefs()
+            db.reminderDao().deleteAllSavedItemReminders()
+            if (previousUid.isNotBlank()) db.firestoreOutboxDao().deleteForAccount(previousUid)
+        }
     }
 
     /**

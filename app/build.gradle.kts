@@ -2,12 +2,12 @@ import java.util.Properties
 
 plugins {
     alias(libs.plugins.androidApplication)
-    alias(libs.plugins.kotlin)
     alias(libs.plugins.compose.compiler)
     alias(libs.plugins.ksp)
-    alias(libs.plugins.secretsGradlePlugin)
     alias(libs.plugins.google.services)
     alias(libs.plugins.firebase.crashlytics)
+    alias(libs.plugins.hilt)
+    alias(libs.plugins.room)
 }
 
 android {
@@ -27,7 +27,6 @@ android {
         }
 
         buildConfigField("String", "N8N_UPDATE_NOTIFICATION_PATH", "\"webhook-test/update-notification\"")
-        buildConfigField("String", "N8N_POST_NOTIFICATION_ACTION_PATH", "\"webhook-test/notification-action\"")
         // Per-notiKey extraction pipeline (contract v3). Each stage is its own n8n workflow/webhook.
         buildConfigField("String", "N8N_EXTRACT_A_SCAN_PATH", "\"webhook/extract-a-scan\"")
         buildConfigField("String", "N8N_EXTRACT_B_ITEMS_PATH", "\"webhook/extract-b-items\"")
@@ -64,9 +63,6 @@ android {
         compose = true
         buildConfig = true
     }
-    composeCompiler {
-        enableStrongSkippingMode = true
-    }
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -76,20 +72,26 @@ android {
     }
 }
 
+// Room's JSON schema is part of the migration contract. Commit generated versions so future
+// migrations can be tested against the exact database shape shipped to users.
+room {
+    schemaDirectory("$projectDir/schemas")
+}
+
 dependencies {
     implementation(libs.core.ktx)
     implementation(libs.core.splashscreen)
     implementation(libs.lifecycle.runtime.ktx)
+    implementation(libs.lifecycle.runtime.compose)
+    implementation(libs.lifecycle.viewmodel.compose)
     implementation(libs.activity.compose)
     implementation(platform(libs.compose.bom))
-    implementation(libs.constraintlayout)
 
     implementation(libs.compose.ui)
     implementation(libs.compose.graphics)
     implementation(libs.compose.tooling.preview)
     implementation(libs.material3)
-    implementation(libs.runtime.livedata)
-    implementation(libs.compose.material.icons.core)
+    implementation(libs.compose.material.icons.extended)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
@@ -105,31 +107,13 @@ dependencies {
     // Room
     implementation(libs.room.runtime)
     ksp(libs.room.compiler)
-    implementation(libs.room.paging)
     implementation(libs.room.ktx)
-
-    // Paging
-    implementation(libs.paging.runtime.ktx)
-    implementation(libs.paging.compose)
-
-    // OpenAI
-    implementation(libs.ktor.client.android)
-
-    // dotenv
-    implementation(libs.dotenv)
-
-    // Navigation
-    implementation(libs.navigation.compose)
-
-    // LazyColumn Scroll-Bar
-    implementation(libs.lazycolumn.scrollbar)
 
     // Reorderable LazyColumn
     implementation(libs.reorderable)
 
     implementation(libs.gson)
     implementation(libs.constraintlayout.compose)
-    implementation(libs.kotlin.toon)
 
     // For HTTP Requests
     implementation(libs.retrofit)
@@ -142,6 +126,8 @@ dependencies {
     implementation(libs.firebase.firestore)
     implementation(libs.firebase.auth)
     implementation(libs.firebase.crashlytics)
+    implementation(libs.firebase.appcheck.playintegrity)
+    implementation(libs.firebase.appcheck.debug)
 
     // Credential Manager for Google Sign-In (mandatory login)
     implementation(libs.androidx.credentials)
@@ -152,6 +138,13 @@ dependencies {
     implementation(libs.play.services.auth)
     implementation(libs.google.api.client.android)
     implementation(libs.google.api.services.tasks)
+    // Firestore and the Google Tasks client otherwise resolve incompatible gRPC families.
+    implementation(platform(libs.grpc.bom))
 
-    implementation(libs.grpc.okhttp)
+    // Hilt owns app-scoped construction and Android entry-point injection.
+    implementation(libs.hilt.android)
+    ksp(libs.hilt.compiler)
+    implementation(libs.androidx.hilt.work)
+    ksp(libs.androidx.hilt.compiler)
+
 }

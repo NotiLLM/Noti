@@ -1,8 +1,6 @@
 package org.muilab.notigpt.ui.common.component
 
-import android.os.Build
 import androidx.activity.ComponentActivity
-import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -24,10 +22,10 @@ import org.muilab.notigpt.ui.notification.viewmodel.DrawerViewModel
  * Keep action dispatch callback/ViewModel driven. This component should not know storage details or Android
  * notification internals.
  */
-@RequiresApi(Build.VERSION_CODES.S)
 @Composable
 fun UserControlPanel(drawerViewModel: DrawerViewModel) {
     val context = LocalContext.current
+    val deletedMessage = stringResource(R.string.ui_user_all_notifications_deleted)
     Row(Modifier.fillMaxWidth()) {
         Spacer(Modifier.size(5.dp))
         TextButton(
@@ -39,7 +37,7 @@ fun UserControlPanel(drawerViewModel: DrawerViewModel) {
         TextButton(
             onClick = {
                 drawerViewModel.deleteAllNotis()
-                AppSnackbar.show(context.getString(R.string.ui_user_all_notifications_deleted))
+                AppSnackbar.show(deletedMessage)
             },
         ) {
             Text(stringResource(R.string.ui_user_clear_all))

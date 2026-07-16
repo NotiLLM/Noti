@@ -2,9 +2,7 @@ package org.muilab.notigpt.model.notifications
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.os.Build
 import android.service.notification.StatusBarNotification
-import androidx.annotation.RequiresApi
 import androidx.room.Embedded
 import androidx.room.Entity
 import org.muilab.notigpt.model.notifications.components.NotiMetadata
@@ -23,7 +21,6 @@ data class NotiUnit(
     @Embedded val metadata: NotiMetadata,
     @Embedded val displayState: NotiDisplayState = NotiDisplayState(),
 ) {
-    @RequiresApi(Build.VERSION_CODES.S)
     constructor(
         context: Context,
         sbn: StatusBarNotification
@@ -40,7 +37,6 @@ data class NotiUnit(
      * Metadata is replaced with current framework data, while user-facing state is reset only where a fresh
      * active notification should behave differently from a dismissed or already-read row.
      */
-    @RequiresApi(Build.VERSION_CODES.S)
     fun updateNoti(context: Context, sbn: StatusBarNotification) {
         metadata.update(context, sbn)
         // A newly observed notification key becomes active again after a dismiss.

@@ -1,41 +1,31 @@
-# Notification pipeline
-
-This doc describes the high-level flow from an Android notification to what users see in the drawer UI.
-
-## Components
-
-- `NotiListenerService`: Android `NotificationListenerService` entry point.
-- `NotiRepository`: orchestrates persistence and background-work triggers.
-- Room DB (`AppDatabase`) + DAOs:
-  - `NotiDrawerDao`: drawer item state (`NotiUnit`).
-  - `NotiRecordDao`: individual notification records (`NotiRecord`).
-  - `NotiGroupDao`: user-created groups.
-  - `NotiActionDao`: user interaction logs.
-- `DrawerViewModel`: UI state holder; subscribes to flows.
-- `N8nAPIWorker`: WorkManager worker that calls the server webhook(s) and applies returned updates.
+# Notification capture pipeline
 
 ## Flow
 
-1. **System notifies** Android of a new notification.
-2. `NotiListenerService.onNotificationPosted()` filters out:
-   - app’s own notifications
-   - ongoing/non-clearable notifications
-   - group summaries
-   - media style notifications
-   - known noisy system notifications
-3. `NotiRepository.upsertNotiUnit()` creates or updates a `NotiUnit`.
-4. `NotiRepository.insertNotiRecord()` upserts a `NotiRecord`.
-5. Repository may schedule background work:
-   - task scan
-   - task extraction
-   - updates to server-side summaries/sort scores
-6. UI renders:
-   - `DrawerViewModel` collects `getGroupedNotifications(category, appCategory)`.
-   - Grouping & sorting rules are applied by `domain/notification/DrawerGrouper`.
+1. Android binds `NotiListenerService` after the user grants notification-listener access.
+2. Posted notifications pass through `NotificationFilter`. The app ignores its own ongoing status,
+   non-actionable noise, and other explicitly filtered categories.
+3. `NotiRepository` updates one `NotiUnit` drawer row and appends a `NotiRecord` content snapshot.
+4. The source notification's content/delete `PendingIntent`s are cached in memory when available.
+5. Per-key WorkManager extraction is debounced so a burst becomes one staged processing run.
+6. The app posts its ongoing status using only notifications from the configured recent X-hour
+   window and current task/keep counts awaiting review.
+7. For a live accepted notification, the original system notification is cancelled after the
+   configured delay. This intentional late cancellation leaves urgent content briefly actionable.
 
-## Invariants
+## Local and cloud data
 
-- All non-Android business rules should be testable on the JVM.
-- Repository methods should remain behavior-preserving (no UI assumptions).
-- Worker parsing errors should not corrupt DB state.
+`NotiRecord` contains raw title/body/person fields and stays in Room. Firestore receives only generated
+content and source record IDs/counts. Clearing local notification history removes drawer records,
+actions, LLM thread state, journals, and raw reminder references without deleting generated items.
 
+## Listener recovery
+
+- `onListenerDisconnected` calls the framework `requestRebind` API.
+- `onStartCommand` preserves redelivery and the existing component re-enable recovery behavior.
+- `onDestroy` schedules a short elapsed-realtime alarm. `NotiListenerRestartReceiver` requests a
+  framework rebind; it does not directly start a background service.
+- `onListenerConnected` cancels the fallback alarm and hydrates currently active notifications.
+
+Android controls the listener process and no app can promise literal 24/7 execution. Do not remove a
+recovery path without API 29/30/31/current testing and comparable physical-device evidence.

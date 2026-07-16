@@ -4,7 +4,9 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.muilab.notigpt.model.features.SavedItemType
 import org.muilab.notigpt.model.features.SavedSubItem
+import java.time.LocalDateTime
 import java.time.OffsetDateTime
+import java.time.ZoneId
 import java.time.ZonedDateTime
 
 /**
@@ -51,8 +53,18 @@ object N8nOpParsing {
         return try {
             OffsetDateTime.parse(iso).toInstant().toEpochMilli()
         } catch (_: Exception) {
-            // Fallback: sometimes it's a full zone format or slightly different ISO variant
-            ZonedDateTime.parse(iso).toInstant().toEpochMilli()
+            try {
+                // Some n8n responses omit the offset (for example, 2026-08-01T17:00:00).
+                // Treat those values as local device time, matching the timezone used when
+                // Android serializes timestamps for n8n.
+                LocalDateTime.parse(iso)
+                    .atZone(ZoneId.systemDefault())
+                    .toInstant()
+                    .toEpochMilli()
+            } catch (_: Exception) {
+                // Fallback: sometimes it's a full zone format or slightly different ISO variant
+                ZonedDateTime.parse(iso).toInstant().toEpochMilli()
+            }
         }
     }
 

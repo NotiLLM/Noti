@@ -1,6 +1,8 @@
 package org.muilab.notigpt.data.repository.reminder
 
 import android.content.Context
+import androidx.room.withTransaction
+import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
@@ -9,6 +11,8 @@ import org.muilab.notigpt.data.local.room.AppDatabase
 import org.muilab.notigpt.data.local.room.dao.SavedItemDao
 import org.muilab.notigpt.model.features.ExtractionJournalEntry
 import org.muilab.notigpt.model.features.ExtractionJournalEventType
+import org.muilab.notigpt.model.features.FirestoreOutboxKind
+import org.muilab.notigpt.model.features.FirestoreOutboxOp
 import org.muilab.notigpt.model.features.NotiSavedItemLink
 import org.muilab.notigpt.model.features.NotiSavedItemLinkRole
 import org.muilab.notigpt.model.features.SavedItem
@@ -17,8 +21,9 @@ import org.muilab.notigpt.model.features.SavedItemChangeType
 import org.muilab.notigpt.model.features.SavedItemState
 import org.muilab.notigpt.data.remote.firestore.FirestoreSyncRepository
 import org.muilab.notigpt.data.remote.n8n.N8nOpParsing
-import org.muilab.notigpt.domain.reminder.SavedItemRevertLogic
+import org.muilab.notigpt.domain.saveditem.SavedItemRevertLogic
 import org.muilab.notigpt.util.SharedPreferencesManager
+import org.muilab.notigpt.work.FirestoreOutboxWork
 import org.json.JSONArray
 import org.json.JSONObject
 import java.text.SimpleDateFormat
@@ -35,15 +40,16 @@ class SavedItemRepository(
     private val reminderListDao: SavedItemDao,
     private val appContext: Context,
 ) {
+    private val db = AppDatabase.getInstance(appContext.applicationContext)
     private val firestoreSync by lazy { FirestoreSyncRepository(appContext.applicationContext) }
-    private val linkDao by lazy { AppDatabase.getInstance(appContext.applicationContext).notiSavedItemLinkDao() }
+    private val linkDao by lazy { db.notiSavedItemLinkDao() }
     private val journalRepo by lazy {
-        ExtractionJournalRepository(AppDatabase.getInstance(appContext.applicationContext).extractionJournalDao())
+        ExtractionJournalRepository(db.extractionJournalDao())
     }
-    private val changeLogDao by lazy { AppDatabase.getInstance(appContext.applicationContext).savedItemChangeLogDao() }
-    private val subTaskDao by lazy { AppDatabase.getInstance(appContext.applicationContext).subTaskDao() }
-    private val pendingOpDao by lazy { AppDatabase.getInstance(appContext.applicationContext).pendingOpDao() }
-    private val rejectedMergeDao by lazy { AppDatabase.getInstance(appContext.applicationContext).rejectedMergeDao() }
+    private val changeLogDao by lazy { db.savedItemChangeLogDao() }
+    private val subTaskDao by lazy { db.subTaskDao() }
+    private val pendingOpDao by lazy { db.pendingOpDao() }
+    private val rejectedMergeDao by lazy { db.rejectedMergeDao() }
 
     /** Returns visible reminders in the canonical list order used by the reminders screen. */
     fun observeAll(): Flow<List<SavedItem>> = reminderListDao.observeAll()
@@ -96,8 +102,7 @@ class SavedItemRepository(
             journalUserEvent(reminder.savedItemId, ExtractionJournalEventType.UserEdited, reminder.title)
         }
 
-        // Best-effort; never block core UX.
-        firestoreSync.syncReminder(reminder)
+        queueAndSync(reminder, reminder.lastUpdateTimestamp)
     }
 
     /**
@@ -107,13 +112,17 @@ class SavedItemRepository(
      * mirror is marked deleted rather than removed, preserving the research record.
      */
     suspend fun deleteById(savedItemId: String, ts: Long) = withContext(Dispatchers.IO) {
-        journalUserEvent(savedItemId, ExtractionJournalEventType.UserDeleted)
+        db.withTransaction {
+            journalUserEvent(savedItemId, ExtractionJournalEventType.UserDeleted)
+            queueSavedItem(savedItemId, FirestoreOutboxKind.DeleteSavedItem, ts)
+            subTaskDao.hardDeleteByParentId(savedItemId)
+            reminderListDao.hardDeleteById(savedItemId)
+            // Staged ops against a gone item are unreviewable; merge cool-downs are moot too.
+            pendingOpDao.deleteByTargetItemId(savedItemId)
+            rejectedMergeDao.deleteForItem(savedItemId)
+        }
+        FirestoreOutboxWork.enqueue(appContext)
         firestoreSync.markReminderDeleted(savedItemId, ts)
-        subTaskDao.hardDeleteByParentId(savedItemId)
-        reminderListDao.hardDeleteById(savedItemId)
-        // Staged ops against a gone item are unreviewable; merge cool-downs are moot too.
-        pendingOpDao.deleteByTargetItemId(savedItemId)
-        rejectedMergeDao.deleteForItem(savedItemId)
     }
 
     suspend fun setCompleted(savedItemId: String, completed: Boolean, ts: Long) = withContext(Dispatchers.IO) {
@@ -121,7 +130,7 @@ class SavedItemRepository(
         if (completed) journalUserEvent(savedItemId, ExtractionJournalEventType.UserCompleted)
 
         val updated = reminderListDao.getById(savedItemId) ?: return@withContext
-        firestoreSync.syncReminder(updated)
+        queueAndSync(updated, ts)
     }
 
     suspend fun setState(savedItemId: String, state: String, ts: Long) = withContext(Dispatchers.IO) {
@@ -134,27 +143,44 @@ class SavedItemRepository(
                 journalUserEvent(savedItemId, ExtractionJournalEventType.ItemRestored)
         }
         val updated = reminderListDao.getById(savedItemId) ?: return@withContext
-        firestoreSync.syncReminder(updated)
+        queueAndSync(updated, ts)
     }
 
     suspend fun markSavedByIds(savedItemIds: List<String>, ts: Long) = withContext(Dispatchers.IO) {
         if (savedItemIds.isEmpty()) return@withContext
         reminderListDao.markSavedByIds(savedItemIds, ts)
-        savedItemIds.mapNotNull { reminderListDao.getById(it) }.forEach { firestoreSync.syncReminder(it) }
+        savedItemIds.mapNotNull { reminderListDao.getById(it) }.forEach { queueAndSync(it, ts) }
     }
 
     suspend fun deleteByIds(savedItemIds: List<String>, ts: Long) = withContext(Dispatchers.IO) {
         if (savedItemIds.isEmpty()) return@withContext
-        savedItemIds.forEach {
-            journalUserEvent(it, ExtractionJournalEventType.UserDeleted)
-            firestoreSync.markReminderDeleted(it, ts)
+        db.withTransaction {
+            savedItemIds.forEach {
+                journalUserEvent(it, ExtractionJournalEventType.UserDeleted)
+                queueSavedItem(it, FirestoreOutboxKind.DeleteSavedItem, ts)
+            }
+            subTaskDao.hardDeleteByParentIds(savedItemIds)
+            reminderListDao.hardDeleteByIds(savedItemIds)
+            savedItemIds.forEach {
+                pendingOpDao.deleteByTargetItemId(it)
+                rejectedMergeDao.deleteForItem(it)
+            }
         }
-        subTaskDao.hardDeleteByParentIds(savedItemIds)
-        reminderListDao.hardDeleteByIds(savedItemIds)
-        savedItemIds.forEach {
-            pendingOpDao.deleteByTargetItemId(it)
-            rejectedMergeDao.deleteForItem(it)
-        }
+        FirestoreOutboxWork.enqueue(appContext)
+        savedItemIds.forEach { firestoreSync.markReminderDeleted(it, ts) }
+    }
+
+    private suspend fun queueSavedItem(savedItemId: String, kind: String, ts: Long) {
+        val uid = FirebaseAuth.getInstance().currentUser?.uid.orEmpty()
+        if (uid.isBlank()) return
+        db.firestoreOutboxDao().upsert(FirestoreOutboxOp.savedItem(uid, kind, savedItemId, ts))
+    }
+
+    private suspend fun queueAndSync(item: SavedItem, ts: Long = item.lastUpdateTimestamp) {
+        queueSavedItem(item.savedItemId, FirestoreOutboxKind.UpsertSavedItem, ts)
+        FirestoreOutboxWork.enqueue(appContext)
+        // Fast path; the outbox row remains durable until the worker independently confirms it.
+        firestoreSync.syncReminder(item)
     }
 
     /**
@@ -188,34 +214,34 @@ class SavedItemRepository(
     suspend fun setViewed(savedItemId: String) = withContext(Dispatchers.IO) {
         reminderListDao.setViewed(savedItemId)
         val updated = reminderListDao.getById(savedItemId) ?: return@withContext
-        firestoreSync.syncReminder(updated)
+        queueAndSync(updated)
     }
 
     suspend fun setStarred(savedItemId: String, starred: Boolean, ts: Long) = withContext(Dispatchers.IO) {
         reminderListDao.setStarred(savedItemId, starred, ts)
         val updated = reminderListDao.getById(savedItemId) ?: return@withContext
-        firestoreSync.syncReminder(updated)
+        queueAndSync(updated, ts)
     }
 
     /** [doAtMs] = 0 clears the do date. */
     suspend fun setDoDate(savedItemId: String, doAtMs: Long, ts: Long) = withContext(Dispatchers.IO) {
         reminderListDao.setDoDate(savedItemId, doAtMs, ts)
         val updated = reminderListDao.getById(savedItemId) ?: return@withContext
-        firestoreSync.syncReminder(updated)
+        queueAndSync(updated, ts)
     }
 
     /** Explicit user acknowledgment of a New/Updated item (the review "got it" action). */
     suspend fun acknowledgeReview(savedItemId: String, ts: Long) = withContext(Dispatchers.IO) {
         reminderListDao.acknowledgeReview(savedItemId, ts)
         val updated = reminderListDao.getById(savedItemId) ?: return@withContext
-        firestoreSync.syncReminder(updated)
+        queueAndSync(updated, ts)
     }
 
     /** Batch acknowledgment for "approve all" in the review screen. */
     suspend fun acknowledgeReviewByIds(savedItemIds: List<String>, ts: Long) = withContext(Dispatchers.IO) {
         if (savedItemIds.isEmpty()) return@withContext
         reminderListDao.acknowledgeReviewByIds(savedItemIds, ts)
-        savedItemIds.mapNotNull { reminderListDao.getById(it) }.forEach { firestoreSync.syncReminder(it) }
+        savedItemIds.mapNotNull { reminderListDao.getById(it) }.forEach { queueAndSync(it, ts) }
     }
 
     // ========== Reject-an-update (revert) ==========
@@ -319,7 +345,7 @@ class SavedItemRepository(
         )
         // Tell future extraction passes the user rejected these edits so they aren't re-applied.
         journalUserEvent(savedItemId, ExtractionJournalEventType.UserRevertedUpdate, restored.title)
-        firestoreSync.syncReminder(restored)
+        queueAndSync(restored, ts)
 
         RevertOutcome(
             previousItem = item,
@@ -335,7 +361,7 @@ class SavedItemRepository(
         if (outcome.hiddenSubTaskIds.isNotEmpty()) subTaskDao.restoreByIds(outcome.hiddenSubTaskIds, ts)
         outcome.restoredSubTaskIds.forEach { subTaskDao.softDeleteById(it, ts) }
         changeLogDao.deleteById(outcome.revertChangeId)
-        firestoreSync.syncReminder(outcome.previousItem)
+        queueAndSync(outcome.previousItem, ts)
     }
 
     private fun deadlineMsFromIso(iso: String): Long = N8nOpParsing.isoToUnixMillis(iso)
@@ -416,7 +442,7 @@ class SavedItemRepository(
     suspend fun updateButtons(savedItemId: String, buttons: String) = withContext(Dispatchers.IO) {
         reminderListDao.updateButtons(savedItemId, buttons)
         val updated = reminderListDao.getById(savedItemId) ?: return@withContext
-        firestoreSync.syncReminder(updated)
+        queueAndSync(updated)
     }
 
     /**

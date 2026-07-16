@@ -45,13 +45,14 @@ data class CategoryPreviewLine(
 
 /**
  * Preview for one notification category row on the home screen: the top few senders/apps by recency
- * with their new-notification counts, plus totals for the badge. Only records inside the recency
- * window ([HomeViewModel.newNotiWindowMs]) are counted.
+ * with their new-notification counts, plus separate recent and older totals for the badges.
  */
 data class CategoryPreview(
     val topLines: List<CategoryPreviewLine> = emptyList(),
-    val totalRecords: Int = 0,
-    val totalUnits: Int = 0,
+    val recentRecords: Int = 0,
+    val recentUnits: Int = 0,
+    val olderRecords: Int = 0,
+    val olderUnits: Int = 0,
 )
 
 /**
@@ -137,8 +138,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
          *
          * Communication groups by the thread's overall title (one line per notiKey) and counts
          * individual messages (records). Content groups by app name and counts threads (notiKeys).
-         * Only records at or after [cutoffMs] count. Labels are ordered by the most recent record in
-         * each group and capped to the top few, each carrying its app icon.
+         * Each thread is assigned to one bucket using its latest received record. Labels are ordered
+         * by the most recent record in each group and capped to the top few, each carrying its app icon.
          */
         fun buildPreviews(
             newUnits: List<NotiDisplayUnit>,
@@ -151,36 +152,48 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             val comm = LinkedHashMap<String, Group>()
             // Content: keyed by app name; each group counts the number of distinct threads.
             val content = LinkedHashMap<String, Group>()
-            var commUnits = 0; var contentUnits = 0
-            var commRecords = 0; var contentRecords = 0
+            var recentCommUnits = 0; var recentContentUnits = 0
+            var recentCommRecords = 0; var recentContentRecords = 0
+            var olderCommUnits = 0; var olderContentUnits = 0
+            var olderCommRecords = 0; var olderContentRecords = 0
 
             newUnits.forEach { du ->
-                val records = du.notiRecords.filter { it.time >= cutoffMs }
-                if (records.isEmpty()) return@forEach
+                val records = du.notiRecords
+                val latestRecordTime = records.maxOfOrNull { it.time } ?: return@forEach
+                val isRecent = latestRecordTime >= cutoffMs
                 val category = NotiClassificationRepository.categoryOf(du.notiUnit, llmByKey[du.notiKey])
                 val isComm = category == NotiCategory.Communication
-                val latestRecordTime = records.maxOf { it.time }
                 if (isComm) {
-                    commUnits++
-                    commRecords += records.size
-                    // Overall thread title (conversation/group title), not the individual sender.
-                    val label = records.maxByOrNull { it.time }?.title?.ifBlank { du.notiUnit.appName }
-                        ?: du.notiUnit.appName
-                    val g = comm.getOrPut(label) { Group() }
-                    g.count += records.size
-                    if (latestRecordTime >= g.latest) {
-                        g.latest = latestRecordTime
-                        g.icon = du.notiUnit.bitmap
+                    if (isRecent) {
+                        recentCommUnits++
+                        recentCommRecords += records.size
+                        // Overall thread title (conversation/group title), not the individual sender.
+                        val label = records.maxByOrNull { it.time }?.title?.ifBlank { du.notiUnit.appName }
+                            ?: du.notiUnit.appName
+                        val g = comm.getOrPut(label) { Group() }
+                        g.count += records.size
+                        if (latestRecordTime >= g.latest) {
+                            g.latest = latestRecordTime
+                            g.icon = du.notiUnit.bitmap
+                        }
+                    } else {
+                        olderCommUnits++
+                        olderCommRecords += records.size
                     }
                 } else {
-                    contentUnits++
-                    contentRecords += records.size
-                    val g = content.getOrPut(du.notiUnit.appName) { Group() }
-                    // Content counts threads, so one per unit regardless of record count.
-                    g.count += 1
-                    if (latestRecordTime >= g.latest) {
-                        g.latest = latestRecordTime
-                        g.icon = du.notiUnit.bitmap
+                    if (isRecent) {
+                        recentContentUnits++
+                        recentContentRecords += records.size
+                        val g = content.getOrPut(du.notiUnit.appName) { Group() }
+                        // Content counts threads, so one per unit regardless of record count.
+                        g.count += 1
+                        if (latestRecordTime >= g.latest) {
+                            g.latest = latestRecordTime
+                            g.icon = du.notiUnit.bitmap
+                        }
+                    } else {
+                        olderContentUnits++
+                        olderContentRecords += records.size
                     }
                 }
             }
@@ -191,8 +204,20 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     .map { CategoryPreviewLine(it.key, it.value.count, it.value.icon) }
 
             return mapOf(
-                NotiCategory.Communication to CategoryPreview(top(comm), commRecords, commUnits),
-                NotiCategory.Content to CategoryPreview(top(content), contentRecords, contentUnits),
+                NotiCategory.Communication to CategoryPreview(
+                    topLines = top(comm),
+                    recentRecords = recentCommRecords,
+                    recentUnits = recentCommUnits,
+                    olderRecords = olderCommRecords,
+                    olderUnits = olderCommUnits,
+                ),
+                NotiCategory.Content to CategoryPreview(
+                    topLines = top(content),
+                    recentRecords = recentContentRecords,
+                    recentUnits = recentContentUnits,
+                    olderRecords = olderContentRecords,
+                    olderUnits = olderContentUnits,
+                ),
             )
         }
     }

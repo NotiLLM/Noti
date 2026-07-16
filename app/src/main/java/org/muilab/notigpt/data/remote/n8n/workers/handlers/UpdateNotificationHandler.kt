@@ -78,7 +78,7 @@ internal object UpdateNotificationHandler {
         }
 
         val jsonString = response.body()?.string()
-        Log.d("N8nWebhook", "Response: $jsonString")
+        Log.d("N8nWebhook", "Response bytes=${jsonString?.length ?: 0}")
 
         try {
             if (jsonString.isNullOrEmpty()) return ctx.success()

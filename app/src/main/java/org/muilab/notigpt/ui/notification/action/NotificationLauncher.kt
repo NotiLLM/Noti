@@ -65,14 +65,13 @@ object NotificationLauncher {
 
     private fun launchApp(context: Context, packageName: String): Boolean {
         return try {
-            val launchIntent = context.packageManager.getLaunchIntentForPackage(packageName)
-            if (launchIntent != null) {
-                launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                context.startActivity(launchIntent)
-                true
-            } else {
-                false
+            val launchIntent = Intent(Intent.ACTION_MAIN).apply {
+                addCategory(Intent.CATEGORY_LAUNCHER)
+                setPackage(packageName)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
+            context.startActivity(launchIntent)
+            true
         } catch (_: Throwable) {
             false
         }
@@ -90,4 +89,3 @@ object NotificationLauncher {
         }
     }
 }
-

@@ -1,8 +1,5 @@
 package org.muilab.notigpt.ui.settings
 
-import android.app.Application
-import android.os.Build
-import androidx.annotation.RequiresApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -31,9 +28,11 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -42,10 +41,13 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.launch
 import org.muilab.notigpt.R
-import org.muilab.notigpt.data.repository.notification.NotiRepositoryProvider
+import org.muilab.notigpt.data.remote.auth.GoogleAuthManager
+import org.muilab.notigpt.ui.auth.AccountSwitchChoice
 import org.muilab.notigpt.ui.notification.viewmodel.DrawerViewModel
-import org.muilab.notigpt.ui.notification.viewmodel.DrawerViewModelFactory
+import org.muilab.notigpt.ui.common.feedback.AppSnackbar
 import org.muilab.notigpt.ui.theme.Dimens
 import org.muilab.notigpt.util.SharedPreferencesManager
 
@@ -59,18 +61,18 @@ private const val SHOW_SWIPE_DIRECTION_SETTING = false
  * [ListItem]s. Side effects call platform/repository helpers rather than embedding long-running work
  * in composables.
  */
-@RequiresApi(Build.VERSION_CODES.S)
 @Composable
-fun SettingsScreen() {
+fun SettingsScreen(
+    onSignedOut: () -> Unit,
+    onAccountChanged: () -> Unit,
+) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
-    // Get or create DrawerViewModel for export functionality
-    val drawerViewModel: DrawerViewModel = viewModel(
-        factory = DrawerViewModelFactory(
-            application = context.applicationContext as Application,
-            notiRepository = NotiRepositoryProvider.provideNotiRepository(context)
-        )
-    )
+    // The activity's Hilt default factory supplies the injected drawer ViewModel.
+    val drawerViewModel: DrawerViewModel = viewModel()
+    val deletionViewModel: DataDeletionViewModel = viewModel()
+    val deletionState by deletionViewModel.state.collectAsStateWithLifecycle()
 
     var isLeftSwipe by remember { mutableStateOf(SharedPreferencesManager.swipeDeleteLeft) }
     var extractionLanguage by remember { mutableStateOf(SharedPreferencesManager.targetExtractionLanguage) }
@@ -78,7 +80,23 @@ fun SettingsScreen() {
     var showExportDialog by remember { mutableStateOf(false) }
     var homeWindowHours by remember { mutableStateOf(SharedPreferencesManager.homeNotiWindowHours) }
     var showHomeWindowDialog by remember { mutableStateOf(false) }
+    var pendingDeletion by remember { mutableStateOf<DataDeletionViewModel.Target?>(null) }
+    var showSignOutConfirmation by remember { mutableStateOf(false) }
+    var showSwitchAccountDialog by remember { mutableStateOf(false) }
+    var keepNotificationHistory by remember { mutableStateOf(true) }
+    var accountActionWorking by remember { mutableStateOf(false) }
+    var accountRevision by remember { mutableStateOf(0) }
+    val currentAccount = remember(accountRevision) { GoogleAuthManager.currentUser() }
     val originalLabel = stringResource(R.string.ui_settings_extraction_language_original)
+    val cloudDeletedMessage = stringResource(R.string.ui_settings_delete_cloud_done)
+    val historyClearedMessage = stringResource(R.string.ui_settings_clear_history_done)
+    val deletionFailedMessage = stringResource(R.string.ui_settings_delete_failed)
+    val switchCancelledMessage = stringResource(
+        R.string.ui_settings_switch_cancelled,
+        currentAccount?.email ?: currentAccount?.displayName ?: currentAccount?.uid.orEmpty(),
+    )
+    val switchFailedMessage = stringResource(R.string.ui_settings_switch_failed)
+    val switchCompleteMessage = stringResource(R.string.ui_settings_switch_complete)
 
     Column(
         modifier = Modifier
@@ -87,6 +105,38 @@ fun SettingsScreen() {
             .padding(bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
+        // ── Account ──
+        SettingsSection(stringResource(R.string.settings_section_account)) {
+            ListItem(
+                headlineContent = { Text(stringResource(R.string.ui_settings_signed_in_as)) },
+                supportingContent = {
+                    Text(currentAccount?.email ?: currentAccount?.displayName ?: currentAccount?.uid.orEmpty())
+                },
+                colors = transparentListItem(),
+            )
+            ListItem(
+                headlineContent = { Text(stringResource(R.string.ui_settings_switch_account)) },
+                supportingContent = { Text(stringResource(R.string.ui_settings_switch_account_desc)) },
+                colors = transparentListItem(),
+                modifier = Modifier.clickable(enabled = !accountActionWorking) {
+                    showSwitchAccountDialog = true
+                },
+            )
+            ListItem(
+                headlineContent = {
+                    Text(
+                        stringResource(R.string.ui_settings_sign_out),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                },
+                supportingContent = { Text(stringResource(R.string.ui_settings_sign_out_desc)) },
+                colors = transparentListItem(),
+                modifier = Modifier.clickable(enabled = !accountActionWorking) {
+                    showSignOutConfirmation = true
+                },
+            )
+        }
+
         // ── Appearance ──
         // Swipe-dismiss now works both directions, so the swipe-direction setting below is hidden
         // (not deleted — flip SHOW_SWIPE_DIRECTION_SETTING back on if single-direction swipe returns).
@@ -148,6 +198,180 @@ fun SettingsScreen() {
                 colors = transparentListItem(),
                 modifier = Modifier.clickable { showExportDialog = true },
             )
+            ListItem(
+                headlineContent = { Text(stringResource(R.string.ui_settings_delete_cloud_data)) },
+                supportingContent = { Text(stringResource(R.string.ui_settings_delete_cloud_data_desc)) },
+                colors = transparentListItem(),
+                modifier = Modifier.clickable {
+                    pendingDeletion = DataDeletionViewModel.Target.CloudGeneratedData
+                },
+            )
+            ListItem(
+                headlineContent = { Text(stringResource(R.string.ui_settings_clear_notification_history)) },
+                supportingContent = { Text(stringResource(R.string.ui_settings_clear_notification_history_desc)) },
+                colors = transparentListItem(),
+                modifier = Modifier.clickable {
+                    pendingDeletion = DataDeletionViewModel.Target.LocalNotificationHistory
+                },
+            )
+        }
+    }
+
+    if (showSwitchAccountDialog) {
+        AlertDialog(
+            onDismissRequest = { showSwitchAccountDialog = false },
+            title = { Text(stringResource(R.string.ui_settings_switch_account)) },
+            text = {
+                Column {
+                    Text(stringResource(R.string.ui_settings_switch_prepare_message))
+                    AccountSwitchChoice(
+                        selected = keepNotificationHistory,
+                        onClick = { keepNotificationHistory = true },
+                        title = stringResource(R.string.account_switch_keep_history),
+                        warning = stringResource(R.string.account_switch_keep_history_warning),
+                    )
+                    AccountSwitchChoice(
+                        selected = !keepNotificationHistory,
+                        onClick = { keepNotificationHistory = false },
+                        title = stringResource(R.string.account_switch_start_clean),
+                        warning = stringResource(R.string.account_switch_start_clean_warning),
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !accountActionWorking,
+                    onClick = {
+                        showSwitchAccountDialog = false
+                        accountActionWorking = true
+                        scope.launch {
+                            try {
+                                GoogleAuthManager.prepareAccountSwitch(context)
+                                when (val outcome = GoogleAuthManager.signIn(context)) {
+                                    is GoogleAuthManager.SignInOutcome.SignedIn -> {
+                                        accountRevision += 1
+                                        onAccountChanged()
+                                        AppSnackbar.show(switchCompleteMessage)
+                                    }
+                                    is GoogleAuthManager.SignInOutcome.AccountSwitchRequired -> {
+                                        GoogleAuthManager.completeAccountSwitch(
+                                            context = context,
+                                            user = outcome.user,
+                                            keepNotificationHistory = keepNotificationHistory,
+                                        )
+                                        accountRevision += 1
+                                        onAccountChanged()
+                                        AppSnackbar.show(switchCompleteMessage)
+                                    }
+                                    GoogleAuthManager.SignInOutcome.Cancelled -> {
+                                        AppSnackbar.show(switchCancelledMessage)
+                                    }
+                                    is GoogleAuthManager.SignInOutcome.Failed -> {
+                                        AppSnackbar.show(switchFailedMessage)
+                                    }
+                                }
+                            } catch (_: Throwable) {
+                                AppSnackbar.show(switchFailedMessage)
+                            } finally {
+                                accountActionWorking = false
+                            }
+                        }
+                    },
+                ) { Text(stringResource(R.string.ui_action_continue)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSwitchAccountDialog = false }) {
+                    Text(stringResource(R.string.ui_action_cancel))
+                }
+            },
+        )
+    }
+
+    if (showSignOutConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showSignOutConfirmation = false },
+            title = { Text(stringResource(R.string.ui_settings_sign_out_confirm_title)) },
+            text = { Text(stringResource(R.string.ui_settings_sign_out_confirm_message)) },
+            confirmButton = {
+                TextButton(
+                    enabled = !accountActionWorking,
+                    onClick = {
+                        showSignOutConfirmation = false
+                        accountActionWorking = true
+                        scope.launch {
+                            GoogleAuthManager.signOut(context)
+                            onSignedOut()
+                        }
+                    },
+                ) {
+                    Text(
+                        stringResource(R.string.ui_settings_sign_out),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSignOutConfirmation = false }) {
+                    Text(stringResource(R.string.ui_action_cancel))
+                }
+            },
+        )
+    }
+
+    pendingDeletion?.let { target ->
+        val isCloud = target == DataDeletionViewModel.Target.CloudGeneratedData
+        AlertDialog(
+            onDismissRequest = { pendingDeletion = null },
+            title = {
+                Text(
+                    stringResource(
+                        if (isCloud) R.string.ui_settings_delete_cloud_confirm_title
+                        else R.string.ui_settings_clear_history_confirm_title,
+                    ),
+                )
+            },
+            text = {
+                Text(
+                    stringResource(
+                        if (isCloud) R.string.ui_settings_delete_cloud_confirm_message
+                        else R.string.ui_settings_clear_history_confirm_message,
+                    ),
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = deletionState != DataDeletionViewModel.State.Working,
+                    onClick = {
+                        pendingDeletion = null
+                        deletionViewModel.delete(target)
+                    },
+                ) { Text(stringResource(R.string.ui_action_delete)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDeletion = null }) {
+                    Text(stringResource(R.string.ui_action_cancel))
+                }
+            },
+        )
+    }
+
+    LaunchedEffect(deletionState) {
+        when (val state = deletionState) {
+            is DataDeletionViewModel.State.Finished -> {
+                AppSnackbar.show(
+                    if (state.target == DataDeletionViewModel.Target.CloudGeneratedData) {
+                        cloudDeletedMessage
+                    } else {
+                        historyClearedMessage
+                    },
+                )
+                deletionViewModel.consumeResult()
+            }
+            is DataDeletionViewModel.State.Failed -> {
+                AppSnackbar.show(deletionFailedMessage)
+                deletionViewModel.consumeResult()
+            }
+            else -> Unit
         }
     }
 

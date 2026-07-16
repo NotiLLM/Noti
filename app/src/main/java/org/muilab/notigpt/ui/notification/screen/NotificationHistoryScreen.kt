@@ -276,10 +276,11 @@ private fun HistoryActionMenu(
     target: HistoryMenuTarget,
     onDismiss: () -> Unit,
 ) {
-    val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val copiedMessage = stringResource(R.string.history_copied)
+    val extractRequestedMessage = stringResource(R.string.history_extract_requested)
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
         Column(Modifier.navigationBarsPadding()) {
             ListItem(
@@ -288,7 +289,7 @@ private fun HistoryActionMenu(
                 colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
                 modifier = Modifier.clickable {
                     clipboard.setText(AnnotatedString(target.copyText))
-                    AppSnackbar.show(context.getString(R.string.history_copied))
+                    AppSnackbar.show(copiedMessage)
                     onDismiss()
                 },
             )
@@ -300,7 +301,7 @@ private fun HistoryActionMenu(
                     scope.launch {
                         val idsJson = com.google.gson.Gson().toJson(target.recordIds.distinct())
                         drawerViewModel.actOnNoti(target.notiKey, "extract_reminder_with_records::$idsJson")
-                        AppSnackbar.show(context.getString(R.string.history_extract_requested))
+                        AppSnackbar.show(extractRequestedMessage)
                     }
                     onDismiss()
                 },

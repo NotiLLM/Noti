@@ -1,7 +1,5 @@
 package org.muilab.notigpt.ui.review
 
-import android.os.Build
-import androidx.annotation.RequiresApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -62,7 +60,6 @@ import org.muilab.notigpt.ui.theme.NotiTheme
  * opens its full detail; a snackbar offers single-step undo.
  */
 @OptIn(ExperimentalMaterial3Api::class)
-@RequiresApi(Build.VERSION_CODES.S)
 @Composable
 fun ReviewScreen(
     drawerViewModel: DrawerViewModel,
@@ -212,7 +209,7 @@ fun ReviewScreen(
                         }) { Text(undoLabel) }
                     }
                 },
-            ) { Text(context.getString(data.messageRes)) }
+            ) { Text(stringResource(data.messageRes)) }
         }
     }
 

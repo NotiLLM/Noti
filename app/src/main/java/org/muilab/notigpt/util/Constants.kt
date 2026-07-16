@@ -9,7 +9,6 @@ package org.muilab.notigpt.util
 class Constants {
     companion object {
         const val DIFY_UPDATE_NOTIFICATION = "update_notification"
-        const val DIFY_POST_NOTIFICATION_ACTION = "post_notification_action"
         const val NOTI_REMOVE_DELAY = 20 * 1000L
 
         const val NOTI_CATEGORY_GENERAL = "General"
@@ -73,11 +72,6 @@ class Constants {
             APP_CATEGORY_PHONE,
             APP_CATEGORY_UNKNOWN
         )
-
-        // Time in milliseconds for one week
-        const val NOTI_RECORD_EXPIRE_TIME_MS = 7 * 24 * 60 * 60 * 1000L
-        // The maximum number of read, expired notification records to keep visible per key
-        const val MAX_EXPIRED_RECORDS_PER_KEY = 5
 
         // n8n task API types. The per-notiKey extraction pipeline runs its stages (A→B→C→D1→E1)
         // sequentially inside one worker job, so it needs a single api_type; the reflection pass

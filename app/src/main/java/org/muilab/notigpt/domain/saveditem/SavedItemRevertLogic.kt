@@ -1,4 +1,4 @@
-package org.muilab.notigpt.domain.reminder
+package org.muilab.notigpt.domain.saveditem
 
 /**
  * Pure rollback logic for rejecting a pending LLM update, kept free of Android/Room dependencies so

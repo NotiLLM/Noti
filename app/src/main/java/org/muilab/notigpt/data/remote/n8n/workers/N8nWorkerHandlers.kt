@@ -4,7 +4,6 @@ import androidx.work.Data
 import androidx.work.ListenableWorker
 import org.muilab.notigpt.data.remote.n8n.context.N8nWorkerContext
 import org.muilab.notigpt.data.remote.n8n.workers.handlers.ExtractionPipelineHandler
-import org.muilab.notigpt.data.remote.n8n.workers.handlers.PostNotificationActionHandler
 import org.muilab.notigpt.data.remote.n8n.workers.handlers.PreferenceQuickSyncHandler
 import org.muilab.notigpt.data.remote.n8n.workers.handlers.ReflectionPipelineHandler
 import org.muilab.notigpt.data.remote.n8n.workers.handlers.ReminderRegenerationHandler
@@ -23,13 +22,11 @@ internal object N8nWorkerHandlers {
      *
      * Keep the mapping exhaustive with N8nWorkerInput so unsupported WorkManager Data fails before side effects.
      */
-    suspend fun dispatch(worker: N8nAPIWorker, input: N8nWorkerInput, raw: Data): ListenableWorker.Result {
-        val ctx = N8nWorkerContext(worker.applicationContext)
+    suspend fun dispatch(ctx: N8nWorkerContext, input: N8nWorkerInput, raw: Data): ListenableWorker.Result {
         return when (input) {
             is N8nWorkerInput.UpdateNotification -> UpdateNotificationHandler.handle(ctx, raw)
             is N8nWorkerInput.ExtractionPipeline -> ExtractionPipelineHandler.handle(ctx, input)
             is N8nWorkerInput.ReflectionPipeline -> ReflectionPipelineHandler.handle(ctx)
-            is N8nWorkerInput.PostNotificationAction -> PostNotificationActionHandler.handle(ctx, raw)
             is N8nWorkerInput.PreferenceQuickSync -> PreferenceQuickSyncHandler.handle(ctx, raw)
             is N8nWorkerInput.RegenerateOne -> ReminderRegenerationHandler.handleOne(ctx, raw)
         }

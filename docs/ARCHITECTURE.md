@@ -1,127 +1,77 @@
-# NotiGPT Architecture & Directory Guide
+# Architecture and source guide
 
-This project uses a **layered Android + Jetpack Compose** structure. It’s a common, "normal" organization in modern Android apps because it separates:
+Noti is one Gradle module (`:app`) with a shallow, conventional package layout. `MainActivity` and
+`NotiApplication` stay in the root package. The separate root and app Gradle files are normal:
+the root declares shared plugin versions while `app/build.gradle.kts` configures the Android module.
 
-- **UI (Compose) + ViewModels**: rendering and presentation state
-- **Domain**: business logic / rules (Android-free when possible)
-- **Data**: local persistence + remote clients + repositories
-- **Platform**: small wrappers around Android system APIs (clipboard, toast, MediaStore, etc.)
+## Runtime overview
 
-The goal is to keep code readable, testable, and easy to extend.
+```mermaid
+flowchart TB
+    Android[Android notification framework] --> Listener[NotiListenerService]
+    Listener --> Room[(Room v47)]
+    Compose[Compose screens] --> VM[ViewModels]
+    VM --> Repo[Repositories]
+    Repo --> Room
+    Repo --> Work[WorkManager]
+    Work --> N8N[n8n compatibility API]
+    Repo --> Outbox[ID-only Firestore outbox]
+    Outbox --> Firestore[Firestore generated data]
+    Alarm[AlarmManager receivers] --> Room
+    Hilt[NotiApplication Hilt graph] --> VM
+    Hilt --> Listener
+    Hilt --> Work
+```
 
----
+Room is the device source of truth. Network success is never required to capture notifications or
+perform a user action. Firestore retry operations contain IDs only; workers re-read generated data
+from Room. Raw notification text is not represented in the Firestore proposal or item schemas.
 
-## Top-level packages (under `org.muilab.notigpt`)
+## Package ownership
 
-### `ui/`
-**What it is:** Everything related to Jetpack Compose UI.
+| Package | Responsibility | Important examples |
+|---|---|---|
+| root | Android process and activity entry points | `NotiApplication`, `MainActivity` |
+| `ui` | Compose screens, reusable UI, presentation state | `AppScaffold`, `DrawerViewModel`, `ReviewScreen` |
+| `domain` | Pure business rules without Android/Room/network APIs | notification filters/sorters, `domain.saveditem` merge and revert rules |
+| `data.local.room` | Database, migrations, converters, and DAOs | `AppDatabase`, `AppDatabaseMigrations`, `FirestoreOutboxDao` |
+| `data.repository` | Coordinates local state and side effects | notification repositories, `PendingOpRepository`, `DataDeletionRepository` |
+| `data.remote` | Firebase, n8n, and Google Tasks adapters | `FirestoreSyncRepository`, `N8nAPIClient` |
+| `di` | Hilt bindings with app-process lifetime | `AppModule` |
+| `service` | Long-lived Android service boundaries | `NotiListenerService` |
+| `receiver` | Alarm, boot, listener-rebind, and seen broadcasts | `NotiListenerRestartReceiver`, `ReminderAlarmReceiver` |
+| `work` | Durable/deferred Android work | `ReminderPeriodicWorker`, `FirestoreOutboxWorker` |
+| `model` | Room entities and stable application data | `NotiRecord`, `SavedItem`, `GeneratedProposal` |
+| `util` | Small shared Android/Kotlin utilities | ongoing notification and time formatting |
 
-**What goes here:**
-- `ui/screen`: high-level screens (page-level composables)
-- `ui/component`: reusable UI pieces (composables)
-- `ui/viewmodel`: `ViewModel`s + factories (presentation layer)
-- `ui/theme`: Material theme definitions
-- `ui/utils`: Compose-only utilities
+The older `data.repository.reminder` and `ui.reminder` paths currently contain both saved-item and
+scheduled-reminder code. Treat the class names as authoritative: `SavedItem*` means generated tasks
+and keeps, while `ScheduledReminder*`/`ReminderScheduler` means Android reminder notifications.
+New pure saved-item rules belong in `domain.saveditem`; new code should not reintroduce the ambiguous
+`domain.reminder` package.
 
-**Rules of thumb:**
-- Composables should be **stateless where possible**: take state via parameters, send events via callbacks.
-- `ViewModel`s hold state and coordinate repositories/platform.
-- Avoid doing network/Room work directly in composables.
+## Significant file roles
 
-### `domain/`
-**What it is:** Pure application logic: filtering, grouping, rules, types.
+- `NotiApplication.kt`: creates the Hilt process graph, configures Hilt WorkManager construction,
+  installs Firebase App Check, disables debug Crashlytics collection, and wakes the Firestore outbox.
+- `MainActivity.kt`: hosts Compose, sign-in, notification-listener access, and background-work bootstrap.
+- `NotiListenerService.kt`: framework callback adapter; filters, stores, caches source intents, posts
+  ongoing status, preserves delayed cancellation, and requests recovery after disconnect/destruction.
+- `AppDatabase.kt`: v47 Room contract. Every version change requires an exported JSON schema and migration.
+- `AppDatabaseMigrations.kt`: explicit migration chain; never use destructive fallback for production.
+- `PendingOpRepository.kt`: stages generated operations, computes review groups, and applies/undoes/rejects
+  multi-table changes transactionally. It permanently records proposal decision state.
+- `SavedItemRepository.kt`: task/keep mutations and Firestore convergence scheduling.
+- `FirestoreOutboxWorker.kt`: replays payload-free operations for the current Firebase UID only.
+- `DataDeletionRepository.kt`: separate local raw-history deletion and cloud/generated-data deletion.
+- `N8nAPIWorker.kt`: typed WorkManager dispatch boundary for temporary n8n endpoints.
+- `OngoingNotiUtils.kt`: localized recent-window count plus task/keep awaiting-review counts.
 
-**What goes here:**
-- Business rules (e.g., grouping notifications, filter predicates)
-- Strongly typed concepts that UI and data can share (e.g., `NotiActionType`)
+## Dependency direction
 
-**What should NOT go here:**
-- Android APIs (`Context`, `Intent`, `Toast`, `MediaStore`)
-- Room/Retrofit implementations
+UI calls ViewModels; ViewModels call repositories; repositories use DAOs and remote adapters; pure
+domain functions depend only on plain models. Android framework callbacks delegate inward rather
+than placing business rules in services or receivers. Some older ViewModels/repositories still use
+manual construction; new or touched entry points should use constructor injection.
 
-This makes it easy to unit-test domain logic as plain Kotlin.
-
-### `repository/`
-**What it is:** Data orchestration. Repositories coordinate Room, network, and side effects.
-
-**What goes here:**
-- Interfaces/implementations to read/write notification state
-- Task repository logic
-
-**Notes:**
-- Repositories may depend on `database/room/*`, `data/remote/*`, and shared models/domain helpers.
-- They should not depend on Compose UI.
-
-### `database/`
-**What it is:** Local Room data sources.
-
-- `database/room`: Room DB + DAOs + converters
-
-### `data/remote/`
-**What it is:** Remote integrations.
-
-- `data/remote/n8n`: Retrofit API client/service, n8n DTO helpers, and WorkManager handlers that call n8n webhooks.
-
-n8n belongs here because this app uses it as a remote HTTP function layer. It should not live under Room/database packages, and domain rules should not be hidden inside n8n handlers when they can be pure Kotlin helpers.
-
-> Naming note: Room still uses the historical `database/room` package. New remote integrations should use `data/remote/<service>`.
-
-### `platform/`
-**What it is:** Small, testable wrappers around Android/system APIs.
-
-Examples in this project:
-- `ClipboardController` (clipboard)
-- `UserNotifier` (toast)
-- `NotiLogExporter` (MediaStore)
-
-**Why:** ViewModels can depend on these interfaces instead of raw Android classes, making them easier to test and keeping side-effects contained.
-
-### `service/`
-Android services, e.g. `NotiListenerService`.
-
-### `receiver/`
-Android broadcast receivers, e.g. `BootUpReceiver`.
-
-### `model/`
-Shared data models / entities.
-
-- `model/notifications`: notification-related models and DTOs
-- `model/features`: task model
-
-### `util/`
-Generic helpers/constants shared by multiple layers.
-
----
-
-## Dependency direction (recommended)
-
-A clean, low-coupling direction looks like:
-
-- `ui/*` → depends on `ui/viewmodel` only (and shared models)
-- `ui/viewmodel` → depends on `repository` and `platform`
-- `repository` → depends on `database/room`, `data/remote`, and `model`/`domain`
-- `domain` → depends on `model` (optional) but **not Android**
-- `platform` → depends on Android APIs
-
-This avoids UI depending directly on persistence/network code.
-
----
-
-## Where should new code go?
-
-- New composable? → `ui/component` or `ui/screen`
-- New screen/page? → `ui/screen`
-- New state holder for UI? → `ui/viewmodel`
-- New business rule / algorithm? → `domain/…`
-- New Room table/DAO? → `database/room`
-- New API client/endpoint? → `data/remote/<service>`
-- New background sync job? → usually `data/remote/<service>/workers` if it primarily calls a remote service
-- New Android-system side effect wrapper? → `platform/`
-
----
-
-## Notes
-
-- Some files may currently bend these rules for practicality. If you see Android code inside domain, or DB/network calls inside composables, that’s a good refactor target.
-- Gesture-heavy composables (drag/swipe/fling) should be refactored conservatively.
-
+See [HILT.md](HILT.md) for object lifetimes and generated-code behavior.

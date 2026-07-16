@@ -52,7 +52,7 @@ internal object PreferenceQuickSyncHandler {
             return ctx.success()
         }
 
-        Log.d(TAG, "Response: $bodyStr")
+        Log.d(TAG, "Response bytes=${bodyStr.length}")
 
         try {
             val gson = Gson()
@@ -88,4 +88,3 @@ internal object PreferenceQuickSyncHandler {
         return ctx.success()
     }
 }
-

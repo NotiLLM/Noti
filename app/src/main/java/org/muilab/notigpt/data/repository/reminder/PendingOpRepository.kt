@@ -1,6 +1,8 @@
 package org.muilab.notigpt.data.repository.reminder
 
 import android.content.Context
+import androidx.room.withTransaction
+import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
@@ -9,9 +11,13 @@ import org.json.JSONObject
 import org.muilab.notigpt.data.local.room.AppDatabase
 import org.muilab.notigpt.data.remote.firestore.FirestoreSyncRepository
 import org.muilab.notigpt.data.remote.n8n.N8nOpParsing
-import org.muilab.notigpt.domain.reminder.ReminderAssociationMerger
+import org.muilab.notigpt.domain.saveditem.ReminderAssociationMerger
 import org.muilab.notigpt.model.features.ExtractionJournalEntry
 import org.muilab.notigpt.model.features.ExtractionJournalEventType
+import org.muilab.notigpt.model.features.FirestoreOutboxKind
+import org.muilab.notigpt.model.features.FirestoreOutboxOp
+import org.muilab.notigpt.model.features.GeneratedProposal
+import org.muilab.notigpt.model.features.GeneratedProposalDecision
 import org.muilab.notigpt.model.features.NotiSavedItemLinkSource
 import org.muilab.notigpt.model.features.PendingOp
 import org.muilab.notigpt.model.features.PendingOpType
@@ -23,6 +29,7 @@ import org.muilab.notigpt.model.features.SavedItemState
 import org.muilab.notigpt.model.features.SavedItemType
 import org.muilab.notigpt.model.features.SavedSubItem
 import java.util.UUID
+import org.muilab.notigpt.work.FirestoreOutboxWork
 
 /**
  * The staged-review core: pipeline ops land here as [PendingOp] rows, previews are computed
@@ -112,8 +119,13 @@ class PendingOpRepository(private val appContext: Context) {
             }
         }
         if (rows.isEmpty()) return@withContext emptyList()
-        val ids = pendingOpDao.insertAll(rows)
-        rows.mapIndexed { idx, row -> row.copy(opId = ids[idx]) }
+        val staged = db.withTransaction {
+            val ids = pendingOpDao.insertAll(rows)
+            rows.mapIndexed { idx, row -> row.copy(opId = ids[idx]) }
+                .also { persistGeneratedProposals(it) }
+        }
+        FirestoreOutboxWork.enqueue(appContext)
+        staged
     }
 
     /**
@@ -161,10 +173,18 @@ class PendingOpRepository(private val appContext: Context) {
             )
             consumed?.let { consumedCreateIds += it.opId }
         }
-        if (consumedCreateIds.isNotEmpty()) pendingOpDao.deleteByIds(consumedCreateIds)
         if (rows.isEmpty()) return@withContext emptyList()
-        val ids = pendingOpDao.insertAll(rows)
-        rows.mapIndexed { idx, row -> row.copy(opId = ids[idx]) }
+        val staged = db.withTransaction {
+            if (consumedCreateIds.isNotEmpty()) {
+                pendingOpDao.deleteByIds(consumedCreateIds)
+                setProposalDecision(consumedCreateIds, GeneratedProposalDecision.Superseded, now)
+            }
+            val ids = pendingOpDao.insertAll(rows)
+            rows.mapIndexed { idx, row -> row.copy(opId = ids[idx]) }
+                .also { persistGeneratedProposals(it) }
+        }
+        FirestoreOutboxWork.enqueue(appContext)
+        staged
     }
 
     // ========== Item-level grouping & preview ==========
@@ -244,8 +264,20 @@ class PendingOpRepository(private val appContext: Context) {
      * the `saved` state directly — review acceptance *is* the acknowledgment.
      */
     suspend fun applyGroup(group: OpGroup, now: Long = System.currentTimeMillis()): ApplyOutcome? = withContext(Dispatchers.IO) {
-        val outcome = if (group.isCreate) applyCreate(group, now) else applyOnTarget(group, now)
-        if (outcome != null) pendingOpDao.deleteByIds(group.ops.map { it.opId })
+        val outcome = db.withTransaction {
+            val applied = if (group.isCreate) applyCreate(group, now) else applyOnTarget(group, now)
+            if (applied != null) {
+                val opIds = group.ops.map { it.opId }
+                pendingOpDao.deleteByIds(opIds)
+                setProposalDecision(opIds, GeneratedProposalDecision.Approved, now)
+            }
+            applied
+        }
+        if (outcome != null) {
+            FirestoreOutboxWork.enqueue(appContext)
+            outcome.deletedSourceItems.forEach { firestoreSync.markReminderDeleted(it.savedItemId, now) }
+            outcome.appliedItemId?.let { savedItemDao.getById(it) }?.let { firestoreSync.syncReminder(it) }
+        }
         outcome
     }
 
@@ -273,7 +305,7 @@ class PendingOpRepository(private val appContext: Context) {
             )
         )
         journalAccepted(evidence, pending.notiKey, ExtractionJournalEventType.ItemCreated, itemId, item.title, reasonFrom(op), now)
-        firestoreSync.syncReminder(item)
+        queueSavedItem(itemId, FirestoreOutboxKind.UpsertSavedItem, now)
 
         return ApplyOutcome(
             ops = group.ops,
@@ -327,7 +359,7 @@ class PendingOpRepository(private val appContext: Context) {
                 subTaskDao.hardDeleteByParentId(sourceId)
                 savedItemDao.hardDeleteById(sourceId)
                 rejectedMergeDao.deleteForItem(sourceId)
-                firestoreSync.markReminderDeleted(sourceId, now)
+                queueSavedItem(sourceId, FirestoreOutboxKind.DeleteSavedItem, now)
             }
 
             val evidence = evidenceOf(pending)
@@ -357,7 +389,7 @@ class PendingOpRepository(private val appContext: Context) {
             lastUpdateTimestamp = now,
         )
         savedItemDao.upsert(applied)
-        firestoreSync.syncReminder(applied)
+        queueSavedItem(targetId, FirestoreOutboxKind.UpsertSavedItem, now)
 
         return ApplyOutcome(
             ops = group.ops,
@@ -374,23 +406,35 @@ class PendingOpRepository(private val appContext: Context) {
 
     /** Reverses an [applyGroup]: restores the pre-apply state and re-stages the ops. */
     suspend fun undoApply(outcome: ApplyOutcome, now: Long = System.currentTimeMillis()) = withContext(Dispatchers.IO) {
-        outcome.createdItemId?.let { id ->
-            subTaskDao.hardDeleteByParentId(id)
-            savedItemDao.hardDeleteById(id)
-            firestoreSync.markReminderDeleted(id, now)
+        db.withTransaction {
+            outcome.createdItemId?.let { id ->
+                subTaskDao.hardDeleteByParentId(id)
+                savedItemDao.hardDeleteById(id)
+                queueSavedItem(id, FirestoreOutboxKind.DeleteSavedItem, now)
+            }
+            outcome.beforeTarget?.let { before ->
+                savedItemDao.upsert(before)
+                if (outcome.addedSubItemIds.isNotEmpty()) subTaskDao.hardDeleteByIds(outcome.addedSubItemIds)
+                if (outcome.hiddenSubItemIds.isNotEmpty()) subTaskDao.restoreByIds(outcome.hiddenSubItemIds, now)
+                queueSavedItem(before.savedItemId, FirestoreOutboxKind.UpsertSavedItem, now)
+            }
+            outcome.deletedSourceItems.forEach {
+                savedItemDao.upsert(it)
+                queueSavedItem(it.savedItemId, FirestoreOutboxKind.UpsertSavedItem, now)
+            }
+            if (outcome.deletedSourceSubItems.isNotEmpty()) subTaskDao.upsertAll(outcome.deletedSourceSubItems)
+            outcome.changeLogIds.forEach { changeLogDao.deleteById(it) }
+            pendingOpDao.insertAll(outcome.ops)
+            setProposalDecision(
+                outcome.ops.map { it.opId },
+                GeneratedProposalDecision.Pending,
+                now,
+            )
         }
-        outcome.beforeTarget?.let { before ->
-            savedItemDao.upsert(before)
-            // Update-added sub-items go away; hidden ones come back.
-            if (outcome.addedSubItemIds.isNotEmpty()) subTaskDao.hardDeleteByIds(outcome.addedSubItemIds)
-            if (outcome.hiddenSubItemIds.isNotEmpty()) subTaskDao.restoreByIds(outcome.hiddenSubItemIds, now)
-            firestoreSync.syncReminder(before)
-        }
-        outcome.deletedSourceItems.forEach { savedItemDao.upsert(it) }
-        if (outcome.deletedSourceSubItems.isNotEmpty()) subTaskDao.upsertAll(outcome.deletedSourceSubItems)
+        FirestoreOutboxWork.enqueue(appContext)
+        outcome.createdItemId?.let { firestoreSync.markReminderDeleted(it, now) }
+        outcome.beforeTarget?.let { firestoreSync.syncReminder(it) }
         outcome.deletedSourceItems.forEach { firestoreSync.syncReminder(it) }
-        outcome.changeLogIds.forEach { changeLogDao.deleteById(it) }
-        pendingOpDao.insertAll(outcome.ops.map { it.copy(opId = 0L) })
     }
 
     // ========== Discard (reject) ==========
@@ -400,7 +444,8 @@ class PendingOpRepository(private val appContext: Context) {
      * later extraction runs know, and rejected merges enter the cool-down table.
      */
     suspend fun discardGroup(group: OpGroup, now: Long = System.currentTimeMillis()) = withContext(Dispatchers.IO) {
-        group.ops.forEach { pending ->
+        db.withTransaction {
+          group.ops.forEach { pending ->
             val keys = journalKeysOf(pending)
             val title = when {
                 group.isCreate -> N8nOpParsing.titleFrom(JSONObject(pending.payload))
@@ -425,8 +470,53 @@ class PendingOpRepository(private val appContext: Context) {
                 }
                 if (pairs.isNotEmpty()) rejectedMergeDao.upsertAll(pairs)
             }
+          }
+          val opIds = group.ops.map { it.opId }
+          pendingOpDao.deleteByIds(opIds)
+          setProposalDecision(opIds, GeneratedProposalDecision.Rejected, now)
         }
-        pendingOpDao.deleteByIds(group.ops.map { it.opId })
+        FirestoreOutboxWork.enqueue(appContext)
+    }
+
+    private suspend fun queueSavedItem(savedItemId: String, kind: String, ts: Long) {
+        val uid = FirebaseAuth.getInstance().currentUser?.uid.orEmpty()
+        if (uid.isBlank()) return
+        db.firestoreOutboxDao().upsert(FirestoreOutboxOp.savedItem(uid, kind, savedItemId, ts))
+    }
+
+    private suspend fun persistGeneratedProposals(ops: List<PendingOp>) {
+        val uid = FirebaseAuth.getInstance().currentUser?.uid.orEmpty()
+        if (uid.isBlank() || ops.isEmpty()) return
+        val proposals = ops.map { op ->
+            GeneratedProposal(
+                proposalId = "$uid:p_${op.opId}",
+                uid = uid,
+                opId = op.opId,
+                batchId = op.batchId,
+                opType = op.opType,
+                payload = op.payload,
+                targetItemId = op.targetItemId,
+                itemType = op.itemType,
+                createdAt = op.createdAt,
+            )
+        }
+        db.generatedProposalDao().upsertAll(proposals)
+        proposals.forEach {
+            db.firestoreOutboxDao().upsert(
+                FirestoreOutboxOp.generatedProposal(uid, it.proposalId, it.createdAt)
+            )
+        }
+    }
+
+    private suspend fun setProposalDecision(opIds: List<Long>, decision: String, now: Long) {
+        if (opIds.isEmpty()) return
+        val dao = db.generatedProposalDao()
+        dao.setDecision(opIds, decision, now)
+        dao.getByOpIds(opIds).forEach { proposal ->
+            db.firestoreOutboxDao().upsert(
+                FirestoreOutboxOp.generatedProposal(proposal.uid, proposal.proposalId, now)
+            )
+        }
     }
 
     /** Undo of a reject: the ops come back exactly as they were (fresh row ids). */

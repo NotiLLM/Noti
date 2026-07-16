@@ -69,8 +69,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.SplitButtonDefaults
-import androidx.compose.material3.SplitButtonLayout
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -90,6 +88,8 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -118,7 +118,6 @@ import org.muilab.notigpt.ui.reminder.component.SavedSubItemListInCard
 import org.muilab.notigpt.ui.reminder.component.SavedSubItemDetailScreen
 import org.muilab.notigpt.ui.reminder.component.TaskCompletionToggle
 import org.muilab.notigpt.ui.notification.viewmodel.DrawerViewModel
-import org.muilab.notigpt.ui.notification.viewmodel.DrawerViewModelFactory
 import org.muilab.notigpt.ui.preference.viewmodel.PreferenceViewModel
 import org.muilab.notigpt.ui.reminder.viewmodel.ReminderViewModel
 import org.muilab.notigpt.ui.reminder.viewmodel.ScheduledReminderViewModel
@@ -131,7 +130,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.snapshotFlow
-import androidx.constraintlayout.helper.widget.Grid
 import kotlinx.coroutines.flow.distinctUntilChanged
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.horizontalScroll
@@ -929,6 +927,7 @@ fun ReminderCard(
     onSavedSubItemExportGoogleCalendar: (SavedSubItem) -> Unit = {},
 ) {
     val context = LocalContext.current
+    val locale = LocalConfiguration.current.locales[0]
     val clipboard = remember(context) { AndroidClipboardController(context) }
     val haptic = LocalHapticFeedback.current
 
@@ -1406,6 +1405,7 @@ fun ReminderDetailScreen(
     onSavedSubItemExportGoogleCalendar: (SavedSubItem) -> Unit = {},
 ) {
     val context = LocalContext.current
+    val locale = LocalConfiguration.current.locales[0]
 
     // Trigger B is now handled in RemindersScreen based on 'fully visible' reminder cards.
 
@@ -1563,10 +1563,10 @@ fun ReminderDetailScreen(
                     if (deadlineAtMs > 0L) Calendar.getInstance().apply { timeInMillis = deadlineAtMs } else null
                 }
                 val deadlineDateStr = if (deadlineCal != null) {
-                    java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date(deadlineAtMs))
+                    java.text.SimpleDateFormat("yyyy-MM-dd", locale).format(java.util.Date(deadlineAtMs))
                 } else stringResource(R.string.reminder_no_date)
                 val deadlineTimeStr = if (deadlineCal != null) {
-                    java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date(deadlineAtMs))
+                    java.text.SimpleDateFormat("HH:mm", locale).format(java.util.Date(deadlineAtMs))
                 } else stringResource(R.string.reminder_no_time)
 
                 val deadlineColor = if (deadlineAtMs > 0L && deadlineAtMs < System.currentTimeMillis())
@@ -1635,11 +1635,11 @@ fun ReminderDetailScreen(
                 val isSomeday = SavedItem.isSomeday(doAtMs)
                 val doDateStr = when {
                     isSomeday -> stringResource(R.string.do_date_someday)
-                    hasRealDoDate -> java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date(doAtMs))
+                    hasRealDoDate -> java.text.SimpleDateFormat("yyyy-MM-dd", locale).format(java.util.Date(doAtMs))
                     else -> stringResource(R.string.reminder_no_date)
                 }
                 val doTimeStr = if (hasRealDoDate) {
-                    java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date(doAtMs))
+                    java.text.SimpleDateFormat("HH:mm", locale).format(java.util.Date(doAtMs))
                 } else stringResource(R.string.reminder_no_time)
 
                 Surface(
@@ -2145,6 +2145,8 @@ private fun ExportConfirmationDialog(
     onConfirmGoogleCalendar: (title: String, description: String, startMs: Long, endMs: Long, allDay: Boolean, reminderMinutes: Int) -> Unit,
 ) {
     val context = LocalContext.current
+    val resources = LocalResources.current
+    val locale = LocalConfiguration.current.locales[0]
     val isCalendar = state.type == ExportType.GOOGLE_CALENDAR
 
     var title by remember { mutableStateOf(state.reminder.title) }
@@ -2189,12 +2191,12 @@ private fun ExportConfirmationDialog(
     var pickingMode by remember { mutableStateOf<String?>(null) }
 
     fun reminderLabel(minutes: Int): String = when (minutes) {
-        -1   -> context.getString(R.string.export_dialog_reminder_none)
-        0    -> context.getString(R.string.export_dialog_reminder_at_time)
-        60   -> context.getString(R.string.export_dialog_reminder_1_hour)
-        120  -> context.getString(R.string.export_dialog_reminder_2_hours)
-        1440 -> context.getString(R.string.export_dialog_reminder_1_day)
-        else -> context.getString(R.string.export_dialog_reminder_minutes, minutes)
+        -1   -> resources.getString(R.string.export_dialog_reminder_none)
+        0    -> resources.getString(R.string.export_dialog_reminder_at_time)
+        60   -> resources.getString(R.string.export_dialog_reminder_1_hour)
+        120  -> resources.getString(R.string.export_dialog_reminder_2_hours)
+        1440 -> resources.getString(R.string.export_dialog_reminder_1_day)
+        else -> resources.getString(R.string.export_dialog_reminder_minutes, minutes)
     }
 
     AlertDialog(
@@ -2243,8 +2245,8 @@ private fun ExportConfirmationDialog(
                     }
 
                     // Start: separate date + time
-                    val sdf = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
-                    val stf = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
+                    val sdf = java.text.SimpleDateFormat("yyyy-MM-dd", locale)
+                    val stf = java.text.SimpleDateFormat("HH:mm", locale)
 
                     val startDateLabel = if (startMs > 0L) sdf.format(java.util.Date(startMs)) else stringResource(R.string.reminder_no_date)
                     val startAtMsLabel = if (startMs > 0L) stf.format(java.util.Date(startMs)) else stringResource(R.string.reminder_no_time)
@@ -2301,10 +2303,10 @@ private fun ExportConfirmationDialog(
                 } else {
                     // Google Tasks: deadline with separate date + time + clear option
                     val dlDateLabel = if (deadlineMs > 0L) {
-                        java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date(deadlineMs))
+                        java.text.SimpleDateFormat("yyyy-MM-dd", locale).format(java.util.Date(deadlineMs))
                     } else stringResource(R.string.reminder_no_date)
                     val dlTimeLabel = if (deadlineMs > 0L) {
-                        java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date(deadlineMs))
+                        java.text.SimpleDateFormat("HH:mm", locale).format(java.util.Date(deadlineMs))
                     } else stringResource(R.string.reminder_no_time)
 
                     Row(verticalAlignment = Alignment.CenterVertically) {

@@ -1,12 +1,13 @@
 package org.muilab.notigpt.data.remote.n8n.context
 
 import android.content.Context
+import dagger.hilt.android.qualifiers.ApplicationContext
+import javax.inject.Inject
 import androidx.work.ListenableWorker
 import org.muilab.notigpt.data.local.room.AppDatabase
 import org.muilab.notigpt.data.remote.n8n.N8nAPIClient
 import org.muilab.notigpt.data.repository.notification.NotiLlmStateRepository
 import org.muilab.notigpt.data.repository.notification.NotiRepository
-import org.muilab.notigpt.data.repository.notification.NotiRepositoryProvider
 import org.muilab.notigpt.data.repository.reminder.ExtractionJournalRepository
 import org.muilab.notigpt.data.repository.reminder.PendingOpRepository
 import org.muilab.notigpt.data.repository.reminder.SavedItemChangeLogRepository
@@ -17,15 +18,12 @@ import org.muilab.notigpt.util.SharedPreferencesManager
 /**
  * Common dependencies for N8n worker handlers.
  */
-internal class N8nWorkerContext(
-    val appContext: Context,
+class N8nWorkerContext @Inject constructor(
+    @param:ApplicationContext val appContext: Context,
+    val database: AppDatabase,
+    val notiRepository: NotiRepository,
 ) {
-    val database: AppDatabase by lazy { AppDatabase.getInstance(appContext) }
     val n8nApiService by lazy { N8nAPIClient.n8nAPIService }
-
-    val notiRepository: NotiRepository by lazy {
-        NotiRepositoryProvider.provideNotiRepository(appContext)
-    }
 
     val reminderRepository: SavedItemRepository by lazy {
         SavedItemRepository(database.reminderListDao(), appContext)

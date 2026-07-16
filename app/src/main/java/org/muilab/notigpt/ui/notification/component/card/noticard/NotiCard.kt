@@ -1,8 +1,6 @@
 package org.muilab.notigpt.ui.notification.component.card.noticard
 
 import android.content.Context
-import android.os.Build
-import androidx.annotation.RequiresApi
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -82,7 +80,6 @@ private const val BIDIRECTIONAL_SWIPE_DISMISS = true
  * gesture/animation state, but durable changes should stay outside the composable.
  */
 @OptIn(ExperimentalFoundationApi::class)
-@RequiresApi(Build.VERSION_CODES.S)
 @Composable
 fun NotiCard(
     context: Context,
@@ -452,4 +449,3 @@ fun NotiCard(
         onOpenSavedItem = onOpenSavedItem,
     )
 }
-

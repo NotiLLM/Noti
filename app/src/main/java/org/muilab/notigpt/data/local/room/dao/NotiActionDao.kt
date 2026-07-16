@@ -20,6 +20,9 @@ interface NotiActionDao {
     @Query("SELECT * FROM notiAction")
     fun getAllActions(): List<NotiAction>
 
+    @Query("DELETE FROM notiAction")
+    suspend fun deleteAll()
+
     @Query("SELECT * FROM notiAction WHERE notiKey = :notiKey")
     fun getActionsByKey(notiKey: String): List<NotiAction>
 

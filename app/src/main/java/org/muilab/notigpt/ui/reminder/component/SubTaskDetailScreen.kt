@@ -47,6 +47,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -77,6 +78,7 @@ fun SavedSubItemDetailScreen(
     onExportGoogleCalendar: (SavedSubItem) -> Unit = {},
 ) {
     val context = LocalContext.current
+    val locale = LocalConfiguration.current.locales[0]
 
     var title by remember(initial.savedSubItemId) { mutableStateOf(initial.title) }
     var description by remember(initial.savedSubItemId) { mutableStateOf(initial.description) }
@@ -174,7 +176,7 @@ fun SavedSubItemDetailScreen(
                 }
                 val deadlineDateStr = if (deadlineAtMs > 0L) getAbsoluteTimeStr(deadlineAtMs, context) else stringResource(R.string.reminder_no_date)
                 val deadlineTimeStr = if (deadlineAtMs > 0L) {
-                    java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date(deadlineAtMs))
+                    java.text.SimpleDateFormat("HH:mm", locale).format(java.util.Date(deadlineAtMs))
                 } else stringResource(R.string.reminder_no_time)
 
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -194,7 +196,7 @@ fun SavedSubItemDetailScreen(
             }
 
             if (isEvent) {
-                val sdf = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
+                val sdf = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", locale)
                 val startLabel = if (startAtMs > 0L) sdf.format(java.util.Date(startAtMs)) else stringResource(R.string.reminder_no_date)
                 val endLabel = if (endAtMs > 0L) sdf.format(java.util.Date(endAtMs)) else stringResource(R.string.reminder_no_date)
 
@@ -431,6 +433,5 @@ fun SavedSubItemDetailScreen(
         }
     }
 }
-
 
 

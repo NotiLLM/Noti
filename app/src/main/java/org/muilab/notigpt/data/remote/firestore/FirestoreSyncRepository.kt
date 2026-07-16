@@ -11,8 +11,7 @@ import kotlinx.coroutines.withContext
 import com.google.firebase.auth.FirebaseAuth
 import org.muilab.notigpt.data.local.room.AppDatabase
 import org.muilab.notigpt.model.features.SavedItem
-import org.muilab.notigpt.model.notifications.NotiRecord
-import org.muilab.notigpt.model.notifications.NotiUnit
+import org.muilab.notigpt.model.features.GeneratedProposal
 import org.muilab.notigpt.util.SharedPreferencesManager
 import java.time.ZoneId
 import java.util.Locale
@@ -23,7 +22,6 @@ import java.util.TimeZone
  *
  * Storage (as requested):
  * - reminders/{userId}/reminders/{savedItemId}
- *   - notis/{notiKey}
  * - users/{userId}
  */
 class FirestoreSyncRepository(
@@ -51,8 +49,38 @@ class FirestoreSyncRepository(
         .collection(FirestorePaths.SUBCOLLECTION_REMINDERS)
         .document(savedItemId)
 
-    private fun reminderNotiDoc(savedItemId: String, notiKey: String) =
-        reminderDoc(savedItemId).collection(FirestorePaths.SUBCOLLECTION_NOTIS).document(notiKey)
+    private fun generatedProposalDoc(proposalId: String) = firestore
+        .collection(FirestorePaths.COLLECTION_GENERATED_PROPOSALS_ROOT)
+        .document(userId())
+        .collection(FirestorePaths.SUBCOLLECTION_PROPOSALS)
+        .document(proposalId)
+
+    /** Mirrors generated output and its decision state; it contains no source notification text. */
+    suspend fun syncGeneratedProposal(proposal: GeneratedProposal): Boolean = withContext(Dispatchers.IO) {
+        if (userId().isBlank() || proposal.uid != userId()) return@withContext false
+        try {
+            generatedProposalDoc(proposal.proposalId).set(
+                mapOf(
+                    "proposalId" to proposal.proposalId,
+                    "opId" to proposal.opId,
+                    "batchId" to proposal.batchId,
+                    "opType" to proposal.opType,
+                    "payload" to proposal.payload,
+                    "targetItemId" to proposal.targetItemId,
+                    "itemType" to proposal.itemType,
+                    "decision" to proposal.decision,
+                    "createdAtMsEpoch" to proposal.createdAt,
+                    "decisionAtMsEpoch" to proposal.decisionAt,
+                    "schemaVersion" to 1,
+                ),
+                SetOptions.merge(),
+            ).await()
+            true
+        } catch (t: Throwable) {
+            Log.w(tag, "syncGeneratedProposal failed proposalId=${proposal.proposalId}", t)
+            false
+        }
+    }
 
     suspend fun incrementNotiRecordCount() = withContext(Dispatchers.IO) {
         if (userId().isBlank()) return@withContext
@@ -100,8 +128,8 @@ class FirestoreSyncRepository(
      * Marks the Firestore mirror of a hard-deleted item as deleted. Local deletion is a real row
      * delete, but the research record keeps the doc with a deletion marker; restore skips it.
      */
-    suspend fun markReminderDeleted(savedItemId: String, ts: Long) = withContext(Dispatchers.IO) {
-        if (userId().isBlank()) return@withContext
+    suspend fun markReminderDeleted(savedItemId: String, ts: Long): Boolean = withContext(Dispatchers.IO) {
+        if (userId().isBlank()) return@withContext false
         try {
             reminderDoc(savedItemId).set(
                 mapOf(
@@ -112,13 +140,15 @@ class FirestoreSyncRepository(
                 SetOptions.merge()
             ).await()
             Log.d(tag, "markReminderDeleted succeeded savedItemId=$savedItemId uid=${userId()}")
+            true
         } catch (t: Throwable) {
             Log.w(tag, "markReminderDeleted failed savedItemId=$savedItemId", t)
+            false
         }
     }
 
-    suspend fun syncReminder(reminder: SavedItem) = withContext(Dispatchers.IO) {
-        if (userId().isBlank()) return@withContext
+    suspend fun syncReminder(reminder: SavedItem): Boolean = withContext(Dispatchers.IO) {
+        if (userId().isBlank()) return@withContext false
         ensureUserDoc()
 
         // Resolve provenance from the noti<->saved-item link table (single source of truth).
@@ -177,67 +207,12 @@ class FirestoreSyncRepository(
             Log.d(tag, "syncReminder succeeded savedItemId=${reminder.savedItemId} uid=${userId()}")
         } catch (t: Throwable) {
             Log.w(tag, "syncReminder failed savedItemId=${reminder.savedItemId}", t)
-            return@withContext
+            return@withContext false
         }
 
-        // === Notis subcollection: upload records referenced by the reminder's links ===
-        if (linkedRecordIds.isEmpty()) return@withContext
-
-        try {
-            // notiKey -> record ids, derived from the link rows.
-            val mapping: Map<String, List<String>> = links
-                .groupBy { it.notiKey }
-                .mapValues { (_, group) -> group.map { it.notiRecordId }.distinct() }
-            if (mapping.isEmpty()) return@withContext
-
-            val wantedKeys = mapping.keys.toList()
-            val wantedRecordIds: Set<String> = linkedRecordIds.toSet()
-
-            val records = db.recordDao().getRecordsByIds(wantedRecordIds.toList())
-            val recordsByKey = records.groupBy { it.notiKey }
-
-            val unitsByKey: Map<String, NotiUnit> = db.drawerDao().getByNotiKeys(wantedKeys).associateBy { it.notiKey }
-
-            val nowIso = TimeFormatters.toLocalIso(now, zoneId)
-
-            wantedKeys.forEach { key ->
-                val unit = unitsByKey[key]
-                val allowedIds = mapping[key].orEmpty().toHashSet()
-                val keyRecords = recordsByKey[key].orEmpty().filter { it.notiRecordId in allowedIds }.sortedBy { it.time }
-
-                val notiPayload: Map<String, Any?> = mapOf(
-                    "notiKey" to key,
-                    "pkgName" to (unit?.pkgName ?: ""),
-                    "appName" to (unit?.appName ?: ""),
-                    "records" to keyRecords.map { r ->
-                        mapOf(
-                            "notiRecordId" to r.notiRecordId,
-                            "whenTime" to (if (r.whenTime > 0L) TimeFormatters.toLocalIso(r.whenTime, zoneId) else ""),
-                            "postTime" to TimeFormatters.toLocalIso(r.postTime, zoneId),
-                            "person" to r.person,
-                            "extraTitle" to r.extraTitle,
-                            "extraBigTitle" to r.extraBigTitle,
-                            "extraConversationTitle" to r.extraConversationTitle,
-                            "extraSubText" to r.extraSubText,
-                            "extraText" to r.extraText,
-                            "extraBigText" to r.extraBigText,
-                            "extraTextLines" to r.extraTextLines,
-                            "extraSummaryText" to r.extraSummaryText,
-                            "extraInfoText" to r.extraInfoText,
-                            "isDismissed" to r.isDismissed,
-                        )
-                    },
-                    "syncedAt" to nowIso,
-                    "schemaVersion" to 2,
-                )
-
-                reminderNotiDoc(reminder.savedItemId, key).set(notiPayload, SetOptions.merge()).await()
-                Log.d(tag, "syncReminder noti succeeded savedItemId=${reminder.savedItemId} notiKey=$key uid=${userId()}")
-            }
-
-        } catch (t: Throwable) {
-            Log.w(tag, "syncReminder notis(snapshot-only) failed savedItemId=${reminder.savedItemId}", t)
-        }
+        // Source record IDs remain as association metadata on the generated item. Raw notification
+        // titles, bodies, people, messages, and snapshots are intentionally never uploaded.
+        true
     }
 
     private suspend fun subTasksPayload(savedItemId: String): List<Map<String, Any?>> = try {

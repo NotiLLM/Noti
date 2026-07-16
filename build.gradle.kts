@@ -2,19 +2,18 @@
 
 plugins {
     alias(libs.plugins.androidApplication) apply false
-    alias(libs.plugins.kotlin) apply false
     alias(libs.plugins.compose.compiler) apply false
     alias(libs.plugins.ksp) apply false
-    alias(libs.plugins.secretsGradlePlugin) apply false
     alias(libs.plugins.google.services) apply false
     alias(libs.plugins.firebase.crashlytics) apply false
+    alias(libs.plugins.hilt) apply false
+    alias(libs.plugins.room) apply false
 }
 
 allprojects {
     repositories {
         google()
         mavenCentral()
-        maven { url = uri("https://jitpack.io") }
         gradlePluginPortal()
     }
 }

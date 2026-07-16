@@ -1,7 +1,5 @@
 package org.muilab.notigpt.ui.notification.component.card.notirecord
 
-import android.os.Build
-import androidx.annotation.RequiresApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Column
@@ -54,7 +52,6 @@ import org.muilab.notigpt.ui.common.clipboard.AndroidClipboardController
  * The header appears once while individual records are shown inside the card with load-older/newer controls.
  * Keep this independent from live notification actions unless record-specific actions become product behavior.
  */
-@RequiresApi(Build.VERSION_CODES.S)
 @Composable
 fun NotiRecordContextCard(
     notiKey: String,

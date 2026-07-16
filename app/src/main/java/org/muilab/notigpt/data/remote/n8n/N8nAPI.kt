@@ -13,7 +13,6 @@ import org.muilab.notigpt.data.remote.n8n.workers.N8nAPIWorker
 import org.muilab.notigpt.util.Constants.Companion.N8N_EXTRACTION_PIPELINE
 import org.muilab.notigpt.util.Constants.Companion.N8N_REFLECTION_PIPELINE
 import org.muilab.notigpt.util.Constants.Companion.N8N_REGENERATE_ONE
-import org.muilab.notigpt.util.Constants.Companion.DIFY_POST_NOTIFICATION_ACTION
 import java.util.concurrent.TimeUnit
 import androidx.work.ExistingWorkPolicy
 
@@ -31,40 +30,6 @@ data class N8nUpdateNotificationPayload(
 )
 
 // === WorkManager enqueuers ===
-
-/**
- * Queues one user action event for backend delivery.
- *
- * The unique work name is scoped by notification key and action type so duplicate taps do not accumulate
- * unbounded jobs while an equivalent action is already pending.
- */
-fun enqueueNotificationAction(
-    context: Context,
-    notiKey: String,
-    actionType: String,
-    actionTime: Long = System.currentTimeMillis()
-) {
-    val inputData = Data.Builder()
-        .putString("api_type", DIFY_POST_NOTIFICATION_ACTION)
-        .putString("noti_key", notiKey)
-        .putString("action_type", actionType)
-        .putLong("action_time", actionTime)
-        .putString("webhook_path", BuildConfig.N8N_POST_NOTIFICATION_ACTION_PATH)
-        .build()
-
-    val constraints = Constraints.Builder()
-        .setRequiredNetworkType(NetworkType.CONNECTED)
-        .build()
-
-    val workerRequest = OneTimeWorkRequestBuilder<N8nAPIWorker>()
-        .setBackoffCriteria(BackoffPolicy.LINEAR, 1, TimeUnit.MINUTES)
-        .setConstraints(constraints)
-        .setInputData(inputData)
-        .build()
-
-    val uniqueName = "n8n_post_action_${notiKey}_$actionType"
-    WorkManager.getInstance(context).enqueueUniqueWork(uniqueName, ExistingWorkPolicy.KEEP, workerRequest)
-}
 
 private fun isSignedIn(): Boolean =
     com.google.firebase.auth.FirebaseAuth.getInstance().currentUser != null
@@ -168,4 +133,3 @@ fun enqueueRegenerateOne(context: Context, savedItemId: String) {
     val uniqueName = "n8n_regenerate_one_$savedItemId"
     WorkManager.getInstance(context).enqueueUniqueWork(uniqueName, ExistingWorkPolicy.REPLACE, workerRequest)
  }
-

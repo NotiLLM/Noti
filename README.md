@@ -1,53 +1,41 @@
-# NotiGPT
+# Noti
 
-NotiGPT is an Android app that captures incoming notifications, persists them locally, and powers a Compose “drawer” UI with grouping/sorting plus optional server-side enrichment via WorkManager jobs.
+Noti is a single-module Android application that captures notification history on the device,
+uses a staged LLM pipeline to propose tasks and keeps, lets the user review those proposals, and
+synchronizes generated content across signed-in devices. Scheduled reminders are a separate
+feature: they are Android alarm notifications that can point to a saved item or notification.
 
-## Architecture (current)
+## Start here
 
-This project is evolving toward a clean-ish layering:
+1. [Architecture](docs/ARCHITECTURE.md) — layers, runtime flow, Hilt, and significant file roles.
+2. [Data and privacy](docs/DATA_AND_PRIVACY.md) — what is local, what reaches Firestore/n8n, and deletion.
+3. [Notification pipeline](docs/notification-pipeline.md) — capture, delayed shade cancellation, and recovery.
+4. [Extraction pipeline](docs/extraction-pipeline.md) — current n8n contract and staged review flow.
+5. [Setup and testing](docs/SETUP_AND_TESTING.md) — local configuration and verification commands.
+6. [Release checklist](docs/RELEASE.md) and [known issues](docs/KNOWN_ISSUES.md).
 
-- **UI (Compose)**: `org.muilab.notigpt.ui.*`
-- **State**: `org.muilab.notigpt.ui.viewmodel.*`
-- **Repository / orchestration**: `org.muilab.notigpt.repository.*`
-- **Local persistence**: Room DAOs and entities under `org.muilab.notigpt.database.room.*`
-- **Remote n8n integration**: Retrofit clients and WorkManager handlers under `org.muilab.notigpt.data.remote.n8n.*`
-- **Domain (pure Kotlin)**: `org.muilab.notigpt.domain.*`
-- **Platform (Android wrappers)**: `org.muilab.notigpt.platform.*`
+## Build
 
-See additional docs:
-- `docs/ARCHITECTURE.md`
-- `docs/UI.md`
-- `docs/DOMAIN.md`
-- `docs/PLATFORM.md`
+Requirements: JDK 17 and the Android SDK used by `compileSdk = 37`. Keep Firebase configuration in
+`app/google-services.json`; never commit private signing keys or server credentials.
 
-## Notification pipeline
-
-1. **Capture**: `NotiListenerService` receives a `StatusBarNotification`.
-2. **Store**:
-   - `NotiRepository.upsertNotiUnit()` stores/updates the drawer item (`NotiUnit`).
-   - `NotiRepository.insertNotiRecord()` stores the record (`NotiRecord`).
-3. **Schedule enrichment** (optional): repository calls helper functions (e.g. `enqueueTaskScan`, `enqueueTaskExtraction`) which enqueue `N8nAPIWorker` jobs in `data.remote.n8n`.
-4. **Render**: `DrawerViewModel` collects `NotiRepository.getGroupedNotifications()` and the Compose UI renders the drawer.
-
-## Firebase setup
-
-Firebase/Firestore sync is kept enabled. Do not commit credentials. Put your local Firebase config at:
-
-```text
-app/google-services.json
+```bash
+./gradlew testDebugUnitTest lintDebug assembleDebug
 ```
 
-The Google Services Gradle plugin reads this file during Android builds.
+Instrumented migration and DAO tests need an emulator or test device:
 
-## Testing strategy
+```bash
+./gradlew connectedDebugAndroidTest
+```
 
-- **JVM unit tests** (`app/src/test`): pure Kotlin logic (e.g. drawer grouping & sorting).
-- **Instrumentation tests** (`app/src/androidTest`): Room DAO tests and WorkManager tests (recommended next).
+The app supports Android 10/API 29 and later. Newer notification metadata is read behind runtime
+API checks, so keeping API 29 does not disable Android 12+ features on newer phones.
 
-## Contributing
+## Non-negotiable data boundary
 
-Principles:
-
-- Avoid behavior changes unless explicitly requested.
-- Prefer extracting logic into `domain/` with tests over editing UI or DAO code directly.
-- Add KDoc when a function encodes business rules.
+Raw notification titles, messages, and bodies remain in the local Room database. Firestore stores
+generated task/keep content, generated proposals and decision state, minimal source record IDs, and
+account metadata; it must not store source notification snapshots. The temporary n8n server still
+receives content needed for generation. Its workflow paths are compatibility contracts and are not
+edited from this Android repository.

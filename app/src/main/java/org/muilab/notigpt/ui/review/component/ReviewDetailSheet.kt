@@ -1,7 +1,5 @@
 package org.muilab.notigpt.ui.review.component
 
-import android.os.Build
-import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -34,7 +32,6 @@ import org.muilab.notigpt.ui.review.viewmodel.ReviewViewModel
  * Expanded detail for a review card, shown in a bottom sheet: full content, the "what's new" block,
  * the notifications that triggered/support the item, and approve/reject actions.
  */
-@RequiresApi(Build.VERSION_CODES.S)
 @Composable
 fun ReviewDetailSheet(
     entry: ReviewViewModel.ReviewEntry,

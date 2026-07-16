@@ -1,0 +1,54 @@
+package org.muilab.notigpt.model.features
+
+import androidx.room.Entity
+import androidx.room.Index
+import androidx.room.PrimaryKey
+
+/** Supported cloud-mirror operations. Payload content is deliberately never stored in the queue. */
+object FirestoreOutboxKind {
+    const val UpsertSavedItem = "upsert_saved_item"
+    const val DeleteSavedItem = "delete_saved_item"
+    const val SyncGeneratedProposal = "sync_generated_proposal"
+}
+
+/**
+ * Durable, ID-only instruction for converging a local saved-item mutation to Firestore.
+ *
+ * The item body is re-read from Room when an upsert runs. A delete needs only its item ID. Keeping
+ * the queue payload-free prevents raw notification content (or stale generated content) from being
+ * duplicated in retry storage. One row per account/item means the newest local intent supersedes an
+ * older one safely: an edit replaces an edit, and a later delete replaces a pending upload.
+ */
+@Entity(
+    tableName = "firestore_outbox",
+    indices = [Index(value = ["uid", "createdAt"])],
+)
+data class FirestoreOutboxOp(
+    @PrimaryKey val operationKey: String,
+    val uid: String,
+    val kind: String,
+    val entityId: String,
+    val createdAt: Long,
+    val attemptCount: Int = 0,
+    val lastError: String = "",
+) {
+    companion object {
+        fun savedItem(uid: String, kind: String, savedItemId: String, createdAt: Long) =
+            FirestoreOutboxOp(
+                operationKey = "$uid:saved_item:$savedItemId",
+                uid = uid,
+                kind = kind,
+                entityId = savedItemId,
+                createdAt = createdAt,
+            )
+
+        fun generatedProposal(uid: String, proposalId: String, createdAt: Long) =
+            FirestoreOutboxOp(
+                operationKey = "$uid:generated_proposal:$proposalId",
+                uid = uid,
+                kind = FirestoreOutboxKind.SyncGeneratedProposal,
+                entityId = proposalId,
+                createdAt = createdAt,
+            )
+    }
+}

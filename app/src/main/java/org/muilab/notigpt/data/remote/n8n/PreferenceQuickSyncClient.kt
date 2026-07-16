@@ -24,7 +24,7 @@ object PreferenceQuickSyncClient {
     suspend fun sync(request: N8nQuickSyncRequestDto): N8nQuickSyncResponseDto? {
         val gson = Gson()
         val json = gson.toJson(request)
-        Log.d(TAG, "Request: $json")
+        Log.d(TAG, "Request bytes=${json.length}")
 
         val requestBody = json.toRequestBody("application/json; charset=utf-8".toMediaType())
         val webhookPath = BuildConfig.N8N_PREFERENCE_QUICK_SYNC_PATH
@@ -47,7 +47,7 @@ object PreferenceQuickSyncClient {
             return null
         }
 
-        Log.d(TAG, "Response: $bodyStr")
+        Log.d(TAG, "Response bytes=${bodyStr.length}")
 
         return try {
             val root = gson.fromJson(bodyStr, Map::class.java)
@@ -95,6 +95,5 @@ object PreferenceQuickSyncClient {
         }
     }
 }
-
 
 

@@ -1,0 +1,1364 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 45,
+    "identityHash": "6badf45ecbf47a6c413a189daa79d11a",
+    "entities": [
+      {
+        "tableName": "noti_drawer",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`notiKey` TEXT NOT NULL, `pkgName` TEXT NOT NULL, `hashKey` INTEGER NOT NULL, `groupKey` TEXT NOT NULL, `isAppGroup` INTEGER NOT NULL, `isGroupChat` INTEGER NOT NULL, `sortKey` TEXT NOT NULL, `appName` TEXT NOT NULL, `lastUpdateTime` INTEGER NOT NULL, `lastSyncTime` INTEGER NOT NULL, `icon` TEXT NOT NULL, `largeIcon` TEXT NOT NULL, `isPeople` INTEGER NOT NULL, `isPinned` INTEGER NOT NULL, `isArchived` INTEGER NOT NULL, `isDismissed` INTEGER NOT NULL, `isRead` INTEGER NOT NULL, `isSetToTop` INTEGER NOT NULL, `setToTopTime` INTEGER NOT NULL, `sortPosition` INTEGER NOT NULL, `explanation` TEXT NOT NULL, `summary` TEXT NOT NULL, `sortScore` REAL NOT NULL, PRIMARY KEY(`notiKey`))",
+        "fields": [
+          {
+            "fieldPath": "notiKey",
+            "columnName": "notiKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "metadata.pkgName",
+            "columnName": "pkgName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "metadata.hashKey",
+            "columnName": "hashKey",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "metadata.groupKey",
+            "columnName": "groupKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "metadata.isAppGroup",
+            "columnName": "isAppGroup",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "metadata.isGroupChat",
+            "columnName": "isGroupChat",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "metadata.sortKey",
+            "columnName": "sortKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "metadata.appName",
+            "columnName": "appName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "metadata.lastUpdateTime",
+            "columnName": "lastUpdateTime",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "metadata.lastSyncTime",
+            "columnName": "lastSyncTime",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "metadata.icon",
+            "columnName": "icon",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "metadata.largeIcon",
+            "columnName": "largeIcon",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "metadata.isPeople",
+            "columnName": "isPeople",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "displayState.isPinned",
+            "columnName": "isPinned",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "displayState.isArchived",
+            "columnName": "isArchived",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "displayState.isDismissed",
+            "columnName": "isDismissed",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "displayState.isRead",
+            "columnName": "isRead",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "displayState.isSetToTop",
+            "columnName": "isSetToTop",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "displayState.setToTopTime",
+            "columnName": "setToTopTime",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "displayState.sortPosition",
+            "columnName": "sortPosition",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "displayState.explanation",
+            "columnName": "explanation",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "displayState.summary",
+            "columnName": "summary",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "displayState.sortScore",
+            "columnName": "sortScore",
+            "affinity": "REAL",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "notiKey"
+          ]
+        }
+      },
+      {
+        "tableName": "noti_record",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`notiRecordId` TEXT NOT NULL, `notiKey` TEXT NOT NULL, `whenTime` INTEGER NOT NULL, `postTime` INTEGER NOT NULL, `person` TEXT NOT NULL, `extraTitle` TEXT NOT NULL, `extraBigTitle` TEXT NOT NULL, `extraConversationTitle` TEXT NOT NULL, `extraBigText` TEXT NOT NULL, `extraText` TEXT NOT NULL, `extraTextLines` TEXT NOT NULL, `extraSummaryText` TEXT NOT NULL, `extraInfoText` TEXT NOT NULL, `extraSubText` TEXT NOT NULL, `isDismissed` INTEGER NOT NULL, PRIMARY KEY(`notiRecordId`))",
+        "fields": [
+          {
+            "fieldPath": "notiRecordId",
+            "columnName": "notiRecordId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "notiKey",
+            "columnName": "notiKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "whenTime",
+            "columnName": "whenTime",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "postTime",
+            "columnName": "postTime",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "person",
+            "columnName": "person",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "extraTitle",
+            "columnName": "extraTitle",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "extraBigTitle",
+            "columnName": "extraBigTitle",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "extraConversationTitle",
+            "columnName": "extraConversationTitle",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "extraBigText",
+            "columnName": "extraBigText",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "extraText",
+            "columnName": "extraText",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "extraTextLines",
+            "columnName": "extraTextLines",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "extraSummaryText",
+            "columnName": "extraSummaryText",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "extraInfoText",
+            "columnName": "extraInfoText",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "extraSubText",
+            "columnName": "extraSubText",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isDismissed",
+            "columnName": "isDismissed",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "notiRecordId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "idx_record_notiKey_whenTime",
+            "unique": false,
+            "columnNames": [
+              "notiKey",
+              "whenTime"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `idx_record_notiKey_whenTime` ON `${TABLE_NAME}` (`notiKey`, `whenTime`)"
+          }
+        ]
+      },
+      {
+        "tableName": "notiAction",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`notiActionId` TEXT NOT NULL, `notiKey` TEXT NOT NULL, `actionType` TEXT NOT NULL, `time` INTEGER NOT NULL, `lastAppResumeTime` INTEGER NOT NULL, `metadata` TEXT NOT NULL, PRIMARY KEY(`notiActionId`))",
+        "fields": [
+          {
+            "fieldPath": "notiActionId",
+            "columnName": "notiActionId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "notiKey",
+            "columnName": "notiKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "actionType",
+            "columnName": "actionType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "time",
+            "columnName": "time",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastAppResumeTime",
+            "columnName": "lastAppResumeTime",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "metadata",
+            "columnName": "metadata",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "notiActionId"
+          ]
+        }
+      },
+      {
+        "tableName": "noti_llm_state",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`notiKey` TEXT NOT NULL, `shouldExtractReminder` INTEGER NOT NULL DEFAULT 0, `categories` TEXT NOT NULL DEFAULT '[]', `categoryReason` TEXT NOT NULL DEFAULT '', `categorySource` TEXT NOT NULL DEFAULT '', `lastClassifiedAt` INTEGER NOT NULL DEFAULT 0, `lastClassifiedRecordCount` INTEGER NOT NULL DEFAULT 0, `updatedAt` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`notiKey`))",
+        "fields": [
+          {
+            "fieldPath": "notiKey",
+            "columnName": "notiKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "shouldExtractReminder",
+            "columnName": "shouldExtractReminder",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "categories",
+            "columnName": "categories",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'[]'"
+          },
+          {
+            "fieldPath": "categoryReason",
+            "columnName": "categoryReason",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "''"
+          },
+          {
+            "fieldPath": "categorySource",
+            "columnName": "categorySource",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "''"
+          },
+          {
+            "fieldPath": "lastClassifiedAt",
+            "columnName": "lastClassifiedAt",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "lastClassifiedRecordCount",
+            "columnName": "lastClassifiedRecordCount",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "notiKey"
+          ]
+        }
+      },
+      {
+        "tableName": "saved_item",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`savedItemId` TEXT NOT NULL, `title` TEXT NOT NULL, `content` TEXT NOT NULL, `itemType` TEXT NOT NULL DEFAULT 'task', `state` TEXT NOT NULL DEFAULT 'saved', `lastUpdateTimestamp` INTEGER NOT NULL, `deadlineAtMs` INTEGER NOT NULL, `startAtMs` INTEGER NOT NULL DEFAULT 0, `endAtMs` INTEGER NOT NULL DEFAULT 0, `origin` TEXT NOT NULL, `humanEditCount` INTEGER NOT NULL, `userEdited` INTEGER NOT NULL, `buttons` TEXT NOT NULL DEFAULT '[]', `isViewed` INTEGER NOT NULL DEFAULT 1, `isStarred` INTEGER NOT NULL DEFAULT 0, `doAtMs` INTEGER NOT NULL DEFAULT 0, `lastViewedChangeAt` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`savedItemId`))",
+        "fields": [
+          {
+            "fieldPath": "savedItemId",
+            "columnName": "savedItemId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "content",
+            "columnName": "content",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "itemType",
+            "columnName": "itemType",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'task'"
+          },
+          {
+            "fieldPath": "state",
+            "columnName": "state",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'saved'"
+          },
+          {
+            "fieldPath": "lastUpdateTimestamp",
+            "columnName": "lastUpdateTimestamp",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "deadlineAtMs",
+            "columnName": "deadlineAtMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "startAtMs",
+            "columnName": "startAtMs",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "endAtMs",
+            "columnName": "endAtMs",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "origin",
+            "columnName": "origin",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "humanEditCount",
+            "columnName": "humanEditCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "userEdited",
+            "columnName": "userEdited",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "buttons",
+            "columnName": "buttons",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'[]'"
+          },
+          {
+            "fieldPath": "isViewed",
+            "columnName": "isViewed",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "1"
+          },
+          {
+            "fieldPath": "isStarred",
+            "columnName": "isStarred",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "doAtMs",
+            "columnName": "doAtMs",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "lastViewedChangeAt",
+            "columnName": "lastViewedChangeAt",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "savedItemId"
+          ]
+        }
+      },
+      {
+        "tableName": "saved_sub_item",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`savedSubItemId` TEXT NOT NULL, `parentSavedItemId` TEXT NOT NULL, `title` TEXT NOT NULL, `description` TEXT NOT NULL, `itemType` TEXT NOT NULL DEFAULT 'task', `isCompleted` INTEGER NOT NULL DEFAULT 0, `deadlineAtMs` INTEGER NOT NULL, `startAtMs` INTEGER NOT NULL DEFAULT 0, `endAtMs` INTEGER NOT NULL DEFAULT 0, `buttons` TEXT NOT NULL DEFAULT '[]', `sortOrder` INTEGER NOT NULL DEFAULT 0, `createdAt` INTEGER NOT NULL, `lastUpdateTimestamp` INTEGER NOT NULL, `isVisible` INTEGER NOT NULL DEFAULT 1, PRIMARY KEY(`savedSubItemId`), FOREIGN KEY(`parentSavedItemId`) REFERENCES `saved_item`(`savedItemId`) ON UPDATE NO ACTION ON DELETE NO ACTION )",
+        "fields": [
+          {
+            "fieldPath": "savedSubItemId",
+            "columnName": "savedSubItemId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "parentSavedItemId",
+            "columnName": "parentSavedItemId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "description",
+            "columnName": "description",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "itemType",
+            "columnName": "itemType",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'task'"
+          },
+          {
+            "fieldPath": "isCompleted",
+            "columnName": "isCompleted",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "deadlineAtMs",
+            "columnName": "deadlineAtMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "startAtMs",
+            "columnName": "startAtMs",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "endAtMs",
+            "columnName": "endAtMs",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "buttons",
+            "columnName": "buttons",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'[]'"
+          },
+          {
+            "fieldPath": "sortOrder",
+            "columnName": "sortOrder",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastUpdateTimestamp",
+            "columnName": "lastUpdateTimestamp",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isVisible",
+            "columnName": "isVisible",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "1"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "savedSubItemId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "idx_saved_sub_item_parent",
+            "unique": false,
+            "columnNames": [
+              "parentSavedItemId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `idx_saved_sub_item_parent` ON `${TABLE_NAME}` (`parentSavedItemId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "saved_item",
+            "onDelete": "NO ACTION",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "parentSavedItemId"
+            ],
+            "referencedColumns": [
+              "savedItemId"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "noti_saved_item_link",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`linkId` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `notiKey` TEXT NOT NULL, `notiRecordId` TEXT NOT NULL, `type` TEXT NOT NULL, `savedItemId` TEXT NOT NULL, `role` TEXT NOT NULL, `source` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, FOREIGN KEY(`savedItemId`) REFERENCES `saved_item`(`savedItemId`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "linkId",
+            "columnName": "linkId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "notiKey",
+            "columnName": "notiKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "notiRecordId",
+            "columnName": "notiRecordId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "type",
+            "columnName": "type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "savedItemId",
+            "columnName": "savedItemId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "role",
+            "columnName": "role",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "source",
+            "columnName": "source",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "linkId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_noti_saved_item_link_savedItemId_notiRecordId_role",
+            "unique": true,
+            "columnNames": [
+              "savedItemId",
+              "notiRecordId",
+              "role"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_noti_saved_item_link_savedItemId_notiRecordId_role` ON `${TABLE_NAME}` (`savedItemId`, `notiRecordId`, `role`)"
+          },
+          {
+            "name": "index_noti_saved_item_link_savedItemId",
+            "unique": false,
+            "columnNames": [
+              "savedItemId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_noti_saved_item_link_savedItemId` ON `${TABLE_NAME}` (`savedItemId`)"
+          },
+          {
+            "name": "index_noti_saved_item_link_notiRecordId",
+            "unique": false,
+            "columnNames": [
+              "notiRecordId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_noti_saved_item_link_notiRecordId` ON `${TABLE_NAME}` (`notiRecordId`)"
+          },
+          {
+            "name": "index_noti_saved_item_link_notiKey",
+            "unique": false,
+            "columnNames": [
+              "notiKey"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_noti_saved_item_link_notiKey` ON `${TABLE_NAME}` (`notiKey`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "saved_item",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "savedItemId"
+            ],
+            "referencedColumns": [
+              "savedItemId"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "saved_item_change_log",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`changeId` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `savedItemId` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, `changeType` TEXT NOT NULL, `changeSummary` TEXT NOT NULL DEFAULT '', `appendedContent` TEXT NOT NULL DEFAULT '', `addedSubTasksJson` TEXT NOT NULL DEFAULT '[]', `removedSubTasksJson` TEXT NOT NULL DEFAULT '[]', `changedFieldsJson` TEXT NOT NULL DEFAULT '{}', `evidenceRecordIdsJson` TEXT NOT NULL DEFAULT '[]', `origin` TEXT NOT NULL DEFAULT 'llm', FOREIGN KEY(`savedItemId`) REFERENCES `saved_item`(`savedItemId`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "changeId",
+            "columnName": "changeId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "savedItemId",
+            "columnName": "savedItemId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "changeType",
+            "columnName": "changeType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "changeSummary",
+            "columnName": "changeSummary",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "''"
+          },
+          {
+            "fieldPath": "appendedContent",
+            "columnName": "appendedContent",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "''"
+          },
+          {
+            "fieldPath": "addedSubTasksJson",
+            "columnName": "addedSubTasksJson",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'[]'"
+          },
+          {
+            "fieldPath": "removedSubTasksJson",
+            "columnName": "removedSubTasksJson",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'[]'"
+          },
+          {
+            "fieldPath": "changedFieldsJson",
+            "columnName": "changedFieldsJson",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'{}'"
+          },
+          {
+            "fieldPath": "evidenceRecordIdsJson",
+            "columnName": "evidenceRecordIdsJson",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'[]'"
+          },
+          {
+            "fieldPath": "origin",
+            "columnName": "origin",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'llm'"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "changeId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_saved_item_change_log_savedItemId_createdAt",
+            "unique": false,
+            "columnNames": [
+              "savedItemId",
+              "createdAt"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_saved_item_change_log_savedItemId_createdAt` ON `${TABLE_NAME}` (`savedItemId`, `createdAt`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "saved_item",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "savedItemId"
+            ],
+            "referencedColumns": [
+              "savedItemId"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "pending_op",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`opId` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `notiKey` TEXT NOT NULL DEFAULT '', `opType` TEXT NOT NULL, `payload` TEXT NOT NULL, `targetItemId` TEXT NOT NULL DEFAULT '', `mergeSourceItemIds` TEXT NOT NULL DEFAULT '[]', `evidenceRecordIds` TEXT NOT NULL DEFAULT '[]', `reason` TEXT NOT NULL DEFAULT '', `itemType` TEXT NOT NULL DEFAULT 'task', `batchId` TEXT NOT NULL DEFAULT '', `createdAt` INTEGER NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "opId",
+            "columnName": "opId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "notiKey",
+            "columnName": "notiKey",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "''"
+          },
+          {
+            "fieldPath": "opType",
+            "columnName": "opType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "payload",
+            "columnName": "payload",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "targetItemId",
+            "columnName": "targetItemId",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "''"
+          },
+          {
+            "fieldPath": "mergeSourceItemIds",
+            "columnName": "mergeSourceItemIds",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'[]'"
+          },
+          {
+            "fieldPath": "evidenceRecordIds",
+            "columnName": "evidenceRecordIds",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'[]'"
+          },
+          {
+            "fieldPath": "reason",
+            "columnName": "reason",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "''"
+          },
+          {
+            "fieldPath": "itemType",
+            "columnName": "itemType",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'task'"
+          },
+          {
+            "fieldPath": "batchId",
+            "columnName": "batchId",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "''"
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "opId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_pending_op_targetItemId",
+            "unique": false,
+            "columnNames": [
+              "targetItemId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_pending_op_targetItemId` ON `${TABLE_NAME}` (`targetItemId`)"
+          },
+          {
+            "name": "index_pending_op_batchId",
+            "unique": false,
+            "columnNames": [
+              "batchId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_pending_op_batchId` ON `${TABLE_NAME}` (`batchId`)"
+          }
+        ]
+      },
+      {
+        "tableName": "rejected_merge",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`itemIdA` TEXT NOT NULL, `itemIdB` TEXT NOT NULL, `rejectedAt` INTEGER NOT NULL, PRIMARY KEY(`itemIdA`, `itemIdB`))",
+        "fields": [
+          {
+            "fieldPath": "itemIdA",
+            "columnName": "itemIdA",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "itemIdB",
+            "columnName": "itemIdB",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "rejectedAt",
+            "columnName": "rejectedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "itemIdA",
+            "itemIdB"
+          ]
+        }
+      },
+      {
+        "tableName": "extraction_journal_entry",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`entryId` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `notiKey` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, `eventType` TEXT NOT NULL, `savedItemId` TEXT NOT NULL DEFAULT '', `itemTitle` TEXT NOT NULL DEFAULT '', `detail` TEXT NOT NULL DEFAULT '')",
+        "fields": [
+          {
+            "fieldPath": "entryId",
+            "columnName": "entryId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "notiKey",
+            "columnName": "notiKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "eventType",
+            "columnName": "eventType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "savedItemId",
+            "columnName": "savedItemId",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "''"
+          },
+          {
+            "fieldPath": "itemTitle",
+            "columnName": "itemTitle",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "''"
+          },
+          {
+            "fieldPath": "detail",
+            "columnName": "detail",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "''"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "entryId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_extraction_journal_entry_notiKey_createdAt",
+            "unique": false,
+            "columnNames": [
+              "notiKey",
+              "createdAt"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_extraction_journal_entry_notiKey_createdAt` ON `${TABLE_NAME}` (`notiKey`, `createdAt`)"
+          }
+        ]
+      },
+      {
+        "tableName": "extraction_journal_summary",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`notiKey` TEXT NOT NULL, `summaryText` TEXT NOT NULL DEFAULT '', `lastFoldedAt` INTEGER NOT NULL DEFAULT 0, `foldedEntryCount` INTEGER NOT NULL DEFAULT 0, `lastFoldedPostTime` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`notiKey`))",
+        "fields": [
+          {
+            "fieldPath": "notiKey",
+            "columnName": "notiKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "summaryText",
+            "columnName": "summaryText",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "''"
+          },
+          {
+            "fieldPath": "lastFoldedAt",
+            "columnName": "lastFoldedAt",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "foldedEntryCount",
+            "columnName": "foldedEntryCount",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "lastFoldedPostTime",
+            "columnName": "lastFoldedPostTime",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "notiKey"
+          ]
+        }
+      },
+      {
+        "tableName": "reminder",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`reminderId` TEXT NOT NULL, `remindAtMs` INTEGER NOT NULL, `title` TEXT NOT NULL, `content` TEXT NOT NULL, `status` TEXT NOT NULL DEFAULT 'scheduled', `sourceType` TEXT NOT NULL DEFAULT 'saved_item', `createdAtMs` INTEGER NOT NULL, `updatedAtMs` INTEGER NOT NULL, `seenAtMs` INTEGER, `cancelledAtMs` INTEGER, PRIMARY KEY(`reminderId`))",
+        "fields": [
+          {
+            "fieldPath": "reminderId",
+            "columnName": "reminderId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "remindAtMs",
+            "columnName": "remindAtMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "content",
+            "columnName": "content",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'scheduled'"
+          },
+          {
+            "fieldPath": "sourceType",
+            "columnName": "sourceType",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'saved_item'"
+          },
+          {
+            "fieldPath": "createdAtMs",
+            "columnName": "createdAtMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAtMs",
+            "columnName": "updatedAtMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "seenAtMs",
+            "columnName": "seenAtMs",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "cancelledAtMs",
+            "columnName": "cancelledAtMs",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "reminderId"
+          ]
+        }
+      },
+      {
+        "tableName": "reminder_saved_item_ref",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`reminderId` TEXT NOT NULL, `savedItemId` TEXT NOT NULL, PRIMARY KEY(`reminderId`, `savedItemId`))",
+        "fields": [
+          {
+            "fieldPath": "reminderId",
+            "columnName": "reminderId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "savedItemId",
+            "columnName": "savedItemId",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "reminderId",
+            "savedItemId"
+          ]
+        }
+      },
+      {
+        "tableName": "reminder_noti_record_ref",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`reminderId` TEXT NOT NULL, `notiRecordId` TEXT NOT NULL, PRIMARY KEY(`reminderId`, `notiRecordId`))",
+        "fields": [
+          {
+            "fieldPath": "reminderId",
+            "columnName": "reminderId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "notiRecordId",
+            "columnName": "notiRecordId",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "reminderId",
+            "notiRecordId"
+          ]
+        }
+      },
+      {
+        "tableName": "extraction_preferences",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `statement` TEXT NOT NULL, `preferenceType` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "statement",
+            "columnName": "statement",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "preferenceType",
+            "columnName": "preferenceType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "preference_conflicts",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`conflictId` TEXT NOT NULL, `description` TEXT NOT NULL, `involvedPreferenceIds` TEXT NOT NULL, `source` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, PRIMARY KEY(`conflictId`))",
+        "fields": [
+          {
+            "fieldPath": "conflictId",
+            "columnName": "conflictId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "description",
+            "columnName": "description",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "involvedPreferenceIds",
+            "columnName": "involvedPreferenceIds",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "source",
+            "columnName": "source",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "conflictId"
+          ]
+        }
+      },
+      {
+        "tableName": "user_contexts",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `statement` TEXT NOT NULL, `category` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "statement",
+            "columnName": "statement",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "category",
+            "columnName": "category",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '6badf45ecbf47a6c413a189daa79d11a')"
+    ]
+  }
+}

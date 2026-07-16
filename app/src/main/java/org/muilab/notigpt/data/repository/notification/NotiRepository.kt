@@ -1,9 +1,7 @@
 package org.muilab.notigpt.data.repository.notification
 
 import android.content.Context
-import android.os.Build
 import android.service.notification.StatusBarNotification
-import androidx.annotation.RequiresApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
@@ -61,10 +59,6 @@ class NotiRepository(
         notiActionDao = notiActionDao,
     )
 
-    suspend fun removeExpiredNotiRecords() {
-        actionsRepo.removeExpiredNotiRecords()
-    }
-
     /** Returns flat active notification units after record joining and drawer sort rules are applied. */
     fun getActiveNotiUnits(): Flow<List<NotiDisplayUnit>> {
         return activeUnitsRepo.getActiveNotiUnits()
@@ -76,7 +70,6 @@ class NotiRepository(
      * The service calls this for both initial active notifications and new posts; record history is inserted
      * separately so current state and timeline remain distinct.
      */
-    @RequiresApi(Build.VERSION_CODES.S)
     fun upsertNotiUnit(context: Context, sbn: StatusBarNotification, isInit: Boolean) {
         actionsRepo.upsertNotiUnit(context, sbn, isInit)
     }
@@ -94,7 +87,6 @@ class NotiRepository(
      *
      * Call this alongside NotiUnit upserts when the timeline needs to preserve repeated updates for the same key.
      */
-    @RequiresApi(Build.VERSION_CODES.S)
     suspend fun insertNotiRecord(sbn: StatusBarNotification) = withContext(Dispatchers.IO) {
         actionsRepo.insertNotiRecord(sbn)
     }

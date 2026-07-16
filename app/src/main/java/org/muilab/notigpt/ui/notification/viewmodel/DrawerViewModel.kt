@@ -5,10 +5,10 @@ package org.muilab.notigpt.ui.notification.viewmodel
 import android.annotation.SuppressLint
 import android.app.Application
 import android.content.Context
-import android.os.Build
 import android.util.Log
-import androidx.annotation.RequiresApi
 import androidx.lifecycle.AndroidViewModel
+import dagger.hilt.android.lifecycle.HiltViewModel
+import javax.inject.Inject
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -60,7 +60,8 @@ import org.muilab.notigpt.ui.notification.controller.DrawerUnreadCounts
  * This class is the UI-facing coordinator over smaller drawer controllers. If a responsibility grows large,
  * prefer extracting another controller/repository method over adding more direct database logic here.
  */
-class DrawerViewModel(
+@HiltViewModel
+class DrawerViewModel @Inject constructor(
     application: Application,
     private val notiRepository: NotiRepository,
     private val clipboard: ClipboardController,
@@ -112,16 +113,15 @@ class DrawerViewModel(
      * The category page's "past 24 hrs" time-window toggle, lifted here so the top-bar Clear All action
      * (which lives outside the screen) can scope itself to exactly the visible list.
      */
-    private val _notiLast24hOnly = MutableStateFlow(true)
-    val notiLast24hOnly: StateFlow<Boolean> = _notiLast24hOnly.asStateFlow()
-    fun setNotiLast24hOnly(value: Boolean) { _notiLast24hOnly.value = value }
+    private val _notiRecentOnly = MutableStateFlow(true)
+    val notiRecentOnly: StateFlow<Boolean> = _notiRecentOnly.asStateFlow()
+    fun setNotiRecentOnly(value: Boolean) { _notiRecentOnly.value = value }
 
     /**
      * Updates the active drawer category filter and resets dependent app-filter state when needed.
      *
      * Keep filter coordination here so the screen does not need to understand category/app-category coupling.
      */
-    @RequiresApi(Build.VERSION_CODES.S)
     fun updateCategory(newCategory: String) {
         filters.startTargetLoading()
         filters.setCategory(newCategory)
@@ -132,7 +132,6 @@ class DrawerViewModel(
         updateAppCategory(APP_CATEGORY_ALL)
     }
 
-    @RequiresApi(Build.VERSION_CODES.S)
     fun updateAppCategory(newAppCategory: String) {
         filters.startTargetLoading()
         if (isSortingMode.value) toggleSortingMode()
@@ -175,7 +174,7 @@ class DrawerViewModel(
 
     private val searchController = DrawerSearchController(notiRepository)
     private val readStateController = DrawerReadStateController(notiRepository)
-    private val actionsController = DrawerActionsController(context, notiRepository)
+    private val actionsController = DrawerActionsController(notiRepository)
     private val fullRecordsController = FullRecordsController(
         scope = viewModelScope,
         notiRepository = notiRepository,
@@ -219,20 +218,23 @@ class DrawerViewModel(
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    /** True if a visible thread should be cleared by "Clear all": right category, in-window, not pinned. */
-    private fun isVisibleClearable(du: NotiDisplayUnit, category: String, last24hOnly: Boolean, cutoff: Long, llm: Map<String, org.muilab.notigpt.model.features.NotiLlmState>): Boolean =
+    /** True if a visible thread should be cleared by "Clear all": right category, time bucket, not pinned. */
+    private fun isVisibleClearable(du: NotiDisplayUnit, category: String, recentOnly: Boolean, cutoff: Long, llm: Map<String, org.muilab.notigpt.model.features.NotiLlmState>): Boolean =
         !du.notiUnit.isPinned &&
             NotiClassificationRepository.categoryOf(du.notiUnit, llm[du.notiKey]) == category &&
-            (!last24hOnly || du.notiRecords.any { it.time >= cutoff })
+            (du.notiRecords.maxOfOrNull { it.time }?.let { (it >= cutoff) == recentOnly } == true)
 
     /**
-     * Count of threads "Clear all" would remove for each category, honoring the current time window and
+     * Count of threads "Clear all" would remove for each category, honoring the current time bucket and
      * excluding pinned. Drives the top-bar button's enabled state so it disables when the visible list is empty.
      */
     val clearableVisibleCountByCategory: StateFlow<Map<String, Int>> =
-        combine(newNotificationUnits, llmStatesByKey, _notiLast24hOnly) { units, llm, last24hOnly ->
+        combine(newNotificationUnits, llmStatesByKey, _notiRecentOnly) { units, llm, recentOnly ->
             val cutoff = System.currentTimeMillis() - HomeViewModel.newNotiWindowMs()
-            units.filter { du -> !du.notiUnit.isPinned && (!last24hOnly || du.notiRecords.any { it.time >= cutoff }) }
+            units.filter { du ->
+                !du.notiUnit.isPinned &&
+                    (du.notiRecords.maxOfOrNull { it.time }?.let { (it >= cutoff) == recentOnly } == true)
+            }
                 .groupingBy { du -> NotiClassificationRepository.categoryOf(du.notiUnit, llm[du.notiKey]) }
                 .eachCount()
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
@@ -290,20 +292,16 @@ class DrawerViewModel(
                 }
         }
 
-        removeExpiredRecords()
     }
 
-    @RequiresApi(Build.VERSION_CODES.S)
     fun accessNotification(notiUnit: NotiUnit) {
         launchNotificationContent(notiUnit, NotiActionType.AccessClickSearch)
     }
 
-    @RequiresApi(Build.VERSION_CODES.S)
     fun accessAndDismissNotification(notiUnit: NotiUnit) {
         launchNotificationContent(notiUnit, NotiActionType.AccessClickDismiss)
     }
 
-    @RequiresApi(Build.VERSION_CODES.S)
     private fun launchNotificationContent(notiUnit: NotiUnit, action: NotiActionType) {
         val contentIntent = NotiListenerService.getContentIntent(context, notiUnit)
         NotificationLauncher.launchPendingIntentOrFallback(
@@ -317,7 +315,6 @@ class DrawerViewModel(
         actOnNoti(notiUnit.notiKey, action)
     }
 
-    @RequiresApi(Build.VERSION_CODES.S)
     fun actOnNoti(notiKey: String, action: String) {
         val typed = NotiActionType.fromWireValue(action)
         if (typed != null) {
@@ -334,7 +331,6 @@ class DrawerViewModel(
         }
     }
 
-    @RequiresApi(Build.VERSION_CODES.S)
     fun actOnNoti(notiKey: String, action: NotiActionType) {
         applyOptimisticPinState(notiKey, action)
         viewModelScope.launch {
@@ -365,7 +361,6 @@ class DrawerViewModel(
         }
     }
 
-    @RequiresApi(Build.VERSION_CODES.S)
     fun deleteAllNotis() {
         viewModelScope.launch(Dispatchers.IO) {
             notiRepository.deleteAllNotis()
@@ -375,17 +370,16 @@ class DrawerViewModel(
     }
 
     /**
-     * Clears only the threads currently visible on the given category page: matching category, within the
-     * active time window ([notiLast24hOnly]), excluding pinned. Whole units are dismissed (records included).
+     * Clears only the threads currently visible on the given category page: matching category and time
+     * bucket, excluding pinned. Whole units are dismissed (records included).
      */
-    @RequiresApi(Build.VERSION_CODES.S)
     fun clearVisibleNotis(category: String) {
         viewModelScope.launch(Dispatchers.IO) {
             val cutoff = System.currentTimeMillis() - HomeViewModel.newNotiWindowMs()
             val llm = llmStatesByKey.value
-            val last24hOnly = _notiLast24hOnly.value
+            val recentOnly = _notiRecentOnly.value
             val keys = newNotificationUnits.value
-                .filter { du -> isVisibleClearable(du, category, last24hOnly, cutoff, llm) }
+                .filter { du -> isVisibleClearable(du, category, recentOnly, cutoff, llm) }
                 .map { it.notiKey }
             if (keys.isNotEmpty()) {
                 notiRepository.deleteNotisByKeys(keys)
@@ -395,7 +389,6 @@ class DrawerViewModel(
         unreadCounts.refresh()
     }
 
-    @RequiresApi(Build.VERSION_CODES.S)
     fun markAllNotisRead() {
         persistReadStatus()
         viewModelScope.launch(Dispatchers.IO) {
@@ -495,7 +488,6 @@ class DrawerViewModel(
         }
     }
 
-    @RequiresApi(Build.VERSION_CODES.S)
     fun persistReadStatus() {
         viewModelScope.launch {
             readStateController.persistSeen()
@@ -513,13 +505,6 @@ class DrawerViewModel(
             refreshNewNotificationRecords()
         }
     }
-
-    fun removeExpiredRecords() {
-        viewModelScope.launch {
-            notiRepository.removeExpiredNotiRecords()
-        }
-    }
-
 
     /**
      * Called by list items when a card is fully visible.
@@ -599,7 +584,6 @@ class DrawerViewModel(
         }
     }
 
-    @RequiresApi(Build.VERSION_CODES.S)
     fun accessNotificationByKey(notiKey: String) {
         viewModelScope.launch {
             val unit = withContext(Dispatchers.IO) { notiRepository.getNotiUnit(notiKey) }

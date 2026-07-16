@@ -21,11 +21,19 @@ interface NotiDrawerDao {
     @Query("SELECT COUNT(*) FROM noti_drawer WHERE isDismissed = 0")
     fun getActiveNotiCount(): Int
 
+    /** Counts active notification threads updated inside the user-selected recent window. */
+    @Query("SELECT COUNT(*) FROM noti_drawer WHERE isDismissed = 0 AND lastUpdateTime >= :sinceMs")
+    fun getActiveNotiCountSince(sinceMs: Long): Int
+
     @Query("SELECT COUNT(*) FROM noti_drawer WHERE isDismissed = 0 AND isRead = 0")
     fun getActiveUnreadCount(): Int
 
     @Query("SELECT * FROM noti_drawer")
     fun getAll(): List<NotiUnit>
+
+    /** Irreversibly removes device-local notification drawer history. */
+    @Query("DELETE FROM noti_drawer")
+    suspend fun hardDeleteAll()
 
     @Query("SELECT * FROM noti_drawer WHERE isDismissed = 0")
     fun getAllActive(): List<NotiUnit>

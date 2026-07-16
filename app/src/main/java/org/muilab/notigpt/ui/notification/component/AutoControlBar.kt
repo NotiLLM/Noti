@@ -31,7 +31,6 @@ import org.muilab.notigpt.util.SharedPreferencesManager
 fun AutoControlBar() {
     var autoArchive by remember { mutableStateOf(SharedPreferencesManager.autoArchive) }
     var autoDelete by remember { mutableStateOf(SharedPreferencesManager.autoDelete) }
-    var trackPin by remember { mutableStateOf(SharedPreferencesManager.trackPin) }
 
     FlowRow (
         Modifier.fillMaxWidth(),
@@ -61,16 +60,5 @@ fun AutoControlBar() {
             )
         }
 
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Track Pin")
-            Spacer(Modifier.size(20.dp))
-            Switch(
-                checked = trackPin,
-                onCheckedChange = {
-                    trackPin = it
-                    SharedPreferencesManager.trackPin = it
-                }
-            )
-        }
     }
 }

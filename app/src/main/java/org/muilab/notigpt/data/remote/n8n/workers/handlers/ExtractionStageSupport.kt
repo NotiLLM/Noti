@@ -145,7 +145,7 @@ internal object ExtractionStageSupport {
     /** Posts [payload] (serialized to JSON) to [path]; records pipeline health for the banner. */
     suspend fun call(ctx: N8nWorkerContext, path: String, payload: Map<String, Any>): Http {
         val json = gson.toJson(payload)
-        Log.d(TAG, "Stage POST $path payload=$json")
+        Log.d(TAG, "Stage POST $path bytes=${json.length}")
         val response = try {
             ctx.n8nApiService.postToWebhook(path, json.toRequestBody("application/json; charset=utf-8".toMediaType()))
         } catch (t: Throwable) {
@@ -162,7 +162,7 @@ internal object ExtractionStageSupport {
         }
         ExtractionStatusStore.recordSuccess()
         val body = response.body()?.string() ?: return Http.Fail
-        Log.d(TAG, "Stage response ($path): $body")
+        Log.d(TAG, "Stage response ($path) bytes=${body.length}")
         return Http.Ok(body)
     }
 

@@ -1,23 +1,16 @@
 package org.muilab.notigpt
 
-import android.app.ActivityManager
 import android.content.ComponentName
-import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.activity.viewModels
-import androidx.core.content.ContextCompat
-import android.content.pm.PackageManager
-import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -28,13 +21,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.core.app.NotificationManagerCompat
-import org.muilab.notigpt.data.repository.notification.NotiRepositoryProvider
+import dagger.hilt.android.AndroidEntryPoint
 import org.muilab.notigpt.service.NotiListenerService
 import org.muilab.notigpt.ui.theme.NotiTheme
 import org.muilab.notigpt.util.SharedPreferencesManager
 import org.muilab.notigpt.ui.common.component.AppScaffold
 import org.muilab.notigpt.ui.notification.viewmodel.DrawerViewModel
-import org.muilab.notigpt.ui.notification.viewmodel.DrawerViewModelFactory
 import org.muilab.notigpt.work.ReminderPeriodicWork
 
 /**
@@ -43,6 +35,7 @@ import org.muilab.notigpt.work.ReminderPeriodicWork
  * Keep process-wide startup wiring here. Feature state should stay in ViewModels, repositories, or workers so
  * the activity remains a thin host for Compose and Android permission flows.
  */
+@AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     /**
      * Initializes app-wide preferences, background work, and Compose content for the main shell.
@@ -50,10 +43,6 @@ class MainActivity : ComponentActivity() {
      * Keep permission prompts and service checks here because they depend on Android activity context; route
      * feature behavior through Compose screens and ViewModels.
      */
-    private val requestLocalNetworkPermission =
-        registerForActivityResult(ActivityResultContracts.RequestPermission()) { /* no-op: workers retry */ }
-
-    @RequiresApi(Build.VERSION_CODES.S)
     override fun onCreate(savedInstanceState: Bundle?) {
         // Must precede super.onCreate: swaps the launch (splash) theme for the app theme.
         installSplashScreen()
@@ -66,9 +55,6 @@ class MainActivity : ComponentActivity() {
 
         SharedPreferencesManager.init(this)
 
-        // Android 16+ (API 36) Local Network Protection: LAN/RFC-1918 hosts (e.g. the dev n8n server)
-        // are unreachable until this runtime permission is granted, even though internet access works.
-        maybeRequestLocalNetworkPermission()
         // Identity is always the signed-in Firebase UID. Keep it blank before sign-in; the device
         // ID is not an account identity and must never be used for Firestore or n8n payloads.
         SharedPreferencesManager.userId =
@@ -139,6 +125,7 @@ class MainActivity : ComponentActivity() {
                     } else {
                         AppScaffold(
                             drawerViewModel = drawerViewModel,
+                            onSignedOut = { signedIn = false },
                         )
                     }
                 }
@@ -146,9 +133,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private val drawerViewModel: DrawerViewModel by viewModels {
-        DrawerViewModelFactory(this.application, NotiRepositoryProvider.provideNotiRepository(applicationContext))
-    }
+    private val drawerViewModel: DrawerViewModel by viewModels()
 
 
     private fun isNotiListenerEnabled(): Boolean {
@@ -158,30 +143,9 @@ class MainActivity : ComponentActivity() {
         return (flat != null) && (cn.flattenToString() in flat)
     }
 
-    /**
-     * Requests ACCESS_LOCAL_NETWORK on Android 16+ so the app can reach LAN hosts (dev n8n server).
-     * No-op on older versions where the permission does not exist and LAN access is unrestricted.
-     */
-    private fun maybeRequestLocalNetworkPermission() {
-        if (Build.VERSION.SDK_INT < 36) return
-        val perm = "android.permission.ACCESS_LOCAL_NETWORK"
-        if (ContextCompat.checkSelfPermission(this, perm) != PackageManager.PERMISSION_GRANTED) {
-            requestLocalNetworkPermission.launch(perm)
-        }
-    }
-
     fun isBatteryOptimizationsIgnored(): Boolean {
         val pm = getSystemService(POWER_SERVICE) as android.os.PowerManager
         return pm.isIgnoringBatteryOptimizations(packageName)
-    }
-
-    private fun isServiceRunning(context: Context, serviceClass: Class<*>): Boolean {
-        val activityManager = context.getSystemService(ACTIVITY_SERVICE) as ActivityManager
-        val services = activityManager.getRunningServices(Integer.MAX_VALUE)
-        for (serviceInfo in services)
-            if (serviceClass.name == serviceInfo.service.className)
-                return true
-        return false
     }
 
     override fun onResume() {

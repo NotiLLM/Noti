@@ -1,7 +1,6 @@
 package org.muilab.notigpt.ui.home
 
-import android.os.Build
-import androidx.annotation.RequiresApi
+import android.graphics.Paint
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -10,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -57,7 +57,6 @@ import org.muilab.notigpt.ui.theme.NotiTheme
  * Visual system (Apple-restraint): a single tinted hero (the Review row); everything else is a
  * neutral card whose meaning comes from a small colored icon disc and a bold count.
  */
-@RequiresApi(Build.VERSION_CODES.S)
 @Composable
 fun HomeScreen(
     drawerViewModel: DrawerViewModel,
@@ -99,8 +98,9 @@ fun HomeScreen(
                 iconRes = R.drawable.communication,
                 title = stringResource(R.string.home_noti_communication),
                 preview = commPreview,
-                // Communication counts individual messages (records).
-                badgeCount = commPreview.totalUnits,
+                // Both Home and the category screen count notification threads.
+                recentCount = commPreview.recentUnits,
+                olderCount = commPreview.olderUnits,
                 onClick = { onOpenNotiCategory(NotiCategory.Communication) },
             )
         }
@@ -109,8 +109,9 @@ fun HomeScreen(
                 iconRes = R.drawable.content,
                 title = stringResource(R.string.home_noti_content),
                 preview = contentPreview,
-                // Content counts threads (notiKeys), not individual records.
-                badgeCount = contentPreview.totalUnits,
+                // Content also counts threads (notiKeys), not individual records.
+                recentCount = contentPreview.recentUnits,
+                olderCount = contentPreview.olderUnits,
                 onClick = { onOpenNotiCategory(NotiCategory.Content) },
             )
         }
@@ -255,7 +256,14 @@ private fun reviewSummary(counts: ReviewCounts): String {
 }
 
 @Composable
-private fun NotiCategoryRow(iconRes: Int, title: String, preview: CategoryPreview, badgeCount: Int, onClick: () -> Unit) {
+private fun NotiCategoryRow(
+    iconRes: Int,
+    title: String,
+    preview: CategoryPreview,
+    recentCount: Int,
+    olderCount: Int,
+    onClick: () -> Unit,
+) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -291,19 +299,48 @@ private fun NotiCategoryRow(iconRes: Int, title: String, preview: CategoryPrevie
                 }
             }
             Column(
-                horizontalAlignment = Alignment.End,
+                modifier = Modifier.fillMaxHeight(),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
+                horizontalAlignment = Alignment.End
             ) {
-                if (badgeCount > 0) {
-                    Text(
-                        text = stringResource(
-                            R.string.home_noti_window_hours,
-                            org.muilab.notigpt.util.SharedPreferencesManager.homeNotiWindowHours,
-                        ),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    CountBadge(badgeCount, MaterialTheme.colorScheme.onSurface, MaterialTheme.colorScheme.surfaceContainerHighest)
+
+                if (recentCount > 0) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = stringResource(
+                                R.string.home_noti_window_hours,
+                                org.muilab.notigpt.util.SharedPreferencesManager.homeNotiWindowHours,
+                            ),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        CountBadge(
+                            recentCount,
+                            MaterialTheme.colorScheme.onSurface,
+                            MaterialTheme.colorScheme.surfaceContainerHighest
+                        )
+                    }
+                }
+
+                if (olderCount > 0) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = stringResource(R.string.home_noti_older),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        CountBadge(
+                            olderCount,
+                            MaterialTheme.colorScheme.onSurface,
+                            MaterialTheme.colorScheme.surfaceContainerHighest
+                        )
+                    }
                 }
             }
         }

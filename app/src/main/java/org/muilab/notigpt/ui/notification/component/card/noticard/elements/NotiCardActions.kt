@@ -1,8 +1,6 @@
 package org.muilab.notigpt.ui.notification.component.card.noticard.elements
 
-import android.os.Build
 import android.util.Log
-import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberUpdatedState
@@ -27,7 +25,6 @@ private const val NOTI_SWIPE_TAG = "NotiSwipe"
  * Keep layout and button composition here. Action semantics should remain in callbacks so swipe/tap UI does not
  * duplicate repository or Android-notification behavior.
  */
-@RequiresApi(Build.VERSION_CODES.S)
 @Composable
 fun NotiCardBackgroundActions(
     modifier: Modifier = Modifier,

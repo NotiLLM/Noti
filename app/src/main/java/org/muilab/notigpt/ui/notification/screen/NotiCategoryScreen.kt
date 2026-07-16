@@ -1,7 +1,5 @@
 package org.muilab.notigpt.ui.notification.screen
 
-import android.os.Build
-import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -34,16 +32,16 @@ import org.muilab.notigpt.ui.notification.component.card.noticard.NotiCard
 import org.muilab.notigpt.ui.notification.viewmodel.DrawerViewModel
 import org.muilab.notigpt.ui.reminder.screen.ReminderDateTimeDialog
 import org.muilab.notigpt.ui.reminder.viewmodel.ScheduledReminderViewModel
+import org.muilab.notigpt.util.SharedPreferencesManager
 
 /**
  * Full-screen NotiCard list for one notification category (Communication / Content).
  *
  * Threads are classified via [NotiClassificationRepository] (persisted LLM category, falling back to
- * the messaging-style signal). A time chip narrows to the last 24 hours (the default, matching the
- * home-screen previews); the search bar filters records in memory. Cards can spawn a scheduled
+ * the messaging-style signal). Time chips split threads into recent X hours versus older
+ * notifications using each thread's latest received record; the search bar filters records in memory. Cards can spawn a scheduled
  * reminder that snapshots the records visible at creation time.
  */
-@RequiresApi(Build.VERSION_CODES.S)
 @Composable
 fun NotiCategoryScreen(
     category: String,
@@ -57,7 +55,7 @@ fun NotiCategoryScreen(
     val llmByKey by drawerViewModel.llmStatesByKey.collectAsState()
 
     // Lifted to the ViewModel so the top-bar Clear All action can scope to the same visible window.
-    val last24hOnly by drawerViewModel.notiLast24hOnly.collectAsState()
+    val recentOnly by drawerViewModel.notiRecentOnly.collectAsState()
     val normalizedQuery = searchQuery.trim().lowercase()
 
     // Pending "create reminder" from a card's records → opens the date-time dialog.
@@ -78,19 +76,13 @@ fun NotiCategoryScreen(
         }
     }
 
-    // Both pages count notiUnits (threads): a unit contributes 1 if it has any record in the window.
-    fun countFor(last24h: Boolean): Int = categoryUnits.count { du ->
-        du.notiRecords.any { !last24h || it.time >= cutoff }
-    }
-    val recentCount = remember(categoryUnits) { countFor(true) }
-    val allCount = remember(categoryUnits) { countFor(false) }
+    // A thread belongs to exactly one bucket based on its latest received record.
+    fun isRecent(du: NotiDisplayUnit): Boolean = du.notiRecords.maxOf { it.time } >= cutoff
+    val recentCount = remember(categoryUnits, cutoff) { categoryUnits.count(::isRecent) }
+    val olderCount = remember(categoryUnits, cutoff) { categoryUnits.count { !isRecent(it) } }
 
-    val visibleUnits: List<NotiDisplayUnit> = remember(categoryUnits, last24hOnly) {
-        if (!last24hOnly) categoryUnits
-        else categoryUnits.mapNotNull { du ->
-            val records = du.notiRecords.filter { it.time >= cutoff }
-            if (records.isEmpty()) null else NotiDisplayUnit(du.notiUnit, records)
-        }
+    val visibleUnits: List<NotiDisplayUnit> = remember(categoryUnits, recentOnly, cutoff) {
+        categoryUnits.filter { isRecent(it) == recentOnly }
     }
 
     Column(Modifier.fillMaxSize()) {
@@ -101,14 +93,14 @@ fun NotiCategoryScreen(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             FilterChip(
-                selected = last24hOnly,
-                onClick = { drawerViewModel.setNotiLast24hOnly(true) },
-                label = { Text(stringResource(R.string.noti_filter_last_24h_count, recentCount)) },
+                selected = recentOnly,
+                onClick = { drawerViewModel.setNotiRecentOnly(true) },
+                label = { Text(stringResource(R.string.noti_filter_recent_count, SharedPreferencesManager.homeNotiWindowHours, recentCount)) },
             )
             FilterChip(
-                selected = !last24hOnly,
-                onClick = { drawerViewModel.setNotiLast24hOnly(false) },
-                label = { Text(stringResource(R.string.noti_filter_all_count, allCount)) },
+                selected = !recentOnly,
+                onClick = { drawerViewModel.setNotiRecentOnly(false) },
+                label = { Text(stringResource(R.string.noti_filter_older_count, olderCount)) },
             )
         }
 

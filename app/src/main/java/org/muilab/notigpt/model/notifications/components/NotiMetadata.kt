@@ -1,7 +1,6 @@
 package org.muilab.notigpt.model.notifications.components
 
 import android.app.Notification
-import android.app.Person
 import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
@@ -14,7 +13,6 @@ import android.os.Build
 import android.service.notification.StatusBarNotification
 import android.util.Base64
 import android.util.LruCache
-import androidx.annotation.RequiresApi
 import androidx.core.graphics.drawable.toBitmap
 import java.io.ByteArrayOutputStream
 import androidx.core.graphics.createBitmap
@@ -54,53 +52,24 @@ data class NotiMetadata(
             override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount
         }
 
-        @RequiresApi(Build.VERSION_CODES.S)
         fun fetchIsPeople(sbn: StatusBarNotification): Boolean {
             val notification = sbn.notification
+            val hasAndroid12CallPerson = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+                notification.extras.get(Notification.EXTRA_CALL_PERSON) != null
+            val hasAndroid12MissedCallCategory = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+                notification.category == Notification.CATEGORY_MISSED_CALL
             return (notification.extras.get(Notification.EXTRA_MESSAGES) != null
                     || notification.extras.get(Notification.EXTRA_HISTORIC_MESSAGES) != null
                     || notification.extras.get(Notification.EXTRA_MESSAGING_PERSON) != null
-                    || notification.extras.get(Notification.EXTRA_CALL_PERSON) != null
+                    || hasAndroid12CallPerson
                     || notification.extras.get(Notification.EXTRA_PEOPLE_LIST)
                 .let { it != null && (it as ArrayList<*>).isNotEmpty() }
                     || notification.category == Notification.CATEGORY_MESSAGE
                     || notification.category == Notification.CATEGORY_CALL
-                    || notification.category == Notification.CATEGORY_MISSED_CALL)
-        }
-
-        @RequiresApi(Build.VERSION_CODES.S)
-        private fun fetchPeople(sbn: StatusBarNotification): List<String> {
-            val fromExtras = sbn.notification?.extras?.get(Notification.EXTRA_PEOPLE_LIST).let { peopleList ->
-                if (peopleList == null)
-                    arrayListOf()
-                else {
-                    (peopleList as ArrayList<Person>)
-                        .map { it.name.toString() }
-                }
-            }
-            val fromMessages = sbn.notification?.extras?.getParcelableArray(Notification.EXTRA_MESSAGES).let { peopleParcelable ->
-                if (peopleParcelable == null)
-                    arrayListOf()
-                else {
-                    Notification.MessagingStyle.Message.getMessagesFromBundleArray(peopleParcelable)
-                        .mapNotNull { it.senderPerson?.name }
-                        .map { it.toString() }
-                }
-            }
-            val fromHistoricMessages = sbn.notification?.extras?.getParcelableArray(Notification.EXTRA_HISTORIC_MESSAGES).let { peopleParcelable ->
-                if (peopleParcelable == null)
-                    arrayListOf()
-                else {
-                    Notification.MessagingStyle.Message.getMessagesFromBundleArray(peopleParcelable)
-                        .mapNotNull { it.senderPerson?.name }
-                        .map { it.toString() }
-                }
-            }
-            return fromExtras + fromMessages + fromHistoricMessages
+                    || hasAndroid12MissedCallCategory)
         }
     }
 
-    @RequiresApi(Build.VERSION_CODES.S)
     constructor(sbn: StatusBarNotification): this (
         pkgName = sbn.opPkg,
         hashKey = sbn.key.hashCode(),
@@ -111,7 +80,6 @@ data class NotiMetadata(
         isPeople = fetchIsPeople(sbn)
     )
 
-    @RequiresApi(Build.VERSION_CODES.S)
     fun update(context: Context, sbn: StatusBarNotification) {
         // appName
         val pm = context.packageManager

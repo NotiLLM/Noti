@@ -26,7 +26,7 @@ object PreferenceChatClient {
     suspend fun interact(request: N8nChatInteractRequestDto): N8nChatInteractResponseDto? {
         val gson = Gson()
         val json = gson.toJson(request)
-        Log.d(TAG, "Request: $json")
+        Log.d(TAG, "Request bytes=${json.length}")
 
         val requestBody = json.toRequestBody("application/json; charset=utf-8".toMediaType())
         val webhookPath = BuildConfig.N8N_PREFERENCE_CHAT_INTERACT_PATH
@@ -49,7 +49,7 @@ object PreferenceChatClient {
             return null
         }
 
-        Log.d(TAG, "Response: $bodyStr")
+        Log.d(TAG, "Response bytes=${bodyStr.length}")
 
         return try {
             val root = gson.fromJson(bodyStr, Map::class.java)
@@ -91,7 +91,6 @@ object PreferenceChatClient {
         }
     }
 }
-
 
 
 

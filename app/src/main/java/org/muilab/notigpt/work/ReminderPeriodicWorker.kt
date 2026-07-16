@@ -4,7 +4,10 @@ import android.content.Context
 import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import androidx.hilt.work.HiltWorker
 import com.google.firebase.auth.FirebaseAuth
+import dagger.assisted.Assisted
+import dagger.assisted.AssistedInject
 import org.muilab.notigpt.data.local.room.AppDatabase
 import org.muilab.notigpt.data.remote.firestore.FirestoreRestoreRepository
 import org.muilab.notigpt.data.remote.n8n.enqueueExtractionPipeline
@@ -18,9 +21,11 @@ import org.muilab.notigpt.util.SharedPreferencesManager
  * with unprocessed records (past their fold watermark) in case a foreground trigger was missed or a
  * thread went quiet and needs compaction, and fires the cross-thread reflection merge once a day.
  */
-class ReminderPeriodicWorker(
-    appContext: Context,
-    workerParams: WorkerParameters,
+@HiltWorker
+class ReminderPeriodicWorker @AssistedInject constructor(
+    @Assisted appContext: Context,
+    @Assisted workerParams: WorkerParameters,
+    private val database: AppDatabase,
 ) : CoroutineWorker(appContext, workerParams) {
 
     override suspend fun doWork(): Result {
@@ -48,10 +53,9 @@ class ReminderPeriodicWorker(
             }
         }
 
-        val db = AppDatabase.getInstance(applicationContext)
-        val drawerDao = db.drawerDao()
-        val recordDao = db.recordDao()
-        val journalDao = db.extractionJournalDao()
+        val drawerDao = database.drawerDao()
+        val recordDao = database.recordDao()
+        val journalDao = database.extractionJournalDao()
 
         // === Extraction pass ===
         // Re-drive active threads that still have records past their fold watermark. The pipeline

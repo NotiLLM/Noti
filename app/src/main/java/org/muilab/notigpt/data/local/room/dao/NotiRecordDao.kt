@@ -72,21 +72,9 @@ interface NotiRecordDao {
     @Query("SELECT * FROM noti_record")
     fun getAllRecords(): List<NotiRecord>
 
-    @Query("""
-        UPDATE noti_record
-        SET isDismissed = 1
-        WHERE notiRecordId IN (
-            SELECT notiRecordId FROM (
-                SELECT
-                    notiRecordId,
-                    ROW_NUMBER() OVER(PARTITION BY notiKey ORDER BY postTime DESC) as row_num
-                FROM noti_record
-                WHERE isDismissed = 0 AND postTime < :expireTimestamp
-            )
-            WHERE row_num > :maxCount
-        )
-    """)
-    suspend fun dismissExpiredReadRecords(expireTimestamp: Long, maxCount: Int)
+    /** Irreversibly removes all raw device-local notification content. */
+    @Query("DELETE FROM noti_record")
+    suspend fun deleteAll()
 
     @Insert
     fun insertAllRecords(notiRecords: List<NotiRecord>)

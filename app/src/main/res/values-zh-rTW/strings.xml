@@ -6,6 +6,7 @@
     <string name="ui_action_back">返回</string>
     <string name="ui_action_cancel">取消</string>
     <string name="ui_action_clear">清除</string>
+    <string name="ui_action_continue">繼續</string>
     <string name="ui_action_delete">刪除</string>
     <string name="ui_action_ok">確定</string>
     <string name="ui_action_save">儲存</string>
@@ -83,8 +84,12 @@
     <string name="sign_in_with_google">使用 Google 登入</string>
     <string name="sign_in_failed">登入失敗，請再試一次。</string>
     <string name="account_switch_title">切換帳戶？</string>
-    <string name="account_switch_message">你以 %1$s 登入，與此裝置先前使用的帳戶不同。繼續將移除本機的任務、保留項目與偏好設定，改為載入此帳戶的資料。</string>
+    <string name="account_switch_message">你以 %1$s 登入。本機任務、備忘與偏好設定將切換至此帳戶。請選擇如何處理此裝置的通知紀錄。</string>
     <string name="account_switch_confirm">切換並重新載入</string>
+    <string name="account_switch_keep_history">保留通知紀錄</string>
+    <string name="account_switch_keep_history_warning">現有通知文字會留在此裝置，之後可能由新帳戶處理。</string>
+    <string name="account_switch_start_clean">從乾淨狀態開始</string>
+    <string name="account_switch_start_clean_warning">載入新帳戶前永久刪除此裝置的通知紀錄。此資料無法從 Firestore 還原。</string>
     <string name="ui_reminders_do_date_chip">預計 %1$s</string>
     <string name="ui_reminders_editor_ect_label">預估完成時間（分鐘）</string>
     <string name="ui_reminders_editor_note">內容</string>
@@ -143,8 +148,21 @@
     <string name="ui_debug_invalid_ip">IP 格式錯誤！</string>
 
     <!-- Ongoing status / generation notifications -->
-    <string name="ongoing_status_idle">沒有新項目</string>
-    <string name="generating_saved_items">正在產生收藏項目…</string>
+    <string name="ongoing_status_title">Noti 運作中</string>
+    <string name="ongoing_status_nothing_new">暫無新通知與待審核項目。</string>
+    <string name="ongoing_status_recent_window">最近 %1$d 小時：%2$s</string>
+    <string name="ongoing_status_awaiting_review">待審核：</string>
+    <string name="ongoing_status_join_string">%1$s · %2$s</string>
+    <plurals name="ongoing_status_notification_count">
+        <item quantity="other">%1$d 則通知</item>
+    </plurals>
+    <plurals name="ongoing_status_task_count">
+        <item quantity="other">%1$d 個待辦</item>
+    </plurals>
+    <plurals name="ongoing_status_keep_count">
+        <item quantity="other">%1$d 則備忘</item>
+    </plurals>
+    <string name="generating_saved_items">正在產生任務與備忘…</string>
 
     <!-- Notifications screen (UI chrome only; not notification content) -->
     <string name="ui_notifications_new">新通知（%1$d）</string>
@@ -415,7 +433,7 @@
     <string name="menu_home">主頁</string>
     <string name="menu_reminders">排程提醒</string>
     <string name="menu_history">歷史記錄</string>
-    <string name="menu_section_collections">收藏</string>
+    <string name="menu_section_collections">任務與備忘</string>
     <string name="menu_section_more">更多</string>
     <string name="scheduled_reminder_time">提醒時間：%1$s</string>
     <string name="scheduled_pick_time">選擇時間</string>
@@ -428,9 +446,21 @@
     <string name="a11y_scheduled_reschedule">重新排程</string>
     <string name="a11y_scheduled_cancel">取消</string>
     <string name="settings_section_appearance">外觀</string>
+    <string name="settings_section_account">帳戶</string>
     <string name="settings_section_extraction">擷取</string>
     <string name="settings_section_home">首頁</string>
     <string name="settings_section_data">資料</string>
+    <string name="ui_settings_signed_in_as">目前登入帳戶</string>
+    <string name="ui_settings_switch_account">切換帳戶</string>
+    <string name="ui_settings_switch_account_desc">選擇其他 Google 帳戶，並決定如何處理此裝置的通知紀錄</string>
+    <string name="ui_settings_switch_prepare_message">若關閉 Google 帳戶選擇畫面，你會繼續登入目前的帳戶。若選擇其他帳戶，請決定如何處理此裝置的通知紀錄。</string>
+    <string name="ui_settings_switch_cancelled">已取消切換帳戶。仍以 %1$s 登入。</string>
+    <string name="ui_settings_switch_failed">無法切換帳戶。現有資料並未刪除。</string>
+    <string name="ui_settings_switch_complete">已切換帳戶。</string>
+    <string name="ui_settings_sign_out">登出</string>
+    <string name="ui_settings_sign_out_desc">保留此裝置的資料並返回登入畫面</string>
+    <string name="ui_settings_sign_out_confirm_title">要登出嗎？</string>
+    <string name="ui_settings_sign_out_confirm_message">通知紀錄與產生的項目會保留在此裝置。你之後可以再次登入。</string>
     <string name="ui_settings_home_window">通知時間範圍</string>
     <string name="ui_settings_home_window_desc">首頁通知預覽與數量往回顯示的時間長度。</string>
     <string name="ui_settings_home_window_label">小時</string>
@@ -438,6 +468,17 @@
     <string name="ui_settings_export_description">匯出所有通知與使用者動作</string>
     <string name="ui_settings_export_include_dismissed">包含已忽略的通知</string>
     <string name="ui_settings_export_include_context">包含完整內容</string>
+    <string name="ui_settings_delete_cloud_data">刪除雲端資料</string>
+    <string name="ui_settings_delete_cloud_data_desc">永久刪除產生的任務、備忘、偏好設定及其本機副本</string>
+    <string name="ui_settings_clear_notification_history">清除通知紀錄</string>
+    <string name="ui_settings_clear_notification_history_desc">僅永久刪除此裝置上的原始通知紀錄</string>
+    <string name="ui_settings_delete_cloud_confirm_title">刪除雲端資料？</string>
+    <string name="ui_settings_delete_cloud_confirm_message">這會永久刪除 Firestore 與此裝置上的產生內容。此裝置的通知紀錄會保留。</string>
+    <string name="ui_settings_clear_history_confirm_title">清除通知紀錄？</string>
+    <string name="ui_settings_clear_history_confirm_message">這會永久刪除此裝置上的原始通知紀錄。產生的任務與備忘會保留。</string>
+    <string name="ui_settings_delete_cloud_done">已刪除雲端與本機產生資料</string>
+    <string name="ui_settings_clear_history_done">已清除通知紀錄</string>
+    <string name="ui_settings_delete_failed">無法刪除資料。請檢查連線後再試一次。</string>
     <string name="home_reminders_due">%1$d 個提醒到期</string>
     <string name="noti_clear_all_confirm_title">清除通知？</string>
     <string name="noti_clear_all_confirm_message">這會移除目前清單中顯示的通知，已釘選的通知會保留。</string>
@@ -485,13 +526,14 @@
     <string name="home_review_none">沒有待檢視項目</string>
     <string name="home_review_new_tasks">%1$d 個新任務</string>
     <string name="home_review_updated_tasks">%1$d 個已更新任務</string>
-    <string name="home_review_new_keeps">%1$d 則新收藏</string>
-    <string name="home_review_updated_keeps">%1$d 則已更新收藏</string>
+    <string name="home_review_new_keeps">%1$d 則新備忘</string>
+    <string name="home_review_updated_keeps">%1$d 則已更新備忘</string>
     <string name="home_section_notifications">通知</string>
     <string name="home_noti_communication">通訊</string>
     <string name="home_noti_content">內容</string>
     <string name="home_noti_none">沒有新通知</string>
     <string name="home_noti_window_hours">近 %d 小時</string>
+    <string name="home_noti_older">較早</string>
     <string name="home_section_saved">已儲存</string>
     <string name="home_filter_today">今天及更早</string>
     <string name="home_filter_upcoming">即將到來</string>
@@ -499,13 +541,15 @@
     <string name="home_filter_undetermined">尚未安排的任務</string>
     <string name="home_filter_starred">已加星號</string>
     <string name="home_collection_tasks">任務</string>
-    <string name="home_collection_keep">收藏</string>
+    <string name="home_collection_keep">備忘</string>
 
     <!-- Notification category pages -->
     <string name="noti_filter_all">全部</string>
     <string name="noti_filter_last_24h">近 24 小時</string>
     <string name="noti_filter_all_count">全部 · %1$d</string>
     <string name="noti_filter_last_24h_count">近 24 小時 · %1$d</string>
+    <string name="noti_filter_recent_count">近 %1$d 小時 · %2$d</string>
+    <string name="noti_filter_older_count">較早通知 · %1$d</string>
     <string name="noti_category_empty">這裡沒有通知</string>
 
     <!-- Expandable text -->
@@ -517,8 +561,8 @@
     <string name="review_empty">全部處理完畢</string>
     <string name="review_chip_new_tasks">%1$d 個新任務</string>
     <string name="review_chip_updated_tasks">%1$d 個已編輯任務</string>
-    <string name="review_chip_new_keeps">%1$d 則新收藏</string>
-    <string name="review_chip_updated_keeps">%1$d 則已編輯收藏</string>
+    <string name="review_chip_new_keeps">%1$d 則新備忘</string>
+    <string name="review_chip_updated_keeps">%1$d 則已編輯備忘</string>
     <string name="review_approve">核准</string>
     <string name="review_reject">拒絕</string>
     <string name="review_approve_all">全部核准</string>
@@ -553,4 +597,3 @@
     <string name="do_date_add_time">新增時間</string>
     <string name="do_date_clear">清除</string>
 </resources>
-

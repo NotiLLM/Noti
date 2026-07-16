@@ -1,8 +1,6 @@
 package org.muilab.notigpt.ui.common.component
 
-import android.os.Build
 import android.util.Log
-import androidx.annotation.RequiresApi
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
@@ -104,15 +102,16 @@ private data class NavSnapshot(
  * state and feature actions flow through ViewModels rather than being stored here.
  */
 @OptIn(ExperimentalMaterial3Api::class)
-@RequiresApi(Build.VERSION_CODES.S)
 @Composable
 fun AppScaffold(
     drawerViewModel: DrawerViewModel,
+    onSignedOut: () -> Unit,
 ) {
     Log.d("AppScaffold", "composed with DrawerViewModel hash=${drawerViewModel.hashCode()}")
 
     var isSearchExpanded by remember { mutableStateOf(false) }
     var menuScreen by remember { mutableStateOf<AppMenuScreen?>(null) }
+    var accountRevision by remember { mutableStateOf(0) }
     val backStack = remember { mutableStateListOf<HomeDestination>(HomeDestination.Home) }
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
@@ -323,7 +322,9 @@ fun AppScaffold(
         drawerContent = {
             AppDrawerContent(
                 isHome = atHomeRoot,
-                accountEmail = org.muilab.notigpt.data.remote.auth.GoogleAuthManager.currentUser()?.email,
+                accountEmail = remember(accountRevision) {
+                    org.muilab.notigpt.data.remote.auth.GoogleAuthManager.currentUser()?.email
+                },
                 unresolvedConflictCount = unresolvedConflicts.size,
                 dueUnseenReminderCount = dueUnseenReminderCount,
                 activeTaskCount = activeTaskCount,
@@ -433,7 +434,10 @@ fun AppScaffold(
                             drawerViewModel = drawerViewModel,
                             searchQuery = appSearchQuery,
                         )
-                        AppMenuScreen.Settings -> SettingsScreen()
+                        AppMenuScreen.Settings -> SettingsScreen(
+                            onSignedOut = onSignedOut,
+                            onAccountChanged = { accountRevision += 1 },
+                        )
                         null -> when (val dest = snap.dest) {
                             HomeDestination.Home -> HomeScreen(
                                 drawerViewModel = drawerViewModel,
