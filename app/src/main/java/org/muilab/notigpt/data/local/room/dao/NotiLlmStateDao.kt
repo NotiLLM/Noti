@@ -43,6 +43,18 @@ interface NotiLlmStateDao {
     @Query("UPDATE noti_llm_state SET shouldExtractReminder = :value, updatedAt = :ts WHERE notiKey IN (:notiKeys)")
     fun setShouldExtractByKeys(notiKeys: List<String>, value: Boolean, ts: Long)
 
+    /** Records a successful Stage B call, creating the otherwise-lazy state row when needed. */
+    @Query(
+        """
+        INSERT INTO noti_llm_state (notiKey, lastItemExtractionAt, updatedAt)
+        VALUES (:notiKey, :ts, :ts)
+        ON CONFLICT(notiKey) DO UPDATE SET
+            lastItemExtractionAt = excluded.lastItemExtractionAt,
+            updatedAt = excluded.updatedAt
+        """
+    )
+    fun markItemExtractionCompleted(notiKey: String, ts: Long)
+
     /** Account-switch wipe. */
     @Query("DELETE FROM noti_llm_state")
     suspend fun deleteAll()

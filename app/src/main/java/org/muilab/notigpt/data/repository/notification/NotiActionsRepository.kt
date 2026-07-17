@@ -97,6 +97,8 @@ class NotiActionsRepository(
     /**
      * Debounces the per-notiKey extraction pipeline after new records arrive: a burst of records
      * coalesces into one pipeline run (scan → extract), and a large burst fires immediately.
+     * A thread that received a successful automatic Stage B pass waits out its B cooldown before
+     * its next scan; that later scan remains the sole gate for another Stage B call.
      */
     private fun registerNewRecordForNotiUnit(notiKey: String) {
         val newCount = (detectionCounters[notiKey] ?: 0) + 1
@@ -109,11 +111,18 @@ class NotiActionsRepository(
             if (newCount < maxRecords) {
                 delay(waitSeconds * 1000L)
             }
+            delayUntilItemExtractionCooldownExpires(notiKey)
             enqueueExtractionPipeline(appContext, notiKey)
             detectionCounters.remove(notiKey)
             detectionJobs.remove(notiKey)
         }
         detectionJobs[notiKey] = job
+    }
+
+    private suspend fun delayUntilItemExtractionCooldownExpires(notiKey: String) {
+        val lastItemExtractionAt = notiLlmStateDao.getByKey(notiKey)?.lastItemExtractionAt ?: 0L
+        val remainingMs = ITEM_EXTRACTION_COOLDOWN_MS - (System.currentTimeMillis() - lastItemExtractionAt)
+        if (remainingMs > 0) delay(remainingMs)
     }
 
     suspend fun markNotiRead(notiKey: String) {
@@ -164,5 +173,9 @@ class NotiActionsRepository(
     suspend fun setPinnedState(notiKey: String, pinned: Boolean? = null) {
         if (pinned == null) notiDrawerDao.flipPin(notiKey)
         else notiDrawerDao.setPinned(notiKey, pinned)
+    }
+
+    private companion object {
+        const val ITEM_EXTRACTION_COOLDOWN_MS = 5 * 60 * 1000L
     }
 }

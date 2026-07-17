@@ -30,6 +30,8 @@ import java.util.UUID
  */
 internal object ExtractionPipelineHandler {
 
+    private const val ITEM_EXTRACTION_COOLDOWN_MS = 5 * 60 * 1000L
+
     suspend fun handle(ctx: N8nWorkerContext, input: N8nWorkerInput.ExtractionPipeline): ListenableWorker.Result {
         val notiKey = input.notiKey
         val unit = ctx.getNotiUnit(notiKey) ?: run {
@@ -84,6 +86,17 @@ internal object ExtractionPipelineHandler {
 
         if (records.isEmpty()) return ctx.success() // forced with nothing to extract
 
+        // Manual extraction intentionally bypasses this rate limit. Auto runs still execute A;
+        // B is skipped during the cooldown, so a subsequent scheduled pass must receive a fresh
+        // true verdict from A before it can make another costly item-extraction request.
+        if (!input.forced) {
+            val lastItemExtractionAt = ctx.database.notiLlmStateDao().getByKey(notiKey)?.lastItemExtractionAt ?: 0L
+            if (System.currentTimeMillis() - lastItemExtractionAt < ITEM_EXTRACTION_COOLDOWN_MS) {
+                Log.d(ExtractionStageSupport.TAG, "Skipping Stage B for $notiKey: cooldown active")
+                return ctx.success()
+            }
+        }
+
         // Mark the thread as having extractable content pending (drives the banner + periodic net).
         ctx.database.notiLlmStateDao().setShouldExtractByKeys(listOf(notiKey), true, System.currentTimeMillis())
 
@@ -129,6 +142,9 @@ internal object ExtractionPipelineHandler {
                 is Http.Fail -> return ctx.success()
                 is Http.Ok -> res.body
             }
+            // A completed B response starts the automatic cooldown, even when the call was a
+            // manual override. Retryable failures remain eligible so WorkManager can recover them.
+            ctx.database.notiLlmStateDao().markItemExtractionCompleted(notiKey, System.currentTimeMillis())
             val envelope = ExtractionStageSupport.parseObject(body)
             val ops = envelope?.optJSONArray("ops") ?: JSONArray()
             val reason = envelope?.optString("reason").orEmpty()

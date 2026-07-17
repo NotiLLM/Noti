@@ -39,6 +39,9 @@ data class NotiLlmState(
     /** Total record count for the thread when it was last classified; drives rare re-checks. */
     @ColumnInfo(defaultValue = "0")
     val lastClassifiedRecordCount: Int = 0,
+    /** End time of the last successful Stage B request for this thread. */
+    @ColumnInfo(defaultValue = "0")
+    val lastItemExtractionAt: Long = 0L,
     @ColumnInfo(defaultValue = "0")
     val updatedAt: Long = 0L,
 )

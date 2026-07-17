@@ -72,7 +72,7 @@ import org.muilab.notigpt.data.local.room.dao.GeneratedProposalDao
         FirestoreOutboxOp::class,
         GeneratedProposal::class,
     ],
-    version = 47,
+    version = 48,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -154,6 +154,7 @@ abstract class AppDatabase : RoomDatabase() {
                 .addMigrations(AppDatabaseMigrations.MIGRATION_44_45)
                 .addMigrations(AppDatabaseMigrations.MIGRATION_45_46)
                 .addMigrations(AppDatabaseMigrations.MIGRATION_46_47)
+                .addMigrations(AppDatabaseMigrations.MIGRATION_47_48)
                 .setJournalMode(JournalMode.TRUNCATE)
                 .build()
         }

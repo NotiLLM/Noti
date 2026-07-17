@@ -86,7 +86,7 @@ object SharedPreferencesManager {
 
     const val KEY_MAX_RECORDS_BEFORE_NOTI_SYNC = "maxRecordsBeforeNotiSync"
     var maxRecordsBeforeNotiSync: Int
-        get() = get(KEY_LOCAL_PREFS, KEY_MAX_RECORDS_BEFORE_NOTI_SYNC, 5)
+        get() = get(KEY_LOCAL_PREFS, KEY_MAX_RECORDS_BEFORE_NOTI_SYNC, 10)
         set(value) = put(KEY_LOCAL_PREFS, KEY_MAX_RECORDS_BEFORE_NOTI_SYNC, value)
 
     const val KEY_WAIT_SECONDS_BEFORE_DRAWER_SYNC = "waitSecondsBeforeDrawerSync"

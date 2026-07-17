@@ -1453,4 +1453,13 @@ object AppDatabaseMigrations {
         }
     }
 
+    /** Persists the successful automatic Stage B timestamp for per-thread request rate limiting. */
+    val MIGRATION_47_48 = object : Migration(47, 48) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                "ALTER TABLE `noti_llm_state` ADD COLUMN `lastItemExtractionAt` INTEGER NOT NULL DEFAULT 0"
+            )
+        }
+    }
+
 }
