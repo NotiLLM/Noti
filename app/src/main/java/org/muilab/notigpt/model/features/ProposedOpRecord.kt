@@ -4,7 +4,7 @@ import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
-object GeneratedProposalDecision {
+object ProposedOpRecordDecision {
     const val Pending = "pending"
     const val Approved = "approved"
     const val Rejected = "rejected"
@@ -19,10 +19,10 @@ object GeneratedProposalDecision {
  * device-only notification tables and are never copied here or to Firestore.
  */
 @Entity(
-    tableName = "generated_proposal",
+    tableName = "proposed_op_record",
     indices = [Index(value = ["uid", "createdAt"]), Index(value = ["opId"], unique = true)],
 )
-data class GeneratedProposal(
+data class ProposedOpRecord(
     @PrimaryKey val proposalId: String,
     val uid: String,
     val opId: Long,
@@ -31,7 +31,7 @@ data class GeneratedProposal(
     val payload: String,
     val targetItemId: String,
     val itemType: String,
-    val decision: String = GeneratedProposalDecision.Pending,
+    val decision: String = ProposedOpRecordDecision.Pending,
     val createdAt: Long,
     val decisionAt: Long = 0L,
 )

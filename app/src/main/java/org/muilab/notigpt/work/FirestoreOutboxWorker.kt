@@ -41,9 +41,9 @@ class FirestoreOutboxWorker @AssistedInject constructor(
                     }
                     FirestoreOutboxKind.DeleteSavedItem ->
                         sync.markReminderDeleted(operation.entityId, operation.createdAt)
-                    FirestoreOutboxKind.SyncGeneratedProposal -> {
-                        val proposal = database.generatedProposalDao().getById(operation.entityId)
-                        proposal == null || sync.syncGeneratedProposal(proposal)
+                    FirestoreOutboxKind.SyncProposedOpRecord -> {
+                        val proposal = database.proposedOpRecordDao().getById(operation.entityId)
+                        proposal == null || sync.syncProposedOpRecord(proposal)
                     }
                     else -> true // Unknown old operation: discard instead of retrying forever.
                 }

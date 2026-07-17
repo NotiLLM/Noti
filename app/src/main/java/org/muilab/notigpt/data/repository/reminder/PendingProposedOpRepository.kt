@@ -16,11 +16,11 @@ import org.muilab.notigpt.model.features.ExtractionJournalEntry
 import org.muilab.notigpt.model.features.ExtractionJournalEventType
 import org.muilab.notigpt.model.features.FirestoreOutboxKind
 import org.muilab.notigpt.model.features.FirestoreOutboxOp
-import org.muilab.notigpt.model.features.GeneratedProposal
-import org.muilab.notigpt.model.features.GeneratedProposalDecision
+import org.muilab.notigpt.model.features.ProposedOpRecord
+import org.muilab.notigpt.model.features.ProposedOpRecordDecision
 import org.muilab.notigpt.model.features.NotiSavedItemLinkSource
-import org.muilab.notigpt.model.features.PendingOp
-import org.muilab.notigpt.model.features.PendingOpType
+import org.muilab.notigpt.model.features.PendingProposedOp
+import org.muilab.notigpt.model.features.PendingProposedOpType
 import org.muilab.notigpt.model.features.RejectedMerge
 import org.muilab.notigpt.model.features.SavedItem
 import org.muilab.notigpt.model.features.SavedItemChangeLog
@@ -32,7 +32,7 @@ import java.util.UUID
 import org.muilab.notigpt.work.FirestoreOutboxWork
 
 /**
- * The staged-review core: pipeline ops land here as [PendingOp] rows, previews are computed
+ * The staged-review core: pipeline ops land here as [PendingProposedOp] rows, previews are computed
  * in-memory, and only user approval turns an op group into real saved-item writes.
  *
  * Grouping is item-level — users review "one eventual item" per card, not atomic instructions:
@@ -40,10 +40,10 @@ import org.muilab.notigpt.work.FirestoreOutboxWork
  * one group. Accepting applies the whole group; rejecting discards it (recording merge cool-downs
  * so D-stages stop re-proposing the pair for a while).
  */
-class PendingOpRepository(private val appContext: Context) {
+class PendingProposedOpRepository(private val appContext: Context) {
 
     private val db = AppDatabase.getInstance(appContext.applicationContext)
-    private val pendingOpDao = db.pendingOpDao()
+    private val pendingProposedOpDao = db.pendingProposedOpDao()
     private val rejectedMergeDao = db.rejectedMergeDao()
     private val savedItemDao = db.reminderListDao()
     private val subTaskDao = db.subTaskDao()
@@ -53,13 +53,13 @@ class PendingOpRepository(private val appContext: Context) {
     private val journalRepo by lazy { ExtractionJournalRepository(journalDao) }
     private val firestoreSync by lazy { FirestoreSyncRepository(appContext.applicationContext) }
 
-    fun observePending(): Flow<List<PendingOp>> = pendingOpDao.observeAll()
+    fun observePending(): Flow<List<PendingProposedOp>> = pendingProposedOpDao.observeAll()
 
-    suspend fun getPending(): List<PendingOp> = withContext(Dispatchers.IO) { pendingOpDao.getAll() }
+    suspend fun getPending(): List<PendingProposedOp> = withContext(Dispatchers.IO) { pendingProposedOpDao.getAll() }
 
     /** Item ids with unreviewed staged ops against them — excluded from merge-stage inputs. */
     suspend fun getTargetedItemIds(): Set<String> = withContext(Dispatchers.IO) {
-        pendingOpDao.getTargetedItemIds().toSet()
+        pendingProposedOpDao.getTargetedItemIds().toSet()
     }
 
     /** Pairs still inside the merge-rejection cool-down window. */
@@ -83,8 +83,8 @@ class PendingOpRepository(private val appContext: Context) {
         ops: JSONArray,
         validRecordIds: Set<String>,
         now: Long = System.currentTimeMillis(),
-    ): List<PendingOp> = withContext(Dispatchers.IO) {
-        val rows = mutableListOf<PendingOp>()
+    ): List<PendingProposedOp> = withContext(Dispatchers.IO) {
+        val rows = mutableListOf<PendingProposedOp>()
         for (i in 0 until ops.length()) {
             val op = ops.optJSONObject(i) ?: continue
             val cited = ReminderAssociationMerger.evidenceIdsFrom(op)
@@ -94,9 +94,9 @@ class PendingOpRepository(private val appContext: Context) {
                 "update" -> {
                     val targetId = N8nOpParsing.savedItemIdFrom(op)
                     val target = savedItemDao.getById(targetId) ?: continue
-                    rows += PendingOp(
+                    rows += PendingProposedOp(
                         notiKey = notiKey,
-                        opType = PendingOpType.Update,
+                        opType = PendingProposedOpType.Update,
                         payload = op.toString(),
                         targetItemId = targetId,
                         evidenceRecordIds = JSONArray(evidence.toList()).toString(),
@@ -106,9 +106,9 @@ class PendingOpRepository(private val appContext: Context) {
                         createdAt = now,
                     )
                 }
-                else -> rows += PendingOp(
+                else -> rows += PendingProposedOp(
                     notiKey = notiKey,
-                    opType = PendingOpType.Create,
+                    opType = PendingProposedOpType.Create,
                     payload = op.toString(),
                     evidenceRecordIds = JSONArray(evidence.toList()).toString(),
                     reason = reasonFrom(op),
@@ -120,9 +120,9 @@ class PendingOpRepository(private val appContext: Context) {
         }
         if (rows.isEmpty()) return@withContext emptyList()
         val staged = db.withTransaction {
-            val ids = pendingOpDao.insertAll(rows)
+            val ids = pendingProposedOpDao.insertAll(rows)
             rows.mapIndexed { idx, row -> row.copy(opId = ids[idx]) }
-                .also { persistGeneratedProposals(it) }
+                .also { persistProposedOpRecords(it) }
         }
         FirestoreOutboxWork.enqueue(appContext)
         staged
@@ -138,10 +138,10 @@ class PendingOpRepository(private val appContext: Context) {
     suspend fun stageMergeOps(
         batchId: String,
         ops: JSONArray,
-        createsByRef: Map<String, PendingOp> = emptyMap(),
+        createsByRef: Map<String, PendingProposedOp> = emptyMap(),
         now: Long = System.currentTimeMillis(),
-    ): List<PendingOp> = withContext(Dispatchers.IO) {
-        val rows = mutableListOf<PendingOp>()
+    ): List<PendingProposedOp> = withContext(Dispatchers.IO) {
+        val rows = mutableListOf<PendingProposedOp>()
         val consumedCreateIds = mutableListOf<Long>()
         for (i in 0 until ops.length()) {
             val op = ops.optJSONObject(i) ?: continue
@@ -159,9 +159,9 @@ class PendingOpRepository(private val appContext: Context) {
             }.distinct()
             if (consumed == null && validSources.isEmpty() && !op.has("changes")) continue
 
-            rows += PendingOp(
+            rows += PendingProposedOp(
                 notiKey = consumed?.notiKey ?: "",
-                opType = PendingOpType.Merge,
+                opType = PendingProposedOpType.Merge,
                 payload = op.toString(),
                 targetItemId = targetId,
                 mergeSourceItemIds = JSONArray(validSources).toString(),
@@ -176,12 +176,12 @@ class PendingOpRepository(private val appContext: Context) {
         if (rows.isEmpty()) return@withContext emptyList()
         val staged = db.withTransaction {
             if (consumedCreateIds.isNotEmpty()) {
-                pendingOpDao.deleteByIds(consumedCreateIds)
-                setProposalDecision(consumedCreateIds, GeneratedProposalDecision.Superseded, now)
+                pendingProposedOpDao.deleteByIds(consumedCreateIds)
+                setProposalDecision(consumedCreateIds, ProposedOpRecordDecision.Superseded, now)
             }
-            val ids = pendingOpDao.insertAll(rows)
+            val ids = pendingProposedOpDao.insertAll(rows)
             rows.mapIndexed { idx, row -> row.copy(opId = ids[idx]) }
-                .also { persistGeneratedProposals(it) }
+                .also { persistProposedOpRecords(it) }
         }
         FirestoreOutboxWork.enqueue(appContext)
         staged
@@ -192,7 +192,7 @@ class PendingOpRepository(private val appContext: Context) {
     /** One reviewable unit: a would-be item (create) or an existing item with staged changes. */
     data class OpGroup(
         val key: String,
-        val ops: List<PendingOp>,
+        val ops: List<PendingProposedOp>,
         /** Null for creates — the item doesn't exist yet. */
         val targetItemId: String?,
     ) {
@@ -202,12 +202,12 @@ class PendingOpRepository(private val appContext: Context) {
     }
 
     /** Groups pending ops item-level: one group per create op, one per targeted existing item. */
-    fun groupOps(ops: List<PendingOp>): List<OpGroup> {
+    fun groupOps(ops: List<PendingProposedOp>): List<OpGroup> {
         val groups = mutableListOf<OpGroup>()
-        ops.filter { it.opType == PendingOpType.Create }.forEach { op ->
+        ops.filter { it.opType == PendingProposedOpType.Create }.forEach { op ->
             groups += OpGroup(key = "create_${op.opId}", ops = listOf(op), targetItemId = null)
         }
-        ops.filter { it.opType != PendingOpType.Create }
+        ops.filter { it.opType != PendingProposedOpType.Create }
             .groupBy { it.targetItemId }
             .forEach { (targetId, targetOps) ->
                 groups += OpGroup(key = "item_$targetId", ops = targetOps.sortedBy { it.opId }, targetItemId = targetId)
@@ -248,7 +248,7 @@ class PendingOpRepository(private val appContext: Context) {
 
     /** Everything needed to undo an accepted group. Held in memory by the review screen's snackbar. */
     data class ApplyOutcome(
-        val ops: List<PendingOp>,
+        val ops: List<PendingProposedOp>,
         val createdItemId: String?,
         val beforeTarget: SavedItem?,
         val deletedSourceItems: List<SavedItem>,
@@ -268,8 +268,8 @@ class PendingOpRepository(private val appContext: Context) {
             val applied = if (group.isCreate) applyCreate(group, now) else applyOnTarget(group, now)
             if (applied != null) {
                 val opIds = group.ops.map { it.opId }
-                pendingOpDao.deleteByIds(opIds)
-                setProposalDecision(opIds, GeneratedProposalDecision.Approved, now)
+                pendingProposedOpDao.deleteByIds(opIds)
+                setProposalDecision(opIds, ProposedOpRecordDecision.Approved, now)
             }
             applied
         }
@@ -424,10 +424,10 @@ class PendingOpRepository(private val appContext: Context) {
             }
             if (outcome.deletedSourceSubItems.isNotEmpty()) subTaskDao.upsertAll(outcome.deletedSourceSubItems)
             outcome.changeLogIds.forEach { changeLogDao.deleteById(it) }
-            pendingOpDao.insertAll(outcome.ops)
+            pendingProposedOpDao.insertAll(outcome.ops)
             setProposalDecision(
                 outcome.ops.map { it.opId },
-                GeneratedProposalDecision.Pending,
+                ProposedOpRecordDecision.Pending,
                 now,
             )
         }
@@ -463,7 +463,7 @@ class PendingOpRepository(private val appContext: Context) {
                     )
                 )
             }
-            if (pending.opType == PendingOpType.Merge) {
+            if (pending.opType == PendingProposedOpType.Merge) {
                 val ids = (mergeSourceIdsOf(pending) + pending.targetItemId).filter { it.isNotBlank() }.distinct()
                 val pairs = buildList {
                     for (a in ids.indices) for (b in a + 1 until ids.size) add(RejectedMerge.of(ids[a], ids[b], now))
@@ -472,8 +472,8 @@ class PendingOpRepository(private val appContext: Context) {
             }
           }
           val opIds = group.ops.map { it.opId }
-          pendingOpDao.deleteByIds(opIds)
-          setProposalDecision(opIds, GeneratedProposalDecision.Rejected, now)
+          pendingProposedOpDao.deleteByIds(opIds)
+          setProposalDecision(opIds, ProposedOpRecordDecision.Rejected, now)
         }
         FirestoreOutboxWork.enqueue(appContext)
     }
@@ -484,11 +484,11 @@ class PendingOpRepository(private val appContext: Context) {
         db.firestoreOutboxDao().upsert(FirestoreOutboxOp.savedItem(uid, kind, savedItemId, ts))
     }
 
-    private suspend fun persistGeneratedProposals(ops: List<PendingOp>) {
+    private suspend fun persistProposedOpRecords(ops: List<PendingProposedOp>) {
         val uid = FirebaseAuth.getInstance().currentUser?.uid.orEmpty()
         if (uid.isBlank() || ops.isEmpty()) return
         val proposals = ops.map { op ->
-            GeneratedProposal(
+            ProposedOpRecord(
                 proposalId = "$uid:p_${op.opId}",
                 uid = uid,
                 opId = op.opId,
@@ -500,39 +500,39 @@ class PendingOpRepository(private val appContext: Context) {
                 createdAt = op.createdAt,
             )
         }
-        db.generatedProposalDao().upsertAll(proposals)
+        db.proposedOpRecordDao().upsertAll(proposals)
         proposals.forEach {
             db.firestoreOutboxDao().upsert(
-                FirestoreOutboxOp.generatedProposal(uid, it.proposalId, it.createdAt)
+                FirestoreOutboxOp.proposedOpRecord(uid, it.proposalId, it.createdAt)
             )
         }
     }
 
     private suspend fun setProposalDecision(opIds: List<Long>, decision: String, now: Long) {
         if (opIds.isEmpty()) return
-        val dao = db.generatedProposalDao()
+        val dao = db.proposedOpRecordDao()
         dao.setDecision(opIds, decision, now)
         dao.getByOpIds(opIds).forEach { proposal ->
             db.firestoreOutboxDao().upsert(
-                FirestoreOutboxOp.generatedProposal(proposal.uid, proposal.proposalId, now)
+                FirestoreOutboxOp.proposedOpRecord(proposal.uid, proposal.proposalId, now)
             )
         }
     }
 
     /** Undo of a reject: the ops come back exactly as they were (fresh row ids). */
     suspend fun restoreDiscarded(group: OpGroup) = withContext(Dispatchers.IO) {
-        pendingOpDao.insertAll(group.ops.map { it.copy(opId = 0L) })
+        pendingProposedOpDao.insertAll(group.ops.map { it.copy(opId = 0L) })
         // The cool-down entries a rejected merge wrote are left in place; re-rejecting would
         // recreate them anyway and an accepted merge deletes them via deleteForItem.
     }
 
     /** Drops staged ops whose target item no longer exists (deleted out from under review). */
     suspend fun purgeOrphanedOps() = withContext(Dispatchers.IO) {
-        pendingOpDao.getAll()
+        pendingProposedOpDao.getAll()
             .filter { it.targetItemId.isNotBlank() && savedItemDao.getById(it.targetItemId) == null }
             .map { it.opId }
             .takeIf { it.isNotEmpty() }
-            ?.let { pendingOpDao.deleteByIds(it) }
+            ?.let { pendingProposedOpDao.deleteByIds(it) }
     }
 
     // ========== Helpers ==========
@@ -588,14 +588,14 @@ class PendingOpRepository(private val appContext: Context) {
         }
     }
 
-    private fun mergeSourceIdsOf(pending: PendingOp): List<String> = try {
+    private fun mergeSourceIdsOf(pending: PendingProposedOp): List<String> = try {
         val arr = JSONArray(pending.mergeSourceItemIds)
         buildList { for (i in 0 until arr.length()) arr.optString(i).takeIf { it.isNotBlank() }?.let(::add) }
     } catch (_: Exception) {
         emptyList()
     }
 
-    private fun evidenceOf(pending: PendingOp): Set<String> = try {
+    private fun evidenceOf(pending: PendingProposedOp): Set<String> = try {
         val arr = JSONArray(pending.evidenceRecordIds)
         buildSet { for (i in 0 until arr.length()) arr.optString(i).takeIf { it.isNotBlank() }?.let(::add) }
     } catch (_: Exception) {
@@ -603,7 +603,7 @@ class PendingOpRepository(private val appContext: Context) {
     }
 
     /** Threads to journal a verdict to: the evidence keys, falling back to the op's own notiKey. */
-    private fun journalKeysOf(pending: PendingOp): List<String> {
+    private fun journalKeysOf(pending: PendingProposedOp): List<String> {
         val fromEvidence = evidenceOf(pending).map { it.substringBeforeLast("_") }.distinct()
         return fromEvidence.ifEmpty { listOfNotNull(pending.notiKey.takeIf { it.isNotBlank() }) }
     }

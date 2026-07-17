@@ -9,7 +9,7 @@ import org.json.JSONObject
 import org.muilab.notigpt.data.remote.n8n.ExtractionStatusStore
 import org.muilab.notigpt.data.remote.n8n.context.N8nWorkerContext
 import org.muilab.notigpt.data.remote.n8n.formatter.N8nRecordFormatter
-import org.muilab.notigpt.data.repository.reminder.PendingOpRepository
+import org.muilab.notigpt.data.repository.reminder.PendingProposedOpRepository
 import org.muilab.notigpt.model.features.SavedItem
 import org.muilab.notigpt.model.features.SavedItemType
 import org.muilab.notigpt.model.notifications.NotiRecord
@@ -112,7 +112,7 @@ internal object ExtractionStageSupport {
     }
 
     /** Item detail for a not-yet-persisted preview (a staged create), tagged with its op reference. */
-    fun previewDetail(preview: PendingOpRepository.Preview, newOpRef: String): Map<String, Any> = mapOf(
+    fun previewDetail(preview: PendingProposedOpRepository.Preview, newOpRef: String): Map<String, Any> = mapOf(
         "newOpRef" to newOpRef,
         "title" to preview.item.title,
         "content" to preview.item.content,
@@ -133,8 +133,8 @@ internal object ExtractionStageSupport {
      * Active items (excluding completed/archived) as compact lines, minus items that already have
      * unreviewed staged ops against them — the merge stages must not target items mid-review.
      */
-    suspend fun activeCompactList(ctx: N8nWorkerContext, pendingOpRepo: PendingOpRepository): List<Map<String, Any>> {
-        val targeted = pendingOpRepo.getTargetedItemIds()
+    suspend fun activeCompactList(ctx: N8nWorkerContext, pendingProposedOpRepo: PendingProposedOpRepository): List<Map<String, Any>> {
+        val targeted = pendingProposedOpRepo.getTargetedItemIds()
         return ctx.reminderRepository.getAllActive()
             .filter { !it.isCompleted && !it.isArchived && it.savedItemId !in targeted }
             .map { itemCompact(it) }

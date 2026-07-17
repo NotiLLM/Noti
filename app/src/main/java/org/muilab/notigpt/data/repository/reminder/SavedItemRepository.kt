@@ -48,7 +48,7 @@ class SavedItemRepository(
     }
     private val changeLogDao by lazy { db.savedItemChangeLogDao() }
     private val subTaskDao by lazy { db.subTaskDao() }
-    private val pendingOpDao by lazy { db.pendingOpDao() }
+    private val pendingProposedOpDao by lazy { db.pendingProposedOpDao() }
     private val rejectedMergeDao by lazy { db.rejectedMergeDao() }
 
     /** Returns visible reminders in the canonical list order used by the reminders screen. */
@@ -118,7 +118,7 @@ class SavedItemRepository(
             subTaskDao.hardDeleteByParentId(savedItemId)
             reminderListDao.hardDeleteById(savedItemId)
             // Staged ops against a gone item are unreviewable; merge cool-downs are moot too.
-            pendingOpDao.deleteByTargetItemId(savedItemId)
+            pendingProposedOpDao.deleteByTargetItemId(savedItemId)
             rejectedMergeDao.deleteForItem(savedItemId)
         }
         FirestoreOutboxWork.enqueue(appContext)
@@ -162,7 +162,7 @@ class SavedItemRepository(
             subTaskDao.hardDeleteByParentIds(savedItemIds)
             reminderListDao.hardDeleteByIds(savedItemIds)
             savedItemIds.forEach {
-                pendingOpDao.deleteByTargetItemId(it)
+                pendingProposedOpDao.deleteByTargetItemId(it)
                 rejectedMergeDao.deleteForItem(it)
             }
         }

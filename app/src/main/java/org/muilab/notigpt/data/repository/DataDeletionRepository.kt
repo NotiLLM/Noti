@@ -68,7 +68,7 @@ class DataDeletionRepository @Inject constructor(
         database.withTransaction {
             database.reminderListDao().deleteAllForAccountSwitch()
             database.subTaskDao().deleteAllForAccountSwitch()
-            database.pendingOpDao().deleteAllForAccountSwitch()
+            database.pendingProposedOpDao().deleteAllForAccountSwitch()
             database.rejectedMergeDao().deleteAllForAccountSwitch()
             database.extractionJournalDao().deleteAllEntries()
             database.extractionJournalDao().deleteAllSummaries()
@@ -76,7 +76,7 @@ class DataDeletionRepository @Inject constructor(
             database.extractionPreferenceDao().deleteAll()
             database.preferenceConflictDao().deleteAll()
             database.userContextDao().deleteAll()
-            database.generatedProposalDao().deleteForAccount(uid)
+            database.proposedOpRecordDao().deleteForAccount(uid)
             database.reminderDao().deleteAllSavedItemRefs()
             database.reminderDao().deleteAllSavedItemReminders()
             database.firestoreOutboxDao().deleteForAccount(uid)
@@ -88,7 +88,7 @@ class DataDeletionRepository @Inject constructor(
         const val REMINDERS_ROOT = "reminders"
         const val REMINDERS = "reminders"
         const val LEGACY_NOTIS = "notis"
-        const val GENERATED_PROPOSALS_ROOT = "generatedProposals"
+        const val GENERATED_PROPOSALS_ROOT = "proposedOpRecords"
         const val PROPOSALS = "proposals"
     }
 }

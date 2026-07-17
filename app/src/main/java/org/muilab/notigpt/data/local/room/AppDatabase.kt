@@ -11,7 +11,7 @@ import org.muilab.notigpt.model.features.ExtractionPreference
 import org.muilab.notigpt.model.features.PreferenceConflict
 import org.muilab.notigpt.model.features.NotiLlmState
 import org.muilab.notigpt.model.features.NotiSavedItemLink
-import org.muilab.notigpt.model.features.PendingOp
+import org.muilab.notigpt.model.features.PendingProposedOp
 import org.muilab.notigpt.model.features.RejectedMerge
 import org.muilab.notigpt.model.features.SavedItemChangeLog
 import org.muilab.notigpt.model.features.Reminder
@@ -21,7 +21,7 @@ import org.muilab.notigpt.model.features.SavedItem
 import org.muilab.notigpt.model.features.SavedSubItem
 import org.muilab.notigpt.model.features.UserContext
 import org.muilab.notigpt.model.features.FirestoreOutboxOp
-import org.muilab.notigpt.model.features.GeneratedProposal
+import org.muilab.notigpt.model.features.ProposedOpRecord
 import org.muilab.notigpt.model.notifications.NotiAction
 import org.muilab.notigpt.model.notifications.NotiRecord
 import org.muilab.notigpt.model.notifications.NotiUnit
@@ -33,7 +33,7 @@ import org.muilab.notigpt.data.local.room.dao.NotiDrawerDao
 import org.muilab.notigpt.data.local.room.dao.NotiLlmStateDao
 import org.muilab.notigpt.data.local.room.dao.NotiRecordDao
 import org.muilab.notigpt.data.local.room.dao.NotiSavedItemLinkDao
-import org.muilab.notigpt.data.local.room.dao.PendingOpDao
+import org.muilab.notigpt.data.local.room.dao.PendingProposedOpDao
 import org.muilab.notigpt.data.local.room.dao.PreferenceConflictDao
 import org.muilab.notigpt.data.local.room.dao.RejectedMergeDao
 import org.muilab.notigpt.data.local.room.dao.ReminderDao
@@ -41,7 +41,7 @@ import org.muilab.notigpt.data.local.room.dao.SavedItemDao
 import org.muilab.notigpt.data.local.room.dao.SavedSubItemDao
 import org.muilab.notigpt.data.local.room.dao.UserContextDao
 import org.muilab.notigpt.data.local.room.dao.FirestoreOutboxDao
-import org.muilab.notigpt.data.local.room.dao.GeneratedProposalDao
+import org.muilab.notigpt.data.local.room.dao.ProposedOpRecordDao
 
 /**
  * Room database entry point for local app state.
@@ -59,7 +59,7 @@ import org.muilab.notigpt.data.local.room.dao.GeneratedProposalDao
         SavedSubItem::class,
         NotiSavedItemLink::class,
         SavedItemChangeLog::class,
-        PendingOp::class,
+        PendingProposedOp::class,
         RejectedMerge::class,
         ExtractionJournalEntry::class,
         ExtractionJournalSummary::class,
@@ -70,9 +70,9 @@ import org.muilab.notigpt.data.local.room.dao.GeneratedProposalDao
         PreferenceConflict::class,
         UserContext::class,
         FirestoreOutboxOp::class,
-        GeneratedProposal::class,
+        ProposedOpRecord::class,
     ],
-    version = 48,
+    version = 49,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -86,7 +86,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun subTaskDao(): SavedSubItemDao
     abstract fun notiSavedItemLinkDao(): NotiSavedItemLinkDao
     abstract fun savedItemChangeLogDao(): SavedItemChangeLogDao
-    abstract fun pendingOpDao(): PendingOpDao
+    abstract fun pendingProposedOpDao(): PendingProposedOpDao
     abstract fun rejectedMergeDao(): RejectedMergeDao
     abstract fun extractionJournalDao(): ExtractionJournalDao
     abstract fun reminderDao(): ReminderDao
@@ -94,7 +94,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun preferenceConflictDao(): PreferenceConflictDao
     abstract fun userContextDao(): UserContextDao
     abstract fun firestoreOutboxDao(): FirestoreOutboxDao
-    abstract fun generatedProposalDao(): GeneratedProposalDao
+    abstract fun proposedOpRecordDao(): ProposedOpRecordDao
 
     companion object {
         @Volatile
@@ -155,6 +155,7 @@ abstract class AppDatabase : RoomDatabase() {
                 .addMigrations(AppDatabaseMigrations.MIGRATION_45_46)
                 .addMigrations(AppDatabaseMigrations.MIGRATION_46_47)
                 .addMigrations(AppDatabaseMigrations.MIGRATION_47_48)
+                .addMigrations(AppDatabaseMigrations.MIGRATION_48_49)
                 .setJournalMode(JournalMode.TRUNCATE)
                 .build()
         }

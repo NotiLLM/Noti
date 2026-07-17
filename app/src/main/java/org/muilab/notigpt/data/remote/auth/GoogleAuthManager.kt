@@ -170,7 +170,7 @@ object GoogleAuthManager {
             // saved_item cascades noti_saved_item_link + saved_item_change_log via FK.
             db.reminderListDao().deleteAllForAccountSwitch()
             db.subTaskDao().deleteAllForAccountSwitch()
-            db.pendingOpDao().deleteAllForAccountSwitch()
+            db.pendingProposedOpDao().deleteAllForAccountSwitch()
             db.rejectedMergeDao().deleteAllForAccountSwitch()
             db.extractionJournalDao().deleteAllEntries()
             db.extractionJournalDao().deleteAllSummaries()
@@ -178,7 +178,7 @@ object GoogleAuthManager {
             db.extractionPreferenceDao().deleteAll()
             db.preferenceConflictDao().deleteAll()
             db.userContextDao().deleteAll()
-            if (previousUid.isNotBlank()) db.generatedProposalDao().deleteForAccount(previousUid)
+            if (previousUid.isNotBlank()) db.proposedOpRecordDao().deleteForAccount(previousUid)
             db.reminderDao().deleteAllSavedItemRefs()
             db.reminderDao().deleteAllSavedItemReminders()
             if (previousUid.isNotBlank()) db.firestoreOutboxDao().deleteForAccount(previousUid)

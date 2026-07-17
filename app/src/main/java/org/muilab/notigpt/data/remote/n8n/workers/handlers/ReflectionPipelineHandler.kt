@@ -13,16 +13,16 @@ import java.util.UUID
  *
  * Items already under review (with pending ops) are excluded, and pairs still inside the
  * merge-rejection cool-down are passed as `excludePairs` so the model stops re-proposing them for a
- * while. Nothing is applied here — E2's ops land in `pending_op`.
+ * while. Nothing is applied here — E2's ops land in `pending_proposed_op`.
  */
 internal object ReflectionPipelineHandler {
 
     suspend fun handle(ctx: N8nWorkerContext): ListenableWorker.Result {
-        val pendingOpRepo = ctx.pendingOpRepository()
-        val activeItems = ExtractionStageSupport.activeCompactList(ctx, pendingOpRepo)
+        val pendingProposedOpRepo = ctx.pendingProposedOpRepository()
+        val activeItems = ExtractionStageSupport.activeCompactList(ctx, pendingProposedOpRepo)
         if (activeItems.size < 2) return ctx.success()
 
-        val excludePairs = pendingOpRepo.getActiveMergeCooldowns().map { listOf(it.itemIdA, it.itemIdB) }
+        val excludePairs = pendingProposedOpRepo.getActiveMergeCooldowns().map { listOf(it.itemIdA, it.itemIdB) }
 
         // D2 — candidate groups.
         val d2Payload = ExtractionStageSupport.baseEnvelope(ctx).apply {
@@ -58,7 +58,7 @@ internal object ReflectionPipelineHandler {
             ?: return ctx.success()
         val ops = ExtractionStageSupport.parseObject(e2Body)?.optJSONArray("ops") ?: JSONArray()
         if (ops.length() > 0) {
-            pendingOpRepo.stageMergeOps(UUID.randomUUID().toString(), ops, emptyMap())
+            pendingProposedOpRepo.stageMergeOps(UUID.randomUUID().toString(), ops, emptyMap())
         }
         return ctx.success()
     }

@@ -1462,4 +1462,40 @@ object AppDatabaseMigrations {
         }
     }
 
+    /** Renames staged proposal and proposal-history storage without dropping persisted rows. */
+    val MIGRATION_48_49 = object : Migration(48, 49) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("DROP INDEX IF EXISTS `index_pending_op_targetItemId`")
+            db.execSQL("DROP INDEX IF EXISTS `index_pending_op_batchId`")
+            db.execSQL("ALTER TABLE `pending_op` RENAME TO `pending_proposed_op`")
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_pending_proposed_op_targetItemId` " +
+                    "ON `pending_proposed_op` (`targetItemId`)"
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_pending_proposed_op_batchId` " +
+                    "ON `pending_proposed_op` (`batchId`)"
+            )
+
+            db.execSQL("DROP INDEX IF EXISTS `index_generated_proposal_uid_createdAt`")
+            db.execSQL("DROP INDEX IF EXISTS `index_generated_proposal_opId`")
+            db.execSQL("ALTER TABLE `generated_proposal` RENAME TO `proposed_op_record`")
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_proposed_op_record_uid_createdAt` " +
+                    "ON `proposed_op_record` (`uid`, `createdAt`)"
+            )
+            db.execSQL(
+                "CREATE UNIQUE INDEX IF NOT EXISTS `index_proposed_op_record_opId` " +
+                    "ON `proposed_op_record` (`opId`)"
+            )
+
+            db.execSQL(
+                "UPDATE `firestore_outbox` SET " +
+                    "`operationKey` = REPLACE(`operationKey`, ':generated_proposal:', ':proposed_op_record:'), " +
+                    "`kind` = 'sync_proposed_op_record' " +
+                    "WHERE `kind` = 'sync_generated_proposal'"
+            )
+        }
+    }
+
 }

@@ -9,9 +9,9 @@ import org.muilab.notigpt.BuildConfig
 import org.muilab.notigpt.data.remote.n8n.context.N8nWorkerContext
 import org.muilab.notigpt.data.remote.n8n.workers.N8nWorkerInput
 import org.muilab.notigpt.data.remote.n8n.workers.handlers.ExtractionStageSupport.Http
-import org.muilab.notigpt.data.repository.reminder.PendingOpRepository
-import org.muilab.notigpt.model.features.PendingOp
-import org.muilab.notigpt.model.features.PendingOpType
+import org.muilab.notigpt.data.repository.reminder.PendingProposedOpRepository
+import org.muilab.notigpt.model.features.PendingProposedOp
+import org.muilab.notigpt.model.features.PendingProposedOpType
 import org.muilab.notigpt.model.notifications.NotiRecord
 import org.muilab.notigpt.util.GeneratingNotiUtils
 import org.muilab.notigpt.util.SharedPreferencesManager
@@ -24,7 +24,7 @@ import java.util.UUID
  * shortlist → E1 merge resolution. Each stage is a separate n8n webhook; this handler chains them
  * in one worker job so intermediate state (the staged rows, the batch id) stays in memory.
  *
- * The pipeline never writes saved items directly — B/E1 land their ops in `pending_op` for review.
+ * The pipeline never writes saved items directly — B/E1 land their ops in `pending_proposed_op` for review.
  * Only A and B gate the worker's retry: once ops are staged, the merge-refinement stages are
  * best-effort (a failure there must not re-run B and double-stage).
  */
@@ -155,7 +155,7 @@ internal object ExtractionPipelineHandler {
             }
 
             val batchId = UUID.randomUUID().toString()
-            val staged = ctx.pendingOpRepository().stageExtractionOps(notiKey, batchId, ops, validRecordIds)
+            val staged = ctx.pendingProposedOpRepository().stageExtractionOps(notiKey, batchId, ops, validRecordIds)
 
             // NonCancellable: once B has produced staged ops, don't let a REPLACE of this work slot
             // cut off the fold/merge follow-up partway.
@@ -231,20 +231,20 @@ internal object ExtractionPipelineHandler {
      * shortlisted pairs into merge ops. A resolved merge consumes the staged create (one reviewable
      * decision). Best-effort — a stage failure just leaves the creates standing.
      */
-    private suspend fun runMergeResolution(ctx: N8nWorkerContext, batchId: String, staged: List<PendingOp>) {
-        val creates = staged.filter { it.opType == PendingOpType.Create }
+    private suspend fun runMergeResolution(ctx: N8nWorkerContext, batchId: String, staged: List<PendingProposedOp>) {
+        val creates = staged.filter { it.opType == PendingProposedOpType.Create }
         if (creates.isEmpty()) return
-        val pendingOpRepo = ctx.pendingOpRepository()
+        val pendingProposedOpRepo = ctx.pendingProposedOpRepository()
 
-        val activeItems = ExtractionStageSupport.activeCompactList(ctx, pendingOpRepo)
+        val activeItems = ExtractionStageSupport.activeCompactList(ctx, pendingProposedOpRepo)
         if (activeItems.isEmpty()) return
 
-        val createsByRef = LinkedHashMap<String, PendingOp>()
+        val createsByRef = LinkedHashMap<String, PendingProposedOp>()
         val newItems = mutableListOf<Map<String, Any>>()
         for (create in creates) {
             val ref = "op_${create.opId}"
-            val group = PendingOpRepository.OpGroup(key = "create_${create.opId}", ops = listOf(create), targetItemId = null)
-            val preview = pendingOpRepo.buildPreview(group) ?: continue
+            val group = PendingProposedOpRepository.OpGroup(key = "create_${create.opId}", ops = listOf(create), targetItemId = null)
+            val preview = pendingProposedOpRepo.buildPreview(group) ?: continue
             createsByRef[ref] = create
             newItems += ExtractionStageSupport.previewDetail(preview, ref)
         }
@@ -265,8 +265,8 @@ internal object ExtractionPipelineHandler {
             val c = candidates.optJSONObject(i) ?: continue
             val ref = c.optString("newOpRef")
             val create = createsByRef[ref] ?: continue
-            val group = PendingOpRepository.OpGroup(key = "create_${create.opId}", ops = listOf(create), targetItemId = null)
-            val preview = pendingOpRepo.buildPreview(group) ?: continue
+            val group = PendingProposedOpRepository.OpGroup(key = "create_${create.opId}", ops = listOf(create), targetItemId = null)
+            val preview = pendingProposedOpRepo.buildPreview(group) ?: continue
             val existingIdsArr = c.optJSONArray("existingItemIds") ?: JSONArray()
             val existing = buildList {
                 for (j in 0 until existingIdsArr.length()) {
@@ -292,6 +292,6 @@ internal object ExtractionPipelineHandler {
         val e1Body = (ExtractionStageSupport.call(ctx, BuildConfig.N8N_EXTRACT_E1_MERGE_PATH, e1Payload) as? Http.Ok)?.body ?: return
         val mergeOps = ExtractionStageSupport.parseObject(e1Body)?.optJSONArray("ops") ?: return
         if (mergeOps.length() == 0) return
-        ctx.pendingOpRepository().stageMergeOps(batchId, mergeOps, createsByRef)
+        ctx.pendingProposedOpRepository().stageMergeOps(batchId, mergeOps, createsByRef)
     }
 }

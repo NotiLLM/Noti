@@ -18,8 +18,8 @@ import org.muilab.notigpt.data.local.room.dao.SmartFilterCounts
 import org.muilab.notigpt.data.repository.notification.NotiClassificationRepository
 import org.muilab.notigpt.model.features.NotiCategory
 import org.muilab.notigpt.model.features.NotiLlmState
-import org.muilab.notigpt.model.features.PendingOp
-import org.muilab.notigpt.model.features.PendingOpType
+import org.muilab.notigpt.model.features.PendingProposedOp
+import org.muilab.notigpt.model.features.PendingProposedOpType
 import org.muilab.notigpt.model.features.SavedItem
 import org.muilab.notigpt.model.features.SavedItemState
 import org.muilab.notigpt.model.features.SavedItemType
@@ -72,7 +72,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
      * already covers them.
      */
     val reviewCounts: StateFlow<ReviewCounts> = combine(
-        db.pendingOpDao().observeAll(),
+        db.pendingProposedOpDao().observeAll(),
         savedItemDao.observeNewItems(),
     ) { ops, legacyItems -> aggregateReviewCounts(ops, legacyItems) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ReviewCounts())
@@ -100,9 +100,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun aggregateReviewCounts(ops: List<PendingOp>, legacyItems: List<SavedItem>): ReviewCounts {
+    private fun aggregateReviewCounts(ops: List<PendingProposedOp>, legacyItems: List<SavedItem>): ReviewCounts {
         var nt = 0; var ut = 0; var nk = 0; var uk = 0
-        ops.filter { it.opType == PendingOpType.Create }.forEach { op ->
+        ops.filter { it.opType == PendingProposedOpType.Create }.forEach { op ->
             if (op.itemType == SavedItemType.Task) nt++ else nk++
         }
         val targeted = ops.filter { it.targetItemId.isNotBlank() }

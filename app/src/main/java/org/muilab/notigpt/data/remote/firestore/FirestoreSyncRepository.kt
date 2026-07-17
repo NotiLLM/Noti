@@ -11,7 +11,7 @@ import kotlinx.coroutines.withContext
 import com.google.firebase.auth.FirebaseAuth
 import org.muilab.notigpt.data.local.room.AppDatabase
 import org.muilab.notigpt.model.features.SavedItem
-import org.muilab.notigpt.model.features.GeneratedProposal
+import org.muilab.notigpt.model.features.ProposedOpRecord
 import org.muilab.notigpt.util.SharedPreferencesManager
 import java.time.ZoneId
 import java.util.Locale
@@ -49,17 +49,17 @@ class FirestoreSyncRepository(
         .collection(FirestorePaths.SUBCOLLECTION_REMINDERS)
         .document(savedItemId)
 
-    private fun generatedProposalDoc(proposalId: String) = firestore
+    private fun proposedOpRecordDoc(proposalId: String) = firestore
         .collection(FirestorePaths.COLLECTION_GENERATED_PROPOSALS_ROOT)
         .document(userId())
         .collection(FirestorePaths.SUBCOLLECTION_PROPOSALS)
         .document(proposalId)
 
     /** Mirrors generated output and its decision state; it contains no source notification text. */
-    suspend fun syncGeneratedProposal(proposal: GeneratedProposal): Boolean = withContext(Dispatchers.IO) {
+    suspend fun syncProposedOpRecord(proposal: ProposedOpRecord): Boolean = withContext(Dispatchers.IO) {
         if (userId().isBlank() || proposal.uid != userId()) return@withContext false
         try {
-            generatedProposalDoc(proposal.proposalId).set(
+            proposedOpRecordDoc(proposal.proposalId).set(
                 mapOf(
                     "proposalId" to proposal.proposalId,
                     "opId" to proposal.opId,
@@ -77,7 +77,7 @@ class FirestoreSyncRepository(
             ).await()
             true
         } catch (t: Throwable) {
-            Log.w(tag, "syncGeneratedProposal failed proposalId=${proposal.proposalId}", t)
+            Log.w(tag, "syncProposedOpRecord failed proposalId=${proposal.proposalId}", t)
             false
         }
     }

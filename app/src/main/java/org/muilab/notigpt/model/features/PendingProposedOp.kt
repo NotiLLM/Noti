@@ -5,7 +5,7 @@ import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
-object PendingOpType {
+object PendingProposedOpType {
     /** Proposes a brand-new saved item; the item id is generated on apply. */
     const val Create = "create"
 
@@ -25,13 +25,13 @@ object PendingOpType {
  * a faithful preview ("what would change") and discard rejected work without trace.
  */
 @Entity(
-    tableName = "pending_op",
+    tableName = "pending_proposed_op",
     indices = [
         Index(value = ["targetItemId"]),
         Index(value = ["batchId"]),
     ],
 )
-data class PendingOp(
+data class PendingProposedOp(
     @PrimaryKey(autoGenerate = true)
     val opId: Long = 0L,
 
@@ -39,7 +39,7 @@ data class PendingOp(
     @ColumnInfo(defaultValue = "''")
     val notiKey: String = "",
 
-    /** [PendingOpType] */
+    /** [PendingProposedOpType] */
     val opType: String,
 
     /**

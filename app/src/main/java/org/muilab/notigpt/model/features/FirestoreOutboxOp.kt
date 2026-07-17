@@ -8,7 +8,7 @@ import androidx.room.PrimaryKey
 object FirestoreOutboxKind {
     const val UpsertSavedItem = "upsert_saved_item"
     const val DeleteSavedItem = "delete_saved_item"
-    const val SyncGeneratedProposal = "sync_generated_proposal"
+    const val SyncProposedOpRecord = "sync_proposed_op_record"
 }
 
 /**
@@ -42,11 +42,11 @@ data class FirestoreOutboxOp(
                 createdAt = createdAt,
             )
 
-        fun generatedProposal(uid: String, proposalId: String, createdAt: Long) =
+        fun proposedOpRecord(uid: String, proposalId: String, createdAt: Long) =
             FirestoreOutboxOp(
-                operationKey = "$uid:generated_proposal:$proposalId",
+                operationKey = "$uid:proposed_op_record:$proposalId",
                 uid = uid,
-                kind = FirestoreOutboxKind.SyncGeneratedProposal,
+                kind = FirestoreOutboxKind.SyncProposedOpRecord,
                 entityId = proposalId,
                 createdAt = createdAt,
             )

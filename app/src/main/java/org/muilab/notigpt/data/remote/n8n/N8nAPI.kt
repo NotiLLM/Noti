@@ -43,7 +43,7 @@ private fun extractionWorkName(notiKey: String) = "n8n_extraction_${notiKey}"
  * One worker job runs the pipeline stages sequentially — auto runs start at scan (A), then
  * item-extraction (B), summary fold (C), merge shortlist (D1) and merge resolution (E1); a forced
  * run (manual "extract" from a notification) skips scan and starts at B. Staged ops land in
- * `pending_op` for review.
+ * `pending_proposed_op` for review.
  *
  * The slot is per-key: an auto run KEEPs (an in-flight run for the key is left to finish), while a
  * forced run REPLACEs so a manual trigger preempts any pending auto run for the same thread.

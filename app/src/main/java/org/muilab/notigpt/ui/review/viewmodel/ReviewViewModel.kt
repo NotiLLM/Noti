@@ -17,7 +17,7 @@ import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.muilab.notigpt.R
 import org.muilab.notigpt.data.local.room.AppDatabase
-import org.muilab.notigpt.data.repository.reminder.PendingOpRepository
+import org.muilab.notigpt.data.repository.reminder.PendingProposedOpRepository
 import org.muilab.notigpt.data.repository.reminder.ReminderRelatedNotificationsRepository
 import org.muilab.notigpt.data.repository.reminder.SavedItemChangeLogRepository
 import org.muilab.notigpt.data.repository.reminder.SavedItemRepository
@@ -29,7 +29,7 @@ import org.muilab.notigpt.model.features.SavedSubItem
 
 /**
  * Drives the swipe-to-review screen over the fully-staged model: pipeline proposals live in
- * pending_op and are grouped item-level ([ReviewEntry] per eventual item). Nothing touches
+ * pending_proposed_op and are grouped item-level ([ReviewEntry] per eventual item). Nothing touches
  * saved_item until approve; reject just discards the staged ops. Items that entered the legacy
  * new/updated states directly (single-item regeneration) still surface as entries with no group.
  */
@@ -39,7 +39,7 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
     private val repo = SavedItemRepository(db.reminderListDao(), application.applicationContext)
     private val changeLogRepo = SavedItemChangeLogRepository(db.savedItemChangeLogDao())
     private val relatedRepo = ReminderRelatedNotificationsRepository(application.applicationContext)
-    private val pendingOpRepo = PendingOpRepository(application.applicationContext)
+    private val pendingProposedOpRepo = PendingProposedOpRepository(application.applicationContext)
 
     enum class ReviewFilter { All, NewTasks, UpdatedTasks, NewKeeps, UpdatedKeeps }
 
@@ -56,7 +56,7 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
         val key: String,
         val preview: SavedItem,
         val previewSubItems: List<SavedSubItem>,
-        val group: PendingOpRepository.OpGroup?,
+        val group: PendingProposedOpRepository.OpGroup?,
         val reason: String,
     ) {
         val isNewLike: Boolean get() = preview.state == SavedItemState.New
@@ -65,14 +65,14 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
     /** All entries awaiting review. The screen applies the chip filter locally. */
     @OptIn(ExperimentalCoroutinesApi::class)
     val entries: StateFlow<List<ReviewEntry>> = combine(
-        pendingOpRepo.observePending(),
+        pendingProposedOpRepo.observePending(),
         repo.observeNewItems(),
     ) { ops, legacyItems -> ops to legacyItems }
         .mapLatest { (ops, legacyItems) ->
-            val groups = pendingOpRepo.groupOps(ops)
+            val groups = pendingProposedOpRepo.groupOps(ops)
             val targeted = groups.mapNotNull { it.targetItemId }.toSet()
             val groupEntries = groups.mapNotNull { group ->
-                val preview = pendingOpRepo.buildPreview(group) ?: return@mapNotNull null
+                val preview = pendingProposedOpRepo.buildPreview(group) ?: return@mapNotNull null
                 ReviewEntry(
                     key = group.key,
                     preview = preview.item,
@@ -160,10 +160,10 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
 
     private sealed interface UndoableAction {
         /** A staged group was applied; undo restores the pre-apply state and re-stages the ops. */
-        data class ApplyGroup(val outcome: PendingOpRepository.ApplyOutcome) : UndoableAction
+        data class ApplyGroup(val outcome: PendingProposedOpRepository.ApplyOutcome) : UndoableAction
 
         /** A staged group was discarded; undo re-inserts the ops. */
-        data class DiscardGroup(val group: PendingOpRepository.OpGroup) : UndoableAction
+        data class DiscardGroup(val group: PendingProposedOpRepository.OpGroup) : UndoableAction
 
         // Legacy (non-staged) items keep their old semantics.
         data class Approve(val item: SavedItem) : UndoableAction
@@ -197,7 +197,7 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             val group = entry.group
             if (group != null) {
-                val outcome = pendingOpRepo.applyGroup(group) ?: return@launch
+                val outcome = pendingProposedOpRepo.applyGroup(group) ?: return@launch
                 pendingUndo = UndoableAction.ApplyGroup(outcome)
                 noteApprovedForDoDate(entry.preview.copy(savedItemId = outcome.appliedItemId))
             } else {
@@ -216,7 +216,7 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
             val ts = System.currentTimeMillis()
             val group = entry.group
             if (group != null) {
-                val outcome = pendingOpRepo.applyGroup(group) ?: return@launch
+                val outcome = pendingProposedOpRepo.applyGroup(group) ?: return@launch
                 // The editor edited the preview; retarget its id to the real applied item.
                 repo.upsert(
                     edited.copy(
@@ -244,7 +244,7 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
             val ts = System.currentTimeMillis()
             val group = entry.group
             if (group != null) {
-                pendingOpRepo.discardGroup(group, ts)
+                pendingProposedOpRepo.discardGroup(group, ts)
                 pendingUndo = UndoableAction.DiscardGroup(group)
                 _snackbar.trySend(ReviewSnackbar(R.string.review_rejected_toast, entry.preview, canTeach = true))
                 return@launch
@@ -273,7 +273,7 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
             entries.forEach { entry ->
                 val group = entry.group
                 if (group != null) {
-                    val outcome = pendingOpRepo.applyGroup(group, ts) ?: return@forEach
+                    val outcome = pendingProposedOpRepo.applyGroup(group, ts) ?: return@forEach
                     noteApprovedForDoDate(entry.preview.copy(savedItemId = outcome.appliedItemId))
                 } else {
                     repo.acknowledgeReview(entry.preview.savedItemId, ts)
@@ -291,8 +291,8 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             val ts = System.currentTimeMillis()
             when (action) {
-                is UndoableAction.ApplyGroup -> pendingOpRepo.undoApply(action.outcome, ts)
-                is UndoableAction.DiscardGroup -> pendingOpRepo.restoreDiscarded(action.group)
+                is UndoableAction.ApplyGroup -> pendingProposedOpRepo.undoApply(action.outcome, ts)
+                is UndoableAction.DiscardGroup -> pendingProposedOpRepo.restoreDiscarded(action.group)
                 is UndoableAction.Approve -> {
                     repo.upsert(action.item)
                     approvedNeedingDoDate.remove(action.item.savedItemId)

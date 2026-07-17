@@ -27,7 +27,7 @@ object SavedItemState {
  * A SavedItem is not an active scheduled reminder. It is the local source of truth for
  * task/keep content and completion state. Scheduled push notifications use [Reminder] and
  * link back to saved items or notification records. Rows only exist once the user approved
- * the item (or created it manually): LLM proposals stage as [PendingOp]s until reviewed,
+ * the item (or created it manually): LLM proposals stage as [PendingProposedOp]s until reviewed,
  * and user deletion is a hard delete.
  */
 @Entity(tableName = "saved_item", primaryKeys = ["savedItemId"])

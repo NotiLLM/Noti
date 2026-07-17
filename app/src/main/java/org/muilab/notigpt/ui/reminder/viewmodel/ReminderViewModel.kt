@@ -31,7 +31,7 @@ import kotlinx.coroutines.flow.Flow
 import org.muilab.notigpt.model.features.SavedItemChangeLog
 import org.muilab.notigpt.data.repository.reminder.SavedItemChangeLogRepository
 import org.muilab.notigpt.data.repository.reminder.SavedItemRepository
-import org.muilab.notigpt.data.repository.reminder.PendingOpRepository
+import org.muilab.notigpt.data.repository.reminder.PendingProposedOpRepository
 import org.muilab.notigpt.data.repository.reminder.ReminderRelatedNotificationsRepository
 import org.muilab.notigpt.data.repository.reminder.SavedSubItemRepository
 import org.muilab.notigpt.data.remote.googletasks.GoogleTasksAuthManager
@@ -72,7 +72,7 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
     private val googleTasksRepo: GoogleTasksRepository
     private val relatedNotificationsRepo: ReminderRelatedNotificationsRepository
     private val changeLogRepo: SavedItemChangeLogRepository
-    private val pendingOpRepo: PendingOpRepository
+    private val pendingProposedOpRepo: PendingProposedOpRepository
 
     /** Extraction pipeline health, for the "server unreachable" banner. */
     val extractionStatus: StateFlow<org.muilab.notigpt.data.remote.n8n.ExtractionStatusStore.Status> =
@@ -88,7 +88,7 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
         googleTasksRepo = GoogleTasksRepository(application.applicationContext)
         relatedNotificationsRepo = ReminderRelatedNotificationsRepository(application.applicationContext)
         changeLogRepo = SavedItemChangeLogRepository(db.savedItemChangeLogDao())
-        pendingOpRepo = PendingOpRepository(application.applicationContext)
+        pendingProposedOpRepo = PendingProposedOpRepository(application.applicationContext)
         pendingExtractionCount = db.recordDao().observePendingExtractionCount()
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
     }
@@ -151,14 +151,14 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
      */
     @OptIn(ExperimentalCoroutinesApi::class)
     val pendingPreviews: StateFlow<Map<String, PendingListPreview>> = combine(
-        pendingOpRepo.observePending(),
+        pendingProposedOpRepo.observePending(),
         allFlow,
     ) { ops, _ -> ops }
         .mapLatest { ops ->
-            pendingOpRepo.groupOps(ops)
+            pendingProposedOpRepo.groupOps(ops)
                 .filter { !it.isCreate }
                 .mapNotNull { group ->
-                    val preview = pendingOpRepo.buildPreview(group) ?: return@mapNotNull null
+                    val preview = pendingProposedOpRepo.buildPreview(group) ?: return@mapNotNull null
                     val current = repo.getById(group.targetItemId!!) ?: return@mapNotNull null
                     val sourceIds = group.ops.flatMap { pending ->
                         try {
@@ -372,13 +372,13 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
     /** Accepts a staged update/merge, then opens the now-current item for manual editing. */
     fun approvePendingForEdit(savedItemId: String, onApproved: (SavedItem) -> Unit) {
         viewModelScope.launch {
-            val group = pendingOpRepo.groupOps(pendingOpRepo.getPending())
+            val group = pendingProposedOpRepo.groupOps(pendingProposedOpRepo.getPending())
                 .firstOrNull { it.targetItemId == savedItemId }
             if (group == null) {
                 repo.getById(savedItemId)?.let(onApproved)
                 return@launch
             }
-            val outcome = pendingOpRepo.applyGroup(group) ?: return@launch
+            val outcome = pendingProposedOpRepo.applyGroup(group) ?: return@launch
             repo.getById(outcome.appliedItemId)?.let(onApproved)
         }
     }
