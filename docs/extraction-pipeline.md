@@ -28,6 +28,25 @@ flowchart LR
 - **D1/E1 — local merge:** finds related existing saved items and proposes conservative merges.
 - **D2/E2 — reflection:** periodically considers relationships across notification keys.
 
+## Item and merge semantics
+
+Automatic extraction is precision-first. A **Task** is unresolved work that must survive beyond
+reading, acknowledging, or immediately replying to the notification. A **Keep** is information with
+a credible future retrieval occasion after the source notification is gone. If reading or a simple
+reply exhausts the notification's value, the normal result is no item. A forced/manual extraction is
+an explicit one-run override and may return multiple independent Tasks and Keeps, but every result
+still needs record evidence.
+
+One Task is one completion and scheduling unit. Subtasks are reserved for steps the user could handle
+in the same session under one parent deadline. Different deadlines, waiting periods, locations, tools,
+or handling sessions require separate Tasks even when they share a person, topic, or event. `whenAtMs`
+is always user-owned: workflows may read it to avoid an unsafe merge, but no workflow may create or
+change it. Evidence-backed deadlines remain model-managed.
+
+Merges are limited to exact duplicate/update units or genuine same-session action bundles. Keeps merge
+only when their information will be retrieved and become obsolete together. Task/Keep cross-type
+merges and merges with conflicting user-set When values are also rejected by Android before staging.
+
 `N8nWorkerInput` is the typed WorkManager boundary. `N8nWorkerHandlers` exhaustively dispatches each
 supported job to a focused handler. Invalid/unknown input stops before side effects.
 
@@ -41,6 +60,11 @@ local multi-DAO changes in a Room transaction.
 Every generated instruction is also copied to `generated_proposal` with a durable decision:
 `pending`, `approved`, `rejected`, or `superseded`. That generated payload may synchronize to Firestore.
 It must not contain copied raw notification snapshots; provenance is record IDs only.
+
+Buttons are parent-owned `{buttonText,intent,type}` actions. Creates use `buttons`; updates and merges
+append through `changes.addedButtons`. Copy actions are reserved for values likely to be pasted or
+entered later. Link labels use grounded source text when present, otherwise Android derives a readable
+host/short-path label and hides opaque token paths.
 
 ## Journal and idempotency
 

@@ -315,7 +315,7 @@
     <!-- DELETE Quick Rules -->
     <string name="pref_rule_delete_sender">Ignore future tasks from this specific sender</string>
     <string name="pref_rule_delete_group">Only extract tasks from this group if I am explicitly mentioned</string>
-    <string name="pref_rule_delete_info">This type of message is just an update/news, never a task</string>
+    <string name="pref_rule_delete_info">This is only a one-time update; don\'t create a task or keep</string>
     <string name="pref_rule_delete_topic">Mute tasks about this specific topic</string>
     <string name="pref_rule_delete_app">Do not extract any tasks from this app</string>
 
@@ -329,7 +329,7 @@
     <string name="pref_rule_edit_context">Always include the \'why\' (the rationale) behind the task</string>
     <string name="pref_rule_edit_urgency">Pay closer attention to implied urgency or deadlines</string>
     <string name="pref_rule_edit_responsibility">The assigned responsibility/person was incorrect</string>
-    <string name="pref_rule_edit_granularity">Combine this with existing tasks for this topic instead of making a new one</string>
+    <string name="pref_rule_edit_granularity">Combine only when I would handle everything in the same session</string>
 
     <!-- Preference learning – syncing -->
     <string name="pref_syncing">Saving your preference…</string>

@@ -97,8 +97,9 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import org.json.JSONArray
 import org.muilab.notigpt.R
+import org.muilab.notigpt.domain.saveditem.SavedItemActionButton
+import org.muilab.notigpt.domain.saveditem.SavedItemActionButtons
 import org.muilab.notigpt.ui.preference.model.PreferenceEntryPoint
 import org.muilab.notigpt.model.features.SavedItem
 import org.muilab.notigpt.model.features.SavedItemType
@@ -822,19 +823,7 @@ fun SavedItemCard(
 
     // Parse LLM-generated buttons
     val buttons = remember(item.buttons) {
-        try {
-            val arr = JSONArray(item.buttons)
-            buildList {
-                for (i in 0 until arr.length()) {
-                    val obj = arr.getJSONObject(i)
-                    add(Triple(
-                        obj.optString("buttonText", ""),
-                        obj.optString("intent", ""),
-                        obj.optString("type", "link"),
-                    ))
-                }
-            }
-        } catch (_: Exception) { emptyList() }
+        SavedItemActionButtons.parse(item.buttons)
     }
 
     var expanded by remember(item.savedItemId) { mutableStateOf(false) }
@@ -1003,8 +992,8 @@ fun SavedItemCard(
                 if (buttons.isNotEmpty()) {
                     val savedItemActionScrollState = rememberScrollState()
                     Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp).horizontalScroll(savedItemActionScrollState), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        buttons.forEach { (buttonText, intent, type) ->
-                            SavedItemActionChip(buttonText = buttonText, intent = intent, type = type, context = context, clipboard = clipboard)
+                        buttons.forEach { button ->
+                            SavedItemActionChip(button = button, context = context, clipboard = clipboard)
                         }
                     }
                 }
@@ -1222,25 +1211,23 @@ private fun WhenBottomButton(
  */
 @Composable
 private fun SavedItemActionChip(
-    buttonText: String,
-    intent: String,
-    type: String,
+    button: SavedItemActionButton,
     context: android.content.Context,
     clipboard: AndroidClipboardController,
 ) {
-    val iconRes = when (type) {
+    val iconRes = when (button.type) {
         "copy" -> R.drawable.copy
         else -> R.drawable.link
     }
     AssistChip(
         onClick = {
-            when (type) {
+            when (button.type) {
                 "copy" -> {
-                    clipboard.copyPlainText("saved_item_button", intent)
+                    clipboard.copyPlainText("saved_item_button", button.intent)
                 }
                 else -> {
                     try {
-                        val viewIntent = Intent(Intent.ACTION_VIEW, Uri.parse(intent)).apply {
+                        val viewIntent = Intent(Intent.ACTION_VIEW, Uri.parse(button.intent)).apply {
                             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                         }
                         context.startActivity(viewIntent)
@@ -1248,11 +1235,11 @@ private fun SavedItemActionChip(
                 }
             }
         },
-        label = { Text(buttonText, style = MaterialTheme.typography.labelSmall) },
+        label = { Text(button.buttonText, style = MaterialTheme.typography.labelSmall) },
         leadingIcon = {
             Icon(
                 painter = painterResource(iconRes),
-                contentDescription = if (type == "copy") stringResource(R.string.a11y_copy_text) else stringResource(R.string.a11y_open_link),
+                contentDescription = if (button.type == "copy") stringResource(R.string.a11y_copy_text) else stringResource(R.string.a11y_open_link),
                 modifier = Modifier.size(16.dp),
             )
         },
@@ -1636,26 +1623,14 @@ fun SavedItemDetailScreen(
 
             // === LLM-generated button chips ===
             val detailButtons = remember(initial.buttons) {
-                try {
-                    val arr = JSONArray(initial.buttons)
-                    buildList {
-                        for (i in 0 until arr.length()) {
-                            val obj = arr.getJSONObject(i)
-                            add(Triple(
-                                obj.optString("buttonText", ""),
-                                obj.optString("intent", ""),
-                                obj.optString("type", "link"),
-                            ))
-                        }
-                    }
-                } catch (_: Exception) { emptyList() }
+                SavedItemActionButtons.parse(initial.buttons)
             }
 
             if (detailButtons.isNotEmpty()) {
                 val detailClipboard = remember(context) { AndroidClipboardController(context) }
                 FlowRow(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    detailButtons.forEach { (buttonText, intent, type) ->
-                        SavedItemActionChip(buttonText = buttonText, intent = intent, type = type, context = context, clipboard = detailClipboard)
+                    detailButtons.forEach { button ->
+                        SavedItemActionChip(button = button, context = context, clipboard = detailClipboard)
                     }
                 }
             }

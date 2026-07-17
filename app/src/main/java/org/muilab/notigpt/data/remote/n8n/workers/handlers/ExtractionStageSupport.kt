@@ -67,6 +67,8 @@ internal object ExtractionStageSupport {
         "type" to if (item.isTask) "task" else "keep",
         "deadline" to iso(item.deadlineAtMs),
         "when" to if (SavedItem.isSomeday(item.whenAtMs)) "someday" else iso(item.whenAtMs),
+        "isStarred" to item.isStarred,
+        "userEdited" to item.userEdited,
     )
 
     /** Full item detail, used where a stage reasons over content (B linked items, E-stage pairs/groups). */
@@ -99,6 +101,7 @@ internal object ExtractionStageSupport {
             "endTime" to iso(item.endAtMs),
             "when" to if (SavedItem.isSomeday(item.whenAtMs)) "someday" else iso(item.whenAtMs),
             "userEdited" to item.userEdited,
+            "isStarred" to item.isStarred,
             "isCompleted" to item.isCompleted,
             "buttons" to item.buttons,
             "sourceNotiRecordIds" to recordIds,
@@ -116,6 +119,7 @@ internal object ExtractionStageSupport {
         "deadline" to iso(preview.item.deadlineAtMs),
         "startTime" to iso(preview.item.startAtMs),
         "endTime" to iso(preview.item.endAtMs),
+        "buttons" to preview.item.buttons,
         "subTasks" to preview.subItems.map { st ->
             mapOf(
                 "text" to st.text,

@@ -54,6 +54,8 @@ internal object ExtractionPipelineHandler {
         var shouldExtract = input.forced
         if (!input.forced) {
             val payload = ExtractionStageSupport.baseEnvelope(ctx).apply {
+                put("extractionPreferences", ctx.getExtractionPreferencesPayload())
+                put("userContexts", ctx.getUserContextsPayload())
                 put("notiKey", notiKey)
                 put("appName", unit.appName)
                 put("priorSummary", priorSummary)

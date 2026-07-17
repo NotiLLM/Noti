@@ -254,7 +254,7 @@
     <!-- DELETE Quick Rules -->
     <string name="pref_rule_delete_sender">忽略此發送者未來的任務</string>
     <string name="pref_rule_delete_group">只有在群組中明確提到我時才擷取任務</string>
-    <string name="pref_rule_delete_info">這類訊息只是更新／新聞，不是任務</string>
+    <string name="pref_rule_delete_info">這只是一次性更新，不要建立任務或備忘</string>
     <string name="pref_rule_delete_topic">忽略此主題的任務</string>
     <string name="pref_rule_delete_app">不要從此應用程式擷取任何任務</string>
 
@@ -268,7 +268,7 @@
     <string name="pref_rule_edit_context">總是包含任務背後的「原因」（理由）</string>
     <string name="pref_rule_edit_urgency">更加留意隱含的緊急程度或截止日期</string>
     <string name="pref_rule_edit_responsibility">指派的負責人不正確</string>
-    <string name="pref_rule_edit_granularity">將此與相同主題的現有任務合併，而非建立新任務</string>
+    <string name="pref_rule_edit_granularity">只有在所有內容會於同一次處理時才合併</string>
 
     <!-- Preference learning – syncing -->
     <string name="pref_syncing">正在儲存您的偏好…</string>

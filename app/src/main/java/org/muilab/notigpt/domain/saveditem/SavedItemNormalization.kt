@@ -1,6 +1,5 @@
 package org.muilab.notigpt.domain.saveditem
 
-import org.json.JSONArray
 import org.muilab.notigpt.model.features.SavedItem
 import org.muilab.notigpt.model.features.SavedSubItem
 import java.text.SimpleDateFormat
@@ -41,21 +40,7 @@ object SavedItemNormalization {
         )
     }
 
-    fun mergeButtons(vararg buttonJson: String): String {
-        val out = JSONArray()
-        val seen = linkedSetOf<String>()
-        buttonJson.forEach { raw ->
-            val arr = try { JSONArray(raw) } catch (_: Exception) { JSONArray() }
-            for (index in 0 until arr.length()) {
-                val button = arr.optJSONObject(index) ?: continue
-                val type = button.optString("type", "link")
-                val intent = button.optString("intent", "")
-                if (intent.isBlank() || !seen.add("$type\u0000$intent")) continue
-                out.put(button)
-            }
-        }
-        return out.toString()
-    }
+    fun mergeButtons(vararg buttonJson: String): String = SavedItemActionButtons.mergeJson(*buttonJson)
 
     private fun appendDeadline(content: String, deadlineAtMs: Long): String {
         if (deadlineAtMs <= 0L) return content

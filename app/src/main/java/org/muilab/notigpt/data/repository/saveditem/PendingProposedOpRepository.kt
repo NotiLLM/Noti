@@ -12,6 +12,7 @@ import org.muilab.notigpt.data.local.room.AppDatabase
 import org.muilab.notigpt.data.remote.firestore.FirestoreSyncRepository
 import org.muilab.notigpt.data.remote.n8n.N8nOpParsing
 import org.muilab.notigpt.domain.saveditem.SavedItemAssociationMerger
+import org.muilab.notigpt.domain.saveditem.SavedItemMergePolicy
 import org.muilab.notigpt.domain.saveditem.SavedItemNormalization
 import org.muilab.notigpt.model.features.ExtractionJournalEntry
 import org.muilab.notigpt.model.features.ExtractionJournalEventType
@@ -150,14 +151,19 @@ class PendingProposedOpRepository(private val appContext: Context) {
             if (targetId.isBlank()) continue
             val target = savedItemDao.getById(targetId) ?: continue
             val consumed = createsByRef[op.optString("newOpRef")]
+            if (consumed != null && consumed.itemType != target.itemType) continue
             val sourceIds = op.optJSONArray("sourceItemIds") ?: JSONArray()
             // Sources must be real, distinct items; the survivor can't merge into itself.
-            val validSources = buildList {
+            val sourceItems = buildList {
                 for (j in 0 until sourceIds.length()) {
                     val id = sourceIds.optString(j)
-                    if (id.isNotBlank() && id != targetId && savedItemDao.getById(id) != null) add(id)
+                    if (id.isBlank() || id == targetId) continue
+                    savedItemDao.getById(id)?.let(::add)
                 }
-            }.distinct()
+            }.distinctBy(SavedItem::savedItemId)
+            if (sourceItems.any { it.itemType != target.itemType }) continue
+            if (SavedItemMergePolicy.preservedUserState(listOf(target) + sourceItems) == null) continue
+            val validSources = sourceItems.map(SavedItem::savedItemId)
             if (consumed == null && validSources.isEmpty() && !op.has("changes")) continue
 
             rows += PendingProposedOp(
@@ -241,6 +247,7 @@ class PendingProposedOpRepository(private val appContext: Context) {
             val op = JSONObject(pending.payload)
             val changes = op.optJSONObject("changes") ?: JSONObject()
             item = applyChangesInMemory(item, changes, now)
+            item = applyOperationButtons(item, op, changes)
             subs += N8nOpParsing.parseSubTasks(changes.optJSONArray("addedSubTasks"), current.savedItemId, now, baseSortOrder = subs.size)
             removedSubTaskIds(changes).forEach { removedId -> subs.removeAll { it.savedSubItemId == removedId } }
         }
@@ -332,6 +339,13 @@ class PendingProposedOpRepository(private val appContext: Context) {
     private suspend fun applyOnTarget(group: OpGroup, now: Long): ApplyOutcome? {
         val targetId = group.targetItemId!!
         val before = savedItemDao.getById(targetId) ?: return null
+        val sourceSnapshots = buildList {
+            group.ops.flatMap(::mergeSourceIdsOf).distinct().forEach { sourceId ->
+                savedItemDao.getById(sourceId)?.let(::add)
+            }
+        }
+        val preservedUserState = SavedItemMergePolicy.preservedUserState(listOf(before) + sourceSnapshots)
+            ?: return null
 
         var item = before
         val addedSubItemIds = mutableListOf<String>()
@@ -344,13 +358,7 @@ class PendingProposedOpRepository(private val appContext: Context) {
             val op = JSONObject(pending.payload)
             val changes = op.optJSONObject("changes") ?: JSONObject()
             item = applyChangesInMemory(item, changes, now)
-            op.optJSONArray("buttons")?.let { item = item.copy(buttons = it.toString()) }
-            item = item.copy(
-                buttons = SavedItemNormalization.mergeButtons(
-                    item.buttons,
-                    N8nOpParsing.childButtons(changes.optJSONArray("addedSubTasks")),
-                )
-            )
+            item = applyOperationButtons(item, op, changes)
 
             val added = N8nOpParsing.parseSubTasks(
                 changes.optJSONArray("addedSubTasks"), targetId, now,
@@ -400,6 +408,11 @@ class PendingProposedOpRepository(private val appContext: Context) {
         }
 
         // Acceptance is the acknowledgment: land in `saved` with the change cursor moved.
+        item = item.copy(
+            whenAtMs = preservedUserState.whenAtMs,
+            isStarred = preservedUserState.isStarred,
+            userEdited = preservedUserState.userEdited,
+        )
         val currentSubs = subTaskDao.getBySavedItemId(targetId)
         val normalized = SavedItemNormalization.normalize(
             item,
@@ -603,6 +616,16 @@ class PendingProposedOpRepository(private val appContext: Context) {
             ?.let { N8nOpParsing.isoToUnixMillis(it.optString("new", "-1")).let { v -> if (v == -1L) 0L else v } } ?: item.endAtMs
         return item.copy(title = title, content = content, deadlineAtMs = deadline, startAtMs = start, endAtMs = end)
     }
+
+    /** Buttons are append-only in v3, including legacy top-level and child-owned payloads. */
+    private fun applyOperationButtons(item: SavedItem, op: JSONObject, changes: JSONObject): SavedItem = item.copy(
+        buttons = SavedItemNormalization.mergeButtons(
+            item.buttons,
+            op.optJSONArray("buttons")?.toString() ?: "[]",
+            changes.optJSONArray("addedButtons")?.toString() ?: "[]",
+            N8nOpParsing.childButtons(changes.optJSONArray("addedSubTasks")),
+        )
+    )
 
     private fun removedSubTaskIds(changes: JSONObject): List<String> {
         val arr = changes.optJSONArray("removedSubTasks") ?: return emptyList()
