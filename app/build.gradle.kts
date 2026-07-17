@@ -26,7 +26,6 @@ android {
             useSupportLibrary = true
         }
 
-        buildConfigField("String", "N8N_UPDATE_NOTIFICATION_PATH", "\"webhook-test/update-notification\"")
         // Per-notiKey extraction pipeline (contract v3). Each stage is its own n8n workflow/webhook.
         buildConfigField("String", "N8N_EXTRACT_A_SCAN_PATH", "\"webhook/extract-a-scan\"")
         buildConfigField("String", "N8N_EXTRACT_B_ITEMS_PATH", "\"webhook/extract-b-items\"")

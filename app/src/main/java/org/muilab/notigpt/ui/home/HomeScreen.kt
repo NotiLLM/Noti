@@ -127,17 +127,6 @@ fun HomeScreen(
 }
 
 @Composable
-private fun HomeTitle() {
-    Text(
-        text = stringResource(R.string.app_name),
-        style = MaterialTheme.typography.headlineLarge,
-        fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
-        color = MaterialTheme.colorScheme.onSurface,
-        modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 8.dp),
-    )
-}
-
-@Composable
 private fun HomeSectionHeader(title: String) {
     Text(
         text = title,

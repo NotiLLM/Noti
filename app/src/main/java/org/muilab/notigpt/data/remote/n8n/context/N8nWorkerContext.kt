@@ -95,11 +95,7 @@ class N8nWorkerContext @Inject constructor(
         }
     }
 
-    @Suppress("unused")
     fun getNotiUnit(notiKey: String) = notiRepository.getNotiUnit(notiKey)
-
-    @Suppress("unused")
-    fun getNotSyncedNotiActions(notiKey: String, sinceTimeMs: Long) = notiRepository.getNotSyncedNotiActions(notiKey, sinceTimeMs)
 
     fun success(): ListenableWorker.Result = ListenableWorker.Result.success()
     fun retry(): ListenableWorker.Result = ListenableWorker.Result.retry()

@@ -74,10 +74,6 @@ class NotiRepository(
         actionsRepo.upsertNotiUnit(context, sbn, isInit)
     }
 
-    fun updateNotiUnit(notiUnit: NotiUnit) {
-        actionsRepo.updateNotiUnit(notiUnit)
-    }
-
     suspend fun removeNotiUnit(notiKey: String) = withContext(Dispatchers.IO) {
         actionsRepo.removeNotiUnit(notiKey)
     }
@@ -89,10 +85,6 @@ class NotiRepository(
      */
     suspend fun insertNotiRecord(sbn: StatusBarNotification) = withContext(Dispatchers.IO) {
         actionsRepo.insertNotiRecord(sbn)
-    }
-
-    suspend fun markNotiRead(notiKey: String) = withContext(Dispatchers.IO) {
-        actionsRepo.markNotiRead(notiKey)
     }
 
     fun getNewRecords(): List<NotiRecord> = notiRecordDao.getNewRecords()
@@ -178,14 +170,6 @@ class NotiRepository(
         maintenanceRepo.deleteNotisByKeys(notiKeys) { k, a -> maintenanceRepo.logAction(k, a) }
     }
 
-    suspend fun markAllNotisRead() = withContext(Dispatchers.IO) {
-        maintenanceRepo.markAllNotisRead { k, a -> maintenanceRepo.logAction(k, a) }
-    }
-
-    fun updateSeenNotifications(seenNotis: Set<String>) {
-        maintenanceRepo.updateSeenNotifications(seenNotis) { k, a -> logAction(k, a) }
-    }
-
     suspend fun actOnNoti(notiKey: String, action: String) {
         actionsRepo.actOnNotiLegacy(notiKey, action)
     }
@@ -199,11 +183,6 @@ class NotiRepository(
     fun getNotiUnitByKeys(notiKeys: List<String>): List<NotiUnit> {
         if (notiKeys.isEmpty()) return emptyList()
         return notiDrawerDao.getByNotiKeys(notiKeys)
-    }
-
-    /** Returns actions since [sinceTimeMs]. */
-    fun getNotSyncedNotiActions(notiKey: String, sinceTimeMs: Long): List<NotiAction> {
-        return notiActionDao.getActionsByKey(notiKey).filter { it.time > sinceTimeMs }
     }
 
     /**

@@ -223,7 +223,6 @@ class NotiListenerService: NotificationListenerService() {
                 Log.d("NotiListenerService", "Caching delete intent")
                 deleteIntentCache.put(sbn.key, it)
             }
-//            enqueueUpdateNotification(applicationContext, sbn.key)
             postOngoingNotification(applicationContext)
         }
 

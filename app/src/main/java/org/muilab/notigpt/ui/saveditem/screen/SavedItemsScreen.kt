@@ -741,18 +741,6 @@ fun SavedItemsScreen(
     PreferenceLearningBottomSheet(preferenceViewModel = prefVm)
 }
 
-@Composable
-private fun SectionHeader(title: String) {
-    Text(
-        text = title,
-        style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp),
-    )
-}
-
 /**
  * Single-select filter chip used by the Task/Keep filter rows.
  *

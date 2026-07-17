@@ -17,8 +17,6 @@
     <!-- UI strings (default: English). -->
 
     <!-- Common / actions -->
-    <string name="ui_action_add">Add</string>
-    <string name="ui_action_back">Back</string>
     <string name="ui_action_cancel">Cancel</string>
     <string name="ui_action_clear">Clear</string>
     <string name="ui_action_continue">Continue</string>
@@ -181,27 +179,7 @@
     <string name="ui_home_no_results">No results found.</string>
     <string name="ui_search_placeholder">Search…</string>
 
-    <!-- User control panel -->
-    <string name="ui_user_close_app">Close app</string>
     <string name="ui_user_clear_all">Clear all</string>
-    <string name="ui_user_all_notifications_deleted">All notifications deleted</string>
-
-    <!-- Dev control panel (debug UI) -->
-    <string name="ui_dev_open_control_panel">Open Control Panel</string>
-    <string name="ui_dev_close_control_panel">Close Control Panel</string>
-    <string name="ui_dev_sync_noti_status">Sync Noti Status</string>
-    <string name="ui_dev_update_user">Update User</string>
-    <string name="ui_dev_export_data">Export Data</string>
-    <string name="ui_dev_copy_data_with_history">Copy Data with History</string>
-    <string name="ui_dev_copy_data">Copy Data</string>
-    <string name="ui_dev_sync_noti_status_toast">Sync Noti Status (WIP)</string>
-    <string name="ui_dev_work_in_progress">Work In Progress</string>
-
-    <!-- SharedPrefsButton (debug UI) -->
-    <string name="ui_debug_enter_integer_for">Enter an Integer for %1$s</string>
-    <string name="ui_debug_enter_value">Enter value</string>
-    <string name="ui_debug_invalid_integer">Invalid integer!</string>
-    <string name="ui_debug_invalid_ip">Invalid IP!</string>
 
     <!-- Ongoing status / generation notifications -->
     <string name="ongoing_status_title">Noti is active</string>
@@ -462,7 +440,6 @@
     <string name="saved_item_share">Share</string>
     <string name="reminder_pin">Pin</string>
     <string name="reminder_unpin">Unpin</string>
-    <string name="reminder_make_copy_button">Make Copy Button</string>
 
     <!-- Reminder feedback dialog -->
     <string name="saved_item_feedback_title">How should this saved item be ranked?</string>

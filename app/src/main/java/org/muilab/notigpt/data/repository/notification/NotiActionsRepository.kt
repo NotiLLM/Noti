@@ -40,7 +40,7 @@ class NotiActionsRepository(
      * Creates or refreshes the current drawer row for a posted notification.
      *
      * Initial listener hydration inserts missing rows without resetting existing state; live posts refresh metadata
-     * and unread state because they represent new user-visible activity.
+     * because they represent new user-visible activity.
      */
     fun upsertNotiUnit(context: Context, sbn: StatusBarNotification, isInit: Boolean) {
         val existingNoti = notiDrawerDao.getByNotiKey(sbn.key)
@@ -50,13 +50,8 @@ class NotiActionsRepository(
             notiDrawerDao.insert(newNoti)
         } else if (!isInit) {
             existingNoti.updateNoti(context, sbn)
-            existingNoti.isRead = false
             notiDrawerDao.update(existingNoti)
         }
-    }
-
-    fun updateNotiUnit(notiUnit: NotiUnit) {
-        notiDrawerDao.update(notiUnit)
     }
 
     suspend fun removeNotiUnit(notiKey: String) {
@@ -125,10 +120,6 @@ class NotiActionsRepository(
         if (remainingMs > 0) delay(remainingMs)
     }
 
-    suspend fun markNotiRead(notiKey: String) {
-        notiDrawerDao.setUnitReadByKey(notiKey)
-    }
-
     suspend fun actOnNotiLegacy(notiKey: String, action: String) {
         // Special-case actions that carry payload after :: (record ids are no longer used — the
         // forced pipeline extracts from the thread's unprocessed records).
@@ -162,7 +153,6 @@ class NotiActionsRepository(
             "undo_to_top" -> notiDrawerDao.updateToTopStatus(notiKey, false, 0L)
             "unpin" -> setPinnedState(notiKey, false)
             "pin" -> setPinnedState(notiKey, true)
-            "mark_read" -> markNotiRead(notiKey)
             "extract_reminder" -> {
                 // User-triggered manual extraction: run the forced pipeline for this thread.
                 notiDrawerDao.getByNotiKey(notiKey) ?: return

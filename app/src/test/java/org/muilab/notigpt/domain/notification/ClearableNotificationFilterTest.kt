@@ -45,7 +45,6 @@ class ClearableNotificationFilterTest {
                 displayState = NotiDisplayState().apply {
                     this.isPinned = isPinned
                     this.isDismissed = isDismissed
-                    isRead = true
                 },
             ),
             notiRecords = emptyList(),

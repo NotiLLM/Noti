@@ -100,26 +100,6 @@ class GoogleTasksRepository(
         createTaskFromExportable(reminder.asExportable())
 
     /**
-     * Get the user's task lists (for future use if we want list selection).
-     */
-    suspend fun getTaskLists(): List<Pair<String, String>> = withContext(Dispatchers.IO) {
-        val account = GoogleTasksAuthManager.getAccount(appContext) ?: return@withContext emptyList()
-
-        try {
-            val service = buildTasksService(account)
-            val response = service.tasklists().list().execute()
-
-            response.items?.map { taskList ->
-                (taskList.id ?: "") to (taskList.title ?: "")
-            } ?: emptyList()
-
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to fetch task lists", e)
-            emptyList()
-        }
-    }
-
-    /**
      * Format timestamp as RFC 3339 date-time string for Google Tasks API.
      */
     private fun formatRfc3339(timestampMs: Long): String {

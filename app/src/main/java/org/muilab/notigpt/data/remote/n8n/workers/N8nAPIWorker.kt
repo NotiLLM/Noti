@@ -40,5 +40,5 @@ class N8nAPIWorker @AssistedInject constructor(
     }
 
     // NOTE: Large handler methods were extracted into data.remote.n8n.workers.handlers.*
-    // (UpdateNotificationHandler, TaskScanHandler, TaskExtractionHandler)
+    // Workflow-specific behavior stays in the handler classes.
 }

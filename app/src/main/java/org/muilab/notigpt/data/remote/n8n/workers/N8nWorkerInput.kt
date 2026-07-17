@@ -1,7 +1,6 @@
 package org.muilab.notigpt.data.remote.n8n.workers
 
 import androidx.work.Data
-import org.muilab.notigpt.util.Constants.Companion.DIFY_UPDATE_NOTIFICATION
 import org.muilab.notigpt.util.Constants.Companion.N8N_EXTRACTION_PIPELINE
 import org.muilab.notigpt.util.Constants.Companion.N8N_REFLECTION_PIPELINE
 import org.muilab.notigpt.util.Constants.Companion.N8N_PREFERENCE_QUICK_SYNC
@@ -15,11 +14,6 @@ import org.muilab.notigpt.util.Constants.Companion.N8N_REGENERATE_ONE
  */
 sealed interface N8nWorkerInput {
     val webhookPath: String
-
-    data class UpdateNotification(
-        override val webhookPath: String,
-        val notiKey: String,
-    ) : N8nWorkerInput
 
     /** Per-notiKey extraction pipeline (A→B→C→D1→E1). [forced] skips scan and starts at B. */
     data class ExtractionPipeline(
@@ -52,11 +46,6 @@ sealed interface N8nWorkerInput {
             val webhookPath = input.getString("webhook_path") ?: return null
 
             return when (apiType) {
-                DIFY_UPDATE_NOTIFICATION -> UpdateNotification(
-                    webhookPath = webhookPath,
-                    notiKey = input.getString("noti_key") ?: "",
-                )
-
                 N8N_EXTRACTION_PIPELINE -> ExtractionPipeline(
                     webhookPath = webhookPath,
                     notiKey = input.getString("noti_key") ?: return null,

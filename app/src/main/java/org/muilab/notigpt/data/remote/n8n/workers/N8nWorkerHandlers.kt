@@ -7,7 +7,6 @@ import org.muilab.notigpt.data.remote.n8n.workers.handlers.ExtractionPipelineHan
 import org.muilab.notigpt.data.remote.n8n.workers.handlers.PreferenceQuickSyncHandler
 import org.muilab.notigpt.data.remote.n8n.workers.handlers.ReflectionPipelineHandler
 import org.muilab.notigpt.data.remote.n8n.workers.handlers.SavedItemRegenerationHandler
-import org.muilab.notigpt.data.remote.n8n.workers.handlers.UpdateNotificationHandler
 
 /**
  * Dispatcher from typed WorkManager input to the matching n8n workflow handler.
@@ -24,7 +23,6 @@ internal object N8nWorkerHandlers {
      */
     suspend fun dispatch(ctx: N8nWorkerContext, input: N8nWorkerInput, raw: Data): ListenableWorker.Result {
         return when (input) {
-            is N8nWorkerInput.UpdateNotification -> UpdateNotificationHandler.handle(ctx, raw)
             is N8nWorkerInput.ExtractionPipeline -> ExtractionPipelineHandler.handle(ctx, input)
             is N8nWorkerInput.ReflectionPipeline -> ReflectionPipelineHandler.handle(ctx)
             is N8nWorkerInput.PreferenceQuickSync -> PreferenceQuickSyncHandler.handle(ctx, raw)

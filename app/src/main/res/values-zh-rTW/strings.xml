@@ -2,8 +2,6 @@
     <!-- UI strings (Traditional Chinese - Taiwan). -->
 
     <!-- Common / actions -->
-    <string name="ui_action_add">新增</string>
-    <string name="ui_action_back">返回</string>
     <string name="ui_action_cancel">取消</string>
     <string name="ui_action_clear">清除</string>
     <string name="ui_action_continue">繼續</string>
@@ -125,27 +123,7 @@
     <string name="ui_search_placeholder">搜尋…</string>
     <string name="a11y_close_search">關閉搜尋</string>
 
-    <!-- User control panel -->
-    <string name="ui_user_close_app">關閉 App</string>
     <string name="ui_user_clear_all">全部清除</string>
-    <string name="ui_user_all_notifications_deleted">已刪除所有通知</string>
-
-    <!-- Dev control panel (debug UI) -->
-    <string name="ui_dev_open_control_panel">開啟控制面板</string>
-    <string name="ui_dev_close_control_panel">關閉控制面板</string>
-    <string name="ui_dev_sync_noti_status">同步通知狀態</string>
-    <string name="ui_dev_update_user">更新使用者</string>
-    <string name="ui_dev_export_data">匯出資料</string>
-    <string name="ui_dev_copy_data_with_history">複製資料（含歷史）</string>
-    <string name="ui_dev_copy_data">複製資料</string>
-    <string name="ui_dev_sync_noti_status_toast">同步通知狀態（WIP）</string>
-    <string name="ui_dev_work_in_progress">尚在開發中</string>
-
-    <!-- SharedPrefsButton (debug UI) -->
-    <string name="ui_debug_enter_integer_for">請輸入 %1$s 的整數值</string>
-    <string name="ui_debug_enter_value">輸入數值</string>
-    <string name="ui_debug_invalid_integer">整數格式錯誤！</string>
-    <string name="ui_debug_invalid_ip">IP 格式錯誤！</string>
 
     <!-- Ongoing status / generation notifications -->
     <string name="ongoing_status_title">Noti 運作中</string>
@@ -401,7 +379,6 @@
     <string name="saved_item_share">分享</string>
     <string name="reminder_pin">釘選</string>
     <string name="reminder_unpin">取消釘選</string>
-    <string name="reminder_make_copy_button">建立複製按鈕</string>
 
     <!-- Reminder feedback dialog -->
     <string name="saved_item_feedback_title">這個儲存項目的排序應如何調整？</string>
@@ -545,9 +522,6 @@
 
     <!-- Notification category pages -->
     <string name="noti_filter_all">全部</string>
-    <string name="noti_filter_last_24h">近 24 小時</string>
-    <string name="noti_filter_all_count">全部 · %1$d</string>
-    <string name="noti_filter_last_24h_count">近 24 小時 · %1$d</string>
     <string name="noti_filter_recent_count">近 %1$d 小時 · %2$d</string>
     <string name="noti_filter_older_count">較早通知 · %1$d</string>
     <string name="noti_category_empty">這裡沒有通知</string>

@@ -25,9 +25,6 @@ interface NotiDrawerDao {
     @Query("SELECT COUNT(*) FROM noti_drawer WHERE isDismissed = 0 AND lastUpdateTime >= :sinceMs")
     fun getActiveNotiCountSince(sinceMs: Long): Int
 
-    @Query("SELECT COUNT(*) FROM noti_drawer WHERE isDismissed = 0 AND isRead = 0")
-    fun getActiveUnreadCount(): Int
-
     @Query("SELECT * FROM noti_drawer")
     fun getAll(): List<NotiUnit>
 
@@ -61,9 +58,6 @@ interface NotiDrawerDao {
     @Query("SELECT notiKey FROM noti_drawer WHERE isDismissed = 0 AND isPinned = 0")
     fun getActiveNotPinnedKeys(): List<String>
 
-    @Query("SELECT notiKey FROM noti_drawer WHERE isDismissed = 0 AND isRead = 0")
-    fun getActiveUnreadKeys(): List<String>
-
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insert(notiUnit: NotiUnit)
 
@@ -90,21 +84,11 @@ interface NotiDrawerDao {
     @Query("UPDATE noti_drawer SET explanation = :newExplanation WHERE notiKey = :notiKey")
     fun updateExplanation(notiKey: String, newExplanation: String)
 
-    // Dismiss unit by key (Also set isRead = 1)
-    @Query("UPDATE noti_drawer SET isDismissed = 1, isRead = 1, sortPosition = -1 WHERE notiKey = :notiKey")
+    @Query("UPDATE noti_drawer SET isDismissed = 1, sortPosition = -1 WHERE notiKey = :notiKey")
     suspend fun dismissUnitByKey(notiKey: String)
 
-    // Dismiss units by keys
-    @Query("UPDATE noti_drawer SET isDismissed = 1, isRead = 1, sortPosition = -1 WHERE notiKey IN (:notiKeys)")
+    @Query("UPDATE noti_drawer SET isDismissed = 1, sortPosition = -1 WHERE notiKey IN (:notiKeys)")
     suspend fun dismissUnitsByKeys(notiKeys: List<String>)
-
-    // Set unit read by key
-    @Query("UPDATE noti_drawer SET isRead = 1 WHERE notiKey = :notiKey")
-    suspend fun setUnitReadByKey(notiKey: String)
-
-    // Set units read by keys
-    @Query("UPDATE noti_drawer SET isRead = 1 WHERE notiKey IN (:notiKeys)")
-    suspend fun setUnitsReadByKeys(notiKeys: List<String>)
 
     // Manual ordering
     @Query("UPDATE noti_drawer SET sortPosition = :newPosition WHERE notiKey = :notiKey")
@@ -145,7 +129,7 @@ interface NotiDrawerDao {
     @Query("""
         SELECT * FROM noti_drawer
         WHERE isDismissed = 0
-        ORDER BY sortScore DESC, isRead ASC, lastUpdateTime DESC
+        ORDER BY sortScore DESC, lastUpdateTime DESC
     """)
     fun getAutoSortedActiveNotificationsNoRelation(): Flow<List<NotiUnit>>
 

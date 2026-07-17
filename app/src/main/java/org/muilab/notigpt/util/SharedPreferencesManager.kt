@@ -64,21 +64,6 @@ object SharedPreferencesManager {
         get() = get(KEY_SERVER_PREFS, KEY_USER_ID, "")
         set(value) = put(KEY_SERVER_PREFS, KEY_USER_ID, value)
 
-    const val KEY_SERVER_URL = "SERVER_URL"
-    var serverIP: String
-        get() = get(KEY_SERVER_PREFS, KEY_SERVER_URL, "dify.udchen.tw")
-        set(value) = put(KEY_SERVER_PREFS, KEY_SERVER_URL, value)
-
-    const val KEY_AUTO_ARCHIVE = "autoArchive"
-    var autoArchive: Boolean
-        get() = get(KEY_LOCAL_PREFS, KEY_AUTO_ARCHIVE, false)
-        set(value) = put(KEY_LOCAL_PREFS, KEY_AUTO_ARCHIVE, value)
-
-    const val KEY_AUTO_DELETE = "autoDelete"
-    var autoDelete: Boolean
-        get() = get(KEY_LOCAL_PREFS, KEY_AUTO_DELETE, false)
-        set(value) = put(KEY_LOCAL_PREFS, KEY_AUTO_DELETE, value)
-
     const val KEY_WAIT_SECONDS_BEFORE_NOTI_UNIT_SYNC = "waitSecondsBeforeNotiUnitSync"
     var waitSecondsBeforeNotiUnitSync: Int
         get() = get(KEY_LOCAL_PREFS, KEY_WAIT_SECONDS_BEFORE_NOTI_UNIT_SYNC, 3 * 60)
@@ -88,16 +73,6 @@ object SharedPreferencesManager {
     var maxRecordsBeforeNotiSync: Int
         get() = get(KEY_LOCAL_PREFS, KEY_MAX_RECORDS_BEFORE_NOTI_SYNC, 10)
         set(value) = put(KEY_LOCAL_PREFS, KEY_MAX_RECORDS_BEFORE_NOTI_SYNC, value)
-
-    const val KEY_WAIT_SECONDS_BEFORE_DRAWER_SYNC = "waitSecondsBeforeDrawerSync"
-    var waitSecondsBeforeDrawerSync: Int
-        get() = get(KEY_LOCAL_PREFS, KEY_WAIT_SECONDS_BEFORE_DRAWER_SYNC, 30 * 60)
-        set(value) = put(KEY_LOCAL_PREFS, KEY_WAIT_SECONDS_BEFORE_DRAWER_SYNC, value)
-
-    const val KEY_MAX_RECORDS_BEFORE_DRAWER_SYNC = "maxRecordsBeforeDrawerSync"
-    var maxRecordsBeforeDrawerSync: Int
-        get() = get(KEY_LOCAL_PREFS, KEY_MAX_RECORDS_BEFORE_DRAWER_SYNC, 5)
-        set(value) = put(KEY_LOCAL_PREFS, KEY_MAX_RECORDS_BEFORE_DRAWER_SYNC, value)
 
     // --- Swipe Delete Direction ---
     const val KEY_SWIPE_DELETE_LEFT = "swipeDeleteLeft"
@@ -116,32 +91,6 @@ object SharedPreferencesManager {
     var skipClearAllConfirm: Boolean
         get() = get(KEY_LOCAL_PREFS, KEY_SKIP_CLEAR_ALL_CONFIRM, false)
         set(value) = put(KEY_LOCAL_PREFS, KEY_SKIP_CLEAR_ALL_CONFIRM, value)
-
-    // --- Task List Default Expanded ---
-    const val KEY_TASK_LIST_DEFAULT_EXPANDED = "taskListDefaultExpanded"
-    var taskListDefaultExpanded: Boolean
-        get() = get(KEY_LOCAL_PREFS, KEY_TASK_LIST_DEFAULT_EXPANDED, true)
-        set(value) = put(KEY_LOCAL_PREFS, KEY_TASK_LIST_DEFAULT_EXPANDED, value)
-
-    private const val KEY_BASELINE_EMBEDDING_EN = "baselineEmbeddingEn"
-    var baselineEmbeddingEn: String
-        get() = get(KEY_SERVER_PREFS, KEY_BASELINE_EMBEDDING_EN, "")
-        set(value) = put(KEY_SERVER_PREFS, KEY_BASELINE_EMBEDDING_EN, value)
-
-    private const val KEY_BASELINE_EMBEDDING_ZHTW = "baselineEmbeddingZhTW"
-    var baselineEmbeddingZhTW: String
-        get() = get(KEY_SERVER_PREFS, KEY_BASELINE_EMBEDDING_ZHTW, "")
-        set(value) = put(KEY_SERVER_PREFS, KEY_BASELINE_EMBEDDING_ZHTW, value)
-
-    const val KEY_HISTORY_NOTI_COUNT_THRESHOLD = "historyNotiCountThreshold"
-    var historyNotiCountThreshold: Int
-        get() = get(KEY_LOCAL_PREFS, KEY_HISTORY_NOTI_COUNT_THRESHOLD, -1)
-        set(value) = put(KEY_LOCAL_PREFS, KEY_HISTORY_NOTI_COUNT_THRESHOLD, value)
-
-    const val KEY_HISTORY_NOTI_HOURS_THRESHOLD = "historyNotiHoursThreshold"
-    var historyNotiHoursThreshold: Int
-        get() = get(KEY_LOCAL_PREFS, KEY_HISTORY_NOTI_HOURS_THRESHOLD, -1)
-        set(value) = put(KEY_LOCAL_PREFS, KEY_HISTORY_NOTI_HOURS_THRESHOLD, value)
 
     // --- Target extraction language ---
     const val KEY_TARGET_EXTRACTION_LANGUAGE = "targetExtractionLanguage"

@@ -16,19 +16,6 @@ import org.muilab.notigpt.util.Constants.Companion.N8N_REGENERATE_ONE
 import java.util.concurrent.TimeUnit
 import androidx.work.ExistingWorkPolicy
 
-/**
- * Payload shape for the notification-update webhook.
- *
- * Field names intentionally match the n8n workflow contract. Keep transport fields here and use worker handlers
- * to build the payload from app models.
- */
-data class N8nUpdateNotificationPayload(
-    val userId: String,
-    val noti_contents_str: String,
-    val noti_actions_str: String,
-    val noti_past_summary: String
-)
-
 // === WorkManager enqueuers ===
 
 private fun isSignedIn(): Boolean =

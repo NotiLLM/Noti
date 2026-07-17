@@ -11,7 +11,7 @@ import org.muilab.notigpt.model.notifications.components.NotiDisplayState
 /**
  * Room entity for the latest drawer state of one Android notification key.
  *
- * NotiUnit owns current display metadata and read/pin/dismiss state. Detailed content history
+ * NotiUnit owns current display metadata and pin/dismiss state. Detailed content history
  * belongs to NotiRecord, and LLM-derived thread state (scan flags, categories) lives in
  * NotiLlmState so this row stays purely what happened + how the user arranged it.
  */
@@ -35,7 +35,7 @@ data class NotiUnit(
      * Refreshes this notification-key row from a newly observed Android notification.
      *
      * Metadata is replaced with current framework data, while user-facing state is reset only where a fresh
-     * active notification should behave differently from a dismissed or already-read row.
+     * active notification should behave differently from a dismissed row.
      */
     fun updateNoti(context: Context, sbn: StatusBarNotification) {
         metadata.update(context, sbn)
@@ -43,7 +43,6 @@ data class NotiUnit(
         if (isDismissed) {
             displayState.resetUserState()
         }
-        displayState.resetReadState()
         displayState.resetLLMState()
     }
 
@@ -62,10 +61,6 @@ data class NotiUnit(
     var isPinned: Boolean
         get() = displayState.isPinned
         set(value) { displayState.isPinned = value }
-
-    var isRead: Boolean
-        get() = displayState.isRead
-        set(value) { displayState.isRead = value }
 
     var summary: String
         get() = displayState.summary

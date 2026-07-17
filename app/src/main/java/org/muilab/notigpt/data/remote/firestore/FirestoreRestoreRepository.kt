@@ -39,8 +39,6 @@ class FirestoreRestoreRepository(
     private val tag = "FirestoreRestore"
 
     /** Backward-compatible entry point; sign-in now performs reconciliation rather than a one-way restore. */
-    suspend fun restoreIfLocalEmpty() = reconcileAfterSignIn()
-
     /**
      * Reconciles local Room state with the signed-in account's Firestore mirror.
      *

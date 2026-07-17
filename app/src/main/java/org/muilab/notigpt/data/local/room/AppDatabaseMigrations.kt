@@ -1723,6 +1723,57 @@ object AppDatabaseMigrations {
         }
     }
 
+    /** Removes viewport-derived read state from the current notification drawer schema. */
+    val MIGRATION_50_51 = object : Migration(50, 51) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE `noti_drawer_new` (
+                    `notiKey` TEXT NOT NULL,
+                    `pkgName` TEXT NOT NULL,
+                    `hashKey` INTEGER NOT NULL,
+                    `groupKey` TEXT NOT NULL,
+                    `isAppGroup` INTEGER NOT NULL,
+                    `isGroupChat` INTEGER NOT NULL,
+                    `sortKey` TEXT NOT NULL,
+                    `appName` TEXT NOT NULL,
+                    `lastUpdateTime` INTEGER NOT NULL,
+                    `lastSyncTime` INTEGER NOT NULL,
+                    `icon` TEXT NOT NULL,
+                    `largeIcon` TEXT NOT NULL,
+                    `isPeople` INTEGER NOT NULL,
+                    `isPinned` INTEGER NOT NULL,
+                    `isArchived` INTEGER NOT NULL,
+                    `isDismissed` INTEGER NOT NULL,
+                    `isSetToTop` INTEGER NOT NULL,
+                    `setToTopTime` INTEGER NOT NULL,
+                    `sortPosition` INTEGER NOT NULL,
+                    `explanation` TEXT NOT NULL,
+                    `summary` TEXT NOT NULL,
+                    `sortScore` REAL NOT NULL,
+                    PRIMARY KEY(`notiKey`)
+                )
+                """.trimIndent()
+            )
+            db.execSQL(
+                """
+                INSERT INTO `noti_drawer_new` (
+                    notiKey,pkgName,hashKey,groupKey,isAppGroup,isGroupChat,sortKey,appName,
+                    lastUpdateTime,lastSyncTime,icon,largeIcon,isPeople,isPinned,isArchived,
+                    isDismissed,isSetToTop,setToTopTime,sortPosition,explanation,summary,sortScore
+                )
+                SELECT
+                    notiKey,pkgName,hashKey,groupKey,isAppGroup,isGroupChat,sortKey,appName,
+                    lastUpdateTime,lastSyncTime,icon,largeIcon,isPeople,isPinned,isArchived,
+                    isDismissed,isSetToTop,setToTopTime,sortPosition,explanation,summary,sortScore
+                FROM `noti_drawer`
+                """.trimIndent()
+            )
+            db.execSQL("DROP TABLE `noti_drawer`")
+            db.execSQL("ALTER TABLE `noti_drawer_new` RENAME TO `noti_drawer`")
+        }
+    }
+
     private data class LegacySavedSubItem(
         val id: String,
         val parentId: String,

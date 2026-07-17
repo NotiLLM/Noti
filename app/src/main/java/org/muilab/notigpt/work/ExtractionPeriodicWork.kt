@@ -6,12 +6,7 @@ import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.ExistingWorkPolicy
 import androidx.work.PeriodicWorkRequest
 import androidx.work.OneTimeWorkRequest
-import androidx.work.WorkInfo
 import androidx.work.WorkManager
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.firstOrNull
-import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit
 
 /**
@@ -74,29 +69,4 @@ object ExtractionPeriodicWork {
         Log.i(TAG, "Enqueued one-time kick work name=$UNIQUE_KICK_NAME id=${req.id}")
     }
 
-    /** Logs current state of the unique periodic work (useful when debugging 'not running'). */
-    fun logStatus(context: Context) {
-        CoroutineScope(Dispatchers.Default).launch {
-            try {
-                val infos = WorkManager.getInstance(context)
-                    .getWorkInfosForUniqueWorkFlow(UNIQUE_NAME)
-                    .firstOrNull()
-                    .orEmpty()
-
-                if (infos.isEmpty()) {
-                    Log.w(TAG, "No WorkInfos found for $UNIQUE_NAME (not scheduled?)")
-                    return@launch
-                }
-
-                infos.forEach { info: WorkInfo ->
-                    Log.i(
-                        TAG,
-                        "Status for $UNIQUE_NAME: id=${info.id} state=${info.state} runAttemptCount=${info.runAttemptCount}",
-                    )
-                }
-            } catch (t: Throwable) {
-                Log.w(TAG, "Failed to query WorkManager status for $UNIQUE_NAME", t)
-            }
-        }
-    }
 }

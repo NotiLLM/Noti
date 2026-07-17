@@ -11,8 +11,8 @@ import java.util.concurrent.TimeUnit
 /**
  * Retrofit client holder for the n8n webhook API.
  *
- * This object owns the mutable base URL used by settings/debug flows. Keep endpoint definitions in
- * N8nAPIService and workflow-specific request parsing in the dedicated clients or worker handlers.
+ * Endpoint definitions live in N8nAPIService and workflow-specific request parsing stays in dedicated clients
+ * or worker handlers.
  */
 object N8nAPIClient {
     @Volatile
@@ -60,9 +60,4 @@ object N8nAPIClient {
             return retrofit!!.create(N8nAPIService::class.java)
         }
 
-    fun updateBaseUrl(newBaseUrl: String) {
-        synchronized(this) {
-            retrofit = createRetrofit(newBaseUrl)
-        }
-    }
 }

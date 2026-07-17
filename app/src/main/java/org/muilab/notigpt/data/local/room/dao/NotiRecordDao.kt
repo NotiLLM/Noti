@@ -26,9 +26,6 @@ interface NotiRecordDao {
     @Query("SELECT * FROM noti_record WHERE notiKey = :notiKey")
     fun getRecordsByKey(notiKey: String): List<NotiRecord>
 
-    @Query("SELECT * FROM noti_record WHERE notiKey = :notiKey AND whenTime > :timestamp")
-    fun getNotSyncedRecordsByKey(notiKey: String, timestamp: Long): List<NotiRecord>
-
     @Query("SELECT * FROM noti_record WHERE notiKey IN ( :notiKeys )")
     fun getRecordsByKeys(notiKeys: List<String>): List<NotiRecord>
 

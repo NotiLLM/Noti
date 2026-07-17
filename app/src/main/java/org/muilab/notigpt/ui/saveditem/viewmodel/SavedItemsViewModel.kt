@@ -15,7 +15,6 @@ import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import org.json.JSONArray
-import org.json.JSONObject
 import org.muilab.notigpt.data.local.room.AppDatabase
 import org.muilab.notigpt.data.remote.n8n.enqueueRegenerateOne
 import org.muilab.notigpt.data.export.ExportableItem
@@ -383,25 +382,6 @@ class SavedItemsViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
-    /** Creates an empty manual item or memo and lets the screen open it for editing. */
-    fun addNew(isTask: Boolean) {
-        val id = "r_" + UUID.randomUUID().toString().take(8)
-        val now = System.currentTimeMillis()
-        val item = SavedItem(
-            savedItemId = id,
-            title = "",
-            content = "",
-            itemType = if (isTask) SavedItemType.Task else SavedItemType.Keep,
-            state = SavedItemState.Saved,
-            lastUpdateTimestamp = now,
-            deadlineAtMs = 0L,
-            origin = "manual",
-            humanEditCount = 0,
-            userEdited = false,
-        )
-        upsert(item)
-    }
-
 
     data class RelatedNotificationsState(
         val savedItemId: String? = null,
@@ -505,33 +485,6 @@ class SavedItemsViewModel(application: Application) : AndroidViewModel(applicati
 
     fun regenerateOne(savedItemId: String) {
         enqueueRegenerateOne(getApplication(), savedItemId)
-    }
-
-    // ========== Buttons ==========
-
-    /**
-     * Add a copy button to a item's button list.
-     */
-    fun addCopyButton(savedItemId: String, text: String) {
-        viewModelScope.launch {
-            val existing = repo.getById(savedItemId) ?: return@launch
-            val arr = try {
-                JSONArray(existing.buttons)
-            } catch (_: Exception) {
-                JSONArray()
-            }
-            // Check for duplicate
-            for (i in 0 until arr.length()) {
-                val obj = arr.optJSONObject(i) ?: continue
-                if (obj.optString("type") == "copy" && obj.optString("intent") == text) return@launch
-            }
-            arr.put(JSONObject().apply {
-                put("buttonText", text)
-                put("intent", text)
-                put("type", "copy")
-            })
-            repo.updateButtons(savedItemId, arr.toString())
-        }
     }
 
     // ========== Google Tasks Integration ==========

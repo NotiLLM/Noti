@@ -1,8 +1,5 @@
 package org.muilab.notigpt.data.repository.notification
 
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import org.muilab.notigpt.data.local.room.dao.NotiActionDao
 import org.muilab.notigpt.data.local.room.dao.NotiDrawerDao
 import org.muilab.notigpt.data.local.room.dao.NotiRecordDao
@@ -11,8 +8,8 @@ import org.muilab.notigpt.util.SharedPreferencesManager
 /**
  * Repository slice for bulk drawer maintenance operations.
  *
- * Keep destructive or broad state changes here, including delete-all, mark-all-read, seen-state persistence, and
- * action logging. Feature-specific updates should stay in narrower repository slices.
+ * Keep destructive or broad state changes here, including delete-all and action logging. Feature-specific
+ * updates should stay in narrower repository slices.
  */
 class NotiMaintenanceRepository(
     private val notiDrawerDao: NotiDrawerDao,
@@ -25,28 +22,14 @@ class NotiMaintenanceRepository(
     }
 
     /**
-     * Clears a specific set of units (dismiss unit + records, mark read). Callers are responsible for
+     * Clears a specific set of units (dismiss unit + records). Callers are responsible for
      * scoping the keys — e.g. the category page passes only the visible, unpinned threads.
      */
     suspend fun deleteNotisByKeys(notiKeys: List<String>, logAction: (String, String) -> Unit) {
         if (notiKeys.isEmpty()) return
         notiKeys.forEach { k -> logAction(k, "delete_all") }
         notiDrawerDao.dismissUnitsByKeys(notiKeys)
-        notiDrawerDao.setUnitsReadByKeys(notiKeys)
         notiRecordDao.dismissRecordsByKeys(notiKeys)
-    }
-
-    suspend fun markAllNotisRead(logAction: (String, String) -> Unit) {
-        val notReadNotiKeys = notiDrawerDao.getActiveUnreadKeys()
-        notReadNotiKeys.forEach { k -> logAction(k, "mark_all_read") }
-        notiDrawerDao.setUnitsReadByKeys(notReadNotiKeys)
-    }
-
-    fun updateSeenNotifications(seenNotis: Set<String>, logAction: (String, String) -> Unit) {
-        CoroutineScope(Dispatchers.IO).launch {
-            notiDrawerDao.setUnitsReadByKeys(seenNotis.toList())
-            seenNotis.forEach { logAction(it, "scroll_read") }
-        }
     }
 
     fun logAction(

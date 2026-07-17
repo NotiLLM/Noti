@@ -70,7 +70,6 @@ class DrawerItemSorterTest {
                     setToTopTime = topTime
                     this.sortPosition = sortPosition
                     isPinned = false
-                    isRead = true
                 },
             ),
             notiRecords = emptyList(),

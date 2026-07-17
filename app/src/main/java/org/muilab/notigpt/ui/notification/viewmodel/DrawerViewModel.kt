@@ -13,7 +13,6 @@ import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -23,10 +22,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
@@ -40,19 +35,14 @@ import org.muilab.notigpt.model.notifications.NotiUnit
 import org.muilab.notigpt.data.repository.notification.NotiClassificationRepository
 import org.muilab.notigpt.data.repository.notification.NotiRepository
 import org.muilab.notigpt.ui.home.viewmodel.HomeViewModel
-import org.muilab.notigpt.util.Constants.Companion.APP_CATEGORY_ALL
 import org.muilab.notigpt.util.postOngoingNotification
-import org.muilab.notigpt.ui.common.clipboard.ClipboardController
-import org.muilab.notigpt.data.export.NotiLogExporter
 import org.muilab.notigpt.ui.common.feedback.UserToaster
 import org.muilab.notigpt.service.NotiListenerService
 import org.muilab.notigpt.ui.notification.controller.DrawerActionsController
 import org.muilab.notigpt.ui.notification.controller.DrawerFiltersState
-import org.muilab.notigpt.ui.notification.controller.DrawerReadStateController
 import org.muilab.notigpt.ui.notification.controller.DrawerSearchController
 import org.muilab.notigpt.ui.notification.action.NotificationLauncher
 import org.muilab.notigpt.ui.notification.controller.FullRecordsController
-import org.muilab.notigpt.ui.notification.controller.DrawerUnreadCounts
 
 /**
  * ViewModel for notification drawer state, filters, actions, and record context loading.
@@ -64,9 +54,7 @@ import org.muilab.notigpt.ui.notification.controller.DrawerUnreadCounts
 class DrawerViewModel @Inject constructor(
     application: Application,
     private val notiRepository: NotiRepository,
-    private val clipboard: ClipboardController,
     private val notifier: UserToaster,
-    private val logExporter: NotiLogExporter,
 ) : AndroidViewModel(application) {
 
     private val filters = DrawerFiltersState()
@@ -117,30 +105,6 @@ class DrawerViewModel @Inject constructor(
     val notiRecentOnly: StateFlow<Boolean> = _notiRecentOnly.asStateFlow()
     fun setNotiRecentOnly(value: Boolean) { _notiRecentOnly.value = value }
 
-    /**
-     * Updates the active drawer category filter and resets dependent app-filter state when needed.
-     *
-     * Keep filter coordination here so the screen does not need to understand category/app-category coupling.
-     */
-    fun updateCategory(newCategory: String) {
-        filters.startTargetLoading()
-        filters.setCategory(newCategory)
-        if (isSortingMode.value) toggleSortingMode()
-        // Persist read + commit manual sort session (if any)
-        persistReadStatus()
-        unreadCounts.refresh()
-        updateAppCategory(APP_CATEGORY_ALL)
-    }
-
-    fun updateAppCategory(newAppCategory: String) {
-        filters.startTargetLoading()
-        if (isSortingMode.value) toggleSortingMode()
-        // Persist read + commit manual sort session (if any)
-        persistReadStatus()
-        unreadCounts.refresh()
-        filters.setAppCategory(newAppCategory)
-    }
-
     fun clearTargetLoading() = filters.clearTargetLoading()
 
     private val _queryString = MutableStateFlow("")
@@ -154,45 +118,15 @@ class DrawerViewModel @Inject constructor(
     private val _activeNotiUnits = MutableStateFlow<List<NotiDisplayUnit>>(emptyList())
     val activeNotiUnits: StateFlow<List<NotiDisplayUnit>> = _activeNotiUnits.asStateFlow()
 
-    @OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
-    val queryEmbeddingString: Flow<String?> = _queryString
-        .debounce(500)
-        .distinctUntilChanged()
-        .flatMapLatest { query ->
-            if (query.isBlank()) {
-                flowOf(null)
-            } else {
-                flow<String?> {
-                    // TODO: Similarity Search
-                }
-            }
-        }
-        .flowOn(Dispatchers.IO)
-
     @SuppressLint("StaticFieldLeak")
     val context: Context = getApplication<Application>().applicationContext
 
     private val searchController = DrawerSearchController(notiRepository)
-    private val readStateController = DrawerReadStateController(notiRepository)
     private val actionsController = DrawerActionsController(notiRepository)
     private val fullRecordsController = FullRecordsController(
         scope = viewModelScope,
         notiRepository = notiRepository,
     )
-
-    private val unreadCounts = DrawerUnreadCounts(
-        scope = viewModelScope,
-        notiRepository = notiRepository,
-    )
-    val unreadCountsByCategory: StateFlow<Map<String, Int>> = unreadCounts.unreadCountsByCategory
-
-    /** Total unread notifications in the active drawer (not dismissed). */
-    val unreadActiveCount: StateFlow<Int> = activeNotiUnits
-        .map { units ->
-            units.count { du -> !du.notiUnit.isDismissed && !du.notiUnit.isRead }
-        }
-        .distinctUntilChanged()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
     /** Total active (not dismissed) notifications currently in the drawer. */
     val activeNotDismissedCount: StateFlow<Int> = activeNotiUnits
@@ -262,7 +196,6 @@ class DrawerViewModel @Inject constructor(
 
         // Loading state management
         activeNotiUnits.onEach { notifications ->
-            unreadCounts.refresh()
             Log.d("DrawerViewModel", "activeNotiUnits emitted: size=${notifications.size}, isTargetLoading=${isTargetLoading.value}")
 
             if (filters.shouldClearTargetLoading()) {
@@ -369,7 +302,6 @@ class DrawerViewModel @Inject constructor(
             notiRepository.deleteAllNotis()
             postOngoingNotification(context)
         }
-        unreadCounts.refresh()
     }
 
     /**
@@ -387,71 +319,6 @@ class DrawerViewModel @Inject constructor(
             if (keys.isNotEmpty()) {
                 notiRepository.deleteNotisByKeys(keys)
                 postOngoingNotification(context)
-            }
-        }
-        unreadCounts.refresh()
-    }
-
-    fun markAllNotisRead() {
-        persistReadStatus()
-        viewModelScope.launch(Dispatchers.IO) {
-            notiRepository.markAllNotisRead()
-        }
-        unreadCounts.refresh()
-    }
-
-    fun exportPostContent(includeContext: Boolean, includeDismissed: Boolean) {
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val ts = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.getDefault())
-                    .format(java.util.Date())
-                val baseFilename = "notigpt_$ts"
-
-                // Pass 1: write to file(s) using DataExportManager — at most one 5 MB chunk
-                // is held in memory at a time, so OOM is not possible here.
-                val dataExportManager = org.muilab.notigpt.data.export.DataExportManager(context)
-                val createdFiles = dataExportManager.exportNotificationData(
-                    items = notiRepository.exportLog(includeContext, includeDismissed),
-                    filename = baseFilename,
-                )
-
-                // Pass 2: attempt to collect up to 500 KB for the clipboard.
-                // We consume the sequence a second time (fresh DB queries) but bail out
-                // early the moment we exceed the IPC binder limit, so the full dataset is
-                // never materialised in RAM for this path either.
-                val clipboardLimitBytes = 500 * 1024
-                val clipboardBuf = StringBuilder()
-                var tooLarge = false
-                clipboardBuf.append("[\n")
-                var first = true
-                for (item in notiRepository.exportLog(includeContext, includeDismissed)) {
-                    val itemStr = item.toString(2)
-                    if (clipboardBuf.length + itemStr.length > clipboardLimitBytes) {
-                        tooLarge = true
-                        break
-                    }
-                    if (!first) clipboardBuf.append(",\n")
-                    clipboardBuf.append(itemStr)
-                    first = false
-                }
-                if (!tooLarge) clipboardBuf.append("\n]")
-
-                withContext(Dispatchers.Main) {
-                    if (!tooLarge) {
-                        clipboard.copyPlainText(label = "NotiGPT logs", text = clipboardBuf.toString())
-                        val saved = createdFiles.firstOrNull()
-                        if (saved != null) notifier.showShort("Copied to clipboard & saved to: $saved")
-                        else notifier.showShort("Copied to clipboard")
-                    } else {
-                        val fileMsg = if (createdFiles.size == 1) "saved to: ${createdFiles[0]}"
-                                      else "saved to ${createdFiles.size} files"
-                        notifier.showShort("Data too large for clipboard — $fileMsg")
-                    }
-                }
-            } catch (e: Throwable) {
-                withContext(Dispatchers.Main) {
-                    notifier.showShort("Export error: ${e.message}")
-                }
             }
         }
     }
@@ -491,14 +358,6 @@ class DrawerViewModel @Inject constructor(
         }
     }
 
-    fun persistReadStatus() {
-        viewModelScope.launch {
-            readStateController.persistSeen()
-            // Also commit manual sort on pause-style persistence.
-            commitManualSortSessionIfNeeded()
-        }
-    }
-
     fun archiveNewNotificationCard(notiKey: String) {
         viewModelScope.launch {
             val activeUnit = _activeNotiUnits.value.firstOrNull { it.notiKey == notiKey }?.notiUnit
@@ -506,18 +365,6 @@ class DrawerViewModel @Inject constructor(
 
             notiRepository.removeNotiUnit(notiKey)
             refreshNewNotificationRecords()
-        }
-    }
-
-    /**
-     * Called by list items when a card is fully visible.
-     * We batch persistence via [persistReadStatus].
-     */
-    fun markNotificationAsRead(notiKey: String) {
-        val foundUnit = _activeNotiUnits.value.firstOrNull { it.notiKey == notiKey }
-
-        if (foundUnit != null) {
-            readStateController.markSeenIfUnread(notiKey, foundUnit.notiUnit.isRead)
         }
     }
 
@@ -659,8 +506,6 @@ class DrawerViewModel @Inject constructor(
 
         manuallyTouchedKeysInSession.add(key)
     }
-
-    fun getManualSortKeys(): StateFlow<List<String>> = manualSortKeys.asStateFlow()
 
     fun toggleSortingMode() {
         val wasSorting = isSortingMode.value

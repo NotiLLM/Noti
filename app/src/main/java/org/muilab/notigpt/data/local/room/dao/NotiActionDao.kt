@@ -1,7 +1,6 @@
 package org.muilab.notigpt.data.local.room.dao
 
 import androidx.room.Dao
-import androidx.room.Insert
 import androidx.room.Query
 import androidx.room.Upsert
 import org.muilab.notigpt.model.notifications.NotiAction
@@ -26,9 +25,4 @@ interface NotiActionDao {
     @Query("SELECT * FROM notiAction WHERE notiKey = :notiKey")
     fun getActionsByKey(notiKey: String): List<NotiAction>
 
-    @Query("SELECT * FROM notiAction WHERE notiKey = :notiKey AND time > :timestamp")
-    fun getNotSyncedActionsByKey(notiKey: String, timestamp: Long): List<NotiAction>
-
-    @Insert
-    fun insertAllActions(notiActions: List<NotiAction>)
 }
