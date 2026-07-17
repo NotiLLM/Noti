@@ -243,8 +243,8 @@ fun NotiCard(
     val a11yUnpin = stringResource(R.string.ui_noti_action_unpin)
     val a11yExpand = stringResource(R.string.a11y_expand)
     val a11yCollapse = stringResource(R.string.a11y_collapse)
-    val a11yExtract = stringResource(R.string.ui_action_extract_reminder)
-    val a11yCreateReminder = stringResource(R.string.ui_reminders_create_button)
+    val a11yExtract = stringResource(R.string.ui_action_extract_saved_item)
+    val a11yCreateReminder = stringResource(R.string.ui_reminder_create_button)
     val cardActions = buildList {
         add(androidx.compose.ui.semantics.CustomAccessibilityAction(a11yArchive) {
             org.muilab.notigpt.ui.common.feedback.Haptics.commit(haptic)

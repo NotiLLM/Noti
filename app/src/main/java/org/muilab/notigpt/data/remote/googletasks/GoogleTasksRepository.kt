@@ -96,7 +96,7 @@ class GoogleTasksRepository(
     /**
      * Create a task in the user's default task list from a SavedItem.
      */
-    suspend fun createTaskFromReminder(reminder: SavedItem): TaskResult =
+    suspend fun createTaskFromSavedItem(reminder: SavedItem): TaskResult =
         createTaskFromExportable(reminder.asExportable())
 
     /**
@@ -128,4 +128,3 @@ class GoogleTasksRepository(
         return sdf.format(Date(timestampMs))
     }
 }
-

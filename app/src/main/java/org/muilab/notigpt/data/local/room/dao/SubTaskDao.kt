@@ -7,9 +7,9 @@ import kotlinx.coroutines.flow.Flow
 import org.muilab.notigpt.model.features.SavedSubItem
 
 /**
- * Local access layer for subtasks nested under reminders.
+ * Local access layer for subtasks nested under task SavedItems.
  *
- * Subtasks are durable reminder children, not independent notification-derived reminders. If they
+ * Subtasks are durable SavedItem children, not independent notification-derived items. If they
  * gain their own lifecycle or sync rules, consider a dedicated repository boundary before expanding this DAO.
  */
 @Dao
@@ -21,33 +21,25 @@ interface SavedSubItemDao {
     @Upsert
     suspend fun upsertAll(subTasks: List<SavedSubItem>)
 
-    @Query("SELECT * FROM saved_sub_item WHERE parentSavedItemId = :savedItemId AND isVisible = 1 ORDER BY sortOrder ASC, createdAt ASC")
-    fun observeByReminderId(savedItemId: String): Flow<List<SavedSubItem>>
+    @Query("SELECT * FROM saved_sub_item WHERE parentSavedItemId = :savedItemId ORDER BY position ASC, savedSubItemId ASC")
+    fun observeBySavedItemId(savedItemId: String): Flow<List<SavedSubItem>>
 
-    @Query("SELECT * FROM saved_sub_item WHERE isVisible = 1 ORDER BY sortOrder ASC, createdAt ASC")
+    @Query("SELECT * FROM saved_sub_item ORDER BY parentSavedItemId ASC, position ASC, savedSubItemId ASC")
     fun observeAllVisible(): Flow<List<SavedSubItem>>
 
-    @Query("SELECT * FROM saved_sub_item WHERE parentSavedItemId = :savedItemId AND isVisible = 1 ORDER BY sortOrder ASC, createdAt ASC")
-    suspend fun getByReminderId(savedItemId: String): List<SavedSubItem>
+    @Query("SELECT * FROM saved_sub_item WHERE parentSavedItemId = :savedItemId ORDER BY position ASC, savedSubItemId ASC")
+    suspend fun getBySavedItemId(savedItemId: String): List<SavedSubItem>
 
     @Query("SELECT * FROM saved_sub_item WHERE savedSubItemId = :savedSubItemId")
     suspend fun getById(savedSubItemId: String): SavedSubItem?
 
-    @Query("UPDATE saved_sub_item SET isCompleted = :completed, lastUpdateTimestamp = :ts WHERE savedSubItemId = :savedSubItemId")
-    suspend fun setCompleted(savedSubItemId: String, completed: Boolean, ts: Long)
+    @Query("UPDATE saved_sub_item SET isCompleted = :completed WHERE savedSubItemId = :savedSubItemId")
+    suspend fun setCompleted(savedSubItemId: String, completed: Boolean)
 
-    @Query("UPDATE saved_sub_item SET isVisible = 0, lastUpdateTimestamp = :ts WHERE savedSubItemId = :savedSubItemId")
-    suspend fun softDeleteById(savedSubItemId: String, ts: Long)
+    @Query("DELETE FROM saved_sub_item WHERE savedSubItemId = :savedSubItemId")
+    suspend fun hardDeleteById(savedSubItemId: String)
 
-    /** Cascade soft-delete all sub-tasks of a parent reminder. */
-    @Query("UPDATE saved_sub_item SET isVisible = 0, lastUpdateTimestamp = :ts WHERE parentSavedItemId = :savedItemId")
-    suspend fun softDeleteByParentId(savedItemId: String, ts: Long)
-
-    /** Un-hides previously soft-deleted sub-tasks, e.g. restoring ones an LLM edit removed on revert. */
-    @Query("UPDATE saved_sub_item SET isVisible = 1, lastUpdateTimestamp = :ts WHERE savedSubItemId IN (:ids)")
-    suspend fun restoreByIds(ids: List<String>, ts: Long)
-
-    /** Hard-delete all sub-tasks of a parent: rides parent hard deletes (the FK doesn't cascade). */
+    /** Explicit helper for replacement flows; parent deletion also cascades through the FK. */
     @Query("DELETE FROM saved_sub_item WHERE parentSavedItemId = :savedItemId")
     suspend fun hardDeleteByParentId(savedItemId: String)
 
@@ -62,7 +54,6 @@ interface SavedSubItemDao {
     @Query("DELETE FROM saved_sub_item")
     suspend fun deleteAllForAccountSwitch()
 
-    /** Soft-delete visible sub-tasks omitted from a replacement backend response. */
-    @Query("UPDATE saved_sub_item SET isVisible = 0, lastUpdateTimestamp = :ts WHERE parentSavedItemId = :savedItemId AND savedSubItemId NOT IN (:keptIds)")
-    suspend fun softDeleteByParentIdExcept(savedItemId: String, keptIds: List<String>, ts: Long)
+    @Query("SELECT COALESCE(MAX(position), -1) + 1 FROM saved_sub_item WHERE parentSavedItemId = :savedItemId")
+    suspend fun nextPosition(savedItemId: String): Int
 }

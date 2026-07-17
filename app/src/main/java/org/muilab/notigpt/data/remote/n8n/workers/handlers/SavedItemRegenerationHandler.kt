@@ -19,6 +19,7 @@ import org.muilab.notigpt.model.features.SavedItem
 import org.muilab.notigpt.model.features.SavedItemChangeLog
 import org.muilab.notigpt.model.features.SavedItemChangeType
 import org.muilab.notigpt.model.features.SavedItemType
+import org.muilab.notigpt.domain.saveditem.SavedItemNormalization
 import org.muilab.notigpt.model.features.SavedItemState
 import org.muilab.notigpt.util.SharedPreferencesManager
 import java.text.SimpleDateFormat
@@ -27,41 +28,44 @@ import java.util.Locale
 import java.util.TimeZone
 
 /**
- * Worker handler for regenerating one reminder's content from its stored notification context.
+ * Worker handler for regenerating one item's content from its stored notification context.
  *
- * Use this when an existing reminder needs fresh backend output without re-running the extraction
- * pipeline. Keep payload building here and shared snapshot/status rules in the reminder domain
+ * Use this when an existing item needs fresh backend output without re-running the extraction
+ * pipeline. Keep payload building here and shared snapshot/status rules in the item domain
  * helpers.
  */
-internal object ReminderRegenerationHandler {
+/** Regenerates one SavedItem from its notification evidence. */
+internal object SavedItemRegenerationHandler {
 
     private const val TAG = "N8nRegeneration"
 
     /**
-     * Regenerates one reminder using its current local reminder row and related notification context.
+     * Regenerates one item using its current local item row and related notification context.
      *
-     * The reminder ID stays stable; n8n is asked to revise content, not create a separate reminder.
+     * The item ID stays stable; n8n is asked to revise content, not create a separate item.
      */
     suspend fun handleOne(ctx: N8nWorkerContext, inputData: Data): ListenableWorker.Result {
         val webhookPath = inputData.getString("webhook_path") ?: run {
             Log.e(TAG, "No webhook_path for regenerate_one")
             return ctx.failure()
         }
-        val savedItemId = inputData.getString("reminder_id") ?: run {
-            Log.e(TAG, "No reminder_id for regenerate_one")
+        val savedItemId = inputData.getString("saved_item_id")
+            ?: inputData.getString("reminder_id")
+            ?: run {
+            Log.e(TAG, "No saved_item_id for regenerate_one")
             return ctx.failure()
         }
 
-        val reminder = ctx.reminderRepository.getById(savedItemId) ?: run {
-            Log.w(TAG, "Reminder $savedItemId not found")
+        val item = ctx.savedItemRepository.getById(savedItemId) ?: run {
+            Log.w(TAG, "SavedItem $savedItemId not found")
             return ctx.success()
         }
 
-        val notiContext = buildNotiContextForReminder(ctx, reminder)
+        val notiContext = buildNotiContextForSavedItem(ctx, item)
         val payload = buildPayload(
-            reminders = listOf(reminder),
+            savedItems = listOf(item),
             notiContextMap = mapOf(savedItemId to notiContext),
-            linkedByItem = ctx.reminderRepository.getLinkedRecordIdsFor(listOf(savedItemId)),
+            linkedByItem = ctx.savedItemRepository.getLinkedRecordIdsFor(listOf(savedItemId)),
             trigger = "REGENERATE_ONE",
             extractionPreferences = ctx.getExtractionPreferencesPayload(),
             userContexts = ctx.getUserContextsPayload(),
@@ -71,17 +75,17 @@ internal object ReminderRegenerationHandler {
     }
 
     /**
-     * Builds notification context records from a reminder's stored provenance.
+     * Builds notification context records from a item's stored provenance.
      *
-     * This is shared preparation for regeneration payloads. If reminder context loading is needed by
-     * UI or sync too, move it behind a ReminderContextRepository instead of copying this DB traversal.
+     * This is shared preparation for regeneration payloads. If item context loading is needed by
+     * UI or sync too, move it behind a SavedItemContextRepository instead of copying this DB traversal.
      */
-    private suspend fun buildNotiContextForReminder(
+    private suspend fun buildNotiContextForSavedItem(
         ctx: N8nWorkerContext,
-        reminder: SavedItem,
+        item: SavedItem,
     ): List<Map<String, Any>> {
         val db = ctx.database
-        val wantedKeys = ctx.reminderRepository.getLinkedKeys(reminder.savedItemId)
+        val wantedKeys = ctx.savedItemRepository.getLinkedKeys(item.savedItemId)
         if (wantedKeys.isEmpty()) return emptyList()
 
         val records = try {
@@ -104,7 +108,7 @@ internal object ReminderRegenerationHandler {
     }
 
     private fun buildPayload(
-        reminders: List<SavedItem>,
+        savedItems: List<SavedItem>,
         notiContextMap: Map<String, List<Map<String, Any>>>,
         linkedByItem: Map<String, List<String>>,
         trigger: String,
@@ -113,7 +117,7 @@ internal object ReminderRegenerationHandler {
     ): Map<String, Any> {
         val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.getDefault())
 
-        val remindersPayload = reminders.map { r ->
+        val savedItemsPayload = savedItems.map { r ->
             val deadlineIso = if (r.deadlineAtMs > 0L) sdf.format(Date(r.deadlineAtMs)) else -1L
             val startAtMsIso = if (r.startAtMs > 0L) sdf.format(Date(r.startAtMs)) else -1L
             val endAtMsIso = if (r.endAtMs > 0L) sdf.format(Date(r.endAtMs)) else -1L
@@ -143,7 +147,7 @@ internal object ReminderRegenerationHandler {
             "targetExtractionLanguage" to SharedPreferencesManager.targetExtractionLanguage,
             "trigger" to trigger,
             "contractVersion" to 3,
-            "reminders" to remindersPayload,
+            "savedItems" to savedItemsPayload,
             "extractionPreferences" to extractionPreferences,
             "userContexts" to userContexts,
         )
@@ -180,7 +184,7 @@ internal object ReminderRegenerationHandler {
         try {
             // NonCancellable: a response is already in hand at this point. A concurrent REPLACE of
             // this unique work slot must not cut off persistence partway through the array, or
-            // later reminders in the same response are silently dropped even though the network
+            // later savedItems in the same response are silently dropped even though the network
             // call already succeeded.
             withContext(NonCancellable) {
             val arr = JSONArray(bodyStr)
@@ -189,7 +193,7 @@ internal object ReminderRegenerationHandler {
                 val savedItemId = N8nOpParsing.savedItemIdFrom(obj)
                 if (savedItemId.isBlank()) continue
 
-                val existing = ctx.reminderRepository.getById(savedItemId)
+                val existing = ctx.savedItemRepository.getById(savedItemId)
                 val now = System.currentTimeMillis()
 
                 val title = N8nOpParsing.titleFrom(obj, existing?.title ?: "")
@@ -202,7 +206,10 @@ internal object ReminderRegenerationHandler {
 
                 // Parse buttons
                 val buttonsArr = obj.optJSONArray("buttons")
-                val buttons = buttonsArr?.toString() ?: existing?.buttons ?: "[]"
+                val buttons = SavedItemNormalization.mergeButtons(
+                    buttonsArr?.toString() ?: existing?.buttons ?: "[]",
+                    N8nOpParsing.childButtons(obj.optJSONArray("subTasks")),
+                )
 
                 // Regeneration is user-initiated, so it must NOT drop the item into the review queue
                 // (an unrevertible wholesale rewrite has no place in the swipe-to-reject flow). A brand
@@ -234,16 +241,23 @@ internal object ReminderRegenerationHandler {
                     isViewed = false,
                     // User-owned fields: regeneration must never reset them.
                     isStarred = existing?.isStarred ?: false,
-                    doAtMs = existing?.doAtMs ?: 0L,
+                    whenAtMs = existing?.whenAtMs ?: 0L,
                     // Advance the review cursor past this regeneration's change-log row so it never
                     // surfaces as "what's new" and revert never treats the rewrite as pending.
                     lastViewedChangeAt = now,
                 )
 
-                ctx.reminderRepository.upsert(unit)
+                val returnedSubTasks = N8nOpParsing.parseSubTasks(
+                    obj.optJSONArray("subTasks"),
+                    savedItemId,
+                    now,
+                    baseSortOrder = 0,
+                )
+                val normalized = SavedItemNormalization.normalize(unit, returnedSubTasks)
+                ctx.savedItemRepository.upsert(normalized.item)
+                ctx.savedSubItemRepository.replaceForParent(savedItemId, normalized.subItems)
                 // Regeneration rewrites content from the item's existing noti context; it neither
                 // adds nor removes provenance, so links stay untouched.
-                persistReturnedSubTasks(ctx, savedItemId, obj, now)
 
                 // Record the rewrite in the change history (regeneration is the one flow allowed
                 // to replace text wholesale — the user explicitly asked for it) and the journal.
@@ -270,7 +284,7 @@ internal object ReminderRegenerationHandler {
                             origin = "llm",
                         )
                     )
-                    ctx.reminderRepository.getLinkedKeys(savedItemId).forEach { key ->
+                    ctx.savedItemRepository.getLinkedKeys(savedItemId).forEach { key ->
                         ctx.journalRepository.append(
                             ExtractionJournalEntry(
                                 notiKey = key,
@@ -292,15 +306,4 @@ internal object ReminderRegenerationHandler {
         return ctx.success()
     }
 
-    /**
-     * Persists child items from a full `subTasks` response array.
-     *
-     * The array is treated as the complete visible child list for that parent. Existing omitted children are
-     * soft-deleted by the repository; if the field is absent, the existing children are left untouched.
-     */
-    private suspend fun persistReturnedSubTasks(ctx: N8nWorkerContext, parentSavedItemId: String, obj: JSONObject, ts: Long) {
-        if (!obj.has("subTasks")) return
-        val subTasks = N8nOpParsing.parseSubTasks(obj.optJSONArray("subTasks"), parentSavedItemId, ts, baseSortOrder = 0)
-        ctx.savedSubItemRepository.replaceVisibleForParent(parentSavedItemId, subTasks, ts)
-    }
 }

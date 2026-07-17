@@ -1,4 +1,4 @@
-package org.muilab.notigpt.ui.reminder.viewmodel
+package org.muilab.notigpt.ui.saveditem.viewmodel
 
 import android.app.Application
 import android.content.Intent
@@ -19,7 +19,7 @@ import org.json.JSONObject
 import org.muilab.notigpt.data.local.room.AppDatabase
 import org.muilab.notigpt.data.remote.n8n.enqueueRegenerateOne
 import org.muilab.notigpt.data.export.ExportableItem
-import org.muilab.notigpt.model.features.DoDateBucket
+import org.muilab.notigpt.model.features.WhenBucket
 import org.muilab.notigpt.model.features.SavedItem
 import org.muilab.notigpt.model.features.SavedItemState
 import org.muilab.notigpt.model.features.SavedItemType
@@ -29,21 +29,21 @@ import org.muilab.notigpt.util.time.DayBoundaries
 import org.muilab.notigpt.data.remote.googletasks.GoogleTasksRepository
 import kotlinx.coroutines.flow.Flow
 import org.muilab.notigpt.model.features.SavedItemChangeLog
-import org.muilab.notigpt.data.repository.reminder.SavedItemChangeLogRepository
-import org.muilab.notigpt.data.repository.reminder.SavedItemRepository
-import org.muilab.notigpt.data.repository.reminder.PendingProposedOpRepository
-import org.muilab.notigpt.data.repository.reminder.ReminderRelatedNotificationsRepository
-import org.muilab.notigpt.data.repository.reminder.SavedSubItemRepository
+import org.muilab.notigpt.data.repository.saveditem.SavedItemChangeLogRepository
+import org.muilab.notigpt.data.repository.saveditem.SavedItemRepository
+import org.muilab.notigpt.data.repository.saveditem.PendingProposedOpRepository
+import org.muilab.notigpt.data.repository.saveditem.SavedItemRelatedNotificationsRepository
+import org.muilab.notigpt.data.repository.saveditem.SavedSubItemRepository
 import org.muilab.notigpt.data.remote.googletasks.GoogleTasksAuthManager
 import java.util.UUID
 
 /**
- * ViewModel for reminders, sub-tasks, related notification context, Google Tasks export, and regeneration jobs.
+ * ViewModel for savedItems, sub-tasks, related notification context, Google Tasks export, and regeneration jobs.
  *
  * Keep screen orchestration here while persistence stays in repositories and remote/background work stays behind
  * platform or n8n enqueue helpers.
  */
-class ReminderViewModel(application: Application) : AndroidViewModel(application) {
+class SavedItemsViewModel(application: Application) : AndroidViewModel(application) {
 
     enum class FilterTab { All, Pending, Tasks, Memos, Completed, Keep, Archived, Starred }
     enum class ListMode { All, Tasks, Keep }
@@ -70,7 +70,7 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
     private val repo: SavedItemRepository
     private val subTaskRepo: SavedSubItemRepository
     private val googleTasksRepo: GoogleTasksRepository
-    private val relatedNotificationsRepo: ReminderRelatedNotificationsRepository
+    private val relatedNotificationsRepo: SavedItemRelatedNotificationsRepository
     private val changeLogRepo: SavedItemChangeLogRepository
     private val pendingProposedOpRepo: PendingProposedOpRepository
 
@@ -83,10 +83,10 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
 
     init {
         val db = AppDatabase.getInstance(application.applicationContext)
-        repo = SavedItemRepository(db.reminderListDao(), application.applicationContext)
+        repo = SavedItemRepository(db.savedItemDao(), application.applicationContext)
         subTaskRepo = SavedSubItemRepository(db.subTaskDao())
         googleTasksRepo = GoogleTasksRepository(application.applicationContext)
-        relatedNotificationsRepo = ReminderRelatedNotificationsRepository(application.applicationContext)
+        relatedNotificationsRepo = SavedItemRelatedNotificationsRepository(application.applicationContext)
         changeLogRepo = SavedItemChangeLogRepository(db.savedItemChangeLogDao())
         pendingProposedOpRepo = PendingProposedOpRepository(application.applicationContext)
         pendingExtractionCount = db.recordDao().observePendingExtractionCount()
@@ -126,7 +126,7 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
     }
 
     /**
-     * When non-null, the reminders list is a home-screen smart filter (planned-date bucket or
+     * When non-null, the savedItems list is a home-screen smart filter (planned-date bucket or
      * starred) that mixes tasks and keeps and ignores [_filter]/[_listMode]. Tasks/Keep collections
      * are NOT routed here — they use [_listMode] with their own in-screen chips.
      */
@@ -185,19 +185,19 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
 
-    val allReminders: StateFlow<List<SavedItem>> = allFlow
+    val allSavedItems: StateFlow<List<SavedItem>> = allFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     val newSavedItems: StateFlow<List<SavedItem>> = newItemsFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /**
-     * Filtered reminder list consumed by RemindersScreen.
+     * Filtered item list consumed by SavedItemsScreen.
      *
-     * Search terms are split on '+', then AND-matched against title and content so users can narrow noisy reminder
-     * lists without changing persisted reminder data.
+     * Search terms are split on '+', then AND-matched against title and content so users can narrow noisy item
+     * lists without changing persisted item data.
      */
-    val reminders: StateFlow<List<SavedItem>> = combine(
+    val savedItems: StateFlow<List<SavedItem>> = combine(
         _filter, _searchQuery, _listMode, _smartFilter, allFlow, tasksFlow, memosFlow, completedFlow, activeKeepsFlow, archivedKeepsFlow, pendingPreviews
     ) { values ->
         val f = values[0] as FilterTab
@@ -226,18 +226,18 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
             val startOfTomorrow = DayBoundaries.startOfTomorrowMs()
             val scoped = all.filter { !it.isCompleted && !it.isArchived }
             when (smart) {
-                SavedListFilter.TodayEarlier -> scoped.filter { SavedItem.plannedBucket(it.doAtMs, startOfTomorrow, it.isTask) == DoDateBucket.TodayEarlier }
-                SavedListFilter.Upcoming -> scoped.filter { SavedItem.plannedBucket(it.doAtMs, startOfTomorrow, it.isTask) == DoDateBucket.Upcoming }
-                SavedListFilter.Someday -> scoped.filter { SavedItem.plannedBucket(it.doAtMs, startOfTomorrow, it.isTask) == DoDateBucket.Someday }
-                SavedListFilter.Undetermined -> scoped.filter { SavedItem.plannedBucket(it.doAtMs, startOfTomorrow, it.isTask) == DoDateBucket.Undetermined }
+                SavedListFilter.TodayEarlier -> scoped.filter { SavedItem.plannedBucket(it.whenAtMs, startOfTomorrow, it.isTask) == WhenBucket.TodayEarlier }
+                SavedListFilter.Upcoming -> scoped.filter { SavedItem.plannedBucket(it.whenAtMs, startOfTomorrow, it.isTask) == WhenBucket.Upcoming }
+                SavedListFilter.Someday -> scoped.filter { SavedItem.plannedBucket(it.whenAtMs, startOfTomorrow, it.isTask) == WhenBucket.Someday }
+                SavedListFilter.Undetermined -> scoped.filter { SavedItem.plannedBucket(it.whenAtMs, startOfTomorrow, it.isTask) == WhenBucket.Undetermined }
                 SavedListFilter.Starred -> scoped.filter { it.isStarred }
                 // Tasks/Keep collections are never routed through smart filters.
                 SavedListFilter.Tasks, SavedListFilter.Keep -> scoped
             }.sortedWith(
                 compareBy<SavedItem> {
                     when(smart) {
-                        SavedListFilter.TodayEarlier -> it.doAtMs
-                        SavedListFilter.Upcoming -> it.doAtMs
+                        SavedListFilter.TodayEarlier -> it.whenAtMs
+                        SavedListFilter.Upcoming -> it.whenAtMs
                         else -> -it.lastUpdateTimestamp
                     }
                 }
@@ -285,8 +285,8 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
             if (terms.isEmpty()) {
                 displayList
             } else {
-                displayList.filter { reminder ->
-                    val searchable = "${reminder.title} ${reminder.content}".lowercase()
+                displayList.filter { item ->
+                    val searchable = "${item.title} ${item.content}".lowercase()
                     terms.all { term -> searchable.contains(term) }
                 }
             }
@@ -297,20 +297,20 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
         .distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    /** Sub-tasks grouped by parent reminder ID. */
-    val allSavedSubItemsByReminder: StateFlow<Map<String, List<SavedSubItem>>> =
-        subTaskRepo.observeAllByReminder()
+    /** Sub-tasks grouped by parent item ID. */
+    val allSavedSubItemsBySavedItem: StateFlow<Map<String, List<SavedSubItem>>> =
+        subTaskRepo.observeAllBySavedItem()
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
 
-    fun toggleCompleted(reminder: SavedItem, completed: Boolean) {
+    fun toggleCompleted(item: SavedItem, completed: Boolean) {
         viewModelScope.launch {
-            repo.setCompleted(reminder.savedItemId, completed, System.currentTimeMillis())
+            repo.setCompleted(item.savedItemId, completed, System.currentTimeMillis())
         }
     }
 
-    fun toggleStarred(reminder: SavedItem) {
+    fun toggleStarred(item: SavedItem) {
         viewModelScope.launch {
-            repo.setStarred(reminder.savedItemId, !reminder.isStarred, System.currentTimeMillis())
+            repo.setStarred(item.savedItemId, !item.isStarred, System.currentTimeMillis())
         }
     }
 
@@ -325,10 +325,10 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
     fun changeLogFlow(savedItemId: String): Flow<List<SavedItemChangeLog>> =
         changeLogRepo.observeByItem(savedItemId)
 
-    /** [doAtMs] = 0 clears the do date. */
-    fun setDoDate(savedItemId: String, doAtMs: Long) {
+    /** [whenAtMs] = 0 clears the When. */
+    fun setWhen(savedItemId: String, whenAtMs: Long) {
         viewModelScope.launch {
-            repo.setDoDate(savedItemId, doAtMs, System.currentTimeMillis())
+            repo.setWhen(savedItemId, whenAtMs, System.currentTimeMillis())
         }
     }
 
@@ -363,9 +363,9 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    fun upsert(reminder: SavedItem) {
+    fun upsert(item: SavedItem) {
         viewModelScope.launch {
-            repo.upsert(reminder.copy(lastUpdateTimestamp = System.currentTimeMillis()))
+            repo.upsert(item.copy(lastUpdateTimestamp = System.currentTimeMillis()))
         }
     }
 
@@ -383,11 +383,11 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    /** Creates an empty manual reminder or memo and lets the screen open it for editing. */
+    /** Creates an empty manual item or memo and lets the screen open it for editing. */
     fun addNew(isTask: Boolean) {
         val id = "r_" + UUID.randomUUID().toString().take(8)
         val now = System.currentTimeMillis()
-        val reminder = SavedItem(
+        val item = SavedItem(
             savedItemId = id,
             title = "",
             content = "",
@@ -399,43 +399,43 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
             humanEditCount = 0,
             userEdited = false,
         )
-        upsert(reminder)
+        upsert(item)
     }
 
 
     data class RelatedNotificationsState(
         val savedItemId: String? = null,
         val isLoading: Boolean = false,
-        val related: ReminderRelatedNotificationsRepository.RelatedNotifications = ReminderRelatedNotificationsRepository.RelatedNotifications.Empty,
+        val related: SavedItemRelatedNotificationsRepository.RelatedNotifications = SavedItemRelatedNotificationsRepository.RelatedNotifications.Empty,
     )
 
     private val _relatedNotificationsState = MutableStateFlow(RelatedNotificationsState())
     val relatedNotificationsState: StateFlow<RelatedNotificationsState> = _relatedNotificationsState
 
     /**
-     * Loads notification context linked to a reminder for provenance/preview UI.
+     * Loads notification context linked to a item for provenance/preview UI.
      *
-     * This is read-only reminder context; edits to reminders or notifications should use their own repository paths.
+     * This is read-only item context; edits to savedItems or notifications should use their own repository paths.
      */
-    fun loadRelatedNotifications(reminder: SavedItem) {
+    fun loadRelatedNotifications(item: SavedItem) {
         val current = _relatedNotificationsState.value
-        if (current.savedItemId == reminder.savedItemId && current.isLoading) return
+        if (current.savedItemId == item.savedItemId && current.isLoading) return
 
         viewModelScope.launch {
             _relatedNotificationsState.value = RelatedNotificationsState(
-                savedItemId = reminder.savedItemId,
+                savedItemId = item.savedItemId,
                 isLoading = true,
             )
 
             val related = try {
-                relatedNotificationsRepo.getRelatedNotifications(reminder)
+                relatedNotificationsRepo.getRelatedNotifications(item)
             } catch (t: Throwable) {
-                Log.e("ReminderRelatedNotis", "Failed loading related notifications", t)
-                ReminderRelatedNotificationsRepository.RelatedNotifications.Empty
+                Log.e("SavedItemRelatedNotis", "Failed loading related notifications", t)
+                SavedItemRelatedNotificationsRepository.RelatedNotifications.Empty
             }
 
             _relatedNotificationsState.value = RelatedNotificationsState(
-                savedItemId = reminder.savedItemId,
+                savedItemId = item.savedItemId,
                 isLoading = false,
                 related = related,
             )
@@ -450,7 +450,7 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
             val expanded = try {
                 relatedNotificationsRepo.withSurroundingContext(current.related, notiKey)
             } catch (t: Throwable) {
-                Log.e("ReminderRelatedNotis", "Failed loading surrounding context", t)
+                Log.e("SavedItemRelatedNotis", "Failed loading surrounding context", t)
                 return@launch
             }
             _relatedNotificationsState.value = current.copy(related = expanded)
@@ -461,33 +461,29 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
 
     fun addSavedSubItem(parentSavedItemId: String) {
         val id = "st_" + UUID.randomUUID().toString().take(8)
-        val now = System.currentTimeMillis()
         val subTask = SavedSubItem(
             savedSubItemId = id,
             parentSavedItemId = parentSavedItemId,
-            title = "",
-            itemType = SavedItemType.Task,
-            createdAt = now,
-            lastUpdateTimestamp = now,
+            text = "",
         )
-        viewModelScope.launch { subTaskRepo.upsert(subTask) }
+        viewModelScope.launch { repo.upsertSubItem(subTask, System.currentTimeMillis()) }
     }
 
     fun upsertSavedSubItem(subTask: SavedSubItem) {
         viewModelScope.launch {
-            subTaskRepo.upsert(subTask.copy(lastUpdateTimestamp = System.currentTimeMillis()))
+            repo.upsertSubItem(subTask, System.currentTimeMillis())
         }
     }
 
     fun deleteSavedSubItem(savedSubItemId: String) {
         viewModelScope.launch {
-            subTaskRepo.softDeleteById(savedSubItemId, System.currentTimeMillis())
+            repo.deleteSubItem(savedSubItemId, System.currentTimeMillis())
         }
     }
 
     fun toggleSavedSubItemCompleted(savedSubItemId: String, completed: Boolean) {
         viewModelScope.launch {
-            subTaskRepo.setCompleted(savedSubItemId, completed, System.currentTimeMillis())
+            repo.setSubItemCompleted(savedSubItemId, completed, System.currentTimeMillis())
         }
     }
 
@@ -497,7 +493,7 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    /** Batch-mark multiple reminders as viewed (called when leaving the screen). */
+    /** Batch-mark multiple savedItems as viewed (called when leaving the screen). */
     fun markViewedBatch(savedItemIds: Set<String>) {
         if (savedItemIds.isEmpty()) return
         viewModelScope.launch {
@@ -514,7 +510,7 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
     // ========== Buttons ==========
 
     /**
-     * Add a copy button to a reminder's button list.
+     * Add a copy button to a item's button list.
      */
     fun addCopyButton(savedItemId: String, text: String) {
         viewModelScope.launch {
@@ -563,12 +559,12 @@ class ReminderViewModel(application: Application) : AndroidViewModel(application
     }
 
     /**
-     * Export a reminder to Google Tasks.
+     * Export a item to Google Tasks.
      */
-    fun exportToGoogleTasks(reminder: SavedItem) {
+    fun exportToGoogleTasks(item: SavedItem) {
         viewModelScope.launch {
             _googleTasksExportResult.value = GoogleTasksExportResult.Loading
-            val result = googleTasksRepo.createTaskFromReminder(reminder)
+            val result = googleTasksRepo.createTaskFromSavedItem(item)
             _googleTasksExportResult.value = when (result) {
                 is GoogleTasksRepository.TaskResult.Success -> GoogleTasksExportResult.Success(result.taskTitle)
                 is GoogleTasksRepository.TaskResult.Error -> GoogleTasksExportResult.Error(result.message)

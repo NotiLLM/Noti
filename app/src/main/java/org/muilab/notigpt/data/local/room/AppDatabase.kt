@@ -72,7 +72,7 @@ import org.muilab.notigpt.data.local.room.dao.ProposedOpRecordDao
         FirestoreOutboxOp::class,
         ProposedOpRecord::class,
     ],
-    version = 49,
+    version = 50,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -82,7 +82,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun recordDao(): NotiRecordDao
     abstract fun actionDao(): NotiActionDao
     abstract fun notiLlmStateDao(): NotiLlmStateDao
-    abstract fun reminderListDao(): SavedItemDao
+    abstract fun savedItemDao(): SavedItemDao
     abstract fun subTaskDao(): SavedSubItemDao
     abstract fun notiSavedItemLinkDao(): NotiSavedItemLinkDao
     abstract fun savedItemChangeLogDao(): SavedItemChangeLogDao
@@ -156,6 +156,7 @@ abstract class AppDatabase : RoomDatabase() {
                 .addMigrations(AppDatabaseMigrations.MIGRATION_46_47)
                 .addMigrations(AppDatabaseMigrations.MIGRATION_47_48)
                 .addMigrations(AppDatabaseMigrations.MIGRATION_48_49)
+                .addMigrations(AppDatabaseMigrations.MIGRATION_49_50)
                 .setJournalMode(JournalMode.TRUNCATE)
                 .build()
         }

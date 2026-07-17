@@ -22,7 +22,7 @@ import org.muilab.notigpt.util.SharedPreferencesManager
  * thread went quiet and needs compaction, and fires the cross-thread reflection merge once a day.
  */
 @HiltWorker
-class ReminderPeriodicWorker @AssistedInject constructor(
+class ExtractionPeriodicWorker @AssistedInject constructor(
     @Assisted appContext: Context,
     @Assisted workerParams: WorkerParameters,
     private val database: AppDatabase,
@@ -35,7 +35,7 @@ class ReminderPeriodicWorker @AssistedInject constructor(
             // Best-effort; still proceed.
         }
 
-        SharedPreferencesManager.lastReminderPeriodicRunTime = System.currentTimeMillis()
+        SharedPreferencesManager.lastExtractionPeriodicRunTime = System.currentTimeMillis()
         Log.i(TAG, "doWork start; runAttemptCount=$runAttemptCount")
 
         if (runAttemptCount >= MAX_RETRIES) {
@@ -92,7 +92,7 @@ class ReminderPeriodicWorker @AssistedInject constructor(
     }
 
     companion object {
-        private const val TAG = "ReminderPeriodicWorker"
+        private const val TAG = "ExtractionPeriodicWorker"
         private const val MAX_RETRIES = 3
 
         /** Reflection merge cadence: once a day. */

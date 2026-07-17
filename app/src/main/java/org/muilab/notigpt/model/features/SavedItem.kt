@@ -81,11 +81,11 @@ data class SavedItem(
     val isStarred: Boolean = false,
 
     /**
-     * User-set "do date" (ms since epoch) — when the user intends to work on the task, distinct
+     * User-set "When" (ms since epoch) — when the user intends to work on the task, distinct
      * from [deadlineAtMs]. 0 = unset. User-owned: never touched by LLM flows.
      */
     @ColumnInfo(defaultValue = "0")
-    val doAtMs: Long = 0L,
+    val whenAtMs: Long = 0L,
 
     /**
      * Timestamp of the newest change the user has explicitly acknowledged (via the review action).
@@ -111,37 +111,37 @@ data class SavedItem(
 
     companion object {
         /**
-         * Sentinel [doAtMs] meaning the user marked the task "Someday": intended eventually, but with
+         * Sentinel [whenAtMs] meaning the user marked the task "Someday": intended eventually, but with
          * no committed date. Distinct from 0 (no planned date set at all). Chosen as [Long.MAX_VALUE]
          * so it naturally sorts after every real planned date and is trivially excluded from date-range
-         * buckets. LLM flows never set [doAtMs], so only the user ever produces this value.
+         * buckets. LLM flows never set [whenAtMs], so only the user ever produces this value.
          */
-        const val DO_AT_SOMEDAY = Long.MAX_VALUE
+        const val WHEN_SOMEDAY = Long.MAX_VALUE
 
-        /** True when [doAtMs] holds a concrete planned date (not unset, not the Someday sentinel). */
-        fun hasPlannedDate(doAtMs: Long): Boolean = doAtMs > 0L && doAtMs != DO_AT_SOMEDAY
+        /** True when [whenAtMs] holds a concrete planned date (not unset, not the Someday sentinel). */
+        fun hasPlannedDate(whenAtMs: Long): Boolean = whenAtMs > 0L && whenAtMs != WHEN_SOMEDAY
 
-        fun isSomeday(doAtMs: Long): Boolean = doAtMs == DO_AT_SOMEDAY
+        fun isSomeday(whenAtMs: Long): Boolean = whenAtMs == WHEN_SOMEDAY
 
         /**
          * Single source of truth for planned-date bucketing, shared by the home-screen smart-filter
          * counts (mirrored in SQL in `SavedItemDao.observeSmartFilterCounts`) and the in-memory list
-         * filter in `ReminderViewModel`. [startOfTomorrowMs] is the local midnight boundary, so
+         * filter in `SavedItemsViewModel`. [startOfTomorrowMs] is the local midnight boundary, so
          * "Today & earlier" absorbs overdue planned dates.
          *
-         * Keeps can carry a real do-date (set from the reminder card's do-date affordance), and when
-         * they do, they land in the same date-driven buckets as tasks. A keep with no do-date has
-         * nothing to schedule by, so it defaults into [DoDateBucket.Someday] rather than
+         * Keeps can carry a real When (set from the reminder card's When affordance), and when
+         * they do, they land in the same date-driven buckets as tasks. A keep with no When has
+         * nothing to schedule by, so it defaults into [WhenBucket.Someday] rather than
          * "Undetermined" — that bucket is task-only, where it reads as "尚未安排的任務" (unscheduled tasks).
          */
-        fun plannedBucket(doAtMs: Long, startOfTomorrowMs: Long, isTask: Boolean = true): DoDateBucket = when {
-            doAtMs == DO_AT_SOMEDAY -> DoDateBucket.Someday
-            doAtMs <= 0L -> if (isTask) DoDateBucket.Undetermined else DoDateBucket.Someday
-            doAtMs < startOfTomorrowMs -> DoDateBucket.TodayEarlier
-            else -> DoDateBucket.Upcoming
+        fun plannedBucket(whenAtMs: Long, startOfTomorrowMs: Long, isTask: Boolean = true): WhenBucket = when {
+            whenAtMs == WHEN_SOMEDAY -> WhenBucket.Someday
+            whenAtMs <= 0L -> if (isTask) WhenBucket.Undetermined else WhenBucket.Someday
+            whenAtMs < startOfTomorrowMs -> WhenBucket.TodayEarlier
+            else -> WhenBucket.Upcoming
         }
     }
 }
 
-/** Planned-date smart-filter buckets keyed on [SavedItem.doAtMs]. */
-enum class DoDateBucket { TodayEarlier, Upcoming, Someday, Undetermined }
+/** Planned-date smart-filter buckets keyed on [SavedItem.whenAtMs]. */
+enum class WhenBucket { TodayEarlier, Upcoming, Someday, Undetermined }

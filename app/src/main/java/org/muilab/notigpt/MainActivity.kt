@@ -27,7 +27,7 @@ import org.muilab.notigpt.ui.theme.NotiTheme
 import org.muilab.notigpt.util.SharedPreferencesManager
 import org.muilab.notigpt.ui.common.component.AppScaffold
 import org.muilab.notigpt.ui.notification.viewmodel.DrawerViewModel
-import org.muilab.notigpt.work.ReminderPeriodicWork
+import org.muilab.notigpt.work.ExtractionPeriodicWork
 
 /**
  * Main Android entry point for the app shell and notification-permission/service bootstrap.
@@ -61,9 +61,9 @@ class MainActivity : ComponentActivity() {
             org.muilab.notigpt.data.remote.auth.GoogleAuthManager.currentUser()?.uid.orEmpty()
         org.muilab.notigpt.data.remote.n8n.ExtractionStatusStore.restore()
 
-        // Periodic safety-net for reminder scan/extraction — only once signed in.
+        // Periodic safety-net for notification scan/SavedItem extraction — only once signed in.
         if (org.muilab.notigpt.data.remote.auth.GoogleAuthManager.isSignedIn()) {
-            ReminderPeriodicWork.enqueue(applicationContext)
+            ExtractionPeriodicWork.enqueue(applicationContext)
         }
 
         if (!NotificationManagerCompat.from(applicationContext).areNotificationsEnabled()) {
@@ -119,7 +119,7 @@ class MainActivity : ComponentActivity() {
                         org.muilab.notigpt.ui.auth.SignInScreen(
                             onSignedIn = {
                                 signedIn = true
-                                ReminderPeriodicWork.enqueue(applicationContext)
+                                ExtractionPeriodicWork.enqueue(applicationContext)
                             },
                         )
                     } else {
@@ -156,17 +156,17 @@ class MainActivity : ComponentActivity() {
         // Rate limit to avoid spamming when user switches apps quickly.
         try {
             SharedPreferencesManager.init(this)
-            ReminderPeriodicWork.enqueue(applicationContext)
+            ExtractionPeriodicWork.enqueue(applicationContext)
             val now = System.currentTimeMillis()
-            val last = SharedPreferencesManager.lastReminderPeriodicRunTime
+            val last = SharedPreferencesManager.lastExtractionPeriodicRunTime
             val shouldKick = (last == 0L) || (now - last) >= (5 * 60 * 1000L)
 
             if (shouldKick) {
-                Log.i("MainActivity", "Kicking reminder periodic worker; lastRun=$last")
-                ReminderPeriodicWork.kickNow(applicationContext)
+                Log.i("MainActivity", "Kicking extraction periodic worker; lastRun=$last")
+                ExtractionPeriodicWork.kickNow(applicationContext)
             }
         } catch (e: Exception) {
-            Log.w("MainActivity", "Failed to enqueue/kick periodic reminder work", e)
+            Log.w("MainActivity", "Failed to enqueue/kick periodic extraction work", e)
         }
     }
     

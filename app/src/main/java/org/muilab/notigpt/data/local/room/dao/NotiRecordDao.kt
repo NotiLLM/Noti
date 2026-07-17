@@ -115,7 +115,7 @@ interface NotiRecordDao {
         WHERE r.notiKey IN (
             SELECT s.notiKey FROM noti_llm_state s
             JOIN noti_drawer d ON d.notiKey = s.notiKey
-            WHERE d.isDismissed = 0 AND s.shouldExtractReminder = 1
+            WHERE d.isDismissed = 0 AND s.shouldExtractSavedItem = 1
         )
         AND r.postTime > COALESCE(
             (SELECT j.lastFoldedPostTime FROM extraction_journal_summary j WHERE j.notiKey = r.notiKey),

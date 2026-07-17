@@ -135,7 +135,7 @@ fun NotiCategoryScreen(
 
     pendingReminder?.let { pending ->
         ReminderDateTimeDialog(
-            title = stringResource(R.string.ui_reminders_create_button),
+            title = stringResource(R.string.ui_reminder_create_button),
             initialAtMs = System.currentTimeMillis(),
             onDismiss = { pendingReminder = null },
             onConfirm = { remindAtMs ->

@@ -18,8 +18,8 @@ data class BucketCount(
 
 /**
  * Home-screen smart-filter counts from [SavedItemDao.observeSmartFilterCounts], each bucket split by
- * item type so the UI can show a "N tasks · M keeps" breakdown. Keeps with a real do-date land in the
- * date buckets alongside tasks; keeps with no do-date default into [someday]. [undetermined] is
+ * item type so the UI can show a "N tasks · M keeps" breakdown. Keeps with a real When land in the
+ * date buckets alongside tasks; keeps with no When default into [someday]. [undetermined] is
  * task-only (unscheduled tasks).
  */
 data class SmartFilterCounts(
@@ -34,7 +34,7 @@ data class SmartFilterCounts(
  * Local access layer for saved task/keep content and its inbox lifecycle state.
  *
  * List order is date-driven: starred first, then by the item's nearest actionable date (the
- * earlier of a concrete do-date and the deadline; the Someday sentinel and unset dates sort
+ * earlier of a concrete When and the deadline; the Someday sentinel and unset dates sort
  * last), then recency. See [DATE_ORDER].
  */
 @Dao
@@ -44,23 +44,23 @@ interface SavedItemDao {
         /**
          * Shared ORDER BY: starred pins to the top; dated items sort by their nearest actionable
          * date ascending; undated items (and keeps, which carry no dates) fall back to recency.
-         * [SavedItem.DO_AT_SOMEDAY] is excluded as a concrete date so Someday items sort with the
+         * [SavedItem.WHEN_SOMEDAY] is excluded as a concrete date so Someday items sort with the
          * undated tail.
          */
         const val DATE_ORDER = """
             isStarred DESC,
             CASE
-                WHEN doAtMs > 0 AND doAtMs != ${SavedItem.DO_AT_SOMEDAY} AND deadlineAtMs > 0 THEN MIN(doAtMs, deadlineAtMs)
-                WHEN doAtMs > 0 AND doAtMs != ${SavedItem.DO_AT_SOMEDAY} THEN doAtMs
+                WHEN whenAtMs > 0 AND whenAtMs != ${SavedItem.WHEN_SOMEDAY} AND deadlineAtMs > 0 THEN MIN(whenAtMs, deadlineAtMs)
+                WHEN whenAtMs > 0 AND whenAtMs != ${SavedItem.WHEN_SOMEDAY} THEN whenAtMs
                 WHEN deadlineAtMs > 0 THEN deadlineAtMs
-                ELSE ${SavedItem.DO_AT_SOMEDAY}
+                ELSE ${SavedItem.WHEN_SOMEDAY}
             END ASC,
             lastUpdateTimestamp DESC, savedItemId DESC
         """
     }
 
     @Upsert
-    suspend fun upsert(reminder: SavedItem)
+    suspend fun upsert(item: SavedItem)
 
     @Query("SELECT * FROM saved_item ORDER BY $DATE_ORDER")
     fun observeAll(): Flow<List<SavedItem>>
@@ -88,22 +88,22 @@ interface SavedItemDao {
     suspend fun getNewItems(): List<SavedItem>
 
     /**
-     * Home-screen smart-filter counts, bucketed by planned date ([doAtMs]) and split by item type.
+     * Home-screen smart-filter counts, bucketed by planned date ([whenAtMs]) and split by item type.
      * Completed/archived items are excluded. Bucket boundaries mirror [SavedItem.plannedBucket]; keep
      * them in lockstep. [startOfTomorrowMs] is local midnight so "today & earlier" absorbs overdue
-     * planned dates. Keeps with a real do-date land in the date buckets same as tasks; keeps with no
-     * do-date fall into `someday`. `undetermined` is task-only (unscheduled tasks).
+     * planned dates. Keeps with a real When land in the date buckets same as tasks; keeps with no
+     * When fall into `someday`. `undetermined` is task-only (unscheduled tasks).
      */
     @Query(
         """
         SELECT
-          IFNULL(SUM(CASE WHEN itemType = 'task' AND doAtMs > 0 AND doAtMs != ${SavedItem.DO_AT_SOMEDAY} AND doAtMs < :startOfTomorrowMs THEN 1 ELSE 0 END), 0) AS today_tasks,
-          IFNULL(SUM(CASE WHEN itemType = 'keep' AND doAtMs > 0 AND doAtMs != ${SavedItem.DO_AT_SOMEDAY} AND doAtMs < :startOfTomorrowMs THEN 1 ELSE 0 END), 0) AS today_keeps,
-          IFNULL(SUM(CASE WHEN itemType = 'task' AND doAtMs >= :startOfTomorrowMs AND doAtMs != ${SavedItem.DO_AT_SOMEDAY} THEN 1 ELSE 0 END), 0) AS upcoming_tasks,
-          IFNULL(SUM(CASE WHEN itemType = 'keep' AND doAtMs >= :startOfTomorrowMs AND doAtMs != ${SavedItem.DO_AT_SOMEDAY} THEN 1 ELSE 0 END), 0) AS upcoming_keeps,
-          IFNULL(SUM(CASE WHEN itemType = 'task' AND doAtMs = ${SavedItem.DO_AT_SOMEDAY} THEN 1 ELSE 0 END), 0) AS someday_tasks,
-          IFNULL(SUM(CASE WHEN itemType = 'keep' AND (doAtMs <= 0 OR doAtMs = ${SavedItem.DO_AT_SOMEDAY}) THEN 1 ELSE 0 END), 0) AS someday_keeps,
-          IFNULL(SUM(CASE WHEN itemType = 'task' AND doAtMs <= 0 THEN 1 ELSE 0 END), 0) AS undetermined_tasks,
+          IFNULL(SUM(CASE WHEN itemType = 'task' AND whenAtMs > 0 AND whenAtMs != ${SavedItem.WHEN_SOMEDAY} AND whenAtMs < :startOfTomorrowMs THEN 1 ELSE 0 END), 0) AS today_tasks,
+          IFNULL(SUM(CASE WHEN itemType = 'keep' AND whenAtMs > 0 AND whenAtMs != ${SavedItem.WHEN_SOMEDAY} AND whenAtMs < :startOfTomorrowMs THEN 1 ELSE 0 END), 0) AS today_keeps,
+          IFNULL(SUM(CASE WHEN itemType = 'task' AND whenAtMs >= :startOfTomorrowMs AND whenAtMs != ${SavedItem.WHEN_SOMEDAY} THEN 1 ELSE 0 END), 0) AS upcoming_tasks,
+          IFNULL(SUM(CASE WHEN itemType = 'keep' AND whenAtMs >= :startOfTomorrowMs AND whenAtMs != ${SavedItem.WHEN_SOMEDAY} THEN 1 ELSE 0 END), 0) AS upcoming_keeps,
+          IFNULL(SUM(CASE WHEN itemType = 'task' AND whenAtMs = ${SavedItem.WHEN_SOMEDAY} THEN 1 ELSE 0 END), 0) AS someday_tasks,
+          IFNULL(SUM(CASE WHEN itemType = 'keep' AND (whenAtMs <= 0 OR whenAtMs = ${SavedItem.WHEN_SOMEDAY}) THEN 1 ELSE 0 END), 0) AS someday_keeps,
+          IFNULL(SUM(CASE WHEN itemType = 'task' AND whenAtMs <= 0 THEN 1 ELSE 0 END), 0) AS undetermined_tasks,
           0 AS undetermined_keeps,
           IFNULL(SUM(CASE WHEN itemType = 'task' AND isStarred = 1 THEN 1 ELSE 0 END), 0) AS starred_tasks,
           IFNULL(SUM(CASE WHEN itemType = 'keep' AND isStarred = 1 THEN 1 ELSE 0 END), 0) AS starred_keeps
@@ -157,8 +157,8 @@ interface SavedItemDao {
     @Query("UPDATE saved_item SET isStarred = :starred, lastUpdateTimestamp = :ts WHERE savedItemId = :savedItemId")
     suspend fun setStarred(savedItemId: String, starred: Boolean, ts: Long)
 
-    @Query("UPDATE saved_item SET doAtMs = :doAtMs, lastUpdateTimestamp = :ts WHERE savedItemId = :savedItemId")
-    suspend fun setDoDate(savedItemId: String, doAtMs: Long, ts: Long)
+    @Query("UPDATE saved_item SET whenAtMs = :whenAtMs, lastUpdateTimestamp = :ts WHERE savedItemId = :savedItemId")
+    suspend fun setWhen(savedItemId: String, whenAtMs: Long, ts: Long)
 
     /** Explicit user acknowledgment of a New/Updated item: exits review state and moves the change cursor. */
     @Query("UPDATE saved_item SET state = 'saved', lastViewedChangeAt = :ts, lastUpdateTimestamp = :ts WHERE savedItemId = :savedItemId")

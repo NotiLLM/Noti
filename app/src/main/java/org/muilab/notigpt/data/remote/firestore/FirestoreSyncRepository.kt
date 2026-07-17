@@ -21,7 +21,7 @@ import java.util.TimeZone
  * Firestore analytics sync.
  *
  * Storage (as requested):
- * - reminders/{userId}/reminders/{savedItemId}
+ * - users/{userId}/savedItems/{savedItemId}
  * - users/{userId}
  */
 class FirestoreSyncRepository(
@@ -43,10 +43,8 @@ class FirestoreSyncRepository(
         .collection(FirestorePaths.COLLECTION_USERS)
         .document(userId())
 
-    private fun reminderDoc(savedItemId: String) = firestore
-        .collection(FirestorePaths.COLLECTION_REMINDERS_ROOT)
-        .document(userId())
-        .collection(FirestorePaths.SUBCOLLECTION_REMINDERS)
+    private fun savedItemDoc(savedItemId: String) = usersDoc()
+        .collection(FirestorePaths.SUBCOLLECTION_SAVED_ITEMS)
         .document(savedItemId)
 
     private fun proposedOpRecordDoc(proposalId: String) = firestore
@@ -128,10 +126,10 @@ class FirestoreSyncRepository(
      * Marks the Firestore mirror of a hard-deleted item as deleted. Local deletion is a real row
      * delete, but the research record keeps the doc with a deletion marker; restore skips it.
      */
-    suspend fun markReminderDeleted(savedItemId: String, ts: Long): Boolean = withContext(Dispatchers.IO) {
+    suspend fun markSavedItemDeleted(savedItemId: String, ts: Long): Boolean = withContext(Dispatchers.IO) {
         if (userId().isBlank()) return@withContext false
         try {
-            reminderDoc(savedItemId).set(
+            savedItemDoc(savedItemId).set(
                 mapOf(
                     "deleted" to true,
                     "deletedAt" to TimeFormatters.toLocalIso(ts, zoneId),
@@ -139,74 +137,76 @@ class FirestoreSyncRepository(
                 ),
                 SetOptions.merge()
             ).await()
-            Log.d(tag, "markReminderDeleted succeeded savedItemId=$savedItemId uid=${userId()}")
+            Log.d(tag, "markSavedItemDeleted succeeded savedItemId=$savedItemId uid=${userId()}")
             true
         } catch (t: Throwable) {
-            Log.w(tag, "markReminderDeleted failed savedItemId=$savedItemId", t)
+            Log.w(tag, "markSavedItemDeleted failed savedItemId=$savedItemId", t)
             false
         }
     }
 
-    suspend fun syncReminder(reminder: SavedItem): Boolean = withContext(Dispatchers.IO) {
+    suspend fun syncSavedItem(item: SavedItem): Boolean = withContext(Dispatchers.IO) {
         if (userId().isBlank()) return@withContext false
         ensureUserDoc()
 
         // Resolve provenance from the noti<->saved-item link table (single source of truth).
-        val links = db.notiSavedItemLinkDao().getBySavedItemId(reminder.savedItemId)
+        val links = db.notiSavedItemLinkDao().getBySavedItemId(item.savedItemId)
         val linkedRecordIds = links.map { it.notiRecordId }.filter { it.isNotBlank() }.distinct()
 
         val now = System.currentTimeMillis()
         val payload: Map<String, Any?> = mapOf(
-            "savedItemId" to reminder.savedItemId,
-            "title" to reminder.title,
-            "content" to reminder.content,
-            "origin" to reminder.origin,
-            "humanEditCount" to reminder.humanEditCount,
-            "userEdited" to reminder.userEdited,
-            "isTask" to reminder.isTask,
-            "isEvent" to reminder.isEvent,
-            "isCompleted" to reminder.isCompleted,
-            "deadlineAtMs" to (if (reminder.deadlineAtMs > 0L) TimeFormatters.toLocalIso(reminder.deadlineAtMs, zoneId) else ""),
-            "startAtMs" to (if (reminder.startAtMs > 0L) TimeFormatters.toLocalIso(reminder.startAtMs, zoneId) else ""),
-            "endAtMs" to (if (reminder.endAtMs > 0L) TimeFormatters.toLocalIso(reminder.endAtMs, zoneId) else ""),
+            "savedItemId" to item.savedItemId,
+            "title" to item.title,
+            "content" to item.content,
+            "origin" to item.origin,
+            "humanEditCount" to item.humanEditCount,
+            "userEdited" to item.userEdited,
+            "isTask" to item.isTask,
+            "isEvent" to item.isEvent,
+            "isCompleted" to item.isCompleted,
+            "deadlineAtMs" to (if (item.deadlineAtMs > 0L) TimeFormatters.toLocalIso(item.deadlineAtMs, zoneId) else ""),
+            "startAtMs" to (if (item.startAtMs > 0L) TimeFormatters.toLocalIso(item.startAtMs, zoneId) else ""),
+            "endAtMs" to (if (item.endAtMs > 0L) TimeFormatters.toLocalIso(item.endAtMs, zoneId) else ""),
             "sourceNotiRecordIds" to linkedRecordIds,
             "sourceNotiRecordIdsCount" to linkedRecordIds.size,
-            "isStarred" to reminder.isStarred,
+            "isStarred" to item.isStarred,
             // "someday" sentinel (Long.MAX_VALUE) is not a real instant — formatting it would throw;
-            // the raw value still round-trips via doAtMsEpoch below.
-            "doAtMs" to when {
-                SavedItem.isSomeday(reminder.doAtMs) -> "someday"
-                reminder.doAtMs > 0L -> TimeFormatters.toLocalIso(reminder.doAtMs, zoneId)
+            // the raw value still round-trips via whenAtMsEpoch below.
+            "whenAtMs" to when {
+                SavedItem.isSomeday(item.whenAtMs) -> "someday"
+                item.whenAtMs > 0L -> TimeFormatters.toLocalIso(item.whenAtMs, zoneId)
                 else -> ""
             },
-            "state" to reminder.state,
-            "lastViewedChangeAt" to (if (reminder.lastViewedChangeAt > 0L) TimeFormatters.toLocalIso(reminder.lastViewedChangeAt, zoneId) else ""),
-            "lastUpdateTimestamp" to TimeFormatters.toLocalIso(reminder.lastUpdateTimestamp, zoneId),
-            "buttons" to reminder.buttons,
-            "isViewed" to reminder.isViewed,
+            "state" to item.state,
+            "lastViewedChangeAt" to (if (item.lastViewedChangeAt > 0L) TimeFormatters.toLocalIso(item.lastViewedChangeAt, zoneId) else ""),
+            "lastUpdateTimestamp" to TimeFormatters.toLocalIso(item.lastUpdateTimestamp, zoneId),
+            "buttons" to item.buttons,
+            "isViewed" to item.isViewed,
             "syncedAt" to TimeFormatters.toLocalIso(now, zoneId),
             // Raw epoch values: the ISO fields above are for human/analysis reads; restore uses these.
-            "deadlineAtMsEpoch" to reminder.deadlineAtMs,
-            "startAtMsEpoch" to reminder.startAtMs,
-            "endAtMsEpoch" to reminder.endAtMs,
-            "doAtMsEpoch" to reminder.doAtMs,
-            "lastUpdateTimestampEpoch" to reminder.lastUpdateTimestamp,
-            "lastViewedChangeAtEpoch" to reminder.lastViewedChangeAt,
-            "itemType" to reminder.itemType,
-            "subTasks" to subTasksPayload(reminder.savedItemId),
+            "deadlineAtMsEpoch" to item.deadlineAtMs,
+            "startAtMsEpoch" to item.startAtMs,
+            "endAtMsEpoch" to item.endAtMs,
+            "whenAtMsEpoch" to item.whenAtMs,
+            "doAtMs" to FieldValue.delete(),
+            "doAtMsEpoch" to FieldValue.delete(),
+            "lastUpdateTimestampEpoch" to item.lastUpdateTimestamp,
+            "lastViewedChangeAtEpoch" to item.lastViewedChangeAt,
+            "itemType" to item.itemType,
+            "subTasks" to subTasksPayload(item.savedItemId),
             // A normal sync is also the resurrection path for a locally edited item that was
             // previously marked deleted in Firestore.
             "deleted" to false,
             "deletedAt" to FieldValue.delete(),
             "deletedAtMsEpoch" to FieldValue.delete(),
-            "schemaVersion" to 6,
+            "schemaVersion" to 7,
         )
 
         try {
-            reminderDoc(reminder.savedItemId).set(payload, SetOptions.merge()).await()
-            Log.d(tag, "syncReminder succeeded savedItemId=${reminder.savedItemId} uid=${userId()}")
+            savedItemDoc(item.savedItemId).set(payload, SetOptions.merge()).await()
+            Log.d(tag, "syncSavedItem succeeded savedItemId=${item.savedItemId} uid=${userId()}")
         } catch (t: Throwable) {
-            Log.w(tag, "syncReminder failed savedItemId=${reminder.savedItemId}", t)
+            Log.w(tag, "syncSavedItem failed savedItemId=${item.savedItemId}", t)
             return@withContext false
         }
 
@@ -216,20 +216,12 @@ class FirestoreSyncRepository(
     }
 
     private suspend fun subTasksPayload(savedItemId: String): List<Map<String, Any?>> = try {
-        db.subTaskDao().getByReminderId(savedItemId).map { st ->
+        db.subTaskDao().getBySavedItemId(savedItemId).map { st ->
             mapOf(
                 "savedSubItemId" to st.savedSubItemId,
-                "title" to st.title,
-                "description" to st.description,
-                "itemType" to st.itemType,
+                "text" to st.text,
                 "isCompleted" to st.isCompleted,
-                "deadlineAtMsEpoch" to st.deadlineAtMs,
-                "startAtMsEpoch" to st.startAtMs,
-                "endAtMsEpoch" to st.endAtMs,
-                "buttons" to st.buttons,
-                "sortOrder" to st.sortOrder,
-                "createdAtEpoch" to st.createdAt,
-                "lastUpdateTimestampEpoch" to st.lastUpdateTimestamp,
+                "position" to st.position,
             )
         }
     } catch (_: Exception) {
@@ -246,18 +238,18 @@ class FirestoreSyncRepository(
     suspend fun syncAllLocalData() = withContext(Dispatchers.IO) {
         if (userId().isBlank()) return@withContext
 
-        syncAllLocalReminders()
+        syncAllLocalSavedItems()
         syncPreferencesAndContexts()
     }
 
-    /** Uploads the local reminder mirror without replacing cloud-owned preference/context state. */
-    suspend fun syncAllLocalReminders() = withContext(Dispatchers.IO) {
+    /** Uploads the local SavedItem mirror without replacing cloud-owned preference/context state. */
+    suspend fun syncAllLocalSavedItems() = withContext(Dispatchers.IO) {
         if (userId().isBlank()) return@withContext
 
         ensureUserDoc()
-        val items = db.reminderListDao().getAll()
-        items.forEach { syncReminder(it) }
-        Log.i(tag, "syncAllLocalReminders complete uid=${userId()} reminders=${items.size}")
+        val items = db.savedItemDao().getAll()
+        items.forEach { syncSavedItem(it) }
+        Log.i(tag, "syncAllLocalSavedItems complete uid=${userId()} savedItems=${items.size}")
     }
 
     /**

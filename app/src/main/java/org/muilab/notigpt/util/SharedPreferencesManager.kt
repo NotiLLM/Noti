@@ -154,11 +154,13 @@ object SharedPreferencesManager {
         get() = get(KEY_LOCAL_PREFS, KEY_LAST_APP_RESUME_TIME, 0L)
         set(value) = put(KEY_LOCAL_PREFS, KEY_LAST_APP_RESUME_TIME, value)
 
-    // --- Periodic reminder worker diagnostics ---
-    const val KEY_LAST_REMINDER_PERIODIC_RUN_TIME = "lastReminderPeriodicRunTime"
-    var lastReminderPeriodicRunTime: Long
-        get() = get(KEY_LOCAL_PREFS, KEY_LAST_REMINDER_PERIODIC_RUN_TIME, 0L)
-        set(value) = put(KEY_LOCAL_PREFS, KEY_LAST_REMINDER_PERIODIC_RUN_TIME, value)
+    // --- Periodic extraction worker diagnostics ---
+    const val KEY_LAST_EXTRACTION_PERIODIC_RUN_TIME = "lastExtractionPeriodicRunTime"
+    private const val LEGACY_KEY_LAST_REMINDER_PERIODIC_RUN_TIME = "lastReminderPeriodicRunTime"
+    var lastExtractionPeriodicRunTime: Long
+        get() = get(KEY_LOCAL_PREFS, KEY_LAST_EXTRACTION_PERIODIC_RUN_TIME, 0L).takeIf { it > 0L }
+            ?: get(KEY_LOCAL_PREFS, LEGACY_KEY_LAST_REMINDER_PERIODIC_RUN_TIME, 0L)
+        set(value) = put(KEY_LOCAL_PREFS, KEY_LAST_EXTRACTION_PERIODIC_RUN_TIME, value)
 
     /** Last time the cross-thread reflection merge pass ran; gates the daily cadence. */
     const val KEY_LAST_REFLECTION_RUN_TIME = "lastReflectionRunTime"

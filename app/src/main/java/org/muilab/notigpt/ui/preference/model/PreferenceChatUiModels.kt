@@ -19,8 +19,8 @@ data class ChatFlowContext(
     val entryPoint: PreferenceEntryPoint,
     val title: String? = null,
     val content: String? = null,
-    val reminderBeforeTitle: String? = null,
-    val reminderBeforeContent: String? = null,
+    val savedItemBeforeTitle: String? = null,
+    val savedItemBeforeContent: String? = null,
     val notiKey: String? = null,
 )
 

@@ -5,7 +5,7 @@ import org.muilab.notigpt.model.notifications.NotiRecord
 /**
  * Formatter for serializing NotiRecord context into n8n request payloads.
  *
- * Keep backend-facing field names and text selection here so reminder/update handlers do not each invent their
+ * Keep backend-facing field names and text selection here so SavedItem/update handlers do not each invent their
  * own record schema. Model parsing stays in NotiRecord and NotiMetadata.
  */
 internal object N8nRecordFormatter {
@@ -24,4 +24,3 @@ internal object N8nRecordFormatter {
         )
     }
 }
-

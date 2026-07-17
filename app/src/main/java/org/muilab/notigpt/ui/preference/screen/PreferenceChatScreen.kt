@@ -820,18 +820,18 @@ private fun ChatFlowContextCard(flowContext: ChatFlowContext) {
 
             // For EDIT, show before → after
             if (flowContext.entryPoint == PreferenceEntryPoint.EDIT) {
-                if (flowContext.reminderBeforeTitle != null || flowContext.reminderBeforeContent != null) {
+                if (flowContext.savedItemBeforeTitle != null || flowContext.savedItemBeforeContent != null) {
                     Text(
                         stringResource(R.string.pref_chat_context_before),
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
                     )
-                    if (!flowContext.reminderBeforeTitle.isNullOrBlank()) {
-                        Text(flowContext.reminderBeforeTitle, style = MaterialTheme.typography.bodySmall)
+                    if (!flowContext.savedItemBeforeTitle.isNullOrBlank()) {
+                        Text(flowContext.savedItemBeforeTitle, style = MaterialTheme.typography.bodySmall)
                     }
-                    if (!flowContext.reminderBeforeContent.isNullOrBlank()) {
+                    if (!flowContext.savedItemBeforeContent.isNullOrBlank()) {
                         Text(
-                            flowContext.reminderBeforeContent,
+                            flowContext.savedItemBeforeContent,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f),
                             maxLines = 2,
@@ -978,8 +978,6 @@ private fun isNetworkAvailable(context: Context): Boolean {
         caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) ||
         caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
 }
-
-
 
 
 

@@ -1,7 +1,7 @@
 package org.muilab.notigpt.ui.settings
 
 /**
- * A selectable target language for reminder extraction.
+ * A selectable target language for SavedItem extraction.
  *
  * [code] is the BCP-47 language tag sent verbatim to n8n (e.g. "en", "zh-TW"). The sentinel
  * "original" means "keep the notification's own language" and is handled specially by the UI.

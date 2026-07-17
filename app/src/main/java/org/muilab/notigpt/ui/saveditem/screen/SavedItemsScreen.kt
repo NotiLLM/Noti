@@ -1,4 +1,4 @@
-package org.muilab.notigpt.ui.reminder.screen
+package org.muilab.notigpt.ui.saveditem.screen
 
 import android.app.TimePickerDialog
 import android.content.Intent
@@ -108,19 +108,19 @@ import org.muilab.notigpt.data.export.asExportable
 import org.muilab.notigpt.ui.preference.component.PreferenceLearningBottomSheet
 import org.muilab.notigpt.ui.common.component.DueChip
 import org.muilab.notigpt.ui.common.feedback.AppSnackbar
-import org.muilab.notigpt.ui.reminder.component.ExportChooserDialog
+import org.muilab.notigpt.ui.saveditem.component.ExportChooserDialog
 import org.muilab.notigpt.ui.theme.NotiTheme
 import org.muilab.notigpt.ui.theme.NotiType
 import org.muilab.notigpt.ui.theme.Dimens
 import org.muilab.notigpt.ui.notification.component.RelatedNotificationPreview
-import org.muilab.notigpt.ui.reminder.component.SavedSubItemRow
-import org.muilab.notigpt.ui.reminder.component.SavedSubItemListInCard
-import org.muilab.notigpt.ui.reminder.component.SavedSubItemDetailScreen
-import org.muilab.notigpt.ui.reminder.component.TaskCompletionToggle
+import org.muilab.notigpt.ui.saveditem.component.SavedSubItemRow
+import org.muilab.notigpt.ui.saveditem.component.SavedSubItemListInCard
+import org.muilab.notigpt.ui.saveditem.component.TaskCompletionToggle
 import org.muilab.notigpt.ui.notification.viewmodel.DrawerViewModel
 import org.muilab.notigpt.ui.preference.viewmodel.PreferenceViewModel
-import org.muilab.notigpt.ui.reminder.viewmodel.ReminderViewModel
+import org.muilab.notigpt.ui.saveditem.viewmodel.SavedItemsViewModel
 import org.muilab.notigpt.ui.reminder.viewmodel.ScheduledReminderViewModel
+import org.muilab.notigpt.ui.reminder.screen.ReminderDateTimeDialog
 import org.muilab.notigpt.util.time.getAbsoluteTimeStr
 import org.muilab.notigpt.util.time.getRelativeTimeStr
 import java.util.Calendar
@@ -138,25 +138,25 @@ import androidx.compose.material3.AssistChip
 import androidx.compose.material3.minimumInteractiveComponentSize
 
 /**
- * Main reminders screen for tasks, memos, completion state, sub-tasks, export, and related notifications.
+ * Main SavedItems screen for tasks, keeps, completion state, subtasks, export, and related notifications.
  *
- * This screen owns local editing dialogs, drag visuals, and edit drafts. Durable reminder, sub-task, sync, and
- * regeneration actions should stay in ReminderViewModel or related repositories.
+ * This screen owns local editing dialogs, drag visuals, and edit drafts. Durable SavedItem, subtask, sync, and
+ * regeneration actions should stay in SavedItemsViewModel or related repositories.
  */
 @Composable
-fun RemindersScreen(
+fun SavedItemsScreen(
     drawerViewModel: DrawerViewModel,
-    reminderViewModel: ReminderViewModel? = null,
+    savedItemsViewModel: SavedItemsViewModel? = null,
     scheduledReminderViewModel: ScheduledReminderViewModel? = null,
     preferenceViewModel: PreferenceViewModel? = null,
-    listMode: ReminderViewModel.ListMode = ReminderViewModel.ListMode.All,
+    listMode: SavedItemsViewModel.ListMode = SavedItemsViewModel.ListMode.All,
     /** When set, this screen shows a home smart-filter list (planned-date bucket or starred) instead of the tab chips. */
     smartFilter: org.muilab.notigpt.ui.common.navigation.SavedListFilter? = null,
     /** When set, opens this item's detail screen as soon as it's loaded (e.g. jumping in from a notification's linked-items sheet). Consumed once. */
     initialDetailItemId: String? = null,
     onDetailOpenChange: (Boolean) -> Unit = {},
 ) {
-    val vm: ReminderViewModel = reminderViewModel ?: viewModel()
+    val vm: SavedItemsViewModel = savedItemsViewModel ?: viewModel()
     val scheduledVm: ScheduledReminderViewModel = scheduledReminderViewModel ?: viewModel()
     val prefVm: PreferenceViewModel = preferenceViewModel ?: viewModel()
 
@@ -165,9 +165,9 @@ fun RemindersScreen(
         vm.setListMode(listMode)
         vm.setFilter(
             when (listMode) {
-                ReminderViewModel.ListMode.Tasks -> ReminderViewModel.FilterTab.Pending
-                ReminderViewModel.ListMode.Keep -> ReminderViewModel.FilterTab.Keep
-                else -> ReminderViewModel.FilterTab.All
+                SavedItemsViewModel.ListMode.Tasks -> SavedItemsViewModel.FilterTab.Pending
+                SavedItemsViewModel.ListMode.Keep -> SavedItemsViewModel.FilterTab.Keep
+                else -> SavedItemsViewModel.FilterTab.All
             }
         )
     }
@@ -179,41 +179,41 @@ fun RemindersScreen(
     val strGoogleTasksErrorFmt = stringResource(R.string.google_tasks_error, "%s")
     val strGoogleCalendarNoApp = stringResource(R.string.google_calendar_no_app)
 
-    val reminders by vm.reminders.collectAsState()
+    val savedItems by vm.savedItems.collectAsState()
     val pendingPreviews by vm.pendingPreviews.collectAsState()
     val filter by vm.filter.collectAsState()
 
     // Smart-filter pages (Today/Upcoming/… mixing tasks and keeps) get an in-page task/keep filter,
     // but only when the page actually contains both types. null = show all. Reset when the page changes.
     var smartTypeFilter by remember(smartFilter) { mutableStateOf<String?>(null) }
-    val smartHasTask = smartFilter != null && reminders.any { it.isTask }
-    val smartHasKeep = smartFilter != null && reminders.any { !it.isTask }
+    val smartHasTask = smartFilter != null && savedItems.any { it.isTask }
+    val smartHasKeep = smartFilter != null && savedItems.any { !it.isTask }
     val smartShowTypeChips = smartHasTask && smartHasKeep
-    val displayedReminders = if (smartFilter != null && smartTypeFilter != null) {
-        reminders.filter { it.itemType == smartTypeFilter }
+    val displayedSavedItems = if (smartFilter != null && smartTypeFilter != null) {
+        savedItems.filter { it.itemType == smartTypeFilter }
     } else {
-        reminders
+        savedItems
     }
 
     // Flash the destination filter chip when a card changes status (e.g. completed -> Completed chip).
-    var flashTarget by remember { mutableStateOf<ReminderViewModel.FilterTab?>(null) }
+    var flashTarget by remember { mutableStateOf<SavedItemsViewModel.FilterTab?>(null) }
     var flashTick by remember { mutableIntStateOf(0) }
-    val flashChip: (ReminderViewModel.FilterTab) -> Unit = { tab -> flashTarget = tab; flashTick++ }
+    val flashChip: (SavedItemsViewModel.FilterTab) -> Unit = { tab -> flashTarget = tab; flashTick++ }
 
     // Section identity color for the active tab (Tasks=amber, Keep=teal). Drives card accents + FAB.
     val tabAccent: Color? = when (listMode) {
-        ReminderViewModel.ListMode.Tasks -> NotiTheme.semantic.taskAccent
-        ReminderViewModel.ListMode.Keep -> NotiTheme.semantic.keepAccent
+        SavedItemsViewModel.ListMode.Tasks -> NotiTheme.semantic.taskAccent
+        SavedItemsViewModel.ListMode.Keep -> NotiTheme.semantic.keepAccent
         else -> null
     }
     val fabContainer = when (listMode) {
-        ReminderViewModel.ListMode.Tasks -> NotiTheme.semantic.taskContainer
-        ReminderViewModel.ListMode.Keep -> NotiTheme.semantic.keepContainer
+        SavedItemsViewModel.ListMode.Tasks -> NotiTheme.semantic.taskContainer
+        SavedItemsViewModel.ListMode.Keep -> NotiTheme.semantic.keepContainer
         else -> MaterialTheme.colorScheme.primaryContainer
     }
     val fabContent = when (listMode) {
-        ReminderViewModel.ListMode.Tasks -> NotiTheme.semantic.onTaskContainer
-        ReminderViewModel.ListMode.Keep -> NotiTheme.semantic.onKeepContainer
+        SavedItemsViewModel.ListMode.Tasks -> NotiTheme.semantic.onTaskContainer
+        SavedItemsViewModel.ListMode.Keep -> NotiTheme.semantic.onKeepContainer
         else -> MaterialTheme.colorScheme.onPrimaryContainer
     }
 
@@ -223,42 +223,36 @@ fun RemindersScreen(
     var editingInitialSnapshot by remember { mutableStateOf<SavedItem?>(null) }
     var pendingEditRequest by remember { mutableStateOf<SavedItem?>(null) }
 
-    // Sub-task editing (overlaid on top of reminder detail)
-    var editingSavedSubItem by remember { mutableStateOf<SavedSubItem?>(null) }
-    var editingSavedSubItemInitial by remember { mutableStateOf<SavedSubItem?>(null) }
-
-    fun openEditor(item: SavedItem, subItem: SavedSubItem? = null) {
+    fun openEditor(item: SavedItem) {
         editing = item
         editingId = item.savedItemId
         editingInitialSnapshot = item
-        editingSavedSubItem = subItem
-        editingSavedSubItemInitial = subItem
     }
 
-    fun requestEdit(item: SavedItem, subItem: SavedSubItem? = null) {
+    fun requestEdit(item: SavedItem) {
         if (pendingPreviews[item.savedItemId] != null) {
             pendingEditRequest = item
         } else {
-            openEditor(item, subItem)
+            openEditor(item)
         }
     }
 
     // Auto-open a specific item's detail once it shows up in the loaded list (consumed once so
     // re-composition or manually closing the detail doesn't reopen it).
     var consumedInitialDetailItemId by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(initialDetailItemId, reminders) {
+    LaunchedEffect(initialDetailItemId, savedItems) {
         if (initialDetailItemId != null && initialDetailItemId != consumedInitialDetailItemId) {
-            reminders.find { it.savedItemId == initialDetailItemId }?.let { match ->
+            savedItems.find { it.savedItemId == initialDetailItemId }?.let { match ->
                 requestEdit(match)
                 consumedInitialDetailItemId = initialDetailItemId
             }
         }
     }
 
-    // Bulk sub-task observation (one DB query for all reminders)
-    val allSavedSubItemsByReminder by vm.allSavedSubItemsByReminder.collectAsState()
+    // Bulk sub-task observation (one DB query for all savedItems)
+    val allSavedSubItemsBySavedItem by vm.allSavedSubItemsBySavedItem.collectAsState()
 
-    var reminderDialogSavedItem by remember { mutableStateOf<SavedItem?>(null) }
+    var scheduledReminderTarget by remember { mutableStateOf<SavedItem?>(null) }
 
     // ===== Google Tasks integration =====
     val googleTasksExportResult by vm.googleTasksExportResult.collectAsState()
@@ -277,15 +271,15 @@ fun RemindersScreen(
     // Show Toast when Google Tasks export result changes.
     LaunchedEffect(googleTasksExportResult) {
         when (val r = googleTasksExportResult) {
-            is ReminderViewModel.GoogleTasksExportResult.Success -> {
+            is SavedItemsViewModel.GoogleTasksExportResult.Success -> {
                 AppSnackbar.show(strGoogleTasksSuccess)
                 vm.clearGoogleTasksExportResult()
             }
-            is ReminderViewModel.GoogleTasksExportResult.Error -> {
+            is SavedItemsViewModel.GoogleTasksExportResult.Error -> {
                 AppSnackbar.show(strGoogleTasksErrorFmt.replace("%s", r.message ?: ""))
                 vm.clearGoogleTasksExportResult()
             }
-            is ReminderViewModel.GoogleTasksExportResult.NotSignedIn -> {
+            is SavedItemsViewModel.GoogleTasksExportResult.NotSignedIn -> {
                 // Launch sign-in flow
                 vm.clearGoogleTasksExportResult()
             }
@@ -297,15 +291,15 @@ fun RemindersScreen(
     var exportDialogState by remember { mutableStateOf<ExportDialogState?>(null) }
 
     // Helper lambdas to open the dialog
-    val openExportDialog: (SavedItem, ExportType) -> Unit = { reminder, type ->
-        exportDialogState = ExportDialogState(reminder, type)
+    val openExportDialog: (SavedItem, ExportType) -> Unit = { item, type ->
+        exportDialogState = ExportDialogState(item, type)
     }
 
-    val handleGoogleTasksExport: (SavedItem) -> Unit = { reminder ->
+    val handleGoogleTasksExport: (SavedItem) -> Unit = { item ->
         if (vm.isGoogleSignedIn()) {
-            vm.exportToGoogleTasks(reminder)
+            vm.exportToGoogleTasks(item)
         } else {
-            pendingGoogleTasksReminder = reminder
+            pendingGoogleTasksReminder = item
             val signInIntent = org.muilab.notigpt.data.remote.googletasks.GoogleTasksAuthManager.getSignInIntent(context)
             googleSignInLauncher.launch(signInIntent)
         }
@@ -316,9 +310,9 @@ fun RemindersScreen(
 
     var pendingScrollToTopId by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(reminders, pendingScrollToTopId) {
+    LaunchedEffect(savedItems, pendingScrollToTopId) {
         val targetId = pendingScrollToTopId ?: return@LaunchedEffect
-        if (reminders.firstOrNull()?.savedItemId == targetId) {
+        if (savedItems.firstOrNull()?.savedItemId == targetId) {
             listState.animateScrollToItem(0)
         }
         pendingScrollToTopId = null
@@ -338,31 +332,31 @@ fun RemindersScreen(
                 // Smart-filter lists (Today/Upcoming/Someday/Undetermined/Starred) show no tab chips;
                 // the shell's top bar carries the filter name.
                 if (smartFilter == null) when (listMode) {
-                    ReminderViewModel.ListMode.All -> {
-                        ReminderFilterChip(stringResource(R.string.ui_reminders_filter_all), filter == ReminderViewModel.FilterTab.All, { vm.setFilter(ReminderViewModel.FilterTab.All) })
-                        ReminderFilterChip(stringResource(R.string.ui_reminders_filter_tasks), filter == ReminderViewModel.FilterTab.Tasks, { vm.setFilter(ReminderViewModel.FilterTab.Tasks) })
-                        ReminderFilterChip(stringResource(R.string.ui_reminders_filter_memos), filter == ReminderViewModel.FilterTab.Memos, { vm.setFilter(ReminderViewModel.FilterTab.Memos) })
-                        ReminderFilterChip(stringResource(R.string.ui_reminders_filter_completed), filter == ReminderViewModel.FilterTab.Completed, { vm.setFilter(ReminderViewModel.FilterTab.Completed) })
+                    SavedItemsViewModel.ListMode.All -> {
+                        SavedItemFilterChip(stringResource(R.string.ui_saved_items_filter_all), filter == SavedItemsViewModel.FilterTab.All, { vm.setFilter(SavedItemsViewModel.FilterTab.All) })
+                        SavedItemFilterChip(stringResource(R.string.ui_saved_items_filter_tasks), filter == SavedItemsViewModel.FilterTab.Tasks, { vm.setFilter(SavedItemsViewModel.FilterTab.Tasks) })
+                        SavedItemFilterChip(stringResource(R.string.ui_saved_items_filter_memos), filter == SavedItemsViewModel.FilterTab.Memos, { vm.setFilter(SavedItemsViewModel.FilterTab.Memos) })
+                        SavedItemFilterChip(stringResource(R.string.ui_saved_items_filter_completed), filter == SavedItemsViewModel.FilterTab.Completed, { vm.setFilter(SavedItemsViewModel.FilterTab.Completed) })
                     }
-                    ReminderViewModel.ListMode.Tasks -> {
-                        ReminderFilterChip(stringResource(R.string.ui_reminders_filter_pending), filter == ReminderViewModel.FilterTab.Pending, { vm.setFilter(ReminderViewModel.FilterTab.Pending) }, leadingIconRes = R.drawable.check_box_unchecked, iconTint = NotiTheme.semantic.taskAccent, flashTick = if (flashTarget == ReminderViewModel.FilterTab.Pending) flashTick else 0)
-                        ReminderFilterChip(stringResource(R.string.ui_reminders_filter_completed), filter == ReminderViewModel.FilterTab.Completed, { vm.setFilter(ReminderViewModel.FilterTab.Completed) }, leadingIconRes = R.drawable.check_box_checked, iconTint = NotiTheme.semantic.taskAccent, flashTick = if (flashTarget == ReminderViewModel.FilterTab.Completed) flashTick else 0)
-                        ReminderFilterChip(stringResource(R.string.ui_reminders_filter_starred), filter == ReminderViewModel.FilterTab.Starred, { vm.setFilter(ReminderViewModel.FilterTab.Starred) }, leadingIconRes = R.drawable.star_yes, iconTint = NotiTheme.semantic.taskAccent)
-                        ReminderFilterChip(stringResource(R.string.ui_reminders_filter_all), filter == ReminderViewModel.FilterTab.All, { vm.setFilter(ReminderViewModel.FilterTab.All) })
+                    SavedItemsViewModel.ListMode.Tasks -> {
+                        SavedItemFilterChip(stringResource(R.string.ui_saved_items_filter_pending), filter == SavedItemsViewModel.FilterTab.Pending, { vm.setFilter(SavedItemsViewModel.FilterTab.Pending) }, leadingIconRes = R.drawable.check_box_unchecked, iconTint = NotiTheme.semantic.taskAccent, flashTick = if (flashTarget == SavedItemsViewModel.FilterTab.Pending) flashTick else 0)
+                        SavedItemFilterChip(stringResource(R.string.ui_saved_items_filter_completed), filter == SavedItemsViewModel.FilterTab.Completed, { vm.setFilter(SavedItemsViewModel.FilterTab.Completed) }, leadingIconRes = R.drawable.check_box_checked, iconTint = NotiTheme.semantic.taskAccent, flashTick = if (flashTarget == SavedItemsViewModel.FilterTab.Completed) flashTick else 0)
+                        SavedItemFilterChip(stringResource(R.string.ui_saved_items_filter_starred), filter == SavedItemsViewModel.FilterTab.Starred, { vm.setFilter(SavedItemsViewModel.FilterTab.Starred) }, leadingIconRes = R.drawable.star_yes, iconTint = NotiTheme.semantic.taskAccent)
+                        SavedItemFilterChip(stringResource(R.string.ui_saved_items_filter_all), filter == SavedItemsViewModel.FilterTab.All, { vm.setFilter(SavedItemsViewModel.FilterTab.All) })
                     }
-                    ReminderViewModel.ListMode.Keep -> {
-                        ReminderFilterChip(stringResource(R.string.ui_reminders_filter_keep), filter == ReminderViewModel.FilterTab.Keep, { vm.setFilter(ReminderViewModel.FilterTab.Keep) }, leadingIconRes = R.drawable.bookmark, iconTint = NotiTheme.semantic.keepAccent, flashTick = if (flashTarget == ReminderViewModel.FilterTab.Keep) flashTick else 0)
-                        ReminderFilterChip(stringResource(R.string.ui_reminders_filter_archived), filter == ReminderViewModel.FilterTab.Archived, { vm.setFilter(ReminderViewModel.FilterTab.Archived) }, leadingIconRes = R.drawable.archive_yes, iconTint = NotiTheme.semantic.keepAccent, flashTick = if (flashTarget == ReminderViewModel.FilterTab.Archived) flashTick else 0)
-                        ReminderFilterChip(stringResource(R.string.ui_reminders_filter_starred), filter == ReminderViewModel.FilterTab.Starred, { vm.setFilter(ReminderViewModel.FilterTab.Starred) }, leadingIconRes = R.drawable.star_yes, iconTint = NotiTheme.semantic.keepAccent)
-                        ReminderFilterChip(stringResource(R.string.ui_reminders_filter_all), filter == ReminderViewModel.FilterTab.All, { vm.setFilter(ReminderViewModel.FilterTab.All) })
+                    SavedItemsViewModel.ListMode.Keep -> {
+                        SavedItemFilterChip(stringResource(R.string.ui_saved_items_filter_keep), filter == SavedItemsViewModel.FilterTab.Keep, { vm.setFilter(SavedItemsViewModel.FilterTab.Keep) }, leadingIconRes = R.drawable.bookmark, iconTint = NotiTheme.semantic.keepAccent, flashTick = if (flashTarget == SavedItemsViewModel.FilterTab.Keep) flashTick else 0)
+                        SavedItemFilterChip(stringResource(R.string.ui_saved_items_filter_archived), filter == SavedItemsViewModel.FilterTab.Archived, { vm.setFilter(SavedItemsViewModel.FilterTab.Archived) }, leadingIconRes = R.drawable.archive_yes, iconTint = NotiTheme.semantic.keepAccent, flashTick = if (flashTarget == SavedItemsViewModel.FilterTab.Archived) flashTick else 0)
+                        SavedItemFilterChip(stringResource(R.string.ui_saved_items_filter_starred), filter == SavedItemsViewModel.FilterTab.Starred, { vm.setFilter(SavedItemsViewModel.FilterTab.Starred) }, leadingIconRes = R.drawable.star_yes, iconTint = NotiTheme.semantic.keepAccent)
+                        SavedItemFilterChip(stringResource(R.string.ui_saved_items_filter_all), filter == SavedItemsViewModel.FilterTab.All, { vm.setFilter(SavedItemsViewModel.FilterTab.All) })
                     }
                 }
 
                 // Smart-filter pages get task/keep chips only when both types are present.
                 if (smartShowTypeChips) {
-                    ReminderFilterChip(stringResource(R.string.ui_reminders_filter_all), smartTypeFilter == null, { smartTypeFilter = null })
-                    ReminderFilterChip(stringResource(R.string.ui_reminders_filter_tasks), smartTypeFilter == SavedItemType.Task, { smartTypeFilter = SavedItemType.Task }, leadingIconRes = R.drawable.check_box_unchecked, iconTint = NotiTheme.semantic.taskAccent)
-                    ReminderFilterChip(stringResource(R.string.ui_reminders_filter_keep), smartTypeFilter == SavedItemType.Keep, { smartTypeFilter = SavedItemType.Keep }, leadingIconRes = R.drawable.bookmark, iconTint = NotiTheme.semantic.keepAccent)
+                    SavedItemFilterChip(stringResource(R.string.ui_saved_items_filter_all), smartTypeFilter == null, { smartTypeFilter = null })
+                    SavedItemFilterChip(stringResource(R.string.ui_saved_items_filter_tasks), smartTypeFilter == SavedItemType.Task, { smartTypeFilter = SavedItemType.Task }, leadingIconRes = R.drawable.check_box_unchecked, iconTint = NotiTheme.semantic.taskAccent)
+                    SavedItemFilterChip(stringResource(R.string.ui_saved_items_filter_keep), smartTypeFilter == SavedItemType.Keep, { smartTypeFilter = SavedItemType.Keep }, leadingIconRes = R.drawable.bookmark, iconTint = NotiTheme.semantic.keepAccent)
                 }
 
                 Spacer(Modifier.weight(1f))
@@ -398,80 +392,64 @@ fun RemindersScreen(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 96.dp)
             ) {
-                items(displayedReminders, key = { it.savedItemId }, contentType = { "reminderCard" }) { reminder ->
-                    val pendingPreview = pendingPreviews[reminder.savedItemId]
-                    ReminderCard(
-                        reminder = reminder,
+                items(displayedSavedItems, key = { it.savedItemId }, contentType = { "reminderCard" }) { item ->
+                    val pendingPreview = pendingPreviews[item.savedItemId]
+                    SavedItemCard(
+                        item = item,
                         subTasks = pendingPreview?.subItems
-                            ?: allSavedSubItemsByReminder[reminder.savedItemId].orEmpty(),
+                            ?: allSavedSubItemsBySavedItem[item.savedItemId].orEmpty(),
                         pendingReview = pendingPreview != null,
                         pendingMergeSourceCount = pendingPreview?.mergeSourceItemIds?.size ?: 0,
                         onDelete = {
-                            vm.delete(reminder.savedItemId)
-                            if (reminder.origin.contains("llm")) {
+                            vm.delete(item.savedItemId)
+                            if (item.origin.contains("llm")) {
                                 prefVm.startFlow(
                                     entryPoint = PreferenceEntryPoint.DELETE,
-                                    reminder = reminder,
+                                    item = item,
                                 )
                             }
                         },
                         onToggleCompleted = { completed: Boolean ->
-                            vm.toggleCompleted(reminder, completed)
-                            flashChip(if (completed) ReminderViewModel.FilterTab.Completed else ReminderViewModel.FilterTab.Pending)
+                            vm.toggleCompleted(item, completed)
+                            flashChip(if (completed) SavedItemsViewModel.FilterTab.Completed else SavedItemsViewModel.FilterTab.Pending)
                         },
                         onEdit = {
-                            requestEdit(reminder)
+                            requestEdit(item)
                         },
-                        onToggleStarred = { vm.toggleStarred(reminder) },
-                        onSetDoDate = { vm.setDoDate(reminder.savedItemId, it) },
-                        onCreateReminder = { reminderDialogSavedItem = reminder },
+                        onToggleStarred = { vm.toggleStarred(item) },
+                        onSetWhen = { vm.setWhen(item.savedItemId, it) },
+                        onCreateReminder = { scheduledReminderTarget = item },
                         sectionAccent = tabAccent,
                         onArchive = {
-                            flashChip(if (reminder.isArchived) ReminderViewModel.FilterTab.Keep else ReminderViewModel.FilterTab.Archived)
-                            vm.archiveKeep(reminder.savedItemId)
+                            flashChip(if (item.isArchived) SavedItemsViewModel.FilterTab.Keep else SavedItemsViewModel.FilterTab.Archived)
+                            vm.archiveKeep(item.savedItemId)
                         },
                         // Export is available on both task and keep cards (users may push kept info to Tasks/Calendar).
-                        onQuickExportTasks = { openExportDialog(reminder, ExportType.GOOGLE_TASKS) },
-                        onQuickExportCalendar = { openExportDialog(reminder, ExportType.GOOGLE_CALENDAR) },
+                        onQuickExportTasks = { openExportDialog(item, ExportType.GOOGLE_TASKS) },
+                        onQuickExportCalendar = { openExportDialog(item, ExportType.GOOGLE_CALENDAR) },
                         onSavedSubItemToggle = { stId, checked ->
-                            if (pendingPreview != null) requestEdit(reminder)
+                            if (pendingPreview != null) requestEdit(item)
                             else vm.toggleSavedSubItemCompleted(stId, checked)
                         },
-                        onSavedSubItemClick = { st ->
-                            // Open parent reminder detail first, then navigate to sub-task detail
-                            requestEdit(reminder, st)
-                        },
-                        onSavedSubItemEdit = { st ->
-                            requestEdit(reminder, st)
-                        },
+                        onSavedSubItemClick = { requestEdit(item) },
+                        onSavedSubItemEdit = { requestEdit(item) },
                         onSavedSubItemDelete = { st ->
-                            if (pendingPreview != null) requestEdit(reminder)
+                            if (pendingPreview != null) requestEdit(item)
                             else vm.deleteSavedSubItem(st.savedSubItemId)
-                        },
-                        onSavedSubItemExportGoogleTasks = { st -> vm.exportToGoogleTasks(st.asExportable()) },
-                        onSavedSubItemExportGoogleCalendar = { st ->
-                            val calIntent = Intent(Intent.ACTION_INSERT).apply {
-                                data = CalendarContract.Events.CONTENT_URI
-                                putExtra(CalendarContract.Events.TITLE, st.title)
-                                putExtra(CalendarContract.Events.DESCRIPTION, st.description)
-                                if (st.startAtMs > 0L) putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, st.startAtMs)
-                                if (st.endAtMs > 0L) putExtra(CalendarContract.EXTRA_EVENT_END_TIME, st.endAtMs)
-                            }
-                            try { context.startActivity(calIntent) } catch (_: Exception) {}
                         },
                     )
                 }
             }
         }
 
-        reminderDialogSavedItem?.let { target ->
+        scheduledReminderTarget?.let { target ->
             ReminderDateTimeDialog(
-                title = stringResource(R.string.ui_reminders_create_button),
+                title = stringResource(R.string.ui_reminder_create_button),
                 initialAtMs = System.currentTimeMillis(),
-                onDismiss = { reminderDialogSavedItem = null },
+                onDismiss = { scheduledReminderTarget = null },
                 onConfirm = { remindAtMs ->
                     scheduledVm.createForSavedItem(target, remindAtMs)
-                    reminderDialogSavedItem = null
+                    scheduledReminderTarget = null
                 },
             )
         }
@@ -562,10 +540,10 @@ fun RemindersScreen(
                         onClick = { /* consume */ }
                     )
             ) {
-                ReminderDetailScreen(
+                SavedItemDetailScreen(
                     initial = current,
                     drawerViewModel = drawerViewModel,
-                    onCreateReminder = { reminderDialogSavedItem = current },
+                    onCreateReminder = { scheduledReminderTarget = current },
                     onBack = { updatedOrNull: SavedItem? ->
                         val base = editingInitialSnapshot
                         val isNew = base != null && base.title.isBlank() && base.content.isBlank() && base.userEdited
@@ -585,14 +563,14 @@ fun RemindersScreen(
 
                         if (updatedOrNull != null) {
                             val emptyNow = updatedOrNull.title.isBlank() && updatedOrNull.content.isBlank()
-                            // Do date is user-owned planning: persist it via the targeted setter so a
-                            // do-date-only edit does not flip userEdited (which shields content from LLM updates).
-                            if (!emptyNow && base != null && base.doAtMs != updatedOrNull.doAtMs && !changed) {
-                                vm.setDoDate(updatedOrNull.savedItemId, updatedOrNull.doAtMs)
+                            // When is user-owned planning: persist it via the targeted setter so a
+                            // When-only edit does not flip userEdited (which shields content from LLM updates).
+                            if (!emptyNow && base != null && base.whenAtMs != updatedOrNull.whenAtMs && !changed) {
+                                vm.setWhen(updatedOrNull.savedItemId, updatedOrNull.whenAtMs)
                             }
                             when {
                                 emptyNow -> {
-                                    // For brand-new manual reminders, just discard. For existing reminders, delete.
+                                    // For brand-new manual savedItems, just discard. For existing savedItems, delete.
                                     if (!isNew) vm.delete(updatedOrNull.savedItemId)
                                 }
                                 changed -> {
@@ -631,11 +609,11 @@ fun RemindersScreen(
                         editingId = null
                         editingInitialSnapshot = null
                         pendingScrollToTopId = null
-                        // Trigger preference learning for LLM-generated reminders deleted from detail
+                        // Trigger preference learning for LLM-generated savedItems deleted from detail
                         if (deletedReminder != null && deletedReminder.origin.contains("llm")) {
                             prefVm.startFlow(
                                 entryPoint = PreferenceEntryPoint.DELETE,
-                                reminder = deletedReminder,
+                                item = deletedReminder,
                             )
                         }
                     },
@@ -657,9 +635,9 @@ fun RemindersScreen(
                         )
 
                         val emptyNow = updated.title.isBlank() && updated.content.isBlank()
-                        // See onBack: do-date-only edits persist without flipping userEdited.
-                        if (!emptyNow && base != null && base.doAtMs != updated.doAtMs && !changed) {
-                            vm.setDoDate(updated.savedItemId, updated.doAtMs)
+                        // See onBack: When-only edits persist without flipping userEdited.
+                        if (!emptyNow && base != null && base.whenAtMs != updated.whenAtMs && !changed) {
+                            vm.setWhen(updated.savedItemId, updated.whenAtMs)
                         }
                         when {
                             emptyNow -> {
@@ -677,12 +655,12 @@ fun RemindersScreen(
                             }
                         }
 
-                        // Trigger preference learning for LLM-generated reminders that were edited
+                        // Trigger preference learning for LLM-generated savedItems that were edited
                         if (changed && !isNew && base != null && base.origin.contains("llm")) {
                             prefVm.startFlow(
                                 entryPoint = PreferenceEntryPoint.EDIT,
-                                reminder = updated,
-                                reminderBefore = base,
+                                item = updated,
+                                savedItemBefore = base,
                             )
                         }
 
@@ -692,107 +670,30 @@ fun RemindersScreen(
                         editingInitialSnapshot = null
                         if (id != null) pendingScrollToTopId = id
                     },
-                    onExportToGoogleTasks = { reminder ->
+                    onExportToGoogleTasks = { item ->
                         if (vm.isGoogleSignedIn()) {
-                            vm.exportToGoogleTasks(reminder)
+                            vm.exportToGoogleTasks(item)
                         } else {
-                            pendingGoogleTasksReminder = reminder
+                            pendingGoogleTasksReminder = item
                             val signInIntent = org.muilab.notigpt.data.remote.googletasks.GoogleTasksAuthManager.getSignInIntent(context)
                             googleSignInLauncher.launch(signInIntent)
                         }
                     },
-                    isGoogleTasksExporting = googleTasksExportResult is ReminderViewModel.GoogleTasksExportResult.Loading,
+                    isGoogleTasksExporting = googleTasksExportResult is SavedItemsViewModel.GoogleTasksExportResult.Loading,
                     onOpenExportDialog = openExportDialog,
                     onRegenerate = { vm.regenerateOne(current.savedItemId) },
                     relatedNotificationsState = relatedNotificationsState,
-                    onLoadRelatedNotifications = { reminder -> vm.loadRelatedNotifications(reminder) },
+                    onLoadRelatedNotifications = { item -> vm.loadRelatedNotifications(item) },
                     changeLog = remember(current.savedItemId) { vm.changeLogFlow(current.savedItemId) },
                     onAcknowledgeReview = { vm.acknowledgeReview(current.savedItemId) },
                     onLoadSurroundingContext = { key -> vm.loadSurroundingContext(current.savedItemId, key) },
                     // Sub-task parameters
-                    subTasks = allSavedSubItemsByReminder[current.savedItemId] ?: emptyList(),
+                    subTasks = allSavedSubItemsBySavedItem[current.savedItemId] ?: emptyList(),
                     onAddSavedSubItem = { vm.addSavedSubItem(current.savedItemId) },
                     onSavedSubItemToggle = { stId, checked -> vm.toggleSavedSubItemCompleted(stId, checked) },
-                    onSavedSubItemClick = { st ->
-                        editingSavedSubItem = st
-                        editingSavedSubItemInitial = st
-                    },
-                    onSavedSubItemEdit = { st ->
-                        editingSavedSubItem = st
-                        editingSavedSubItemInitial = st
-                    },
+                    onSavedSubItemEdit = { st -> vm.upsertSavedSubItem(st) },
                     onSavedSubItemDelete = { st -> vm.deleteSavedSubItem(st.savedSubItemId) },
-                    onSavedSubItemExportGoogleTasks = { st -> vm.exportToGoogleTasks(st.asExportable()) },
-                    onSavedSubItemExportGoogleCalendar = { st ->
-                        val calIntent = Intent(Intent.ACTION_INSERT).apply {
-                            data = CalendarContract.Events.CONTENT_URI
-                            putExtra(CalendarContract.Events.TITLE, st.title)
-                            putExtra(CalendarContract.Events.DESCRIPTION, st.description)
-                            if (st.startAtMs > 0L) putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, st.startAtMs)
-                            if (st.endAtMs > 0L) putExtra(CalendarContract.EXTRA_EVENT_END_TIME, st.endAtMs)
-                        }
-                        try { context.startActivity(calIntent) } catch (_: Exception) {}
-                    },
                 )
-
-                // Sub-task detail overlay (on top of reminder detail)
-                editingSavedSubItem?.let { stCurrent ->
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(MaterialTheme.colorScheme.background)
-                            .clickable(
-                                indication = null,
-                                interactionSource = remember { MutableInteractionSource() },
-                                onClick = { /* consume */ }
-                            )
-                    ) {
-                        SavedSubItemDetailScreen(
-                            initial = stCurrent,
-                            onBack = { updatedOrNull ->
-                                if (updatedOrNull != null) {
-                                    val base = editingSavedSubItemInitial
-                                    val changed = base != null && (
-                                        base.title != updatedOrNull.title ||
-                                            base.description != updatedOrNull.description ||
-                                            base.isTask != updatedOrNull.isTask ||
-                                            base.isEvent != updatedOrNull.isEvent ||
-                                            base.isCompleted != updatedOrNull.isCompleted ||
-                                            base.deadlineAtMs != updatedOrNull.deadlineAtMs ||
-                                            base.startAtMs != updatedOrNull.startAtMs ||
-                                            base.endAtMs != updatedOrNull.endAtMs
-                                    )
-                                    if (changed) {
-                                        vm.upsertSavedSubItem(updatedOrNull)
-                                    }
-                                }
-                                editingSavedSubItem = null
-                                editingSavedSubItemInitial = null
-                            },
-                            onDelete = { stId ->
-                                vm.deleteSavedSubItem(stId)
-                                editingSavedSubItem = null
-                                editingSavedSubItemInitial = null
-                            },
-                            onSave = { updated ->
-                                vm.upsertSavedSubItem(updated)
-                                editingSavedSubItem = null
-                                editingSavedSubItemInitial = null
-                            },
-                            onExportGoogleTasks = { st -> vm.exportToGoogleTasks(st.asExportable()) },
-                            onExportGoogleCalendar = { st ->
-                                val calIntent = Intent(Intent.ACTION_INSERT).apply {
-                                    data = CalendarContract.Events.CONTENT_URI
-                                    putExtra(CalendarContract.Events.TITLE, st.title)
-                                    putExtra(CalendarContract.Events.DESCRIPTION, st.description)
-                                    if (st.startAtMs > 0L) putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, st.startAtMs)
-                                    if (st.endAtMs > 0L) putExtra(CalendarContract.EXTRA_EVENT_END_TIME, st.endAtMs)
-                                }
-                                try { context.startActivity(calIntent) } catch (_: Exception) {}
-                            },
-                        )
-                    }
-                }
             }
         }
         }
@@ -802,10 +703,10 @@ fun RemindersScreen(
     exportDialogState?.let { dlgState ->
         ExportConfirmationDialog(
             state = dlgState,
-            isGoogleTasksExporting = googleTasksExportResult is ReminderViewModel.GoogleTasksExportResult.Loading,
+            isGoogleTasksExporting = googleTasksExportResult is SavedItemsViewModel.GoogleTasksExportResult.Loading,
             onDismiss = { exportDialogState = null },
             onConfirmGoogleTasks = { title, description, deadlineMs ->
-                val exportReminder = dlgState.reminder.copy(
+                val exportReminder = dlgState.item.copy(
                     title = title,
                     content = description,
                     deadlineAtMs = deadlineMs,
@@ -859,7 +760,7 @@ private fun SectionHeader(title: String) {
  * Pending/Completed). These are mutually-exclusive filters, which is exactly FilterChip's role.
  */
 @Composable
-private fun ReminderFilterChip(
+private fun SavedItemFilterChip(
     text: String,
     selected: Boolean,
     onClick: () -> Unit,
@@ -896,8 +797,8 @@ private fun ReminderFilterChip(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun ReminderCard(
-    reminder: SavedItem,
+fun SavedItemCard(
+    item: SavedItem,
     subTasks: List<SavedSubItem> = emptyList(),
     pendingReview: Boolean = false,
     pendingMergeSourceCount: Int = 0,
@@ -908,8 +809,8 @@ fun ReminderCard(
     onCreateReminder: (() -> Unit)? = null,
     onQuickExportTasks: (() -> Unit)? = null,
     onQuickExportCalendar: (() -> Unit)? = null,
-    /** Set/clear the user's planned "do date" straight from the card. Null hides the affordance. */
-    onSetDoDate: ((Long) -> Unit)? = null,
+    /** Set/clear the user's planned "When" straight from the card. Null hides the affordance. */
+    onSetWhen: ((Long) -> Unit)? = null,
     onLongPress: () -> Unit = {},
     onArchive: () -> Unit = {},
     /** Optional left-edge accent identifying the section (e.g. Tasks/Keep). Null = no accent. */
@@ -932,9 +833,9 @@ fun ReminderCard(
     val haptic = LocalHapticFeedback.current
 
     // Parse LLM-generated buttons
-    val buttons = remember(reminder.buttons) {
+    val buttons = remember(item.buttons) {
         try {
-            val arr = JSONArray(reminder.buttons)
+            val arr = JSONArray(item.buttons)
             buildList {
                 for (i in 0 until arr.length()) {
                     val obj = arr.getJSONObject(i)
@@ -948,12 +849,12 @@ fun ReminderCard(
         } catch (_: Exception) { emptyList() }
     }
 
-    var expanded by remember(reminder.savedItemId) { mutableStateOf(false) }
-    var showExportChooser by remember(reminder.savedItemId) { mutableStateOf(false) }
-    var confirmDelete by remember(reminder.savedItemId) { mutableStateOf(false) }
-    var showDoDatePicker by remember(reminder.savedItemId) { mutableStateOf(false) }
+    var expanded by remember(item.savedItemId) { mutableStateOf(false) }
+    var showExportChooser by remember(item.savedItemId) { mutableStateOf(false) }
+    var confirmDelete by remember(item.savedItemId) { mutableStateOf(false) }
+    var showWhenPicker by remember(item.savedItemId) { mutableStateOf(false) }
     // Star tint follows the item's own type (fixes the previously hardcoded task accent on keep cards).
-    val rowAccent = if (reminder.isTask) NotiTheme.semantic.taskAccent else NotiTheme.semantic.keepAccent
+    val rowAccent = if (item.isTask) NotiTheme.semantic.taskAccent else NotiTheme.semantic.keepAccent
     val selectedBorder = sectionAccent ?: MaterialTheme.colorScheme.primary
     // Left-edge accent: use the section accent in single-type lists, else fall back to the item's own
     // type accent so Task (indigo) vs Keep (green) stays legible in mixed / smart-filter lists.
@@ -997,22 +898,22 @@ fun ReminderCard(
                         onCheckedChange = { onSelectedChange?.invoke(it) },
                         colors = CheckboxDefaults.colors(checkedColor = selectedBorder),
                     )
-                } else if (reminder.isTask) {
+                } else if (item.isTask) {
                     TaskCompletionToggle(
-                        checked = reminder.isCompleted,
+                        checked = item.isCompleted,
                         accent = rowAccent,
                         onCheckedChange = onToggleCompleted,
                     )
                 } else {
                     IconButton(
                         onClick = {
-                            haptic.performHapticFeedback(if (!reminder.isArchived) HapticFeedbackType.ToggleOn else HapticFeedbackType.ToggleOff)
+                            haptic.performHapticFeedback(if (!item.isArchived) HapticFeedbackType.ToggleOn else HapticFeedbackType.ToggleOff)
                             onArchive()
                         },
                         modifier = Modifier.minimumInteractiveComponentSize(),
                     ) {
                         Icon(
-                            painter = painterResource(if (reminder.isArchived) R.drawable.archive_yes else R.drawable.archive_no),
+                            painter = painterResource(if (item.isArchived) R.drawable.archive_yes else R.drawable.archive_no),
                             contentDescription = stringResource(R.string.a11y_archive),
                             modifier = Modifier.size(20.dp),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1024,13 +925,13 @@ fun ReminderCard(
             // Right content column
             Column(modifier = Modifier.weight(1f)) {
                 // Review badge: staged previews remain gated until the user explicitly accepts them.
-                if ((reminder.isNewLike || pendingReview) && !selectionMode) {
+                if ((item.isNewLike || pendingReview) && !selectionMode) {
                     val badgeText = when {
                         pendingReview && pendingMergeSourceCount > 0 ->
                             stringResource(R.string.pending_review_merge_badge, pendingMergeSourceCount)
                         pendingReview -> stringResource(R.string.pending_review_badge)
-                        reminder.state == SavedItemState.New -> stringResource(R.string.reminder_badge_new)
-                        else -> stringResource(R.string.reminder_badge_updated)
+                        item.state == SavedItemState.New -> stringResource(R.string.saved_item_badge_new)
+                        else -> stringResource(R.string.saved_item_badge_updated)
                     }
                     Surface(
                         shape = MaterialTheme.shapes.extraSmall,
@@ -1050,14 +951,14 @@ fun ReminderCard(
 
                 // Title row
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    val completed = reminder.isTask && reminder.isCompleted
+                    val completed = item.isTask && item.isCompleted
                     val titleStyle = if (completed) {
                         NotiType.cardTitle.copy(textDecoration = TextDecoration.LineThrough)
                     } else NotiType.cardTitle
 
                     Text(
-                        text = reminder.title.ifBlank {
-                            if (reminder.isTask) stringResource(R.string.ui_reminders_untitled_task) else stringResource(R.string.ui_reminders_untitled_memo)
+                        text = item.title.ifBlank {
+                            if (item.isTask) stringResource(R.string.ui_saved_items_untitled_task) else stringResource(R.string.ui_saved_items_untitled_memo)
                         },
                         style = titleStyle,
                         color = if (completed) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
@@ -1078,9 +979,9 @@ fun ReminderCard(
                     }
                 }
 
-                // Deadline urgency chip (tasks only). The do-date lives on the bottom action row.
-                if (reminder.isTask) {
-                    val deadline = reminder.deadlineAtMs
+                // Deadline urgency chip (tasks only). The When lives on the bottom action row.
+                if (item.isTask) {
+                    val deadline = item.deadlineAtMs
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -1090,7 +991,7 @@ fun ReminderCard(
                             DueChip(deadlineAtMs = deadline)
                         } else {
                             Text(
-                                text = stringResource(R.string.ui_reminders_no_deadline),
+                                text = stringResource(R.string.ui_saved_items_no_deadline),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -1099,7 +1000,7 @@ fun ReminderCard(
                 }
 
                 // Content preview — capped at 2 visual lines.
-                val contentPreview = reminder.content.trim()
+                val contentPreview = item.content.trim()
                 if (contentPreview.isNotBlank()) {
                     Text(
                         text = contentPreview,
@@ -1112,10 +1013,10 @@ fun ReminderCard(
 
                 // Action buttons
                 if (buttons.isNotEmpty()) {
-                    val reminderActionScrollState = rememberScrollState()
-                    Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp).horizontalScroll(reminderActionScrollState), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    val savedItemActionScrollState = rememberScrollState()
+                    Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp).horizontalScroll(savedItemActionScrollState), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         buttons.forEach { (buttonText, intent, type) ->
-                            ReminderActionChip(buttonText = buttonText, intent = intent, type = type, context = context, clipboard = clipboard)
+                            SavedItemActionChip(buttonText = buttonText, intent = intent, type = type, context = context, clipboard = clipboard)
                         }
                     }
                 }
@@ -1134,31 +1035,31 @@ fun ReminderCard(
                     )
                 }
 
-                // Bottom action row: do-date affordance on the left, icon controls on the right.
+                // Bottom action row: When affordance on the left, icon controls on the right.
                 if (!selectionMode) {
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                         horizontalArrangement = Arrangement.End,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        if (onSetDoDate != null) {
-                            DoDateBottomButton(
-                                doAtMs = reminder.doAtMs,
+                        if (onSetWhen != null) {
+                            WhenBottomButton(
+                                whenAtMs = item.whenAtMs,
                                 accent = rowAccent,
-                                onClick = { showDoDatePicker = true },
+                                onClick = { showWhenPicker = true },
                             )
                         }
                         Spacer(Modifier.weight(1f))
                         if (onToggleStarred != null) {
                             IconButton(onClick = {
-                                haptic.performHapticFeedback(if (!reminder.isStarred) HapticFeedbackType.ToggleOn else HapticFeedbackType.ToggleOff)
+                                haptic.performHapticFeedback(if (!item.isStarred) HapticFeedbackType.ToggleOn else HapticFeedbackType.ToggleOff)
                                 onToggleStarred()
                             }) {
                                 Icon(
-                                    painter = painterResource(if (reminder.isStarred) R.drawable.star_yes else R.drawable.star_no),
-                                    contentDescription = stringResource(if (reminder.isStarred) R.string.a11y_unstar else R.string.a11y_star),
+                                    painter = painterResource(if (item.isStarred) R.drawable.star_yes else R.drawable.star_no),
+                                    contentDescription = stringResource(if (item.isStarred) R.string.a11y_unstar else R.string.a11y_star),
                                     modifier = Modifier.size(20.dp),
-                                    tint = if (reminder.isStarred) rowAccent else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    tint = if (item.isStarred) rowAccent else MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
                         }
@@ -1184,7 +1085,7 @@ fun ReminderCard(
                         }
                         IconButton(onClick = {
                             // Already-reviewed items confirm; new/updated ones (from the review flow) delete directly.
-                            if (reminder.isNewLike) onDelete() else confirmDelete = true
+                            if (item.isNewLike) onDelete() else confirmDelete = true
                         }) {
                             Icon(
                                 painter = painterResource(R.drawable.delete),
@@ -1223,32 +1124,32 @@ fun ReminderCard(
             },
         )
     }
-    if (showDoDatePicker && onSetDoDate != null) {
-        CardDoDatePickerDialog(
-            currentDoAtMs = reminder.doAtMs,
-            onDismiss = { showDoDatePicker = false },
+    if (showWhenPicker && onSetWhen != null) {
+        CardWhenPickerDialog(
+            currentWhenAtMs = item.whenAtMs,
+            onDismiss = { showWhenPicker = false },
             onSet = { newVal ->
-                onSetDoDate(newVal)
-                showDoDatePicker = false
+                onSetWhen(newVal)
+                showWhenPicker = false
             },
         )
     }
 }
 
 /**
- * Compact do-date picker used from a reminder card's bottom row: pick a concrete day, or mark the
+ * Compact When picker used from a item card's bottom row: pick a concrete day, or mark the
  * task "Someday" / clear it. Mirrors the detail editor's date-merge (keeps existing time-of-day, else
  * defaults to 09:00 — a work-start plan, not a 23:59 deadline).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CardDoDatePickerDialog(
-    currentDoAtMs: Long,
+private fun CardWhenPickerDialog(
+    currentWhenAtMs: Long,
     onDismiss: () -> Unit,
     onSet: (Long) -> Unit,
 ) {
     val pickerState = rememberDatePickerState(
-        initialSelectedDateMillis = if (SavedItem.hasPlannedDate(currentDoAtMs)) currentDoAtMs else System.currentTimeMillis()
+        initialSelectedDateMillis = if (SavedItem.hasPlannedDate(currentWhenAtMs)) currentWhenAtMs else System.currentTimeMillis()
     )
     DatePickerDialog(
         onDismissRequest = onDismiss,
@@ -1256,13 +1157,13 @@ private fun CardDoDatePickerDialog(
             TextButton(onClick = {
                 val selectedDate = pickerState.selectedDateMillis
                 if (selectedDate != null) {
-                    val hadTime = SavedItem.hasPlannedDate(currentDoAtMs)
+                    val hadTime = SavedItem.hasPlannedDate(currentWhenAtMs)
                     val existingCal = Calendar.getInstance().apply {
-                        timeInMillis = if (hadTime) currentDoAtMs else System.currentTimeMillis()
+                        timeInMillis = if (hadTime) currentWhenAtMs else System.currentTimeMillis()
                     }
                     val newCal = Calendar.getInstance().apply {
                         timeInMillis = selectedDate
-                        // Do-dates are date-only by default; end-of-day time-of-day so "today" stays
+                        // Whens are date-only by default; end-of-day time-of-day so "today" stays
                         // due through the day and timezone shifts don't bump the calendar day.
                         set(Calendar.HOUR_OF_DAY, if (hadTime) existingCal.get(Calendar.HOUR_OF_DAY) else 23)
                         set(Calendar.MINUTE, if (hadTime) existingCal.get(Calendar.MINUTE) else 59)
@@ -1276,8 +1177,8 @@ private fun CardDoDatePickerDialog(
         dismissButton = {
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 TextButton(onClick = { onSet(0L) }) { Text(stringResource(R.string.ui_action_clear)) }
-                TextButton(onClick = { onSet(SavedItem.DO_AT_SOMEDAY) }) {
-                    Text(stringResource(R.string.do_date_someday))
+                TextButton(onClick = { onSet(SavedItem.WHEN_SOMEDAY) }) {
+                    Text(stringResource(R.string.when_someday))
                 }
             }
         },
@@ -1287,23 +1188,23 @@ private fun CardDoDatePickerDialog(
 }
 
 /**
- * The bottom-row do-date affordance: a calendar icon plus a "when I'll handle it" label
- * (a concrete relative date, "Someday", or a muted "Set do date" when unset). Tapping opens the
+ * The bottom-row When affordance: a calendar icon plus a "when I'll handle it" label
+ * (a concrete relative date, "Someday", or a muted "Set When" when unset). Tapping opens the
  * picker. Sits on the left of the card's bottom action row.
  */
 @Composable
-private fun DoDateBottomButton(
-    doAtMs: Long,
+private fun WhenBottomButton(
+    whenAtMs: Long,
     accent: Color,
     onClick: () -> Unit,
 ) {
     val context = LocalContext.current
-    val hasDo = doAtMs > 0L
+    val hasDo = whenAtMs > 0L
     val label = when {
-        SavedItem.isSomeday(doAtMs) -> stringResource(R.string.do_date_someday)
-        SavedItem.hasPlannedDate(doAtMs) ->
-            stringResource(R.string.ui_reminders_do_date_chip, getRelativeTimeStr(doAtMs, context))
-        else -> stringResource(R.string.a11y_set_do_date)
+        SavedItem.isSomeday(whenAtMs) -> stringResource(R.string.when_someday)
+        SavedItem.hasPlannedDate(whenAtMs) ->
+            stringResource(R.string.ui_saved_items_when_chip, getRelativeTimeStr(whenAtMs, context))
+        else -> stringResource(R.string.a11y_set_when)
     }
     val tint = if (hasDo) accent else MaterialTheme.colorScheme.onSurfaceVariant
     Row(
@@ -1315,7 +1216,7 @@ private fun DoDateBottomButton(
     ) {
         Icon(
             painter = painterResource(R.drawable.ic_calendar_today),
-            contentDescription = stringResource(R.string.a11y_set_do_date),
+            contentDescription = stringResource(R.string.a11y_set_when),
             modifier = Modifier.size(16.dp),
             tint = tint,
         )
@@ -1329,10 +1230,10 @@ private fun DoDateBottomButton(
 }
 
 /**
- * A chip button for LLM-generated reminder actions (copy text or open link).
+ * A chip button for LLM-generated item actions (copy text or open link).
  */
 @Composable
-private fun ReminderActionChip(
+private fun SavedItemActionChip(
     buttonText: String,
     intent: String,
     type: String,
@@ -1347,7 +1248,7 @@ private fun ReminderActionChip(
         onClick = {
             when (type) {
                 "copy" -> {
-                    clipboard.copyPlainText("reminder_button", intent)
+                    clipboard.copyPlainText("saved_item_button", intent)
                 }
                 else -> {
                     try {
@@ -1372,7 +1273,7 @@ private fun ReminderActionChip(
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-fun ReminderDetailScreen(
+fun SavedItemDetailScreen(
     initial: SavedItem,
     drawerViewModel: DrawerViewModel,
     onBack: (SavedItem?) -> Unit,
@@ -1383,7 +1284,7 @@ fun ReminderDetailScreen(
     onOpenExportDialog: (SavedItem, ExportType) -> Unit = { _, _ -> },
     onRegenerate: () -> Unit = {},
     onCreateReminder: (() -> Unit)? = null,
-    relatedNotificationsState: ReminderViewModel.RelatedNotificationsState = ReminderViewModel.RelatedNotificationsState(),
+    relatedNotificationsState: SavedItemsViewModel.RelatedNotificationsState = SavedItemsViewModel.RelatedNotificationsState(),
     onLoadRelatedNotifications: (SavedItem) -> Unit = {},
     // Review flow + change history
     changeLog: kotlinx.coroutines.flow.Flow<List<org.muilab.notigpt.model.features.SavedItemChangeLog>>? = null,
@@ -1396,6 +1297,7 @@ fun ReminderDetailScreen(
     onRejectDelete: (() -> Unit)? = null,
     // Sub-task parameters
     subTasks: List<SavedSubItem> = emptyList(),
+    subTasksEditable: Boolean = true,
     onAddSavedSubItem: () -> Unit = {},
     onSavedSubItemToggle: (String, Boolean) -> Unit = { _, _ -> },
     onSavedSubItemClick: (SavedSubItem) -> Unit = {},
@@ -1407,14 +1309,14 @@ fun ReminderDetailScreen(
     val context = LocalContext.current
     val locale = LocalConfiguration.current.locales[0]
 
-    // Trigger B is now handled in RemindersScreen based on 'fully visible' reminder cards.
+    // Trigger B is now handled in SavedItemsScreen based on 'fully visible' item cards.
 
     var title by remember(initial.savedItemId) { mutableStateOf(initial.title) }
     var content by remember(initial.savedItemId) { mutableStateOf(initial.content) }
     var isTask by remember(initial.savedItemId) { mutableStateOf(initial.isTask) }
     var isCompleted by remember(initial.savedItemId) { mutableStateOf(initial.isCompleted) }
     var deadlineAtMs by remember(initial.savedItemId) { mutableStateOf(initial.deadlineAtMs) }
-    var doAtMs by remember(initial.savedItemId) { mutableStateOf(initial.doAtMs) }
+    var whenAtMs by remember(initial.savedItemId) { mutableStateOf(initial.whenAtMs) }
 
     // Per-type accent: indigo for Task, green for Keep.
     val accent = if (isTask) NotiTheme.semantic.taskAccent else NotiTheme.semantic.keepAccent
@@ -1427,8 +1329,10 @@ fun ReminderDetailScreen(
             content = content,
             itemType = if (isTask) SavedItemType.Task else SavedItemType.Keep,
             state = if (isTask && isCompleted) SavedItemState.Completed else SavedItemState.Saved,
-            deadlineAtMs = if (isTask) deadlineAtMs else 0L,
-            doAtMs = doAtMs,
+            // Keep this value until persistence so Task -> Keep conversion can merge it into content.
+            // SavedItemNormalization clears it before the Keep row is stored.
+            deadlineAtMs = deadlineAtMs,
+            whenAtMs = whenAtMs,
         )
     }
 
@@ -1439,14 +1343,15 @@ fun ReminderDetailScreen(
 
     var showDatePicker by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
-    var showDoDatePicker by remember { mutableStateOf(false) }
-    var showDoTimePicker by remember { mutableStateOf(false) }
+    var showWhenPicker by remember { mutableStateOf(false) }
+    var showWhenTimePicker by remember { mutableStateOf(false) }
+    var showTaskToKeepDialog by remember { mutableStateOf(false) }
     // Do-time is opt-in: shown only if this item already carries a non-end-of-day time, or the user
     // taps "Add time". Keeps the common path date-only.
-    var doTimeShown by remember(initial.savedItemId) {
-        val cal = Calendar.getInstance().apply { timeInMillis = initial.doAtMs }
+    var whenTimeShown by remember(initial.savedItemId) {
+        val cal = Calendar.getInstance().apply { timeInMillis = initial.whenAtMs }
         mutableStateOf(
-            SavedItem.hasPlannedDate(initial.doAtMs) &&
+            SavedItem.hasPlannedDate(initial.whenAtMs) &&
                 !(cal.get(Calendar.HOUR_OF_DAY) == 23 && cal.get(Calendar.MINUTE) == 59)
         )
     }
@@ -1473,7 +1378,7 @@ fun ReminderDetailScreen(
                     decorationBox = { innerTextField ->
                         if (title.isBlank()) {
                             Text(
-                                text = stringResource(R.string.ui_reminders_editor_title_placeholder),
+                                text = stringResource(R.string.ui_saved_items_editor_title_placeholder),
                                 style = MaterialTheme.typography.titleLarge,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -1487,7 +1392,7 @@ fun ReminderDetailScreen(
                     }
                     DropdownMenu(expanded = headerMenuOpen, onDismissRequest = { headerMenuOpen = false }) {
                         DropdownMenuItem(
-                            text = { Text(stringResource(R.string.a11y_regenerate)) },
+                            text = { Text(stringResource(R.string.a11y_regenerate_saved_item)) },
                             leadingIcon = { Icon(painterResource(R.drawable.refresh), contentDescription = null, modifier = Modifier.size(20.dp)) },
                             onClick = { headerMenuOpen = false; onRegenerate() },
                         )
@@ -1517,8 +1422,8 @@ fun ReminderDetailScreen(
             var reviewAcknowledged by remember(initial.savedItemId) { mutableStateOf(false) }
             // In edit-in-review the footer handles approval, so hide the inline "Got it" block.
             if (!reviewMode && !reviewAcknowledged && onAcknowledgeReview != null) {
-                org.muilab.notigpt.ui.reminder.component.ReminderWhatsNewBlock(
-                    reminder = initial,
+                org.muilab.notigpt.ui.saveditem.component.SavedItemWhatsNewBlock(
+                    item = initial,
                     changes = changes,
                     onAcknowledge = {
                         reviewAcknowledged = true
@@ -1544,7 +1449,13 @@ fun ReminderDetailScreen(
                 )
                 FilterChip(
                     selected = !isTask,
-                    onClick = { isTask = false },
+                    onClick = {
+                        if (isTask && (deadlineAtMs > 0L || subTasks.isNotEmpty())) {
+                            showTaskToKeepDialog = true
+                        } else {
+                            isTask = false
+                        }
+                    },
                     label = { Text(stringResource(R.string.tab_keep)) },
                     leadingIcon = {
                         Icon(
@@ -1564,10 +1475,10 @@ fun ReminderDetailScreen(
                 }
                 val deadlineDateStr = if (deadlineCal != null) {
                     java.text.SimpleDateFormat("yyyy-MM-dd", locale).format(java.util.Date(deadlineAtMs))
-                } else stringResource(R.string.reminder_no_date)
+                } else stringResource(R.string.saved_item_no_date)
                 val deadlineTimeStr = if (deadlineCal != null) {
                     java.text.SimpleDateFormat("HH:mm", locale).format(java.util.Date(deadlineAtMs))
-                } else stringResource(R.string.reminder_no_time)
+                } else stringResource(R.string.saved_item_no_time)
 
                 val deadlineColor = if (deadlineAtMs > 0L && deadlineAtMs < System.currentTimeMillis())
                     MaterialTheme.colorScheme.error else accent
@@ -1590,7 +1501,7 @@ fun ReminderDetailScreen(
                                 onCheckedChange = { isCompleted = it },
                             )
                             Spacer(Modifier.width(4.dp))
-                            Text(stringResource(R.string.ui_reminders_editor_completed), style = MaterialTheme.typography.bodyMedium)
+                            Text(stringResource(R.string.ui_saved_items_editor_completed), style = MaterialTheme.typography.bodyMedium)
                         }
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
@@ -1600,7 +1511,7 @@ fun ReminderDetailScreen(
                             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                         ) {
                             Text(
-                                stringResource(R.string.reminder_pick_date),
+                                stringResource(R.string.saved_item_pick_date),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurface,
                             )
@@ -1615,7 +1526,7 @@ fun ReminderDetailScreen(
                             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                         ) {
                             Text(
-                                stringResource(R.string.reminder_pick_time),
+                                stringResource(R.string.saved_item_pick_time),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurface,
                             )
@@ -1628,19 +1539,19 @@ fun ReminderDetailScreen(
                 }
             }
 
-            // User-set do date (when to work on it), independent of the deadline. Available for
-            // tasks and keeps alike — a keep's do-date is when the user intends to revisit it.
+            // User-set When (when to work on it), independent of the deadline. Available for
+            // tasks and keeps alike — a keep's When is when the user intends to revisit it.
             run {
-                val hasRealDoDate = SavedItem.hasPlannedDate(doAtMs)
-                val isSomeday = SavedItem.isSomeday(doAtMs)
-                val doDateStr = when {
-                    isSomeday -> stringResource(R.string.do_date_someday)
-                    hasRealDoDate -> java.text.SimpleDateFormat("yyyy-MM-dd", locale).format(java.util.Date(doAtMs))
-                    else -> stringResource(R.string.reminder_no_date)
+                val hasRealWhen = SavedItem.hasPlannedDate(whenAtMs)
+                val isSomeday = SavedItem.isSomeday(whenAtMs)
+                val whenStr = when {
+                    isSomeday -> stringResource(R.string.when_someday)
+                    hasRealWhen -> java.text.SimpleDateFormat("yyyy-MM-dd", locale).format(java.util.Date(whenAtMs))
+                    else -> stringResource(R.string.saved_item_no_date)
                 }
-                val doTimeStr = if (hasRealDoDate) {
-                    java.text.SimpleDateFormat("HH:mm", locale).format(java.util.Date(doAtMs))
-                } else stringResource(R.string.reminder_no_time)
+                val whenTimeStr = if (hasRealWhen) {
+                    java.text.SimpleDateFormat("HH:mm", locale).format(java.util.Date(whenAtMs))
+                } else stringResource(R.string.saved_item_no_time)
 
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
@@ -1652,24 +1563,24 @@ fun ReminderDetailScreen(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
                     ) {
                         Text(
-                            stringResource(R.string.ui_reminders_editor_do_date),
+                            stringResource(R.string.ui_saved_items_editor_when),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurface,
                         )
                         Spacer(Modifier.weight(1f))
-                        TextButton(onClick = { showDoDatePicker = true }) {
-                            Text(text = doDateStr, color = accent)
+                        TextButton(onClick = { showWhenPicker = true }) {
+                            Text(text = whenStr, color = accent)
                         }
-                        if (hasRealDoDate) {
-                            if (doTimeShown) {
-                                TextButton(onClick = { showDoTimePicker = true }) {
-                                    Text(text = doTimeStr, color = accent)
+                        if (hasRealWhen) {
+                            if (whenTimeShown) {
+                                TextButton(onClick = { showWhenTimePicker = true }) {
+                                    Text(text = whenTimeStr, color = accent)
                                 }
                             } else {
                                 // Optional, collapsed by default: reveal + open the time picker.
-                                TextButton(onClick = { doTimeShown = true; showDoTimePicker = true }) {
+                                TextButton(onClick = { whenTimeShown = true; showWhenTimePicker = true }) {
                                     Text(
-                                        text = stringResource(R.string.do_date_add_time),
+                                        text = stringResource(R.string.when_add_time),
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                 }
@@ -1680,8 +1591,8 @@ fun ReminderDetailScreen(
                         Spacer(Modifier.width(4.dp))
                         FilterChip(
                             selected = isSomeday,
-                            onClick = { doAtMs = if (isSomeday) 0L else SavedItem.DO_AT_SOMEDAY },
-                            label = { Text(stringResource(R.string.do_date_someday)) },
+                            onClick = { whenAtMs = if (isSomeday) 0L else SavedItem.WHEN_SOMEDAY },
+                            label = { Text(stringResource(R.string.when_someday)) },
                             leadingIcon = if (isSomeday) {
                                 {
                                     Icon(
@@ -1692,11 +1603,11 @@ fun ReminderDetailScreen(
                                 }
                             } else null,
                         )
-                        if (hasRealDoDate || isSomeday) {
-                            IconButton(onClick = { doAtMs = 0L }) {
+                        if (hasRealWhen || isSomeday) {
+                            IconButton(onClick = { whenAtMs = 0L }) {
                                 Icon(
                                     painterResource(R.drawable.delete),
-                                    contentDescription = stringResource(R.string.a11y_clear_do_date),
+                                    contentDescription = stringResource(R.string.a11y_clear_when),
                                     modifier = Modifier.size(16.dp),
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -1706,7 +1617,7 @@ fun ReminderDetailScreen(
                 }
             }
 
-            Text(stringResource(R.string.ui_reminders_editor_note), style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.ui_saved_items_editor_note), style = MaterialTheme.typography.titleMedium)
 
             // Note-like editor, grouped card to match the task-detail surface above.
             Surface(
@@ -1725,7 +1636,7 @@ fun ReminderDetailScreen(
                     decorationBox = { innerTextField ->
                         if (content.isBlank()) {
                             Text(
-                                text = stringResource(R.string.ui_reminders_editor_note_placeholder),
+                                text = stringResource(R.string.ui_saved_items_editor_note_placeholder),
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -1756,13 +1667,13 @@ fun ReminderDetailScreen(
                 val detailClipboard = remember(context) { AndroidClipboardController(context) }
                 FlowRow(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     detailButtons.forEach { (buttonText, intent, type) ->
-                        ReminderActionChip(buttonText = buttonText, intent = intent, type = type, context = context, clipboard = detailClipboard)
+                        SavedItemActionChip(buttonText = buttonText, intent = intent, type = type, context = context, clipboard = detailClipboard)
                     }
                 }
             }
 
             // === Sub-tasks section (above action chips) ===
-            if (subTasks.isNotEmpty() || isTask) {
+            if (isTask) {
                 HorizontalDivider(modifier = Modifier.padding(top = 8.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
@@ -1773,10 +1684,12 @@ fun ReminderDetailScreen(
                         stringResource(R.string.subtask_section_title),
                         style = MaterialTheme.typography.titleMedium,
                     )
-                    TextButton(onClick = onAddSavedSubItem) {
-                        Icon(painterResource(R.drawable.add), contentDescription = stringResource(R.string.a11y_add_subtask), modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text(stringResource(R.string.subtask_add), style = MaterialTheme.typography.labelMedium)
+                    if (subTasksEditable) {
+                        TextButton(onClick = onAddSavedSubItem) {
+                            Icon(painterResource(R.drawable.add), contentDescription = stringResource(R.string.a11y_add_subtask), modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text(stringResource(R.string.subtask_add), style = MaterialTheme.typography.labelMedium)
+                        }
                     }
                 }
 
@@ -1784,12 +1697,10 @@ fun ReminderDetailScreen(
                     SavedSubItemRow(
                         subTask = st,
                         onToggleCompleted = { checked -> onSavedSubItemToggle(st.savedSubItemId, checked) },
-                        onClick = { onSavedSubItemClick(st) },
-                        onEdit = { onSavedSubItemEdit(st) },
                         onDelete = { onSavedSubItemDelete(st) },
-                        onExportGoogleTasks = { onSavedSubItemExportGoogleTasks(st) },
-                        onExportGoogleCalendar = { onSavedSubItemExportGoogleCalendar(st) },
-                        showActionButtons = true,
+                        editable = subTasksEditable,
+                        completionEnabled = subTasksEditable,
+                        onTextChange = { text -> onSavedSubItemEdit(st.copy(text = text)) },
                     )
                 }
             }
@@ -1802,11 +1713,11 @@ fun ReminderDetailScreen(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                // Remind me (schedule a push reminder) — same flow as the outer cards.
+                // Remind me (schedule a push item) — same flow as the outer cards.
                 if (onCreateReminder != null) {
                     AssistChip(
                         onClick = onCreateReminder,
-                        label = { Text(stringResource(R.string.ui_reminders_create_button), style = MaterialTheme.typography.labelSmall) },
+                        label = { Text(stringResource(R.string.ui_reminder_create_button), style = MaterialTheme.typography.labelSmall) },
                         leadingIcon = {
                             Icon(painter = painterResource(R.drawable.notifications), contentDescription = null, tint = accent, modifier = Modifier.size(16.dp))
                         },
@@ -1838,9 +1749,9 @@ fun ReminderDetailScreen(
                         }
                         context.startActivity(Intent.createChooser(shareIntent, null))
                     },
-                    label = { Text(stringResource(R.string.reminder_share), style = MaterialTheme.typography.labelSmall) },
+                    label = { Text(stringResource(R.string.saved_item_share), style = MaterialTheme.typography.labelSmall) },
                     leadingIcon = {
-                        Icon(painter = painterResource(R.drawable.share), contentDescription = stringResource(R.string.a11y_share_reminder), tint = accent, modifier = Modifier.size(16.dp))
+                        Icon(painter = painterResource(R.drawable.share), contentDescription = stringResource(R.string.a11y_share_saved_item), tint = accent, modifier = Modifier.size(16.dp))
                     },
                 )
             }
@@ -1849,7 +1760,7 @@ fun ReminderDetailScreen(
             // === Change history ===
             if (changes.isNotEmpty()) {
                 HorizontalDivider(modifier = Modifier.padding(top = 8.dp))
-                org.muilab.notigpt.ui.reminder.component.ReminderChangeHistorySection(changes = changes)
+                org.muilab.notigpt.ui.saveditem.component.SavedItemChangeHistorySection(changes = changes)
             }
 
             // === Related notifications ===
@@ -1879,7 +1790,7 @@ fun ReminderDetailScreen(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        text = stringResource(R.string.reminder_related_notifications, relatedKeys.size),
+                        text = stringResource(R.string.saved_item_related_notifications, relatedKeys.size),
                         style = MaterialTheme.typography.titleSmall
                     )
                     Icon(
@@ -1892,7 +1803,7 @@ fun ReminderDetailScreen(
                     when {
                         relatedLoading -> {
                             Text(
-                                text = stringResource(R.string.reminder_related_notifications_loading),
+                                text = stringResource(R.string.saved_item_related_notifications_loading),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -1900,7 +1811,7 @@ fun ReminderDetailScreen(
 
                         relatedRecordsByKey.isEmpty() -> {
                             Text(
-                                text = stringResource(R.string.reminder_no_related_notifications),
+                                text = stringResource(R.string.saved_item_no_related_notifications),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -2025,6 +1936,28 @@ fun ReminderDetailScreen(
         }
     }
 
+    if (showTaskToKeepDialog) {
+        AlertDialog(
+            onDismissRequest = { showTaskToKeepDialog = false },
+            title = { Text(stringResource(R.string.task_to_keep_title)) },
+            text = { Text(stringResource(R.string.task_to_keep_message)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        isTask = false
+                        isCompleted = false
+                        showTaskToKeepDialog = false
+                    },
+                ) { Text(stringResource(R.string.task_to_keep_confirm)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showTaskToKeepDialog = false }) {
+                    Text(stringResource(R.string.ui_action_cancel))
+                }
+            },
+        )
+    }
+
     // Separate time picker (only modifies the time component of deadlineAtMs)
     if (showTimePicker) {
         LaunchedEffect(showTimePicker) {
@@ -2053,67 +1986,67 @@ fun ReminderDetailScreen(
         }
     }
 
-    // Do-date pickers. Unset do dates default to 09:00 on the picked day (a work-start plan, not a 23:59 deadline).
-    if (showDoDatePicker) {
-        val doDatePickerState = rememberDatePickerState(
-            initialSelectedDateMillis = if (SavedItem.hasPlannedDate(doAtMs)) doAtMs else System.currentTimeMillis()
+    // When pickers. Unset Whens default to 09:00 on the picked day (a work-start plan, not a 23:59 deadline).
+    if (showWhenPicker) {
+        val whenPickerState = rememberDatePickerState(
+            initialSelectedDateMillis = if (SavedItem.hasPlannedDate(whenAtMs)) whenAtMs else System.currentTimeMillis()
         )
         DatePickerDialog(
-            onDismissRequest = { showDoDatePicker = false },
+            onDismissRequest = { showWhenPicker = false },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        val selectedDate = doDatePickerState.selectedDateMillis
+                        val selectedDate = whenPickerState.selectedDateMillis
                         if (selectedDate != null) {
-                            val hadTime = SavedItem.hasPlannedDate(doAtMs)
+                            val hadTime = SavedItem.hasPlannedDate(whenAtMs)
                             val existingCal = Calendar.getInstance().apply {
-                                timeInMillis = if (hadTime) doAtMs else System.currentTimeMillis()
+                                timeInMillis = if (hadTime) whenAtMs else System.currentTimeMillis()
                             }
                             val newCal = Calendar.getInstance().apply {
                                 timeInMillis = selectedDate
-                                // Date-only default → end-of-day (see CardDoDatePickerDialog).
+                                // Date-only default → end-of-day (see CardWhenPickerDialog).
                                 set(Calendar.HOUR_OF_DAY, if (hadTime) existingCal.get(Calendar.HOUR_OF_DAY) else 23)
                                 set(Calendar.MINUTE, if (hadTime) existingCal.get(Calendar.MINUTE) else 59)
                                 set(Calendar.SECOND, 0)
                                 set(Calendar.MILLISECOND, 0)
                             }
-                            doAtMs = newCal.timeInMillis
-                            showDoDatePicker = false
+                            whenAtMs = newCal.timeInMillis
+                            showWhenPicker = false
                         }
                     }
                 ) { Text(stringResource(R.string.ui_action_ok)) }
             },
             dismissButton = {
-                TextButton(onClick = { showDoDatePicker = false }) { Text(stringResource(R.string.ui_action_cancel)) }
+                TextButton(onClick = { showWhenPicker = false }) { Text(stringResource(R.string.ui_action_cancel)) }
             }
         ) {
-            DatePicker(state = doDatePickerState)
+            DatePicker(state = whenPickerState)
         }
     }
 
-    if (showDoTimePicker) {
-        LaunchedEffect(showDoTimePicker) {
+    if (showWhenTimePicker) {
+        LaunchedEffect(showWhenTimePicker) {
             val cal = Calendar.getInstance().apply {
-                timeInMillis = if (SavedItem.hasPlannedDate(doAtMs)) doAtMs else System.currentTimeMillis()
+                timeInMillis = if (SavedItem.hasPlannedDate(whenAtMs)) whenAtMs else System.currentTimeMillis()
             }
             TimePickerDialog(
                 context,
                 { _, hour, minute ->
                     val c = Calendar.getInstance().apply {
-                        timeInMillis = if (SavedItem.hasPlannedDate(doAtMs)) doAtMs else System.currentTimeMillis()
+                        timeInMillis = if (SavedItem.hasPlannedDate(whenAtMs)) whenAtMs else System.currentTimeMillis()
                         set(Calendar.HOUR_OF_DAY, hour)
                         set(Calendar.MINUTE, minute)
                         set(Calendar.SECOND, 0)
                         set(Calendar.MILLISECOND, 0)
                     }
-                    doAtMs = c.timeInMillis
-                    showDoTimePicker = false
+                    whenAtMs = c.timeInMillis
+                    showWhenTimePicker = false
                 },
                 cal.get(Calendar.HOUR_OF_DAY),
                 cal.get(Calendar.MINUTE),
                 true
             ).apply {
-                setOnCancelListener { showDoTimePicker = false }
+                setOnCancelListener { showWhenTimePicker = false }
             }.show()
         }
     }
@@ -2123,11 +2056,11 @@ fun ReminderDetailScreen(
 enum class ExportType { GOOGLE_TASKS, GOOGLE_CALENDAR }
 
 /**
- * Data holder for the export confirmation dialog – remembers the reminder being exported
+ * Data holder for the export confirmation dialog – remembers the item being exported
  * and which target the user chose.
  */
 private data class ExportDialogState(
-    val reminder: SavedItem,
+    val item: SavedItem,
     val type: ExportType,
 )
 
@@ -2149,19 +2082,19 @@ private fun ExportConfirmationDialog(
     val locale = LocalConfiguration.current.locales[0]
     val isCalendar = state.type == ExportType.GOOGLE_CALENDAR
 
-    var title by remember { mutableStateOf(state.reminder.title) }
-    var description by remember { mutableStateOf(state.reminder.content) }
+    var title by remember { mutableStateOf(state.item.title) }
+    var description by remember { mutableStateOf(state.item.content) }
 
     // For Google Tasks: deadline (0 = no deadline)
-    var deadlineMs by remember { mutableStateOf(state.reminder.deadlineAtMs) }
+    var deadlineMs by remember { mutableStateOf(state.item.deadlineAtMs) }
 
     // For Google Calendar: start / end + full-day toggle
-    val initialStart = if (state.reminder.startAtMs > 0L) state.reminder.startAtMs else 0L
+    val initialStart = if (state.item.startAtMs > 0L) state.item.startAtMs else 0L
     var startMs by remember { mutableStateOf(initialStart) }
     var endMs by remember {
         mutableStateOf(
             when {
-                state.reminder.endAtMs > 0L -> state.reminder.endAtMs
+                state.item.endAtMs > 0L -> state.item.endAtMs
                 // No end time: default end date to same day as start so picker opens correctly
                 initialStart > 0L -> {
                     val cal = Calendar.getInstance().apply {
@@ -2248,33 +2181,33 @@ private fun ExportConfirmationDialog(
                     val sdf = java.text.SimpleDateFormat("yyyy-MM-dd", locale)
                     val stf = java.text.SimpleDateFormat("HH:mm", locale)
 
-                    val startDateLabel = if (startMs > 0L) sdf.format(java.util.Date(startMs)) else stringResource(R.string.reminder_no_date)
-                    val startAtMsLabel = if (startMs > 0L) stf.format(java.util.Date(startMs)) else stringResource(R.string.reminder_no_time)
+                    val startDateLabel = if (startMs > 0L) sdf.format(java.util.Date(startMs)) else stringResource(R.string.saved_item_no_date)
+                    val startAtMsLabel = if (startMs > 0L) stf.format(java.util.Date(startMs)) else stringResource(R.string.saved_item_no_time)
 
                     Text(stringResource(R.string.export_dialog_field_start_time), style = MaterialTheme.typography.labelMedium)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         TextButton(onClick = { pickingField = "start"; pickingMode = "date" }) {
-                            Text("${stringResource(R.string.reminder_pick_date)}: $startDateLabel")
+                            Text("${stringResource(R.string.saved_item_pick_date)}: $startDateLabel")
                         }
                         if (!isFullDay) {
                             TextButton(onClick = { pickingField = "start"; pickingMode = "time" }) {
-                                Text("${stringResource(R.string.reminder_pick_time)}: $startAtMsLabel")
+                                Text("${stringResource(R.string.saved_item_pick_time)}: $startAtMsLabel")
                             }
                         }
                     }
 
                     // End: separate date + time
-                    val endDateLabel = if (endMs > 0L) sdf.format(java.util.Date(endMs)) else stringResource(R.string.reminder_no_date)
-                    val endAtMsLabel = if (endMs > 0L) stf.format(java.util.Date(endMs)) else stringResource(R.string.reminder_no_time)
+                    val endDateLabel = if (endMs > 0L) sdf.format(java.util.Date(endMs)) else stringResource(R.string.saved_item_no_date)
+                    val endAtMsLabel = if (endMs > 0L) stf.format(java.util.Date(endMs)) else stringResource(R.string.saved_item_no_time)
 
                     Text(stringResource(R.string.export_dialog_field_end_time), style = MaterialTheme.typography.labelMedium)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         TextButton(onClick = { pickingField = "end"; pickingMode = "date" }) {
-                            Text("${stringResource(R.string.reminder_pick_date)}: $endDateLabel")
+                            Text("${stringResource(R.string.saved_item_pick_date)}: $endDateLabel")
                         }
                         if (!isFullDay) {
                             TextButton(onClick = { pickingField = "end"; pickingMode = "time" }) {
-                                Text("${stringResource(R.string.reminder_pick_time)}: $endAtMsLabel")
+                                Text("${stringResource(R.string.saved_item_pick_time)}: $endAtMsLabel")
                             }
                         }
                     }
@@ -2304,17 +2237,17 @@ private fun ExportConfirmationDialog(
                     // Google Tasks: deadline with separate date + time + clear option
                     val dlDateLabel = if (deadlineMs > 0L) {
                         java.text.SimpleDateFormat("yyyy-MM-dd", locale).format(java.util.Date(deadlineMs))
-                    } else stringResource(R.string.reminder_no_date)
+                    } else stringResource(R.string.saved_item_no_date)
                     val dlTimeLabel = if (deadlineMs > 0L) {
                         java.text.SimpleDateFormat("HH:mm", locale).format(java.util.Date(deadlineMs))
-                    } else stringResource(R.string.reminder_no_time)
+                    } else stringResource(R.string.saved_item_no_time)
 
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         TextButton(onClick = { pickingField = "deadline"; pickingMode = "date" }) {
-                            Text("${stringResource(R.string.reminder_pick_date)}: $dlDateLabel")
+                            Text("${stringResource(R.string.saved_item_pick_date)}: $dlDateLabel")
                         }
                         TextButton(onClick = { pickingField = "deadline"; pickingMode = "time" }) {
-                            Text("${stringResource(R.string.reminder_pick_time)}: $dlTimeLabel")
+                            Text("${stringResource(R.string.saved_item_pick_time)}: $dlTimeLabel")
                         }
                         if (deadlineMs > 0L) {
                             TextButton(onClick = { deadlineMs = 0L }) {

@@ -173,7 +173,7 @@ fun NotiRecordContextCard(
                                 onClick = {
                                     coroutineScope.launch {
                                         val idsJson = com.google.gson.Gson().toJson(safeRecords.map { it.notiRecordId }.distinct())
-                                        drawerViewModel.actOnNoti(notiKey, "extract_reminder_with_records::$idsJson")
+                                        drawerViewModel.actOnNoti(notiKey, "extract_saved_item_with_records::$idsJson")
                                     }
                                     showMenu = false
                                 },
@@ -185,11 +185,11 @@ fun NotiRecordContextCard(
                                 ) {
                                     Icon(
                                         painter = androidx.compose.ui.res.painterResource(R.drawable.task),
-                                        contentDescription = stringResource(R.string.ui_action_extract_reminder),
+                                        contentDescription = stringResource(R.string.ui_action_extract_saved_item),
                                         modifier = Modifier.size(22.dp),
                                     )
                                     Spacer(Modifier.width(12.dp))
-                                    Text(stringResource(R.string.ui_action_extract_reminder))
+                                    Text(stringResource(R.string.ui_action_extract_saved_item))
                                 }
                             }
 

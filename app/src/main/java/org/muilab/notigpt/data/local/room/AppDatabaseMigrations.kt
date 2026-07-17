@@ -3,6 +3,9 @@ package org.muilab.notigpt.data.local.room
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import org.json.JSONArray
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /**
  * Ordered Room schema migrations for installed app databases.
@@ -1066,7 +1069,7 @@ object AppDatabaseMigrations {
         }
     }
 
-    /** Adds user-owned star/do-date + review cursor to saved_item and the per-item change log. */
+    /** Adds user-owned star/When + review cursor to saved_item and the per-item change log. */
     val MIGRATION_41_42 = object : Migration(41, 42) {
         override fun migrate(db: SupportSQLiteDatabase) {
             db.execSQL("ALTER TABLE `saved_item` ADD COLUMN `isStarred` INTEGER NOT NULL DEFAULT 0")
@@ -1496,6 +1499,309 @@ object AppDatabaseMigrations {
                     "WHERE `kind` = 'sync_generated_proposal'"
             )
         }
+    }
+
+    /**
+     * Simplifies SavedItem children, makes Keep childlessness durable, and adopts the current
+     * SavedItem/When terminology in the active schema. Historical migrations intentionally retain
+     * their original names so every installed-version upgrade path remains reproducible.
+     */
+    val MIGRATION_49_50 = object : Migration(49, 50) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            val childrenByParent = linkedMapOf<String, MutableList<LegacySavedSubItem>>()
+            db.query(
+                """
+                SELECT s.savedSubItemId, s.parentSavedItemId, s.title, s.description,
+                       s.isCompleted, s.deadlineAtMs, s.startAtMs, s.endAtMs, s.buttons,
+                       s.sortOrder, s.createdAt, i.itemType
+                FROM saved_sub_item s
+                JOIN saved_item i ON i.savedItemId = s.parentSavedItemId
+                WHERE s.isVisible = 1
+                ORDER BY s.parentSavedItemId, s.sortOrder, s.createdAt, s.savedSubItemId
+                """.trimIndent()
+            ).use { cursor ->
+                while (cursor.moveToNext()) {
+                    val child = LegacySavedSubItem(
+                        id = cursor.getString(0),
+                        parentId = cursor.getString(1),
+                        title = cursor.getString(2),
+                        description = cursor.getString(3),
+                        completed = cursor.getInt(4) != 0,
+                        deadlineAtMs = cursor.getLong(5),
+                        startAtMs = cursor.getLong(6),
+                        endAtMs = cursor.getLong(7),
+                        buttons = cursor.getString(8),
+                        itemType = cursor.getString(11),
+                    )
+                    childrenByParent.getOrPut(child.parentId) { mutableListOf() } += child
+                }
+            }
+
+            childrenByParent.forEach { (parentId, children) ->
+                mergeLegacyButtons(db, parentId, children.map { it.buttons })
+                if (children.firstOrNull()?.itemType == "keep") {
+                    appendLegacyKeepChildren(db, parentId, children)
+                }
+            }
+
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `saved_sub_item_new` (
+                    `savedSubItemId` TEXT NOT NULL,
+                    `parentSavedItemId` TEXT NOT NULL,
+                    `text` TEXT NOT NULL,
+                    `isCompleted` INTEGER NOT NULL,
+                    `position` INTEGER NOT NULL,
+                    PRIMARY KEY(`savedSubItemId`),
+                    FOREIGN KEY(`parentSavedItemId`) REFERENCES `saved_item`(`savedItemId`)
+                        ON UPDATE NO ACTION ON DELETE CASCADE
+                )
+                """.trimIndent()
+            )
+            childrenByParent.forEach { (_, children) ->
+                if (children.firstOrNull()?.itemType != "task") return@forEach
+                children.map { child -> child to child.flattenedText() }
+                    .filter { (_, text) -> text.isNotBlank() }
+                    .forEachIndexed { position, (child, text) ->
+                        db.execSQL(
+                            """
+                            INSERT INTO saved_sub_item_new
+                                (savedSubItemId, parentSavedItemId, text, isCompleted, position)
+                            VALUES (?, ?, ?, ?, ?)
+                            """.trimIndent(),
+                            arrayOf<Any?>(child.id, child.parentId, text, if (child.completed) 1 else 0, position),
+                        )
+                }
+            }
+            db.execSQL("DROP TABLE `saved_sub_item`")
+            db.execSQL("ALTER TABLE `saved_sub_item_new` RENAME TO `saved_sub_item`")
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `idx_saved_sub_item_parent` " +
+                    "ON `saved_sub_item` (`parentSavedItemId`)"
+            )
+
+            // API 29 ships a SQLite version without RENAME COLUMN. Rebuild the parent and every
+            // FK child so links and change history survive without relying on that newer syntax.
+            db.execSQL("CREATE TEMP TABLE `_v50_saved_items` AS SELECT * FROM `saved_item`")
+            db.execSQL("CREATE TEMP TABLE `_v50_sub_items` AS SELECT * FROM `saved_sub_item`")
+            db.execSQL("CREATE TEMP TABLE `_v50_links` AS SELECT * FROM `noti_saved_item_link`")
+            db.execSQL("CREATE TEMP TABLE `_v50_changes` AS SELECT * FROM `saved_item_change_log`")
+            db.execSQL("DROP TABLE `saved_sub_item`")
+            db.execSQL("DROP TABLE `noti_saved_item_link`")
+            db.execSQL("DROP TABLE `saved_item_change_log`")
+            db.execSQL("DROP TABLE `saved_item`")
+
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `saved_item` (
+                    `savedItemId` TEXT NOT NULL,
+                    `title` TEXT NOT NULL,
+                    `content` TEXT NOT NULL,
+                    `itemType` TEXT NOT NULL DEFAULT 'task',
+                    `state` TEXT NOT NULL DEFAULT 'saved',
+                    `lastUpdateTimestamp` INTEGER NOT NULL,
+                    `deadlineAtMs` INTEGER NOT NULL,
+                    `startAtMs` INTEGER NOT NULL DEFAULT 0,
+                    `endAtMs` INTEGER NOT NULL DEFAULT 0,
+                    `origin` TEXT NOT NULL,
+                    `humanEditCount` INTEGER NOT NULL,
+                    `userEdited` INTEGER NOT NULL,
+                    `buttons` TEXT NOT NULL DEFAULT '[]',
+                    `isViewed` INTEGER NOT NULL DEFAULT 1,
+                    `isStarred` INTEGER NOT NULL DEFAULT 0,
+                    `whenAtMs` INTEGER NOT NULL DEFAULT 0,
+                    `lastViewedChangeAt` INTEGER NOT NULL DEFAULT 0,
+                    PRIMARY KEY(`savedItemId`)
+                )
+                """.trimIndent()
+            )
+            db.execSQL(
+                """
+                INSERT INTO `saved_item` (
+                    savedItemId,title,content,itemType,state,lastUpdateTimestamp,deadlineAtMs,
+                    startAtMs,endAtMs,origin,humanEditCount,userEdited,buttons,isViewed,isStarred,
+                    whenAtMs,lastViewedChangeAt
+                )
+                SELECT
+                    savedItemId,title,content,itemType,state,lastUpdateTimestamp,deadlineAtMs,
+                    startAtMs,endAtMs,origin,humanEditCount,userEdited,buttons,isViewed,isStarred,
+                    doAtMs,lastViewedChangeAt
+                FROM `_v50_saved_items`
+                """.trimIndent()
+            )
+
+            db.execSQL(
+                """
+                CREATE TABLE `saved_sub_item` (
+                    `savedSubItemId` TEXT NOT NULL,
+                    `parentSavedItemId` TEXT NOT NULL,
+                    `text` TEXT NOT NULL,
+                    `isCompleted` INTEGER NOT NULL,
+                    `position` INTEGER NOT NULL,
+                    PRIMARY KEY(`savedSubItemId`),
+                    FOREIGN KEY(`parentSavedItemId`) REFERENCES `saved_item`(`savedItemId`)
+                        ON UPDATE NO ACTION ON DELETE CASCADE
+                )
+                """.trimIndent()
+            )
+            db.execSQL("INSERT INTO `saved_sub_item` SELECT * FROM `_v50_sub_items`")
+            db.execSQL("CREATE INDEX `idx_saved_sub_item_parent` ON `saved_sub_item` (`parentSavedItemId`)")
+
+            db.execSQL(
+                """
+                CREATE TABLE `noti_saved_item_link` (
+                    `linkId` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    `notiKey` TEXT NOT NULL,
+                    `notiRecordId` TEXT NOT NULL,
+                    `type` TEXT NOT NULL,
+                    `savedItemId` TEXT NOT NULL,
+                    `role` TEXT NOT NULL,
+                    `source` TEXT NOT NULL,
+                    `createdAt` INTEGER NOT NULL,
+                    FOREIGN KEY(`savedItemId`) REFERENCES `saved_item`(`savedItemId`)
+                        ON UPDATE NO ACTION ON DELETE CASCADE
+                )
+                """.trimIndent()
+            )
+            db.execSQL("INSERT INTO `noti_saved_item_link` SELECT * FROM `_v50_links`")
+            db.execSQL("CREATE UNIQUE INDEX `index_noti_saved_item_link_savedItemId_notiRecordId_role` ON `noti_saved_item_link` (`savedItemId`,`notiRecordId`,`role`)")
+            db.execSQL("CREATE INDEX `index_noti_saved_item_link_savedItemId` ON `noti_saved_item_link` (`savedItemId`)")
+            db.execSQL("CREATE INDEX `index_noti_saved_item_link_notiRecordId` ON `noti_saved_item_link` (`notiRecordId`)")
+            db.execSQL("CREATE INDEX `index_noti_saved_item_link_notiKey` ON `noti_saved_item_link` (`notiKey`)")
+
+            db.execSQL(
+                """
+                CREATE TABLE `saved_item_change_log` (
+                    `changeId` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    `savedItemId` TEXT NOT NULL,
+                    `createdAt` INTEGER NOT NULL,
+                    `changeType` TEXT NOT NULL,
+                    `changeSummary` TEXT NOT NULL DEFAULT '',
+                    `appendedContent` TEXT NOT NULL DEFAULT '',
+                    `addedSubTasksJson` TEXT NOT NULL DEFAULT '[]',
+                    `removedSubTasksJson` TEXT NOT NULL DEFAULT '[]',
+                    `changedFieldsJson` TEXT NOT NULL DEFAULT '{}',
+                    `evidenceRecordIdsJson` TEXT NOT NULL DEFAULT '[]',
+                    `origin` TEXT NOT NULL DEFAULT 'llm',
+                    FOREIGN KEY(`savedItemId`) REFERENCES `saved_item`(`savedItemId`)
+                        ON UPDATE NO ACTION ON DELETE CASCADE
+                )
+                """.trimIndent()
+            )
+            db.execSQL("INSERT INTO `saved_item_change_log` SELECT * FROM `_v50_changes`")
+            db.execSQL("CREATE INDEX `index_saved_item_change_log_savedItemId_createdAt` ON `saved_item_change_log` (`savedItemId`,`createdAt`)")
+            db.execSQL("DROP TABLE `_v50_saved_items`")
+            db.execSQL("DROP TABLE `_v50_sub_items`")
+            db.execSQL("DROP TABLE `_v50_links`")
+            db.execSQL("DROP TABLE `_v50_changes`")
+            db.execSQL(
+                """
+                CREATE TABLE `noti_llm_state_new` (
+                    `notiKey` TEXT NOT NULL,
+                    `shouldExtractSavedItem` INTEGER NOT NULL DEFAULT 0,
+                    `categories` TEXT NOT NULL DEFAULT '[]',
+                    `categoryReason` TEXT NOT NULL DEFAULT '',
+                    `categorySource` TEXT NOT NULL DEFAULT '',
+                    `lastClassifiedAt` INTEGER NOT NULL DEFAULT 0,
+                    `lastClassifiedRecordCount` INTEGER NOT NULL DEFAULT 0,
+                    `lastItemExtractionAt` INTEGER NOT NULL DEFAULT 0,
+                    `updatedAt` INTEGER NOT NULL DEFAULT 0,
+                    PRIMARY KEY(`notiKey`)
+                )
+                """.trimIndent()
+            )
+            db.execSQL(
+                """
+                INSERT INTO `noti_llm_state_new`
+                SELECT notiKey,shouldExtractReminder,categories,categoryReason,categorySource,
+                       lastClassifiedAt,lastClassifiedRecordCount,lastItemExtractionAt,updatedAt
+                FROM `noti_llm_state`
+                """.trimIndent()
+            )
+            db.execSQL("DROP TABLE `noti_llm_state`")
+            db.execSQL("ALTER TABLE `noti_llm_state_new` RENAME TO `noti_llm_state`")
+        }
+    }
+
+    private data class LegacySavedSubItem(
+        val id: String,
+        val parentId: String,
+        val title: String,
+        val description: String,
+        val completed: Boolean,
+        val deadlineAtMs: Long,
+        val startAtMs: Long,
+        val endAtMs: Long,
+        val buttons: String,
+        val itemType: String,
+    ) {
+        fun flattenedText(): String {
+            val parts = buildList {
+                normalizeLegacyLine(title).takeIf(String::isNotBlank)?.let(::add)
+                normalizeLegacyLine(description).takeIf(String::isNotBlank)?.let(::add)
+                legacyTimeLabel("Deadline", "截止時間", deadlineAtMs)?.let(::add)
+                legacyTimeLabel("Start", "開始時間", startAtMs)?.let(::add)
+                legacyTimeLabel("End", "結束時間", endAtMs)?.let(::add)
+            }
+            return parts.distinct().joinToString(" — ")
+        }
+    }
+
+    private fun appendLegacyKeepChildren(
+        db: SupportSQLiteDatabase,
+        parentId: String,
+        children: List<LegacySavedSubItem>,
+    ) {
+        val lines = children.mapNotNull { child ->
+            child.flattenedText().takeIf(String::isNotBlank)?.let { text ->
+                (if (child.completed) "☑ " else "☐ ") + text
+            }
+        }
+        if (lines.isEmpty()) return
+        val existing = db.query("SELECT content FROM saved_item WHERE savedItemId = ?", arrayOf(parentId)).use { cursor ->
+            if (cursor.moveToFirst()) cursor.getString(0).orEmpty() else ""
+        }
+        val heading = if (Locale.getDefault().language.startsWith("zh")) "子任務" else "Subtasks"
+        val block = "$heading:\n${lines.joinToString("\n")}".trim()
+        val merged = listOf(existing.trim(), block).filter(String::isNotBlank).joinToString("\n\n")
+        db.execSQL("UPDATE saved_item SET content = ? WHERE savedItemId = ?", arrayOf(merged, parentId))
+    }
+
+    private fun mergeLegacyButtons(
+        db: SupportSQLiteDatabase,
+        parentId: String,
+        childButtonJson: List<String>,
+    ) {
+        val parentJson = db.query("SELECT buttons FROM saved_item WHERE savedItemId = ?", arrayOf(parentId)).use { cursor ->
+            if (cursor.moveToFirst()) cursor.getString(0).orEmpty() else "[]"
+        }
+        val merged = JSONArray()
+        val seen = linkedSetOf<String>()
+        fun append(raw: String) {
+            val arr = try { JSONArray(raw) } catch (_: Exception) { JSONArray() }
+            for (index in 0 until arr.length()) {
+                val obj = arr.optJSONObject(index) ?: continue
+                val type = obj.optString("type", "link")
+                val intent = obj.optString("intent", "")
+                if (intent.isBlank() || !seen.add("$type\u0000$intent")) continue
+                merged.put(obj)
+            }
+        }
+        append(parentJson)
+        childButtonJson.forEach(::append)
+        db.execSQL("UPDATE saved_item SET buttons = ? WHERE savedItemId = ?", arrayOf(merged.toString(), parentId))
+    }
+
+    private fun normalizeLegacyLine(value: String): String = value
+        .replace(Regex("[\\r\\n]+"), " ")
+        .replace(Regex("[\\t ]+"), " ")
+        .trim()
+
+    private fun legacyTimeLabel(en: String, zh: String, timestamp: Long): String? {
+        if (timestamp <= 0L) return null
+        val label = if (Locale.getDefault().language.startsWith("zh")) zh else en
+        val formatted = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(timestamp))
+        return "$label: $formatted"
     }
 
 }

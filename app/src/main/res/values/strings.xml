@@ -25,7 +25,7 @@
     <string name="ui_action_delete">Delete</string>
     <string name="ui_action_ok">OK</string>
     <string name="ui_action_save">Save</string>
-    <string name="a11y_set_do_date">Set do date</string>
+    <string name="a11y_set_when">Set when</string>
 
     <!-- Settings -->
     <string name="ui_settings_delete_on_swipe">Delete on swipe:</string>
@@ -85,30 +85,30 @@
     <string name="ui_settings_delete_failed">Couldn’t delete data. Check your connection and try again.</string>
 
     <!-- Reminders -->
-    <string name="ui_reminders_filter_all">All</string>
-    <string name="ui_reminders_filter_pending">Pending</string>
-    <string name="ui_reminders_filter_tasks">Tasks</string>
-    <string name="ui_reminders_filter_memos">Memos</string>
-    <string name="ui_reminders_filter_completed">Completed</string>
-    <string name="ui_reminders_filter_keep">Keep</string>
-    <string name="ui_reminders_filter_archived">Archived</string>
-    <string name="ui_reminders_filter_starred">Starred</string>
-    <string name="ui_reminders_search_placeholder">Search reminders (use + for AND)</string>
-    <string name="ui_reminders_add_dialog_title">Add</string>
-    <string name="ui_reminders_add_dialog_body">Create a Task or a Memo</string>
-    <string name="ui_reminders_add_dialog_task">Task</string>
-    <string name="ui_reminders_add_dialog_memo">Memo</string>
-    <string name="ui_reminders_untitled_task">(Untitled task)</string>
-    <string name="ui_reminders_untitled_memo">(Untitled memo)</string>
-    <string name="ui_reminders_no_deadline">No specific deadline</string>
-    <string name="ui_reminders_ect_short">ECT: %1$dm</string>
-    <string name="ui_reminders_editor_title_placeholder">Untitled</string>
-    <string name="ui_reminders_editor_task_label">Task</string>
-    <string name="ui_reminders_editor_completed">Completed</string>
-    <string name="ui_reminders_editor_do_date">Do date</string>
-    <string name="reminder_update_section_label">Update</string>
-    <string name="reminder_badge_new">New</string>
-    <string name="reminder_badge_updated">Updated</string>
+    <string name="ui_saved_items_filter_all">All</string>
+    <string name="ui_saved_items_filter_pending">Pending</string>
+    <string name="ui_saved_items_filter_tasks">Tasks</string>
+    <string name="ui_saved_items_filter_memos">Memos</string>
+    <string name="ui_saved_items_filter_completed">Completed</string>
+    <string name="ui_saved_items_filter_keep">Keep</string>
+    <string name="ui_saved_items_filter_archived">Archived</string>
+    <string name="ui_saved_items_filter_starred">Starred</string>
+    <string name="ui_saved_items_search_placeholder">Search saved items (use + for AND)</string>
+    <string name="ui_saved_items_add_dialog_title">Add</string>
+    <string name="ui_saved_items_add_dialog_body">Create a Task or a Memo</string>
+    <string name="ui_saved_items_add_dialog_task">Task</string>
+    <string name="ui_saved_items_add_dialog_memo">Memo</string>
+    <string name="ui_saved_items_untitled_task">(Untitled task)</string>
+    <string name="ui_saved_items_untitled_memo">(Untitled memo)</string>
+    <string name="ui_saved_items_no_deadline">No specific deadline</string>
+    <string name="ui_saved_items_ect_short">ECT: %1$dm</string>
+    <string name="ui_saved_items_editor_title_placeholder">Untitled</string>
+    <string name="ui_saved_items_editor_task_label">Task</string>
+    <string name="ui_saved_items_editor_completed">Completed</string>
+    <string name="ui_saved_items_editor_when">When</string>
+    <string name="saved_item_update_section_label">Update</string>
+    <string name="saved_item_badge_new">New</string>
+    <string name="saved_item_badge_updated">Updated</string>
     <string name="pending_review_badge">Review required</string>
     <string name="pending_review_merge_badge">Merge pending (%1$d)</string>
     <string name="pending_review_edit_title">Review changes before editing</string>
@@ -116,10 +116,10 @@
     <string name="pending_review_merge_message">This item has an unreviewed update that will merge %1$d other item(s). Accept the changes before editing?</string>
     <string name="pending_review_edit_accept">Accept &amp; edit</string>
     <string name="pending_review_edit_cancel">Not now</string>
-    <string name="reminder_whats_new">What\'s new</string>
-    <string name="reminder_whats_new_generic">This item is waiting for your review.</string>
-    <string name="reminder_acknowledge">Got it</string>
-    <string name="reminder_change_history">Change history (%1$d)</string>
+    <string name="saved_item_whats_new">What\'s new</string>
+    <string name="saved_item_whats_new_generic">This item is waiting for your review.</string>
+    <string name="saved_item_acknowledge">Got it</string>
+    <string name="saved_item_change_history">Change history (%1$d)</string>
     <string name="change_type_created">Created</string>
     <string name="change_type_llm_update">Updated from notifications</string>
     <string name="change_type_user_edit">Edited by you</string>
@@ -134,8 +134,8 @@
     <string name="change_field_end">End</string>
     <string name="change_field_estimate">Estimate</string>
     <string name="change_field_row">%1$s: %2$s → %3$s</string>
-    <string name="reminder_show_surrounding_context">Show surrounding messages</string>
-    <string name="reminder_evidence_legend">Highlighted messages are the source of this item</string>
+    <string name="saved_item_show_surrounding_context">Show surrounding messages</string>
+    <string name="saved_item_evidence_legend">Highlighted messages are the source of this item</string>
     <string name="extraction_pending_banner">Extraction pending — server unreachable (%1$d notifications queued)</string>
     <string name="extraction_retry">Retry</string>
     <string name="extraction_failed_toast">Extraction failed — will retry automatically</string>
@@ -149,11 +149,11 @@
     <string name="account_switch_keep_history_warning">Existing notification text stays on this device and may be processed under the new account.</string>
     <string name="account_switch_start_clean">Start clean</string>
     <string name="account_switch_start_clean_warning">Permanently deletes device-local notification history before loading the new account. It cannot be restored from Firestore.</string>
-    <string name="ui_reminders_do_date_chip">Do %1$s</string>
-    <string name="ui_reminders_editor_ect_label">Estimated completion time (minutes)</string>
-    <string name="ui_reminders_editor_note">Note</string>
-    <string name="ui_reminders_editor_note_placeholder">Write something…</string>
-    <string name="ui_reminders_create_button">Create reminder</string>
+    <string name="ui_saved_items_when_chip">When %1$s</string>
+    <string name="ui_saved_items_editor_ect_label">Estimated completion time (minutes)</string>
+    <string name="ui_saved_items_editor_note">Note</string>
+    <string name="ui_saved_items_editor_note_placeholder">Write something…</string>
+    <string name="ui_reminder_create_button">Create reminder</string>
 
     <!-- Accessibility -->
     <string name="a11y_add">Add</string>
@@ -237,7 +237,7 @@
 
     <!-- Noti record context menu -->
     <string name="ui_noti_menu_title">Options</string>
-    <string name="ui_action_extract_reminder">Extract reminder</string>
+    <string name="ui_action_extract_saved_item">Extract saved item</string>
     <string name="ui_noti_linked_items">Items from this notification</string>
     <string name="ui_noti_show_more_context">Show more context</string>
     <string name="ui_noti_hide_more_context">Hide more context</string>
@@ -249,9 +249,9 @@
     <string name="tab_preferences">Preferences</string>
     <string name="menu_settings">Settings</string>
 
-    <string name="reminder_related_notifications">Related notifications (%1$d)</string>
-    <string name="reminder_related_notifications_loading">Loading reminder &amp; notifications…</string>
-    <string name="reminder_no_related_notifications">No related notifications.</string>
+    <string name="saved_item_related_notifications">Related notifications (%1$d)</string>
+    <string name="saved_item_related_notifications_loading">Loading saved item &amp; notifications…</string>
+    <string name="saved_item_no_related_notifications">No related notifications.</string>
     <string name="a11y_expand">Expand</string>
     <string name="a11y_collapse">Collapse</string>
 
@@ -375,7 +375,7 @@
     <string name="pref_chat_empty_prompt_about_me">Tell me about yourself so I can better understand your notifications.</string>
     <string name="pref_chat_empty_example_about_me">For example: \"I am a software engineer at Google\" or \"My partner\'s name is Alice\"</string>
     <string name="pref_chat_discover_button">Learn about me</string>
-    <string name="pref_chat_discover_analyzing">Analyzing your notifications and reminders to learn about you…</string>
+    <string name="pref_chat_discover_analyzing">Analyzing your notifications and saved items to learn about you…</string>
     <string name="pref_chat_active_rules_count">You have %1$d active rule(s).</string>
     <string name="pref_chat_input_placeholder">Describe a preference…</string>
     <string name="pref_chat_send_desc">Send</string>
@@ -409,8 +409,8 @@
     <string name="pref_conflict_resolve">Resolve</string>
 
     <!-- Chat context card (shown when chat is entered from a flow redirect) -->
-    <string name="pref_chat_context_edit">Refining extraction for an edited reminder:</string>
-    <string name="pref_chat_context_delete">Refining extraction for a deleted reminder:</string>
+    <string name="pref_chat_context_edit">Refining extraction for an edited saved item:</string>
+    <string name="pref_chat_context_delete">Refining extraction for a deleted saved item:</string>
     <string name="pref_chat_context_extract">Refining extraction for a manually extracted notification:</string>
     <string name="pref_chat_context_before">Before:</string>
     <string name="pref_chat_context_after">After:</string>
@@ -439,9 +439,9 @@
     <string name="cancel">Cancel</string>
 
     <!-- Reminder sorting sections -->
-    <string name="reminder_section_unseen">New</string>
-    <string name="reminder_section_pinned">Pinned</string>
-    <string name="reminder_section_scored">All Reminders</string>
+    <string name="saved_item_section_unseen">New</string>
+    <string name="saved_item_section_pinned">Pinned</string>
+    <string name="saved_item_section_scored">All Saved Items</string>
 
     <!-- Sub-task list / row -->
     <string name="subtask_section_title">Sub-tasks</string>
@@ -457,40 +457,40 @@
     <string name="a11y_subtask_more">More options</string>
 
     <!-- Reminder actions -->
-    <string name="reminder_refresh_all">Refresh all reminders</string>
+    <string name="saved_item_refresh_all">Refresh all saved items</string>
     <string name="reminder_regenerate">Regenerate</string>
-    <string name="reminder_share">Share</string>
+    <string name="saved_item_share">Share</string>
     <string name="reminder_pin">Pin</string>
     <string name="reminder_unpin">Unpin</string>
     <string name="reminder_make_copy_button">Make Copy Button</string>
 
     <!-- Reminder feedback dialog -->
-    <string name="reminder_feedback_title">How should this reminder be ranked?</string>
+    <string name="saved_item_feedback_title">How should this saved item be ranked?</string>
     <string name="reminder_feedback_important">Important</string>
     <string name="reminder_feedback_handle_later">Handle Later</string>
 
     <!-- Reminder button chips -->
     <string name="a11y_open_link">Open link</string>
     <string name="a11y_copy_text">Copy text</string>
-    <string name="a11y_share_reminder">Share reminder</string>
-    <string name="a11y_refresh_all">Refresh all reminders</string>
-    <string name="dialog_regenerate_all_title">Regenerate All Reminders?</string>
-    <string name="dialog_regenerate_all_message">This will resend all existing reminders and their notification context to the pipeline for regeneration. Reminders may be rewritten or merged.</string>
-    <string name="dialog_regenerate_all_confirm">Regenerate</string>
-    <string name="a11y_regenerate">Regenerate reminder</string>
-    <string name="a11y_pin">Pin reminder</string>
-    <string name="a11y_unpin">Unpin reminder</string>
+    <string name="a11y_share_saved_item">Share saved item</string>
+    <string name="a11y_refresh_saved_items">Refresh all saved items</string>
+    <string name="dialog_regenerate_all_saved_items_title">Regenerate All Saved Items?</string>
+    <string name="dialog_regenerate_all_saved_items_message">This will resend all existing saved items and their notification context to the pipeline for regeneration. Saved items may be rewritten or merged.</string>
+    <string name="dialog_regenerate_all_saved_items_confirm">Regenerate</string>
+    <string name="a11y_regenerate_saved_item">Regenerate saved item</string>
+    <string name="a11y_pin_saved_item">Pin saved item</string>
+    <string name="a11y_unpin_saved_item">Unpin saved item</string>
     <string name="a11y_archive">Archive</string>
     <string name="a11y_star">Star</string>
     <string name="a11y_unstar">Unstar</string>
-    <string name="a11y_clear_do_date">Clear do date</string>
+    <string name="a11y_clear_when">Clear when</string>
     <string name="a11y_drag_handle">Drag to reorder</string>
 
     <!-- Separate date/time pickers -->
-    <string name="reminder_pick_date">Date</string>
-    <string name="reminder_pick_time">Time</string>
-    <string name="reminder_no_date">No date</string>
-    <string name="reminder_no_time">No time</string>
+    <string name="saved_item_pick_date">Date</string>
+    <string name="saved_item_pick_time">Time</string>
+    <string name="saved_item_no_date">No date</string>
+    <string name="saved_item_no_time">No time</string>
 
     <!-- Navigation / drawer -->
     <string name="tab_new">New</string>
@@ -588,10 +588,10 @@
     <string name="review_rejected_toast">Rejected</string>
     <string name="review_reverted_toast">Change reverted</string>
     <string name="review_tell_why">Tell it why</string>
-    <string name="review_dodate_offer_title">Set do-dates?</string>
-    <string name="review_dodate_offer_body">%1$d approved task(s) don\'t have a do-date yet. Set them now?</string>
-    <string name="review_dodate_offer_set">Set do-dates</string>
-    <string name="review_dodate_offer_skip">Skip</string>
+    <string name="review_when_offer_title">Set When?</string>
+    <string name="review_when_offer_body">%1$d approved task(s) don\'t have When set yet. Set it now?</string>
+    <string name="review_when_offer_set">Set When</string>
+    <string name="review_when_offer_skip">Skip</string>
     <string name="review_edit">Edit</string>
     <string name="review_save_approve">Save &amp; Approve</string>
     <string name="review_triggered_this">Triggered this edit</string>
@@ -609,8 +609,11 @@
     <string name="a11y_set_reminder">Set reminder</string>
     <string name="a11y_export">Export</string>
 
-    <!-- Do date -->
-    <string name="do_date_someday">Someday</string>
-    <string name="do_date_add_time">Add time</string>
-    <string name="do_date_clear">Clear</string>
+    <!-- When -->
+    <string name="when_someday">Someday</string>
+    <string name="when_add_time">Add time</string>
+    <string name="when_clear">Clear</string>
+    <string name="task_to_keep_title">Change task to Keep?</string>
+    <string name="task_to_keep_message">Its deadline and subtasks, if present, will be added to the item description. When will stay unchanged.</string>
+    <string name="task_to_keep_confirm">Change to Keep</string>
 </resources>

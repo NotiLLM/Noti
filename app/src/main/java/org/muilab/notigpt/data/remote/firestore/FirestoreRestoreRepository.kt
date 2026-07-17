@@ -5,6 +5,7 @@ import android.util.Log
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.SetOptions
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
@@ -15,6 +16,10 @@ import org.muilab.notigpt.model.features.SavedItemType
 import org.muilab.notigpt.model.features.SavedItemState
 import org.muilab.notigpt.model.features.SavedSubItem
 import org.muilab.notigpt.model.features.UserContext
+import org.muilab.notigpt.domain.saveditem.SavedItemNormalization
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /**
  * Login/periodic reconciliation for the signed-in account's saved items, extraction preferences,
@@ -47,16 +52,16 @@ class FirestoreRestoreRepository(
         val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return@withContext
 
         try {
-            val remoteDocs = fetchReminderDocs(uid)
-            val localItems = db.reminderListDao().getAll()
+            val remoteDocs = fetchSavedItemDocs(uid)
+            val localItems = db.savedItemDao().getAll()
             val sync = FirestoreSyncRepository(appContext)
 
             when {
                 localItems.isEmpty() -> {
-                    restoreReminders(remoteDocs)
+                    restoreSavedItems(remoteDocs)
                     val cloudHasUserState = restorePreferencesAndContexts(uid)
                     if (remoteDocs.isEmpty()) {
-                        sync.syncAllLocalReminders()
+                        sync.syncAllLocalSavedItems()
                         if (!cloudHasUserState) sync.syncPreferencesAndContexts()
                     } else if (!cloudHasUserState) {
                         sync.syncPreferencesAndContexts()
@@ -66,12 +71,12 @@ class FirestoreRestoreRepository(
                 remoteDocs.isEmpty() -> {
                     // This is the important first-connect/backfill path for existing local data.
                     val cloudHasUserState = restorePreferencesAndContexts(uid)
-                    sync.syncAllLocalReminders()
+                    sync.syncAllLocalSavedItems()
                     if (!cloudHasUserState) sync.syncPreferencesAndContexts()
                 }
 
                 else -> {
-                    reconcileReminders(remoteDocs, localItems, sync)
+                    reconcileSavedItems(remoteDocs, localItems, sync)
                     if (!restorePreferencesAndContexts(uid)) {
                         sync.syncPreferencesAndContexts()
                     }
@@ -84,32 +89,70 @@ class FirestoreRestoreRepository(
         }
     }
 
-    private suspend fun fetchReminderDocs(uid: String): List<DocumentSnapshot> {
-        val docs = firestore
-            .collection(FirestorePaths.COLLECTION_REMINDERS_ROOT)
+    private suspend fun fetchSavedItemDocs(uid: String): List<DocumentSnapshot> {
+        val destination = firestore
+            .collection(FirestorePaths.COLLECTION_USERS)
             .document(uid)
-            .collection(FirestorePaths.SUBCOLLECTION_REMINDERS)
-            .get()
-            .await()
-            .documents
-        Log.d(tag, "Fetched ${docs.size} cloud reminder docs uid=$uid")
+            .collection(FirestorePaths.SUBCOLLECTION_SAVED_ITEMS)
+        val legacy = firestore
+            .collection(FirestorePaths.LEGACY_COLLECTION_SAVED_ITEMS_ROOT)
+            .document(uid)
+            .collection(FirestorePaths.LEGACY_SUBCOLLECTION_SAVED_ITEMS)
+
+        val currentById = destination.get().await().documents.associateBy { it.id }.toMutableMap()
+        for (legacyDoc in legacy.get().await().documents) {
+            try {
+                val current = currentById[legacyDoc.id]
+                val legacyTimestamp = maxOf(cloudUpdateTimestamp(legacyDoc), cloudDeletionTimestamp(legacyDoc))
+                val currentTimestamp = current?.let {
+                    maxOf(cloudUpdateTimestamp(it), cloudDeletionTimestamp(it))
+                } ?: Long.MIN_VALUE
+                val target = destination.document(legacyDoc.id)
+
+                if (current == null || legacyTimestamp > currentTimestamp) {
+                    target.set(legacyDoc.data.orEmpty(), SetOptions.merge()).await()
+                }
+
+                // Delete only after the destination can be read back. Failed copies remain in the
+                // legacy collection and will be retried on the next reconciliation.
+                val verified = target.get().await()
+                if (verified.exists()) {
+                    legacyDoc.reference.delete().await()
+                    currentById[legacyDoc.id] = verified
+                    Log.i(tag, "Migrated legacy SavedItem savedItemId=${legacyDoc.id} uid=$uid")
+                }
+            } catch (t: Throwable) {
+                Log.w(tag, "Legacy SavedItem migration deferred savedItemId=${legacyDoc.id}", t)
+            }
+        }
+
+        val docs = destination.get().await().documents
+        Log.d(tag, "Fetched ${docs.size} cloud SavedItem docs uid=$uid")
         return docs
     }
 
-    private suspend fun restoreReminders(docs: List<DocumentSnapshot>) {
-        for (doc in docs) restoreOneReminder(doc)
-        Log.d(tag, "Restored ${docs.size} reminder docs")
+    private suspend fun restoreSavedItems(docs: List<DocumentSnapshot>) {
+        for (doc in docs) restoreOneSavedItem(doc)
+        Log.d(tag, "Restored ${docs.size} SavedItem docs")
     }
 
-    private suspend fun restoreOneReminder(doc: DocumentSnapshot) {
-        val item = savedItemFrom(doc) ?: return
+    private suspend fun restoreOneSavedItem(doc: DocumentSnapshot) {
+        val restoredItem = savedItemFrom(doc) ?: return
+        val restoredSubItems = subItemsFrom(doc, restoredItem.savedItemId)
+        val itemWithChildButtons = restoredItem.copy(
+            buttons = SavedItemNormalization.mergeButtons(
+                restoredItem.buttons,
+                *legacyChildButtons(doc).toTypedArray(),
+            ),
+        )
+        val normalized = SavedItemNormalization.normalize(itemWithChildButtons, restoredSubItems)
         // Remove stale local sub-items before applying the cloud snapshot.
-        db.subTaskDao().hardDeleteByParentId(item.savedItemId)
-        db.reminderListDao().upsert(item)
-        subItemsFrom(doc, item.savedItemId).forEach { db.subTaskDao().upsert(it) }
+        db.subTaskDao().hardDeleteByParentId(normalized.item.savedItemId)
+        db.savedItemDao().upsert(normalized.item)
+        normalized.subItems.forEach { db.subTaskDao().upsert(it) }
     }
 
-    private suspend fun reconcileReminders(
+    private suspend fun reconcileSavedItems(
         remoteDocs: List<DocumentSnapshot>,
         localItems: List<SavedItem>,
         sync: FirestoreSyncRepository,
@@ -124,24 +167,24 @@ class FirestoreRestoreRepository(
 
             val local = localById[id]
             when {
-                local == null && !isCloudDeleted(doc) -> restoreOneReminder(doc)
+                local == null && !isCloudDeleted(doc) -> restoreOneSavedItem(doc)
                 local != null && isCloudDeleted(doc) -> {
                     val cloudDeletedAt = cloudDeletionTimestamp(doc)
                     if (cloudDeletedAt <= 0L || cloudDeletedAt >= local.lastUpdateTimestamp) {
                         db.subTaskDao().hardDeleteByParentId(id)
-                        db.reminderListDao().hardDeleteById(id)
+                        db.savedItemDao().hardDeleteById(id)
                         Log.i(tag, "Removed locally deleted cloud item savedItemId=$id")
                     } else {
                         // A newer local edit intentionally resurrects the cloud mirror.
-                        sync.syncReminder(local)
+                        sync.syncSavedItem(local)
                     }
                 }
                 local != null -> {
                     val cloudUpdatedAt = cloudUpdateTimestamp(doc)
                     when {
-                        cloudUpdatedAt > local.lastUpdateTimestamp -> restoreOneReminder(doc)
-                        local.lastUpdateTimestamp > cloudUpdatedAt -> sync.syncReminder(local)
-                        else -> restoreOneReminder(doc)
+                        cloudUpdatedAt > local.lastUpdateTimestamp -> restoreOneSavedItem(doc)
+                        local.lastUpdateTimestamp > cloudUpdatedAt -> sync.syncSavedItem(local)
+                        else -> restoreOneSavedItem(doc)
                     }
                 }
             }
@@ -150,7 +193,7 @@ class FirestoreRestoreRepository(
         // A document absent from the cloud may simply be a local item created while offline.
         localItems
             .filter { it.savedItemId !in remoteIds }
-            .forEach { sync.syncReminder(it) }
+            .forEach { sync.syncSavedItem(it) }
     }
 
     private fun isCloudDeleted(doc: DocumentSnapshot): Boolean =
@@ -191,7 +234,7 @@ class FirestoreRestoreRepository(
             buttons = doc.getString("buttons") ?: "[]",
             isViewed = doc.getBoolean("isViewed") ?: true,
             isStarred = doc.getBoolean("isStarred") ?: false,
-            doAtMs = doc.getLong("doAtMsEpoch") ?: 0L,
+            whenAtMs = doc.getLong("whenAtMsEpoch") ?: doc.getLong("doAtMsEpoch") ?: 0L,
             lastViewedChangeAt = doc.getLong("lastViewedChangeAtEpoch") ?: 0L,
         )
     }
@@ -199,25 +242,49 @@ class FirestoreRestoreRepository(
     @Suppress("UNCHECKED_CAST")
     private fun subItemsFrom(doc: DocumentSnapshot, parentId: String): List<SavedSubItem> {
         val raw = doc.get("subTasks") as? List<Map<String, Any?>> ?: return emptyList()
-        return raw.mapNotNull { m ->
-            val id = m["savedSubItemId"] as? String ?: return@mapNotNull null
+        return raw.mapIndexedNotNull { index, m ->
+            val id = m["savedSubItemId"] as? String ?: return@mapIndexedNotNull null
+            val text = legacySubItemText(m)
+            if (text.isBlank()) return@mapIndexedNotNull null
             SavedSubItem(
                 savedSubItemId = id,
                 parentSavedItemId = parentId,
-                title = m["title"] as? String ?: "",
-                description = m["description"] as? String ?: "",
-                itemType = m["itemType"] as? String ?: SavedItemType.Task,
+                text = text,
                 isCompleted = m["isCompleted"] as? Boolean ?: false,
-                deadlineAtMs = (m["deadlineAtMsEpoch"] as? Number)?.toLong() ?: 0L,
-                startAtMs = (m["startAtMsEpoch"] as? Number)?.toLong() ?: 0L,
-                endAtMs = (m["endAtMsEpoch"] as? Number)?.toLong() ?: 0L,
-                buttons = m["buttons"] as? String ?: "[]",
-                sortOrder = (m["sortOrder"] as? Number)?.toInt() ?: 0,
-                createdAt = (m["createdAtEpoch"] as? Number)?.toLong() ?: System.currentTimeMillis(),
-                lastUpdateTimestamp = (m["lastUpdateTimestampEpoch"] as? Number)?.toLong() ?: System.currentTimeMillis(),
-                isVisible = true,
+                position = ((m["position"] ?: m["sortOrder"]) as? Number)?.toInt() ?: index,
             )
+        }.sortedWith(compareBy<SavedSubItem> { it.position }.thenBy { it.savedSubItemId })
+            .mapIndexed { index, child -> child.copy(position = index) }
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun legacyChildButtons(doc: DocumentSnapshot): List<String> {
+        val raw = doc.get("subTasks") as? List<Map<String, Any?>> ?: return emptyList()
+        return raw.mapNotNull { it["buttons"] as? String }.filter { it.isNotBlank() && it != "[]" }
+    }
+
+    private fun legacySubItemText(map: Map<String, Any?>): String {
+        val parts = mutableListOf<String>()
+        val currentText = map["text"] as? String
+        if (!currentText.isNullOrBlank()) {
+            parts += currentText
+        } else {
+            (map["title"] as? String)?.takeIf { it.isNotBlank() }?.let(parts::add)
+            (map["description"] as? String)?.takeIf { it.isNotBlank() }?.let(parts::add)
         }
+        val zh = Locale.getDefault().language.startsWith("zh")
+        listOf(
+            "deadlineAtMsEpoch" to if (zh) "截止時間" else "Deadline",
+            "startAtMsEpoch" to if (zh) "開始時間" else "Start",
+            "endAtMsEpoch" to if (zh) "結束時間" else "End",
+        ).forEach { (key, label) ->
+            val value = (map[key] as? Number)?.toLong() ?: 0L
+            if (value > 0L) {
+                val formatted = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(value))
+                parts += "$label: $formatted"
+            }
+        }
+        return SavedSubItem.normalizeText(parts.joinToString(" — "))
     }
 
     @Suppress("UNCHECKED_CAST")

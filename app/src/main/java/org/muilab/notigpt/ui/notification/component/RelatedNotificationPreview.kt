@@ -37,7 +37,7 @@ import org.muilab.notigpt.ui.notification.component.info.ExpandedNotiRecord
 import org.muilab.notigpt.util.unescapeUserText
 
 /**
- * Reminder-facing preview of notification records associated with a reminder.
+ * SavedItem-facing preview of notification records associated with a SavedItem.
  *
  * One instance = one notiKey group. The header is tap-to-collapse; expanded records render
  * content-left / time-right exactly like the expanded notification card on the New screen.
@@ -184,13 +184,13 @@ fun RelatedNotificationPreview(
                             modifier = Modifier.align(Alignment.CenterHorizontally),
                         ) {
                             Text(
-                                text = stringResource(R.string.reminder_show_surrounding_context),
+                                text = stringResource(R.string.saved_item_show_surrounding_context),
                                 style = MaterialTheme.typography.labelMedium,
                             )
                         }
                     } else if (highlightEvidence) {
                         Text(
-                            text = stringResource(R.string.reminder_evidence_legend),
+                            text = stringResource(R.string.saved_item_evidence_legend),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),

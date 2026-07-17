@@ -8,11 +8,11 @@ import org.muilab.notigpt.data.local.room.AppDatabase
 import org.muilab.notigpt.data.remote.n8n.N8nAPIClient
 import org.muilab.notigpt.data.repository.notification.NotiLlmStateRepository
 import org.muilab.notigpt.data.repository.notification.NotiRepository
-import org.muilab.notigpt.data.repository.reminder.ExtractionJournalRepository
-import org.muilab.notigpt.data.repository.reminder.PendingProposedOpRepository
-import org.muilab.notigpt.data.repository.reminder.SavedItemChangeLogRepository
-import org.muilab.notigpt.data.repository.reminder.SavedItemRepository
-import org.muilab.notigpt.data.repository.reminder.SavedSubItemRepository
+import org.muilab.notigpt.data.repository.saveditem.ExtractionJournalRepository
+import org.muilab.notigpt.data.repository.saveditem.PendingProposedOpRepository
+import org.muilab.notigpt.data.repository.saveditem.SavedItemChangeLogRepository
+import org.muilab.notigpt.data.repository.saveditem.SavedItemRepository
+import org.muilab.notigpt.data.repository.saveditem.SavedSubItemRepository
 import org.muilab.notigpt.util.SharedPreferencesManager
 
 /**
@@ -25,8 +25,8 @@ class N8nWorkerContext @Inject constructor(
 ) {
     val n8nApiService by lazy { N8nAPIClient.n8nAPIService }
 
-    val reminderRepository: SavedItemRepository by lazy {
-        SavedItemRepository(database.reminderListDao(), appContext)
+    val savedItemRepository: SavedItemRepository by lazy {
+        SavedItemRepository(database.savedItemDao(), appContext)
     }
 
     val savedSubItemRepository: SavedSubItemRepository by lazy {

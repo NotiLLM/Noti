@@ -4,7 +4,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * Pure helper for deriving evidence links from n8n responses.
+ * Pure helper for deriving SavedItem evidence links from n8n responses.
  *
  * Contract v2: the workflow cites `evidenceRecordIds` — the exact record ids that directly
  * evidence a saved item. Only ids we actually sent in the request are accepted (LLMs can cite
@@ -15,7 +15,7 @@ import org.json.JSONObject
  * Keep this free of Room and persistence details so extraction/regeneration handlers share the
  * same evidence semantics.
  */
-object ReminderAssociationMerger {
+object SavedItemAssociationMerger {
 
     /** Reads cited evidence ids from a response op, tolerating pre-v2 field names. */
     fun evidenceIdsFrom(response: JSONObject): Set<String> {

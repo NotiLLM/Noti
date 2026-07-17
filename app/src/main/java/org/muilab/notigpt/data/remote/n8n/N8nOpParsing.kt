@@ -2,7 +2,6 @@ package org.muilab.notigpt.data.remote.n8n
 
 import org.json.JSONArray
 import org.json.JSONObject
-import org.muilab.notigpt.model.features.SavedItemType
 import org.muilab.notigpt.model.features.SavedSubItem
 import java.time.LocalDateTime
 import java.time.OffsetDateTime
@@ -16,7 +15,7 @@ import java.time.ZonedDateTime
  */
 object N8nOpParsing {
 
-    /** Reads reminder IDs from both the current app schema and older n8n schemas. */
+    /** Reads SavedItem IDs from the current schema and legacy n8n aliases. */
     fun savedItemIdFrom(obj: JSONObject): String = obj.optString(
         "savedItemId",
         obj.optString("reminderId", obj.optString("taskId")),
@@ -44,7 +43,7 @@ object N8nOpParsing {
      * Converts n8n deadline/start/end timestamps into local epoch millis.
      *
      * Keep the no-deadline sentinel handling here so response parsing does not scatter timestamp
-     * edge cases across reminder construction code.
+     * edge cases across SavedItem construction code.
      */
     fun isoToUnixMillis(iso: String): Long {
         if (iso == "-1" || iso.isBlank()) return -1L // no-deadline sentinel from the n8n response schema
@@ -79,25 +78,36 @@ object N8nOpParsing {
                 val sub = arr.optJSONObject(i) ?: continue
                 val id = sub.optString("savedSubItemId", sub.optString("subTaskId"))
                     .ifBlank { "st_" + java.util.UUID.randomUUID().toString().take(8) }
-                add(
-                    SavedSubItem(
-                        savedSubItemId = id,
-                        parentSavedItemId = parentSavedItemId,
-                        title = sub.optString("title", ""),
-                        description = sub.optString("description", sub.optString("content", "")),
-                        itemType = if (sub.optBoolean("isTask", true)) SavedItemType.Task else SavedItemType.Keep,
-                        isCompleted = sub.optBoolean("isCompleted", false),
-                        deadlineAtMs = isoToUnixMillis(sub.optString("deadlineTimeString", "-1")),
-                        startAtMs = startAtMsFrom(sub),
-                        endAtMs = endAtMsFrom(sub),
-                        buttons = sub.optJSONArray("buttons")?.toString() ?: "[]",
-                        sortOrder = sub.optInt("sortOrder", baseSortOrder + i),
-                        createdAt = ts,
-                        lastUpdateTimestamp = ts,
-                        isVisible = true,
-                    )
+                val title = sub.optString("text", sub.optString("title", ""))
+                val description = sub.optString("description", sub.optString("content", ""))
+                val text = SavedSubItem.normalizeText(
+                    listOf(title, description).filter(String::isNotBlank).distinct().joinToString(" — ")
                 )
+                if (text.isNotBlank()) {
+                    add(
+                        SavedSubItem(
+                            savedSubItemId = id,
+                            parentSavedItemId = parentSavedItemId,
+                            text = text,
+                            isCompleted = sub.optBoolean("isCompleted", false),
+                            position = sub.optInt("position", sub.optInt("sortOrder", baseSortOrder + i)),
+                        )
+                    )
+                }
             }
         }
+    }
+
+    /** Legacy child actions are parent-owned in the current contract. */
+    fun childButtons(arr: JSONArray?): String {
+        if (arr == null) return "[]"
+        val merged = JSONArray()
+        for (index in 0 until arr.length()) {
+            val buttons = arr.optJSONObject(index)?.optJSONArray("buttons") ?: continue
+            for (buttonIndex in 0 until buttons.length()) {
+                buttons.optJSONObject(buttonIndex)?.let(merged::put)
+            }
+        }
+        return merged.toString()
     }
 }

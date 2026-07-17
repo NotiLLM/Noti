@@ -1,4 +1,4 @@
-package org.muilab.notigpt.ui.reminder.component
+package org.muilab.notigpt.ui.saveditem.component
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -23,8 +23,8 @@ import org.muilab.notigpt.R
  * Task completion toggle styled after iOS Reminders' circular checkbox — filled + checkmark when
  * done, hollow ring in the type accent otherwise — instead of Material's square checkbox glyph.
  *
- * Shared between [org.muilab.notigpt.ui.reminder.screen.ReminderCard],
- * [org.muilab.notigpt.ui.reminder.screen.ReminderDetailScreen], and [SavedSubItemRow] so a task and
+ * Shared between [org.muilab.notigpt.ui.saveditem.screen.SavedItemCard],
+ * [org.muilab.notigpt.ui.saveditem.screen.SavedItemDetailScreen], and [SavedSubItemRow] so a task and
  * its sub-tasks use the same completion affordance.
  */
 @Composable
@@ -33,6 +33,7 @@ fun TaskCompletionToggle(
     accent: Color,
     onCheckedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
 ) {
     val haptic = LocalHapticFeedback.current
     Box(
@@ -40,6 +41,7 @@ fun TaskCompletionToggle(
             .size(40.dp)
             .toggleable(
                 value = checked,
+                enabled = enabled,
                 role = Role.Checkbox,
                 onValueChange = {
                     haptic.performHapticFeedback(if (it) HapticFeedbackType.ToggleOn else HapticFeedbackType.ToggleOff)

@@ -1,4 +1,4 @@
-package org.muilab.notigpt.ui.reminder.component
+package org.muilab.notigpt.ui.saveditem.component
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
@@ -38,22 +38,22 @@ import java.util.Locale
 /**
  * Plain-language change views for a saved item's detail screen.
  *
- * [ReminderWhatsNewBlock] shows the changes the user has not yet acknowledged (rows newer than
+ * [SavedItemWhatsNewBlock] shows the changes the user has not yet acknowledged (rows newer than
  * SavedItem.lastViewedChangeAt) with an explicit "Got it" action — items stay in the New/Updated
- * review state until that tap, never cleared by mere scrolling. [ReminderChangeHistorySection] is
+ * review state until that tap, never cleared by mere scrolling. [SavedItemChangeHistorySection] is
  * the full collapsible history. Both render for general phone users: short labeled rows, no
  * +/− code-diff styling.
  */
 
 @Composable
-fun ReminderWhatsNewBlock(
-    reminder: SavedItem,
+fun SavedItemWhatsNewBlock(
+    item: SavedItem,
     changes: List<SavedItemChangeLog>,
     onAcknowledge: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    if (!reminder.isNewLike) return
-    val unseen = changes.filter { it.createdAt > reminder.lastViewedChangeAt }
+    if (!item.isNewLike) return
+    val unseen = changes.filter { it.createdAt > item.lastViewedChangeAt }
     Surface(
         modifier = modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.medium,
@@ -62,14 +62,14 @@ fun ReminderWhatsNewBlock(
     ) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(
-                text = stringResource(R.string.reminder_whats_new),
+                text = stringResource(R.string.saved_item_whats_new),
                 style = MaterialTheme.typography.titleSmall,
             )
             if (unseen.isEmpty()) {
                 // State says pending review but every row was already seen (e.g. cursor moved on
                 // another device) — still explain why the badge is showing.
                 Text(
-                    text = stringResource(R.string.reminder_whats_new_generic),
+                    text = stringResource(R.string.saved_item_whats_new_generic),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -80,14 +80,14 @@ fun ReminderWhatsNewBlock(
                 onClick = onAcknowledge,
                 modifier = Modifier.align(Alignment.End),
             ) {
-                Text(stringResource(R.string.reminder_acknowledge))
+                Text(stringResource(R.string.saved_item_acknowledge))
             }
         }
     }
 }
 
 @Composable
-fun ReminderChangeHistorySection(
+fun SavedItemChangeHistorySection(
     changes: List<SavedItemChangeLog>,
     modifier: Modifier = Modifier,
 ) {
@@ -103,7 +103,7 @@ fun ReminderChangeHistorySection(
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             Text(
-                text = stringResource(R.string.reminder_change_history, changes.size),
+                text = stringResource(R.string.saved_item_change_history, changes.size),
                 style = MaterialTheme.typography.titleSmall,
             )
             Icon(

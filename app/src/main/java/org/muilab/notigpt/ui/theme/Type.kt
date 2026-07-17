@@ -91,7 +91,7 @@ val Typography = Typography(
  * `NotiType.cardTitle` etc. inside composables.
  */
 object NotiType {
-    /** Card headline (NotiCard / ReminderCard title). Slightly heavier than titleMedium. */
+    /** Card headline (NotiCard / SavedItemCard title). Slightly heavier than titleMedium. */
     val cardTitle: TextStyle
         @Composable @ReadOnlyComposable
         get() = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold)

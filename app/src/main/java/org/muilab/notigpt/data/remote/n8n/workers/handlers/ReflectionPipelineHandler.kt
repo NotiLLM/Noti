@@ -40,7 +40,7 @@ internal object ReflectionPipelineHandler {
             val ids = groups.optJSONArray(i) ?: continue
             val items = buildList {
                 for (j in 0 until ids.length()) {
-                    val item = ctx.reminderRepository.getById(ids.optString(j)) ?: continue
+                    val item = ctx.savedItemRepository.getById(ids.optString(j)) ?: continue
                     add(ExtractionStageSupport.itemDetail(ctx, item))
                 }
             }

@@ -111,13 +111,13 @@ fun enqueueReflectionPipeline(context: Context) {
         .enqueueUniqueWork("n8n_reflection_pipeline", ExistingWorkPolicy.KEEP, workerRequest)
 }
 
-/** Queues regeneration for one reminder from its stored notification context. */
+/** Queues regeneration for one SavedItem from its stored notification context. */
 fun enqueueRegenerateOne(context: Context, savedItemId: String) {
     Log.d("N8nAPI", "enqueueRegenerateOne: savedItemId=$savedItemId")
     val inputData = Data.Builder()
         .putString("api_type", N8N_REGENERATE_ONE)
         .putString("webhook_path", BuildConfig.N8N_REGENERATE_ONE_PATH)
-        .putString("reminder_id", savedItemId)
+        .putString("saved_item_id", savedItemId)
         .build()
 
     val constraints = Constraints.Builder()

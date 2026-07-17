@@ -1,4 +1,4 @@
-package org.muilab.notigpt.data.repository.reminder
+package org.muilab.notigpt.data.repository.saveditem
 
 import android.content.Context
 import androidx.room.withTransaction
@@ -22,6 +22,8 @@ import org.muilab.notigpt.model.features.SavedItemState
 import org.muilab.notigpt.data.remote.firestore.FirestoreSyncRepository
 import org.muilab.notigpt.data.remote.n8n.N8nOpParsing
 import org.muilab.notigpt.domain.saveditem.SavedItemRevertLogic
+import org.muilab.notigpt.domain.saveditem.SavedItemNormalization
+import org.muilab.notigpt.model.features.SavedSubItem
 import org.muilab.notigpt.util.SharedPreferencesManager
 import org.muilab.notigpt.work.FirestoreOutboxWork
 import org.json.JSONArray
@@ -31,13 +33,13 @@ import java.util.Date
 import java.util.Locale
 
 /**
- * Repository for reminder CRUD, filtering queries, soft deletes, and export-oriented reminder operations.
+ * Repository for item CRUD, filtering queries, soft deletes, and export-oriented item operations.
  *
- * Keep reminder persistence rules here rather than in Compose screens. Sub-task persistence and notification
- * context live in adjacent repositories to keep reminder rows focused.
+ * Keep item persistence rules here rather than in Compose screens. Sub-task persistence and notification
+ * context live in adjacent repositories to keep item rows focused.
  */
 class SavedItemRepository(
-    private val reminderListDao: SavedItemDao,
+    private val savedItemDao: SavedItemDao,
     private val appContext: Context,
 ) {
     private val db = AppDatabase.getInstance(appContext.applicationContext)
@@ -51,58 +53,104 @@ class SavedItemRepository(
     private val pendingProposedOpDao by lazy { db.pendingProposedOpDao() }
     private val rejectedMergeDao by lazy { db.rejectedMergeDao() }
 
-    /** Returns visible reminders in the canonical list order used by the reminders screen. */
-    fun observeAll(): Flow<List<SavedItem>> = reminderListDao.observeAll()
-    fun observeTasks(): Flow<List<SavedItem>> = reminderListDao.observeTasks()
-    fun observeMemos(): Flow<List<SavedItem>> = reminderListDao.observeMemos()
-    fun observeActiveKeeps(): Flow<List<SavedItem>> = reminderListDao.observeActiveKeeps()
-    fun observeArchivedKeeps(): Flow<List<SavedItem>> = reminderListDao.observeArchivedKeeps()
-    fun observeCompletedTasks(): Flow<List<SavedItem>> = reminderListDao.observeCompletedTasks()
-    fun observeNewItems(): Flow<List<SavedItem>> = reminderListDao.observeNewItems()
+    /** Returns visible savedItems in the canonical list order used by the savedItems screen. */
+    fun observeAll(): Flow<List<SavedItem>> = savedItemDao.observeAll()
+    fun observeTasks(): Flow<List<SavedItem>> = savedItemDao.observeTasks()
+    fun observeMemos(): Flow<List<SavedItem>> = savedItemDao.observeMemos()
+    fun observeActiveKeeps(): Flow<List<SavedItem>> = savedItemDao.observeActiveKeeps()
+    fun observeArchivedKeeps(): Flow<List<SavedItem>> = savedItemDao.observeArchivedKeeps()
+    fun observeCompletedTasks(): Flow<List<SavedItem>> = savedItemDao.observeCompletedTasks()
+    fun observeNewItems(): Flow<List<SavedItem>> = savedItemDao.observeNewItems()
 
-    suspend fun getAll(): List<SavedItem> = withContext(Dispatchers.IO) { reminderListDao.getAll() }
+    suspend fun getAll(): List<SavedItem> = withContext(Dispatchers.IO) { savedItemDao.getAll() }
 
     /** Active (non-completed/archived) items — the merge stages' candidate pool. */
-    suspend fun getAllActive(): List<SavedItem> = withContext(Dispatchers.IO) { reminderListDao.getAllActive() }
+    suspend fun getAllActive(): List<SavedItem> = withContext(Dispatchers.IO) { savedItemDao.getAllActive() }
 
     /**
-     * Upserts a reminder locally and mirrors the resulting row to Firestore.
+     * Upserts a SavedItem locally and mirrors the resulting row to Firestore.
      *
      * Callers should set edit timestamps and user-edit flags before calling this method so local and remote
-     * copies share the same reminder semantics.
+     * copies share the same item semantics.
      */
-    suspend fun upsert(reminder: SavedItem) = withContext(Dispatchers.IO) {
+    suspend fun upsert(item: SavedItem) = withContext(Dispatchers.IO) {
         // Editor saves (vs LLM handler upserts) carry origin="manual" + userEdited; record them in
         // the change history and the extraction journal so the pipeline knows the user took over.
-        val old = reminderListDao.getById(reminder.savedItemId)
-        val isEditorSave = reminder.userEdited && reminder.origin == "manual" &&
-            old != null && (old.title != reminder.title || old.content != reminder.content ||
-                old.deadlineAtMs != reminder.deadlineAtMs || old.itemType != reminder.itemType)
+        val old = savedItemDao.getById(item.savedItemId)
+        val isEditorSave = item.userEdited && item.origin == "manual" &&
+            old != null && (old.title != item.title || old.content != item.content ||
+                old.deadlineAtMs != item.deadlineAtMs || old.itemType != item.itemType)
 
-        reminderListDao.upsert(reminder)
+        val existingChildren = subTaskDao.getBySavedItemId(item.savedItemId)
+        val normalized = when {
+            old?.isTask == true && !item.isTask -> SavedItemNormalization.convertTaskToKeep(
+                item.copy(
+                    deadlineAtMs = item.deadlineAtMs.takeIf { it > 0L } ?: old.deadlineAtMs,
+                ),
+                existingChildren,
+            )
+            !item.isTask -> SavedItemNormalization.normalize(item, existingChildren)
+            else -> SavedItemNormalization.normalize(item, existingChildren)
+        }
+        db.withTransaction {
+            savedItemDao.upsert(normalized.item)
+            subTaskDao.hardDeleteByParentId(item.savedItemId)
+            if (normalized.subItems.isNotEmpty()) subTaskDao.upsertAll(normalized.subItems)
+        }
 
-        if (isEditorSave && old != null) {
+        if (isEditorSave) {
+            val stored = normalized.item
             val changedFields = org.json.JSONObject().apply {
-                if (old.title != reminder.title) {
-                    put("title", org.json.JSONObject().put("old", old.title).put("new", reminder.title))
+                if (old.title != stored.title) {
+                    put("title", org.json.JSONObject().put("old", old.title).put("new", stored.title))
                 }
-                if (old.deadlineAtMs != reminder.deadlineAtMs) {
-                    put("deadlineAtMs", org.json.JSONObject().put("old", old.deadlineAtMs).put("new", reminder.deadlineAtMs))
+                if (old.deadlineAtMs != stored.deadlineAtMs) {
+                    put("deadlineAtMs", org.json.JSONObject().put("old", old.deadlineAtMs).put("new", stored.deadlineAtMs))
                 }
             }
             changeLogDao.insert(
                 SavedItemChangeLog(
-                    savedItemId = reminder.savedItemId,
-                    createdAt = reminder.lastUpdateTimestamp,
+                    savedItemId = stored.savedItemId,
+                    createdAt = stored.lastUpdateTimestamp,
                     changeType = SavedItemChangeType.UserEdit,
                     changedFieldsJson = changedFields.toString(),
                     origin = "user",
                 )
             )
-            journalUserEvent(reminder.savedItemId, ExtractionJournalEventType.UserEdited, reminder.title)
+            journalUserEvent(stored.savedItemId, ExtractionJournalEventType.UserEdited, stored.title)
         }
 
-        queueAndSync(reminder, reminder.lastUpdateTimestamp)
+        queueAndSync(normalized.item, normalized.item.lastUpdateTimestamp)
+    }
+
+    suspend fun upsertSubItem(subItem: SavedSubItem, ts: Long) = withContext(Dispatchers.IO) {
+        val parent = savedItemDao.getById(subItem.parentSavedItemId) ?: return@withContext
+        if (!parent.isTask) return@withContext
+        val normalizedText = SavedSubItem.normalizeText(subItem.text)
+        val existing = subTaskDao.getById(subItem.savedSubItemId)
+        val position = existing?.position ?: subTaskDao.nextPosition(parent.savedItemId)
+        subTaskDao.upsert(subItem.copy(text = normalizedText, position = position))
+        val updated = parent.copy(lastUpdateTimestamp = ts)
+        savedItemDao.upsert(updated)
+        queueAndSync(updated, ts)
+    }
+
+    suspend fun deleteSubItem(savedSubItemId: String, ts: Long) = withContext(Dispatchers.IO) {
+        val child = subTaskDao.getById(savedSubItemId) ?: return@withContext
+        val parent = savedItemDao.getById(child.parentSavedItemId) ?: return@withContext
+        subTaskDao.hardDeleteById(savedSubItemId)
+        val updated = parent.copy(lastUpdateTimestamp = ts)
+        savedItemDao.upsert(updated)
+        queueAndSync(updated, ts)
+    }
+
+    suspend fun setSubItemCompleted(savedSubItemId: String, completed: Boolean, ts: Long) = withContext(Dispatchers.IO) {
+        val child = subTaskDao.getById(savedSubItemId) ?: return@withContext
+        val parent = savedItemDao.getById(child.parentSavedItemId) ?: return@withContext
+        subTaskDao.setCompleted(savedSubItemId, completed)
+        val updated = parent.copy(lastUpdateTimestamp = ts)
+        savedItemDao.upsert(updated)
+        queueAndSync(updated, ts)
     }
 
     /**
@@ -116,40 +164,40 @@ class SavedItemRepository(
             journalUserEvent(savedItemId, ExtractionJournalEventType.UserDeleted)
             queueSavedItem(savedItemId, FirestoreOutboxKind.DeleteSavedItem, ts)
             subTaskDao.hardDeleteByParentId(savedItemId)
-            reminderListDao.hardDeleteById(savedItemId)
+            savedItemDao.hardDeleteById(savedItemId)
             // Staged ops against a gone item are unreviewable; merge cool-downs are moot too.
             pendingProposedOpDao.deleteByTargetItemId(savedItemId)
             rejectedMergeDao.deleteForItem(savedItemId)
         }
         FirestoreOutboxWork.enqueue(appContext)
-        firestoreSync.markReminderDeleted(savedItemId, ts)
+        firestoreSync.markSavedItemDeleted(savedItemId, ts)
     }
 
     suspend fun setCompleted(savedItemId: String, completed: Boolean, ts: Long) = withContext(Dispatchers.IO) {
-        reminderListDao.setCompleted(savedItemId, completed, ts)
+        savedItemDao.setCompleted(savedItemId, completed, ts)
         if (completed) journalUserEvent(savedItemId, ExtractionJournalEventType.UserCompleted)
 
-        val updated = reminderListDao.getById(savedItemId) ?: return@withContext
+        val updated = savedItemDao.getById(savedItemId) ?: return@withContext
         queueAndSync(updated, ts)
     }
 
     suspend fun setState(savedItemId: String, state: String, ts: Long) = withContext(Dispatchers.IO) {
-        val old = reminderListDao.getById(savedItemId)
-        reminderListDao.setState(savedItemId, state, ts)
+        val old = savedItemDao.getById(savedItemId)
+        savedItemDao.setState(savedItemId, state, ts)
         when {
             state == SavedItemState.Archived -> journalUserEvent(savedItemId, ExtractionJournalEventType.UserArchived)
             // Un-archiving a keep is a "this matters again" signal for future extractions.
             old?.state == SavedItemState.Archived && state == SavedItemState.Saved ->
                 journalUserEvent(savedItemId, ExtractionJournalEventType.ItemRestored)
         }
-        val updated = reminderListDao.getById(savedItemId) ?: return@withContext
+        val updated = savedItemDao.getById(savedItemId) ?: return@withContext
         queueAndSync(updated, ts)
     }
 
     suspend fun markSavedByIds(savedItemIds: List<String>, ts: Long) = withContext(Dispatchers.IO) {
         if (savedItemIds.isEmpty()) return@withContext
-        reminderListDao.markSavedByIds(savedItemIds, ts)
-        savedItemIds.mapNotNull { reminderListDao.getById(it) }.forEach { queueAndSync(it, ts) }
+        savedItemDao.markSavedByIds(savedItemIds, ts)
+        savedItemIds.mapNotNull { savedItemDao.getById(it) }.forEach { queueAndSync(it, ts) }
     }
 
     suspend fun deleteByIds(savedItemIds: List<String>, ts: Long) = withContext(Dispatchers.IO) {
@@ -160,14 +208,14 @@ class SavedItemRepository(
                 queueSavedItem(it, FirestoreOutboxKind.DeleteSavedItem, ts)
             }
             subTaskDao.hardDeleteByParentIds(savedItemIds)
-            reminderListDao.hardDeleteByIds(savedItemIds)
+            savedItemDao.hardDeleteByIds(savedItemIds)
             savedItemIds.forEach {
                 pendingProposedOpDao.deleteByTargetItemId(it)
                 rejectedMergeDao.deleteForItem(it)
             }
         }
         FirestoreOutboxWork.enqueue(appContext)
-        savedItemIds.forEach { firestoreSync.markReminderDeleted(it, ts) }
+        savedItemIds.forEach { firestoreSync.markSavedItemDeleted(it, ts) }
     }
 
     private suspend fun queueSavedItem(savedItemId: String, kind: String, ts: Long) {
@@ -180,7 +228,7 @@ class SavedItemRepository(
         queueSavedItem(item.savedItemId, FirestoreOutboxKind.UpsertSavedItem, ts)
         FirestoreOutboxWork.enqueue(appContext)
         // Fast path; the outbox row remains durable until the worker independently confirms it.
-        firestoreSync.syncReminder(item)
+        firestoreSync.syncSavedItem(item)
     }
 
     /**
@@ -189,7 +237,7 @@ class SavedItemRepository(
      */
     private suspend fun journalUserEvent(savedItemId: String, eventType: String, titleOverride: String? = null) {
         try {
-            val item = reminderListDao.getById(savedItemId)
+            val item = savedItemDao.getById(savedItemId)
             val title = titleOverride ?: item?.title ?: return
             val keys = linkDao.getBySavedItemId(savedItemId).map { it.notiKey }.distinct()
             val now = System.currentTimeMillis()
@@ -209,39 +257,39 @@ class SavedItemRepository(
         }
     }
 
-    suspend fun getById(savedItemId: String): SavedItem? = withContext(Dispatchers.IO) { reminderListDao.getById(savedItemId) }
+    suspend fun getById(savedItemId: String): SavedItem? = withContext(Dispatchers.IO) { savedItemDao.getById(savedItemId) }
 
     suspend fun setViewed(savedItemId: String) = withContext(Dispatchers.IO) {
-        reminderListDao.setViewed(savedItemId)
-        val updated = reminderListDao.getById(savedItemId) ?: return@withContext
+        savedItemDao.setViewed(savedItemId)
+        val updated = savedItemDao.getById(savedItemId) ?: return@withContext
         queueAndSync(updated)
     }
 
     suspend fun setStarred(savedItemId: String, starred: Boolean, ts: Long) = withContext(Dispatchers.IO) {
-        reminderListDao.setStarred(savedItemId, starred, ts)
-        val updated = reminderListDao.getById(savedItemId) ?: return@withContext
+        savedItemDao.setStarred(savedItemId, starred, ts)
+        val updated = savedItemDao.getById(savedItemId) ?: return@withContext
         queueAndSync(updated, ts)
     }
 
-    /** [doAtMs] = 0 clears the do date. */
-    suspend fun setDoDate(savedItemId: String, doAtMs: Long, ts: Long) = withContext(Dispatchers.IO) {
-        reminderListDao.setDoDate(savedItemId, doAtMs, ts)
-        val updated = reminderListDao.getById(savedItemId) ?: return@withContext
+    /** [whenAtMs] = 0 clears the When. */
+    suspend fun setWhen(savedItemId: String, whenAtMs: Long, ts: Long) = withContext(Dispatchers.IO) {
+        savedItemDao.setWhen(savedItemId, whenAtMs, ts)
+        val updated = savedItemDao.getById(savedItemId) ?: return@withContext
         queueAndSync(updated, ts)
     }
 
     /** Explicit user acknowledgment of a New/Updated item (the review "got it" action). */
     suspend fun acknowledgeReview(savedItemId: String, ts: Long) = withContext(Dispatchers.IO) {
-        reminderListDao.acknowledgeReview(savedItemId, ts)
-        val updated = reminderListDao.getById(savedItemId) ?: return@withContext
+        savedItemDao.acknowledgeReview(savedItemId, ts)
+        val updated = savedItemDao.getById(savedItemId) ?: return@withContext
         queueAndSync(updated, ts)
     }
 
     /** Batch acknowledgment for "approve all" in the review screen. */
     suspend fun acknowledgeReviewByIds(savedItemIds: List<String>, ts: Long) = withContext(Dispatchers.IO) {
         if (savedItemIds.isEmpty()) return@withContext
-        reminderListDao.acknowledgeReviewByIds(savedItemIds, ts)
-        savedItemIds.mapNotNull { reminderListDao.getById(it) }.forEach { queueAndSync(it, ts) }
+        savedItemDao.acknowledgeReviewByIds(savedItemIds, ts)
+        savedItemIds.mapNotNull { savedItemDao.getById(it) }.forEach { queueAndSync(it, ts) }
     }
 
     // ========== Reject-an-update (revert) ==========
@@ -250,14 +298,12 @@ class SavedItemRepository(
      * What a [revertPendingLlmUpdates] call changed, carried back so the caller can offer Undo.
      *
      * [previousItem] is the item exactly as it was before the revert (re-upsert to undo the field
-     * and content rollback). [hiddenSubTaskIds] were visible and the revert hid them; [restoredSubTaskIds]
-     * were hidden and the revert brought them back — undo swaps both. [revertChangeId] is the audit
-     * row the revert wrote; undo deletes it so the change history matches the restored state.
+     * and content rollback). Child rows are captured directly because subtasks now use hard deletes.
      */
     data class RevertOutcome(
         val previousItem: SavedItem,
-        val hiddenSubTaskIds: List<String>,
-        val restoredSubTaskIds: List<String>,
+        val deletedAddedSubItems: List<SavedSubItem>,
+        val restoredRemovedSubItems: List<SavedSubItem>,
         val revertChangeId: Long,
     )
 
@@ -274,7 +320,7 @@ class SavedItemRepository(
      * simply acknowledged (equivalent to approve) and an outcome with no subtask changes is returned.
      */
     suspend fun revertPendingLlmUpdates(savedItemId: String, ts: Long): RevertOutcome? = withContext(Dispatchers.IO) {
-        val item = reminderListDao.getById(savedItemId) ?: return@withContext null
+        val item = savedItemDao.getById(savedItemId) ?: return@withContext null
         val pending = changeLogDao.getNewerThan(savedItemId, item.lastViewedChangeAt)
             .filter { it.origin == "llm" && it.changeType == SavedItemChangeType.LlmUpdate }
 
@@ -283,8 +329,8 @@ class SavedItemRepository(
         var deadline = item.deadlineAtMs
         var start = item.startAtMs
         var end = item.endAtMs
-        val hiddenSubTaskIds = mutableListOf<String>()
-        val restoredSubTaskIds = mutableListOf<String>()
+        val deletedAddedSubItems = mutableListOf<SavedSubItem>()
+        val restoredRemovedSubItems = mutableListOf<SavedSubItem>()
 
         // getNewerThan returns newest-first (ORDER BY createdAt DESC), which is the order we need.
         for (row in pending) {
@@ -312,13 +358,13 @@ class SavedItemRepository(
                 )
             }
             parseSubTaskIds(row.addedSubTasksJson).forEach { id ->
-                subTaskDao.softDeleteById(id, ts)
-                hiddenSubTaskIds += id
+                subTaskDao.getById(id)?.let(deletedAddedSubItems::add)
+                subTaskDao.hardDeleteById(id)
             }
-            val removed = parseSubTaskIds(row.removedSubTasksJson)
-            if (removed.isNotEmpty()) {
-                subTaskDao.restoreByIds(removed, ts)
-                restoredSubTaskIds += removed
+            val removed = parseSubTasks(row.removedSubTasksJson, savedItemId)
+            if (removed.isNotEmpty() && item.isTask) {
+                subTaskDao.upsertAll(removed)
+                restoredRemovedSubItems += removed
             }
         }
 
@@ -332,7 +378,7 @@ class SavedItemRepository(
             lastViewedChangeAt = ts,
             lastUpdateTimestamp = ts,
         )
-        reminderListDao.upsert(restored)
+        savedItemDao.upsert(restored)
 
         val revertChangeId = changeLogDao.insert(
             SavedItemChangeLog(
@@ -349,17 +395,19 @@ class SavedItemRepository(
 
         RevertOutcome(
             previousItem = item,
-            hiddenSubTaskIds = hiddenSubTaskIds,
-            restoredSubTaskIds = restoredSubTaskIds,
+            deletedAddedSubItems = deletedAddedSubItems,
+            restoredRemovedSubItems = restoredRemovedSubItems,
             revertChangeId = revertChangeId,
         )
     }
 
-    /** Undoes a [revertPendingLlmUpdates], restoring the item and sub-task visibility as they were. */
+    /** Undoes a [revertPendingLlmUpdates], restoring the captured child rows. */
     suspend fun undoRevert(outcome: RevertOutcome, ts: Long) = withContext(Dispatchers.IO) {
-        reminderListDao.upsert(outcome.previousItem)
-        if (outcome.hiddenSubTaskIds.isNotEmpty()) subTaskDao.restoreByIds(outcome.hiddenSubTaskIds, ts)
-        outcome.restoredSubTaskIds.forEach { subTaskDao.softDeleteById(it, ts) }
+        savedItemDao.upsert(outcome.previousItem)
+        if (outcome.deletedAddedSubItems.isNotEmpty()) subTaskDao.upsertAll(outcome.deletedAddedSubItems)
+        if (outcome.restoredRemovedSubItems.isNotEmpty()) {
+            subTaskDao.hardDeleteByIds(outcome.restoredRemovedSubItems.map { it.savedSubItemId })
+        }
         changeLogDao.deleteById(outcome.revertChangeId)
         queueAndSync(outcome.previousItem, ts)
     }
@@ -380,6 +428,29 @@ class SavedItemRepository(
                 val obj = arr.optJSONObject(i) ?: continue
                 val id = obj.optString("savedSubItemId", obj.optString("subTaskId"))
                 if (id.isNotBlank()) add(id)
+            }
+        }
+    } catch (_: Exception) {
+        emptyList()
+    }
+
+    private fun parseSubTasks(json: String, parentId: String): List<SavedSubItem> = try {
+        val arr = JSONArray(json)
+        buildList {
+            for (index in 0 until arr.length()) {
+                val obj = arr.optJSONObject(index) ?: continue
+                val id = obj.optString("savedSubItemId", obj.optString("subTaskId"))
+                val text = SavedSubItem.normalizeText(obj.optString("text", obj.optString("title")))
+                if (id.isBlank() || text.isBlank()) continue
+                add(
+                    SavedSubItem(
+                        savedSubItemId = id,
+                        parentSavedItemId = parentId,
+                        text = text,
+                        isCompleted = obj.optBoolean("isCompleted", false),
+                        position = obj.optInt("position", index),
+                    )
+                )
             }
         }
     } catch (_: Exception) {
@@ -440,8 +511,8 @@ class SavedItemRepository(
     }
 
     suspend fun updateButtons(savedItemId: String, buttons: String) = withContext(Dispatchers.IO) {
-        reminderListDao.updateButtons(savedItemId, buttons)
-        val updated = reminderListDao.getById(savedItemId) ?: return@withContext
+        savedItemDao.updateButtons(savedItemId, buttons)
+        val updated = savedItemDao.getById(savedItemId) ?: return@withContext
         queueAndSync(updated)
     }
 
@@ -457,7 +528,7 @@ class SavedItemRepository(
         val label = when (SharedPreferencesManager.targetExtractionLanguage) {
             "en" -> "Update"
             "zh-TW" -> "更新"
-            else -> appContext.getString(R.string.reminder_update_section_label)
+            else -> appContext.getString(R.string.saved_item_update_section_label)
         }
         val time = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(ts))
         return "\n\n[$label — $time]\n$fragment"

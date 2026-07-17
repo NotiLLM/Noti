@@ -10,7 +10,7 @@
     <string name="ui_action_delete">刪除</string>
     <string name="ui_action_ok">確定</string>
     <string name="ui_action_save">儲存</string>
-    <string name="a11y_set_do_date">設定執行日期</string>
+    <string name="a11y_set_when">設定何時</string>
 
     <!-- Settings -->
     <string name="ui_settings_delete_on_swipe">滑動刪除：</string>
@@ -26,30 +26,30 @@
     <string name="ui_settings_extraction_language_search">搜尋語言</string>
 
     <!-- Reminders -->
-    <string name="ui_reminders_filter_all">全部</string>
-    <string name="ui_reminders_filter_pending">待辦</string>
-    <string name="ui_reminders_filter_tasks">任務</string>
-    <string name="ui_reminders_filter_memos">備忘</string>
-    <string name="ui_reminders_filter_completed">已完成</string>
-    <string name="ui_reminders_filter_keep">保留</string>
-    <string name="ui_reminders_filter_archived">已封存</string>
-    <string name="ui_reminders_filter_starred">已加星號</string>
-    <string name="ui_reminders_search_placeholder">搜尋提醒（用 + 代表「且」）</string>
-    <string name="ui_reminders_add_dialog_title">新增</string>
-    <string name="ui_reminders_add_dialog_body">建立任務或備忘</string>
-    <string name="ui_reminders_add_dialog_task">任務</string>
-    <string name="ui_reminders_add_dialog_memo">備忘</string>
-    <string name="ui_reminders_untitled_task">（未命名任務）</string>
-    <string name="ui_reminders_untitled_memo">（未命名備忘）</string>
-    <string name="ui_reminders_no_deadline">無特定截止時間</string>
-    <string name="ui_reminders_ect_short">預估：%1$d 分</string>
-    <string name="ui_reminders_editor_title_placeholder">未命名</string>
-    <string name="ui_reminders_editor_task_label">任務</string>
-    <string name="ui_reminders_editor_completed">已完成</string>
-    <string name="ui_reminders_editor_do_date">預計執行</string>
-    <string name="reminder_update_section_label">更新</string>
-    <string name="reminder_badge_new">新項目</string>
-    <string name="reminder_badge_updated">已更新</string>
+    <string name="ui_saved_items_filter_all">全部</string>
+    <string name="ui_saved_items_filter_pending">待辦</string>
+    <string name="ui_saved_items_filter_tasks">任務</string>
+    <string name="ui_saved_items_filter_memos">備忘</string>
+    <string name="ui_saved_items_filter_completed">已完成</string>
+    <string name="ui_saved_items_filter_keep">保留</string>
+    <string name="ui_saved_items_filter_archived">已封存</string>
+    <string name="ui_saved_items_filter_starred">已加星號</string>
+    <string name="ui_saved_items_search_placeholder">搜尋儲存項目（用 + 代表「且」）</string>
+    <string name="ui_saved_items_add_dialog_title">新增</string>
+    <string name="ui_saved_items_add_dialog_body">建立任務或備忘</string>
+    <string name="ui_saved_items_add_dialog_task">任務</string>
+    <string name="ui_saved_items_add_dialog_memo">備忘</string>
+    <string name="ui_saved_items_untitled_task">（未命名任務）</string>
+    <string name="ui_saved_items_untitled_memo">（未命名備忘）</string>
+    <string name="ui_saved_items_no_deadline">無特定截止時間</string>
+    <string name="ui_saved_items_ect_short">預估：%1$d 分</string>
+    <string name="ui_saved_items_editor_title_placeholder">未命名</string>
+    <string name="ui_saved_items_editor_task_label">任務</string>
+    <string name="ui_saved_items_editor_completed">已完成</string>
+    <string name="ui_saved_items_editor_when">何時</string>
+    <string name="saved_item_update_section_label">更新</string>
+    <string name="saved_item_badge_new">新項目</string>
+    <string name="saved_item_badge_updated">已更新</string>
     <string name="pending_review_badge">待檢視</string>
     <string name="pending_review_merge_badge">待合併（%1$d 項）</string>
     <string name="pending_review_edit_title">編輯前先檢視變更</string>
@@ -57,10 +57,10 @@
     <string name="pending_review_merge_message">此項目有尚未檢視的更新，接受後會與另外 %1$d 項合併。要先接受變更再編輯嗎？</string>
     <string name="pending_review_edit_accept">接受並編輯</string>
     <string name="pending_review_edit_cancel">稍後</string>
-    <string name="reminder_whats_new">最新變更</string>
-    <string name="reminder_whats_new_generic">此項目正等待你確認。</string>
-    <string name="reminder_acknowledge">知道了</string>
-    <string name="reminder_change_history">變更紀錄（%1$d）</string>
+    <string name="saved_item_whats_new">最新變更</string>
+    <string name="saved_item_whats_new_generic">此項目正等待你確認。</string>
+    <string name="saved_item_acknowledge">知道了</string>
+    <string name="saved_item_change_history">變更紀錄（%1$d）</string>
     <string name="change_type_created">建立</string>
     <string name="change_type_llm_update">依通知更新</string>
     <string name="change_type_user_edit">你編輯過</string>
@@ -75,8 +75,8 @@
     <string name="change_field_end">結束時間</string>
     <string name="change_field_estimate">預估時間</string>
     <string name="change_field_row">%1$s：%2$s → %3$s</string>
-    <string name="reminder_show_surrounding_context">顯示前後訊息</string>
-    <string name="reminder_evidence_legend">標示的訊息是此項目的來源</string>
+    <string name="saved_item_show_surrounding_context">顯示前後訊息</string>
+    <string name="saved_item_evidence_legend">標示的訊息是此項目的來源</string>
     <string name="extraction_pending_banner">擷取待處理——無法連線伺服器（%1$d 則通知排隊中）</string>
     <string name="extraction_retry">重試</string>
     <string name="extraction_failed_toast">擷取失敗——稍後將自動重試</string>
@@ -90,11 +90,11 @@
     <string name="account_switch_keep_history_warning">現有通知文字會留在此裝置，之後可能由新帳戶處理。</string>
     <string name="account_switch_start_clean">從乾淨狀態開始</string>
     <string name="account_switch_start_clean_warning">載入新帳戶前永久刪除此裝置的通知紀錄。此資料無法從 Firestore 還原。</string>
-    <string name="ui_reminders_do_date_chip">預計 %1$s</string>
-    <string name="ui_reminders_editor_ect_label">預估完成時間（分鐘）</string>
-    <string name="ui_reminders_editor_note">內容</string>
-    <string name="ui_reminders_editor_note_placeholder">寫點什麼……</string>
-    <string name="ui_reminders_create_button">建立</string>
+    <string name="ui_saved_items_when_chip">何時：%1$s</string>
+    <string name="ui_saved_items_editor_ect_label">預估完成時間（分鐘）</string>
+    <string name="ui_saved_items_editor_note">內容</string>
+    <string name="ui_saved_items_editor_note_placeholder">寫點什麼……</string>
+    <string name="ui_reminder_create_button">建立</string>
 
     <!-- Accessibility -->
     <string name="a11y_add">新增</string>
@@ -104,7 +104,7 @@
     <string name="a11y_delete">刪除</string>
     <string name="a11y_star">加星號</string>
     <string name="a11y_unstar">取消星號</string>
-    <string name="a11y_clear_do_date">清除預計執行時間</string>
+    <string name="a11y_clear_when">清除何時</string>
 
     <!-- Relative / absolute time (used in reminders and elsewhere). -->
     <string name="time_now">現在</string>
@@ -177,7 +177,7 @@
 
     <!-- Noti record context menu -->
     <string name="ui_noti_menu_title">選項</string>
-    <string name="ui_action_extract_reminder">擷取提醒</string>
+    <string name="ui_action_extract_saved_item">擷取儲存項目</string>
     <string name="ui_noti_linked_items">此通知產生的項目</string>
     <string name="ui_noti_show_more_context">顯示更多內容</string>
     <string name="ui_noti_hide_more_context">隱藏更多內容</string>
@@ -188,9 +188,9 @@
     <string name="tab_keep">備忘</string>
     <string name="tab_preferences">偏好</string>
     <string name="menu_settings">設定</string>
-    <string name="reminder_related_notifications">相關通知（%1$d）</string>
-    <string name="reminder_related_notifications_loading">正在載入提醒與相關通知…</string>
-    <string name="reminder_no_related_notifications">沒有相關通知。</string>
+    <string name="saved_item_related_notifications">相關通知（%1$d）</string>
+    <string name="saved_item_related_notifications_loading">正在載入儲存項目與相關通知…</string>
+    <string name="saved_item_no_related_notifications">沒有相關通知。</string>
     <string name="a11y_expand">展開</string>
     <string name="a11y_collapse">收合</string>
 
@@ -314,7 +314,7 @@
     <string name="pref_chat_empty_prompt_about_me">告訴我關於您自己的資訊，讓我更了解您的通知。</string>
     <string name="pref_chat_empty_example_about_me">例如：「我是 Google 的軟體工程師」或「我的伴侶叫 Alice」</string>
     <string name="pref_chat_discover_button">了解我</string>
-    <string name="pref_chat_discover_analyzing">正在分析您的通知與提醒以了解您…</string>
+    <string name="pref_chat_discover_analyzing">正在分析您的通知與儲存項目以了解您…</string>
     <string name="pref_chat_active_rules_count">您有 %1$d 條有效規則。</string>
     <string name="pref_chat_input_placeholder">描述一項偏好…</string>
     <string name="pref_chat_send_desc">傳送</string>
@@ -348,8 +348,8 @@
     <string name="pref_conflict_resolve">解決</string>
 
     <!-- Chat context card -->
-    <string name="pref_chat_context_edit">針對已編輯的提醒調整擷取偏好：</string>
-    <string name="pref_chat_context_delete">針對已刪除的提醒調整擷取偏好：</string>
+    <string name="pref_chat_context_edit">針對已編輯的儲存項目調整擷取偏好：</string>
+    <string name="pref_chat_context_delete">針對已刪除的儲存項目調整擷取偏好：</string>
     <string name="pref_chat_context_extract">針對手動擷取的通知調整擷取偏好：</string>
     <string name="pref_chat_context_before">修改前：</string>
     <string name="pref_chat_context_after">修改後：</string>
@@ -378,9 +378,9 @@
     <string name="cancel">取消</string>
 
     <!-- Reminder sorting sections -->
-    <string name="reminder_section_unseen">新提醒</string>
-    <string name="reminder_section_pinned">已釘選</string>
-    <string name="reminder_section_scored">所有提醒</string>
+    <string name="saved_item_section_unseen">新項目</string>
+    <string name="saved_item_section_pinned">已釘選</string>
+    <string name="saved_item_section_scored">所有儲存項目</string>
 
     <!-- Sub-task list / row -->
     <string name="subtask_section_title">子任務</string>
@@ -396,37 +396,37 @@
     <string name="a11y_subtask_more">更多選項</string>
 
     <!-- Reminder actions -->
-    <string name="reminder_refresh_all">重新整理所有提醒</string>
+    <string name="saved_item_refresh_all">重新整理所有儲存項目</string>
     <string name="reminder_regenerate">重新生成</string>
-    <string name="reminder_share">分享</string>
+    <string name="saved_item_share">分享</string>
     <string name="reminder_pin">釘選</string>
     <string name="reminder_unpin">取消釘選</string>
     <string name="reminder_make_copy_button">建立複製按鈕</string>
 
     <!-- Reminder feedback dialog -->
-    <string name="reminder_feedback_title">這個提醒的排序應如何調整？</string>
+    <string name="saved_item_feedback_title">這個儲存項目的排序應如何調整？</string>
     <string name="reminder_feedback_important">重要</string>
     <string name="reminder_feedback_handle_later">稍後處理</string>
 
     <!-- Reminder button chips -->
     <string name="a11y_open_link">開啟連結</string>
     <string name="a11y_copy_text">複製文字</string>
-    <string name="a11y_share_reminder">分享提醒</string>
-    <string name="a11y_refresh_all">重新整理所有提醒</string>
-    <string name="dialog_regenerate_all_title">重新生成所有提醒？</string>
-    <string name="dialog_regenerate_all_message">這將把所有現有提醒及其通知內容重新送交處理流程進行重新生成，提醒可能會被改寫或合併。</string>
-    <string name="dialog_regenerate_all_confirm">重新生成</string>
-    <string name="a11y_regenerate">重新生成提醒</string>
-    <string name="a11y_pin">釘選提醒</string>
-    <string name="a11y_unpin">取消釘選提醒</string>
+    <string name="a11y_share_saved_item">分享儲存項目</string>
+    <string name="a11y_refresh_saved_items">重新整理所有儲存項目</string>
+    <string name="dialog_regenerate_all_saved_items_title">重新生成所有儲存項目？</string>
+    <string name="dialog_regenerate_all_saved_items_message">這會將所有現有儲存項目及其通知脈絡重新送交處理流程；項目可能被改寫或合併。</string>
+    <string name="dialog_regenerate_all_saved_items_confirm">重新生成</string>
+    <string name="a11y_regenerate_saved_item">重新生成儲存項目</string>
+    <string name="a11y_pin_saved_item">釘選儲存項目</string>
+    <string name="a11y_unpin_saved_item">取消釘選儲存項目</string>
     <string name="a11y_archive">封存</string>
     <string name="a11y_drag_handle">拖曳以重新排序</string>
 
     <!-- Separate date/time pickers -->
-    <string name="reminder_pick_date">日期</string>
-    <string name="reminder_pick_time">時間</string>
-    <string name="reminder_no_date">未設定日期</string>
-    <string name="reminder_no_time">未設定時間</string>
+    <string name="saved_item_pick_date">日期</string>
+    <string name="saved_item_pick_time">時間</string>
+    <string name="saved_item_no_date">未設定日期</string>
+    <string name="saved_item_no_time">未設定時間</string>
 
     <!-- Navigation / drawer -->
     <string name="tab_new">最新</string>
@@ -571,10 +571,10 @@
     <string name="review_rejected_toast">已拒絕</string>
     <string name="review_reverted_toast">已還原變更</string>
     <string name="review_tell_why">告訴它原因</string>
-    <string name="review_dodate_offer_title">要設定執行日期嗎？</string>
-    <string name="review_dodate_offer_body">%1$d 項已核准的任務尚未設定執行日期，現在要設定嗎？</string>
-    <string name="review_dodate_offer_set">設定執行日期</string>
-    <string name="review_dodate_offer_skip">略過</string>
+    <string name="review_when_offer_title">要設定「何時」嗎？</string>
+    <string name="review_when_offer_body">%1$d 項已核准的任務尚未設定「何時」，現在要設定嗎？</string>
+    <string name="review_when_offer_set">設定何時</string>
+    <string name="review_when_offer_skip">略過</string>
     <string name="review_edit">編輯</string>
     <string name="review_save_approve">儲存並核准</string>
     <string name="review_triggered_this">觸發此次編輯</string>
@@ -592,8 +592,11 @@
     <string name="a11y_set_reminder">設定提醒</string>
     <string name="a11y_export">匯出</string>
 
-    <!-- Do date -->
-    <string name="do_date_someday">將來某天</string>
-    <string name="do_date_add_time">新增時間</string>
-    <string name="do_date_clear">清除</string>
+    <!-- When -->
+    <string name="when_someday">將來某天</string>
+    <string name="when_add_time">新增時間</string>
+    <string name="when_clear">清除</string>
+    <string name="task_to_keep_title">要將任務改為保留項目嗎？</string>
+    <string name="task_to_keep_message">截止時間與子任務（如有）會加入項目描述；「何時」維持不變。</string>
+    <string name="task_to_keep_confirm">改為保留項目</string>
 </resources>

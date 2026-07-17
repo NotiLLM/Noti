@@ -96,28 +96,28 @@ fun DueChip(
 }
 
 /**
- * A small neutral pill showing the user-set "do date" (when they plan to work on the task),
- * as opposed to [DueChip]'s deadline. No urgency coloring: the do date is a plan, not an obligation.
+ * A small neutral pill showing the user-set "When" (when they plan to work on the task),
+ * as opposed to [DueChip]'s deadline. No urgency coloring: the When is a plan, not an obligation.
  *
  * Values ≤ 0 (unset) render nothing.
  */
 @Composable
-fun DoDateChip(
-    doAtMs: Long,
+fun WhenChip(
+    whenAtMs: Long,
     modifier: Modifier = Modifier,
 ) {
-    if (doAtMs <= 0L) return
+    if (whenAtMs <= 0L) return
     val context = androidx.compose.ui.platform.LocalContext.current
     val container = MaterialTheme.colorScheme.secondaryContainer
     val onContainer = MaterialTheme.colorScheme.onSecondaryContainer
 
     // The "someday" sentinel is not a real date; label it as such instead of formatting a far-future time.
-    val label = if (org.muilab.notigpt.model.features.SavedItem.isSomeday(doAtMs)) {
-        androidx.compose.ui.res.stringResource(R.string.do_date_someday)
+    val label = if (org.muilab.notigpt.model.features.SavedItem.isSomeday(whenAtMs)) {
+        androidx.compose.ui.res.stringResource(R.string.when_someday)
     } else {
         androidx.compose.ui.res.stringResource(
-            R.string.ui_reminders_do_date_chip,
-            getRelativeTimeStr(doAtMs, context),
+            R.string.ui_saved_items_when_chip,
+            getRelativeTimeStr(whenAtMs, context),
         )
     }
 

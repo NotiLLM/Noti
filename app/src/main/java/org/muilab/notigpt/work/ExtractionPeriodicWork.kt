@@ -15,16 +15,18 @@ import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit
 
 /**
- * Scheduling helper for the reminder scan/extraction safety-net worker.
+ * Scheduling helper for the notification extraction safety-net worker.
  *
- * Keep unique WorkManager names and enqueue policy here so the app can schedule or kick reminder processing from
+ * Keep unique WorkManager names and enqueue policy here so the app can schedule or kick extraction from
  * multiple entry points without duplicating worker setup.
  */
-object ReminderPeriodicWork {
+object ExtractionPeriodicWork {
 
-    private const val TAG = "ReminderPeriodicWork"
-    private const val UNIQUE_NAME = "reminder_periodic_scan_extract"
-    private const val UNIQUE_KICK_NAME = "reminder_periodic_scan_extract_kick"
+    private const val TAG = "ExtractionPeriodicWork"
+    private const val UNIQUE_NAME = "extraction_periodic_scan"
+    private const val UNIQUE_KICK_NAME = "extraction_periodic_scan_kick"
+    private const val LEGACY_UNIQUE_NAME = "reminder_periodic_scan_extract"
+    private const val LEGACY_UNIQUE_KICK_NAME = "reminder_periodic_scan_extract_kick"
 
     /** For diagnostics / UI. */
     fun uniqueName(): String = UNIQUE_NAME
@@ -37,7 +39,7 @@ object ReminderPeriodicWork {
      */
     fun enqueue(context: Context) {
         val req = PeriodicWorkRequest.Builder(
-            ReminderPeriodicWorker::class.java,
+            ExtractionPeriodicWorker::class.java,
             15,
             TimeUnit.MINUTES,
         )
@@ -48,8 +50,10 @@ object ReminderPeriodicWork {
             // easily push executions out by hours.
             .build()
 
-        WorkManager.getInstance(context)
-            .enqueueUniquePeriodicWork(UNIQUE_NAME, ExistingPeriodicWorkPolicy.KEEP, req)
+        WorkManager.getInstance(context).apply {
+            cancelUniqueWork(LEGACY_UNIQUE_NAME)
+            enqueueUniquePeriodicWork(UNIQUE_NAME, ExistingPeriodicWorkPolicy.KEEP, req)
+        }
 
         Log.i(TAG, "Enqueued unique periodic work name=$UNIQUE_NAME id=${req.id}")
     }
@@ -59,11 +63,13 @@ object ReminderPeriodicWork {
      * user opens the app.
      */
     fun kickNow(context: Context) {
-        val req = OneTimeWorkRequest.Builder(ReminderPeriodicWorker::class.java)
+        val req = OneTimeWorkRequest.Builder(ExtractionPeriodicWorker::class.java)
             .build()
 
-        WorkManager.getInstance(context)
-            .enqueueUniqueWork(UNIQUE_KICK_NAME, ExistingWorkPolicy.REPLACE, req)
+        WorkManager.getInstance(context).apply {
+            cancelUniqueWork(LEGACY_UNIQUE_KICK_NAME)
+            enqueueUniqueWork(UNIQUE_KICK_NAME, ExistingWorkPolicy.REPLACE, req)
+        }
 
         Log.i(TAG, "Enqueued one-time kick work name=$UNIQUE_KICK_NAME id=${req.id}")
     }

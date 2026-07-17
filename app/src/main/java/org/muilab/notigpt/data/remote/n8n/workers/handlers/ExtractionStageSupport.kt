@@ -9,9 +9,8 @@ import org.json.JSONObject
 import org.muilab.notigpt.data.remote.n8n.ExtractionStatusStore
 import org.muilab.notigpt.data.remote.n8n.context.N8nWorkerContext
 import org.muilab.notigpt.data.remote.n8n.formatter.N8nRecordFormatter
-import org.muilab.notigpt.data.repository.reminder.PendingProposedOpRepository
+import org.muilab.notigpt.data.repository.saveditem.PendingProposedOpRepository
 import org.muilab.notigpt.model.features.SavedItem
-import org.muilab.notigpt.model.features.SavedItemType
 import org.muilab.notigpt.model.notifications.NotiRecord
 import org.muilab.notigpt.util.SharedPreferencesManager
 import java.text.SimpleDateFormat
@@ -67,28 +66,25 @@ internal object ExtractionStageSupport {
         "title" to item.title,
         "type" to if (item.isTask) "task" else "keep",
         "deadline" to iso(item.deadlineAtMs),
-        "doAt" to if (SavedItem.isSomeday(item.doAtMs)) "someday" else iso(item.doAtMs),
+        "when" to if (SavedItem.isSomeday(item.whenAtMs)) "someday" else iso(item.whenAtMs),
     )
 
     /** Full item detail, used where a stage reasons over content (B linked items, E-stage pairs/groups). */
     suspend fun itemDetail(ctx: N8nWorkerContext, item: SavedItem): Map<String, Any> {
         val subTasks = try {
-            ctx.database.subTaskDao().getByReminderId(item.savedItemId).map { st ->
+            ctx.database.subTaskDao().getBySavedItemId(item.savedItemId).map { st ->
                 mapOf(
                     "subTaskId" to st.savedSubItemId,
-                    "title" to st.title,
-                    "description" to st.description,
-                    "isTask" to (st.itemType == SavedItemType.Task),
+                    "text" to st.text,
                     "isCompleted" to st.isCompleted,
-                    "deadline" to iso(st.deadlineAtMs),
-                    "sortOrder" to st.sortOrder,
+                    "position" to st.position,
                 )
             }
         } catch (_: Exception) {
             emptyList()
         }
         val recordIds = try {
-            ctx.reminderRepository.getLinkedRecordIdsFor(listOf(item.savedItemId))[item.savedItemId] ?: emptyList()
+            ctx.savedItemRepository.getLinkedRecordIdsFor(listOf(item.savedItemId))[item.savedItemId] ?: emptyList()
         } catch (_: Exception) {
             emptyList()
         }
@@ -101,7 +97,7 @@ internal object ExtractionStageSupport {
             "deadline" to iso(item.deadlineAtMs),
             "startTime" to iso(item.startAtMs),
             "endTime" to iso(item.endAtMs),
-            "doAt" to if (SavedItem.isSomeday(item.doAtMs)) "someday" else iso(item.doAtMs),
+            "when" to if (SavedItem.isSomeday(item.whenAtMs)) "someday" else iso(item.whenAtMs),
             "userEdited" to item.userEdited,
             "isCompleted" to item.isCompleted,
             "buttons" to item.buttons,
@@ -122,9 +118,9 @@ internal object ExtractionStageSupport {
         "endTime" to iso(preview.item.endAtMs),
         "subTasks" to preview.subItems.map { st ->
             mapOf(
-                "title" to st.title,
-                "description" to st.description,
-                "isTask" to (st.itemType == SavedItemType.Task),
+                "text" to st.text,
+                "isCompleted" to st.isCompleted,
+                "position" to st.position,
             )
         },
     )
@@ -135,7 +131,7 @@ internal object ExtractionStageSupport {
      */
     suspend fun activeCompactList(ctx: N8nWorkerContext, pendingProposedOpRepo: PendingProposedOpRepository): List<Map<String, Any>> {
         val targeted = pendingProposedOpRepo.getTargetedItemIds()
-        return ctx.reminderRepository.getAllActive()
+        return ctx.savedItemRepository.getAllActive()
             .filter { !it.isCompleted && !it.isArchived && it.savedItemId !in targeted }
             .map { itemCompact(it) }
     }

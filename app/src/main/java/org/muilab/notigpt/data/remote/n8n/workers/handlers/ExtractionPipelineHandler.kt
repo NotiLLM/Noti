@@ -9,7 +9,7 @@ import org.muilab.notigpt.BuildConfig
 import org.muilab.notigpt.data.remote.n8n.context.N8nWorkerContext
 import org.muilab.notigpt.data.remote.n8n.workers.N8nWorkerInput
 import org.muilab.notigpt.data.remote.n8n.workers.handlers.ExtractionStageSupport.Http
-import org.muilab.notigpt.data.repository.reminder.PendingProposedOpRepository
+import org.muilab.notigpt.data.repository.saveditem.PendingProposedOpRepository
 import org.muilab.notigpt.model.features.PendingProposedOp
 import org.muilab.notigpt.model.features.PendingProposedOpType
 import org.muilab.notigpt.model.notifications.NotiRecord
@@ -112,7 +112,7 @@ internal object ExtractionPipelineHandler {
                 addAll(ctx.database.notiSavedItemLinkDao().getSavedItemIdsByNotiKey(notiKey))
                 addAll(ctx.journalRepository.getSavedItemIdsForKeys(listOf(notiKey)))
             }
-            val linkedItems = linkedItemIds.mapNotNull { id -> ctx.reminderRepository.getById(id) }
+            val linkedItems = linkedItemIds.mapNotNull { id -> ctx.savedItemRepository.getById(id) }
                 .map { ExtractionStageSupport.itemDetail(ctx, it) }
 
             val journalEntries = ctx.journalRepository.payloadFor(listOf(notiKey))[notiKey]
@@ -271,7 +271,7 @@ internal object ExtractionPipelineHandler {
             val existing = buildList {
                 for (j in 0 until existingIdsArr.length()) {
                     val id = existingIdsArr.optString(j)
-                    val item = ctx.reminderRepository.getById(id) ?: continue
+                    val item = ctx.savedItemRepository.getById(id) ?: continue
                     add(ExtractionStageSupport.itemDetail(ctx, item))
                 }
             }

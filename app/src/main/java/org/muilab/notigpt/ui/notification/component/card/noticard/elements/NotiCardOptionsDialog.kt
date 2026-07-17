@@ -65,7 +65,7 @@ fun NotiCardOptionsDialog(
             val db = AppDatabase.getInstance(context.applicationContext)
             val ids = db.notiSavedItemLinkDao().getSavedItemIdsByNotiKey(notiKey)
             if (ids.isEmpty()) emptyList()
-            else db.reminderListDao().getByIds(ids).filter { !it.isArchived && !it.isCompleted }
+            else db.savedItemDao().getByIds(ids).filter { !it.isArchived && !it.isCompleted }
         }
     }
 
@@ -81,7 +81,7 @@ fun NotiCardOptionsDialog(
             )
             OptionRow(
                 iconRes = R.drawable.task,
-                label = stringResource(R.string.ui_action_extract_reminder),
+                label = stringResource(R.string.ui_action_extract_saved_item),
                 onClick = {
                     drawerViewModel.actOnNoti(notiKey, "extract_reminder")
                     onDismiss()
@@ -90,7 +90,7 @@ fun NotiCardOptionsDialog(
             if (onCreateReminder != null) {
                 OptionRow(
                     iconRes = R.drawable.schedule,
-                    label = stringResource(R.string.ui_reminders_create_button),
+                    label = stringResource(R.string.ui_reminder_create_button),
                     onClick = {
                         onCreateReminder()
                         onDismiss()
@@ -130,7 +130,7 @@ private fun LinkedItemRow(item: SavedItem, onClick: () -> Unit) {
     ListItem(
         headlineContent = {
             val fallback = stringResource(
-                if (item.isTask) R.string.ui_reminders_untitled_task else R.string.ui_reminders_untitled_memo
+                if (item.isTask) R.string.ui_saved_items_untitled_task else R.string.ui_saved_items_untitled_memo
             )
             Text(
                 text = item.title.ifBlank { fallback },

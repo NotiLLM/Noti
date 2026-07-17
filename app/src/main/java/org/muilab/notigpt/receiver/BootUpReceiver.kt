@@ -9,7 +9,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import org.muilab.notigpt.data.local.room.AppDatabase
 import org.muilab.notigpt.data.repository.reminder.ScheduledReminderRepository
-import org.muilab.notigpt.work.ReminderPeriodicWork
+import org.muilab.notigpt.work.ExtractionPeriodicWork
 
 /**
  * Broadcast receiver that restarts reminder/background scheduling after device boot.
@@ -26,7 +26,7 @@ class BootUpReceiver : BroadcastReceiver() {
             // and can cause the receiver to fail early.
 
             // Ensure periodic scan/extract restarts after reboot.
-            ReminderPeriodicWork.enqueue(context.applicationContext)
+            ExtractionPeriodicWork.enqueue(context.applicationContext)
 
             val pendingResult = goAsync()
             CoroutineScope(Dispatchers.IO).launch {

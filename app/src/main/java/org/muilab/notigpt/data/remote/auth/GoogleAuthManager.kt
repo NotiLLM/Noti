@@ -168,7 +168,7 @@ object GoogleAuthManager {
     private suspend fun wipeLocalAccountData(db: AppDatabase, previousUid: String) {
         db.withTransaction {
             // saved_item cascades noti_saved_item_link + saved_item_change_log via FK.
-            db.reminderListDao().deleteAllForAccountSwitch()
+            db.savedItemDao().deleteAllForAccountSwitch()
             db.subTaskDao().deleteAllForAccountSwitch()
             db.pendingProposedOpDao().deleteAllForAccountSwitch()
             db.rejectedMergeDao().deleteAllForAccountSwitch()

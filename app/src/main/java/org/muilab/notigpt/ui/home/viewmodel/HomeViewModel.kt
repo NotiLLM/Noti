@@ -63,7 +63,7 @@ data class CategoryPreview(
 class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     private val db = AppDatabase.getInstance(application.applicationContext)
-    private val savedItemDao = db.reminderListDao()
+    private val savedItemDao = db.savedItemDao()
 
     /**
      * Item-level review counts: users count the eventual items they'll review, not atomic pipeline

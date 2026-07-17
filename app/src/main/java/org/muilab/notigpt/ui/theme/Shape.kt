@@ -13,7 +13,7 @@ import androidx.compose.ui.unit.dp
  *
  * - extraSmall  6dp — badges, tiny inline chips
  * - small      10dp — chips, inline surfaces
- * - medium     14dp — list cards (ReminderCard, category rows)
+ * - medium     14dp — list cards (SavedItemCard, category rows)
  * - large      18dp — hero cards, bottom sheets, NotiCard
  * - extraLarge 26dp — dialogs, review cards
  */

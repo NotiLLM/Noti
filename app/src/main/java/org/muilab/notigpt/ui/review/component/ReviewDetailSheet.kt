@@ -25,7 +25,7 @@ import org.muilab.notigpt.R
 import org.muilab.notigpt.model.features.SavedItem
 import org.muilab.notigpt.model.notifications.NotiDisplayUnit
 import org.muilab.notigpt.ui.notification.component.RelatedNotificationPreview
-import org.muilab.notigpt.ui.reminder.component.ReminderWhatsNewBlock
+import org.muilab.notigpt.ui.saveditem.component.SavedItemWhatsNewBlock
 import org.muilab.notigpt.ui.review.viewmodel.ReviewViewModel
 
 /**
@@ -58,7 +58,7 @@ fun ReviewDetailSheet(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text(
-            text = item.title.ifBlank { stringResource(R.string.ui_reminders_untitled_task) },
+            text = item.title.ifBlank { stringResource(R.string.ui_saved_items_untitled_task) },
             style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.SemiBold),
         )
 
@@ -79,15 +79,15 @@ fun ReviewDetailSheet(
         if (entry.group?.isCreate == true && entry.previewSubItems.isNotEmpty()) {
             entry.previewSubItems.forEach { sub ->
                 Text(
-                    text = "•  ${sub.title}",
+                    text = "•  ${sub.text}",
                     style = MaterialTheme.typography.bodyMedium,
                 )
             }
         }
 
         // Reuse the existing "what's new" block; its "Got it" acts as approve here.
-        ReminderWhatsNewBlock(
-            reminder = item,
+        SavedItemWhatsNewBlock(
+            item = item,
             changes = changes,
             onAcknowledge = onApprove,
         )

@@ -4,7 +4,7 @@ import androidx.room.Entity
 import androidx.room.PrimaryKey
 
 /**
- * Room entity for a user-authored or learned rule that guides reminder extraction.
+ * Room entity for a user-authored or learned rule that guides SavedItem extraction.
  *
  * Preferences are reusable behavior inputs across notifications and this local table is the source of
  * truth for the active rule set. Keep UI chat state and conflict metadata in separate models so this
@@ -31,4 +31,3 @@ object PreferenceType {
     const val WHAT_TO_EXTRACT = "WHAT_TO_EXTRACT"
     const val REPRESENTATION = "REPRESENTATION"
 }
-

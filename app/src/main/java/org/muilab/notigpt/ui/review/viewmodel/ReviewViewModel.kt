@@ -17,10 +17,10 @@ import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.muilab.notigpt.R
 import org.muilab.notigpt.data.local.room.AppDatabase
-import org.muilab.notigpt.data.repository.reminder.PendingProposedOpRepository
-import org.muilab.notigpt.data.repository.reminder.ReminderRelatedNotificationsRepository
-import org.muilab.notigpt.data.repository.reminder.SavedItemChangeLogRepository
-import org.muilab.notigpt.data.repository.reminder.SavedItemRepository
+import org.muilab.notigpt.data.repository.saveditem.PendingProposedOpRepository
+import org.muilab.notigpt.data.repository.saveditem.SavedItemRelatedNotificationsRepository
+import org.muilab.notigpt.data.repository.saveditem.SavedItemChangeLogRepository
+import org.muilab.notigpt.data.repository.saveditem.SavedItemRepository
 import org.muilab.notigpt.model.features.SavedItem
 import org.muilab.notigpt.model.features.SavedItemChangeLog
 import org.muilab.notigpt.model.features.SavedItemState
@@ -36,9 +36,9 @@ import org.muilab.notigpt.model.features.SavedSubItem
 class ReviewViewModel(application: Application) : AndroidViewModel(application) {
 
     private val db = AppDatabase.getInstance(application.applicationContext)
-    private val repo = SavedItemRepository(db.reminderListDao(), application.applicationContext)
+    private val repo = SavedItemRepository(db.savedItemDao(), application.applicationContext)
     private val changeLogRepo = SavedItemChangeLogRepository(db.savedItemChangeLogDao())
-    private val relatedRepo = ReminderRelatedNotificationsRepository(application.applicationContext)
+    private val relatedRepo = SavedItemRelatedNotificationsRepository(application.applicationContext)
     private val pendingProposedOpRepo = PendingProposedOpRepository(application.applicationContext)
 
     enum class ReviewFilter { All, NewTasks, UpdatedTasks, NewKeeps, UpdatedKeeps }
@@ -129,8 +129,8 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
     data class RelatedState(
         val entryKey: String? = null,
         val isLoading: Boolean = false,
-        val value: ReminderRelatedNotificationsRepository.RelatedNotifications =
-            ReminderRelatedNotificationsRepository.RelatedNotifications.Empty,
+        val value: SavedItemRelatedNotificationsRepository.RelatedNotifications =
+            SavedItemRelatedNotificationsRepository.RelatedNotifications.Empty,
     )
 
     fun loadRelated(entry: ReviewEntry) {
@@ -150,7 +150,7 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
                     relatedRepo.getRelatedNotifications(entry.preview)
                 }
             } catch (_: Throwable) {
-                ReminderRelatedNotificationsRepository.RelatedNotifications.Empty
+                SavedItemRelatedNotificationsRepository.RelatedNotifications.Empty
             }
             _related.value = RelatedState(entry.key, isLoading = false, value = value)
         }
@@ -184,13 +184,13 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
     val snackbar: Flow<ReviewSnackbar> = _snackbar.receiveAsFlow()
 
     // ── This review pass: tasks approved that still have no planned (do) date ──
-    // Drives the end-of-stack "set do-dates?" offer. Reset when the screen is (re)entered.
-    private val approvedNeedingDoDate = linkedSetOf<String>()
-    fun approvedNeedingDoDateCount(): Int = approvedNeedingDoDate.size
-    fun resetReviewSession() = approvedNeedingDoDate.clear()
+    // Drives the end-of-stack "set Whens?" offer. Reset when the screen is (re)entered.
+    private val approvedNeedingWhen = linkedSetOf<String>()
+    fun approvedNeedingWhenCount(): Int = approvedNeedingWhen.size
+    fun resetReviewSession() = approvedNeedingWhen.clear()
 
-    private fun noteApprovedForDoDate(item: SavedItem) {
-        if (item.isTask && !SavedItem.hasPlannedDate(item.doAtMs)) approvedNeedingDoDate.add(item.savedItemId)
+    private fun noteApprovedForWhen(item: SavedItem) {
+        if (item.isTask && !SavedItem.hasPlannedDate(item.whenAtMs)) approvedNeedingWhen.add(item.savedItemId)
     }
 
     fun approve(entry: ReviewEntry) {
@@ -199,11 +199,11 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
             if (group != null) {
                 val outcome = pendingProposedOpRepo.applyGroup(group) ?: return@launch
                 pendingUndo = UndoableAction.ApplyGroup(outcome)
-                noteApprovedForDoDate(entry.preview.copy(savedItemId = outcome.appliedItemId))
+                noteApprovedForWhen(entry.preview.copy(savedItemId = outcome.appliedItemId))
             } else {
                 repo.acknowledgeReview(entry.preview.savedItemId, System.currentTimeMillis())
                 pendingUndo = UndoableAction.Approve(entry.preview)
-                noteApprovedForDoDate(entry.preview)
+                noteApprovedForWhen(entry.preview)
             }
             _snackbar.trySend(ReviewSnackbar(R.string.review_approved_toast, entry.preview, canTeach = false))
         }
@@ -228,11 +228,11 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
                         lastViewedChangeAt = ts,
                     )
                 )
-                noteApprovedForDoDate(edited.copy(savedItemId = outcome.appliedItemId))
+                noteApprovedForWhen(edited.copy(savedItemId = outcome.appliedItemId))
             } else {
                 repo.upsert(edited.copy(origin = "manual", userEdited = true, lastUpdateTimestamp = ts))
                 repo.acknowledgeReview(edited.savedItemId, ts)
-                noteApprovedForDoDate(edited)
+                noteApprovedForWhen(edited)
             }
             pendingUndo = null
             _snackbar.trySend(ReviewSnackbar(R.string.review_approved_toast, edited, canTeach = false))
@@ -258,7 +258,7 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
                 }
             } else {
                 // Legacy new item → hard delete; capture rows so undo can restore them.
-                val subTasks = db.subTaskDao().getByReminderId(item.savedItemId)
+                val subTasks = db.subTaskDao().getBySavedItemId(item.savedItemId)
                 repo.deleteById(item.savedItemId, ts)
                 pendingUndo = UndoableAction.RejectNew(item, subTasks)
                 _snackbar.trySend(ReviewSnackbar(R.string.review_rejected_toast, item, canTeach = true))
@@ -274,10 +274,10 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
                 val group = entry.group
                 if (group != null) {
                     val outcome = pendingProposedOpRepo.applyGroup(group, ts) ?: return@forEach
-                    noteApprovedForDoDate(entry.preview.copy(savedItemId = outcome.appliedItemId))
+                    noteApprovedForWhen(entry.preview.copy(savedItemId = outcome.appliedItemId))
                 } else {
                     repo.acknowledgeReview(entry.preview.savedItemId, ts)
-                    noteApprovedForDoDate(entry.preview)
+                    noteApprovedForWhen(entry.preview)
                 }
             }
             // Bulk approve isn't individually undoable; clear any stale single-action undo.
@@ -295,11 +295,13 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
                 is UndoableAction.DiscardGroup -> pendingProposedOpRepo.restoreDiscarded(action.group)
                 is UndoableAction.Approve -> {
                     repo.upsert(action.item)
-                    approvedNeedingDoDate.remove(action.item.savedItemId)
+                    approvedNeedingWhen.remove(action.item.savedItemId)
                 }
                 is UndoableAction.RejectNew -> {
                     repo.upsert(action.item)
-                    if (action.subTasks.isNotEmpty()) db.subTaskDao().upsertAll(action.subTasks)
+                    if (action.item.isTask && action.subTasks.isNotEmpty()) {
+                        db.subTaskDao().upsertAll(action.subTasks)
+                    }
                 }
                 is UndoableAction.RejectUpdated -> repo.undoRevert(action.outcome, ts)
             }

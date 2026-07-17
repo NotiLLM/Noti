@@ -51,7 +51,7 @@ import org.muilab.notigpt.ui.notification.viewmodel.DrawerViewModel
 import org.muilab.notigpt.ui.review.component.ReviewCardStack
 import org.muilab.notigpt.ui.review.component.ReviewDetailSheet
 import org.muilab.notigpt.ui.review.viewmodel.ReviewViewModel
-import org.muilab.notigpt.ui.reminder.viewmodel.ReminderViewModel
+import org.muilab.notigpt.ui.saveditem.viewmodel.SavedItemsViewModel
 import org.muilab.notigpt.ui.theme.NotiTheme
 
 /**
@@ -63,7 +63,7 @@ import org.muilab.notigpt.ui.theme.NotiTheme
 @Composable
 fun ReviewScreen(
     drawerViewModel: DrawerViewModel,
-    reminderViewModel: ReminderViewModel,
+    savedItemsViewModel: SavedItemsViewModel,
     preferenceViewModel: org.muilab.notigpt.ui.preference.viewmodel.PreferenceViewModel,
     onBack: () -> Unit,
     onOpenUndetermined: () -> Unit,
@@ -92,9 +92,9 @@ fun ReviewScreen(
         }
     }
 
-    // End-of-stack offer: once the last item is reviewed, if any approved tasks lack a do-date, offer
+    // End-of-stack offer: once the last item is reviewed, if any approved tasks lack a When, offer
     // to go set them in the Undetermined list.
-    var showDoDateOffer by remember { mutableStateOf(false) }
+    var showWhenOffer by remember { mutableStateOf(false) }
     var offerCount by remember { mutableStateOf(0) }
     var everHadItems by remember { mutableStateOf(false) }
     androidx.compose.runtime.LaunchedEffect(allNew.size) {
@@ -102,10 +102,10 @@ fun ReviewScreen(
             everHadItems = true
         } else if (everHadItems) {
             everHadItems = false
-            val count = reviewViewModel.approvedNeedingDoDateCount()
+            val count = reviewViewModel.approvedNeedingWhenCount()
             if (count > 0) {
                 offerCount = count
-                showDoDateOffer = true
+                showWhenOffer = true
             }
         }
     }
@@ -118,7 +118,7 @@ fun ReviewScreen(
     // bars (the editor has its own header) just like the list editor does.
     var editingItem by remember { mutableStateOf<ReviewViewModel.ReviewEntry?>(null) }
     androidx.compose.runtime.LaunchedEffect(editingItem) { onDetailOpenChange(editingItem != null) }
-    val subtasksByReminder by reminderViewModel.allSavedSubItemsByReminder.collectAsState()
+    val subtasksBySavedItem by savedItemsViewModel.allSavedSubItemsBySavedItem.collectAsState()
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
@@ -213,23 +213,23 @@ fun ReviewScreen(
         }
     }
 
-    if (showDoDateOffer) {
+    if (showWhenOffer) {
         androidx.compose.material3.AlertDialog(
-            onDismissRequest = { showDoDateOffer = false; reviewViewModel.resetReviewSession() },
-            title = { Text(stringResource(R.string.review_dodate_offer_title)) },
-            text = { Text(stringResource(R.string.review_dodate_offer_body, offerCount)) },
+            onDismissRequest = { showWhenOffer = false; reviewViewModel.resetReviewSession() },
+            title = { Text(stringResource(R.string.review_when_offer_title)) },
+            text = { Text(stringResource(R.string.review_when_offer_body, offerCount)) },
             confirmButton = {
                 TextButton(onClick = {
-                    showDoDateOffer = false
+                    showWhenOffer = false
                     reviewViewModel.resetReviewSession()
                     onOpenUndetermined()
-                }) { Text(stringResource(R.string.review_dodate_offer_set)) }
+                }) { Text(stringResource(R.string.review_when_offer_set)) }
             },
             dismissButton = {
                 TextButton(onClick = {
-                    showDoDateOffer = false
+                    showWhenOffer = false
                     reviewViewModel.resetReviewSession()
-                }) { Text(stringResource(R.string.review_dodate_offer_skip)) }
+                }) { Text(stringResource(R.string.review_when_offer_skip)) }
             },
         )
     }
@@ -265,7 +265,7 @@ fun ReviewScreen(
                     onClick = {},
                 ),
         ) {
-            org.muilab.notigpt.ui.reminder.screen.ReminderDetailScreen(
+            org.muilab.notigpt.ui.saveditem.screen.SavedItemDetailScreen(
                 initial = item,
                 drawerViewModel = drawerViewModel,
                 onBack = { editingItem = null },
@@ -275,10 +275,12 @@ fun ReviewScreen(
                 onSaveApprove = { updated -> reviewViewModel.saveApprove(entry, updated); editingItem = null },
                 onRejectDelete = { reviewViewModel.reject(entry); editingItem = null },
                 changeLog = reviewViewModel.changeLogFlow(item.savedItemId),
-                subTasks = if (staged) entry.previewSubItems else subtasksByReminder[item.savedItemId] ?: emptyList(),
-                onAddSavedSubItem = { if (!staged) reminderViewModel.addSavedSubItem(item.savedItemId) },
-                onSavedSubItemToggle = { stId, checked -> if (!staged) reminderViewModel.toggleSavedSubItemCompleted(stId, checked) },
-                onSavedSubItemDelete = { st -> if (!staged) reminderViewModel.deleteSavedSubItem(st.savedSubItemId) },
+                subTasks = if (staged) entry.previewSubItems else subtasksBySavedItem[item.savedItemId] ?: emptyList(),
+                subTasksEditable = !staged,
+                onAddSavedSubItem = { if (!staged) savedItemsViewModel.addSavedSubItem(item.savedItemId) },
+                onSavedSubItemToggle = { stId, checked -> if (!staged) savedItemsViewModel.toggleSavedSubItemCompleted(stId, checked) },
+                onSavedSubItemEdit = { st -> if (!staged) savedItemsViewModel.upsertSavedSubItem(st) },
+                onSavedSubItemDelete = { st -> if (!staged) savedItemsViewModel.deleteSavedSubItem(st.savedSubItemId) },
             )
         }
     }
@@ -364,7 +366,7 @@ private fun MinimalReviewCard(
                 }
                 Spacer(Modifier.size(12.dp))
                 Text(
-                    text = item.title.ifBlank { stringResource(R.string.ui_reminders_untitled_task) },
+                    text = item.title.ifBlank { stringResource(R.string.ui_saved_items_untitled_task) },
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 3,
@@ -449,8 +451,8 @@ private fun ReviewBadge(isNew: Boolean) {
     ) {
         Text(
             text = stringResource(
-                if (isNew) R.string.reminder_badge_new
-                else R.string.reminder_badge_updated
+                if (isNew) R.string.saved_item_badge_new
+                else R.string.saved_item_badge_updated
             ),
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSecondaryContainer,

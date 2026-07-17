@@ -35,12 +35,12 @@ interface NotiLlmStateDao {
         """
         SELECT s.notiKey FROM noti_llm_state s
         JOIN noti_drawer d ON d.notiKey = s.notiKey
-        WHERE d.isDismissed = 0 AND s.shouldExtractReminder = 1
+        WHERE d.isDismissed = 0 AND s.shouldExtractSavedItem = 1
         """
     )
     fun getActiveShouldExtractKeys(): List<String>
 
-    @Query("UPDATE noti_llm_state SET shouldExtractReminder = :value, updatedAt = :ts WHERE notiKey IN (:notiKeys)")
+    @Query("UPDATE noti_llm_state SET shouldExtractSavedItem = :value, updatedAt = :ts WHERE notiKey IN (:notiKeys)")
     fun setShouldExtractByKeys(notiKeys: List<String>, value: Boolean, ts: Long)
 
     /** Records a successful Stage B call, creating the otherwise-lazy state row when needed. */

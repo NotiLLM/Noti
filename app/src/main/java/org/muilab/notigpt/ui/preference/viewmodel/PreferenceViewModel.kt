@@ -65,8 +65,8 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
     private val drawerDao: NotiDrawerDao =
         AppDatabase.getInstance(application).drawerDao()
 
-    private val reminderListDao: SavedItemDao =
-        AppDatabase.getInstance(application).reminderListDao()
+    private val savedItemDao: SavedItemDao =
+        AppDatabase.getInstance(application).savedItemDao()
 
     companion object {
         /** Max number of notification summaries sent to the context-discover endpoint. */
@@ -120,8 +120,8 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
 
     data class SnackbarEvent(
         val entryPoint: PreferenceEntryPoint,
-        val reminder: SavedItem?,
-        val reminderBefore: SavedItem?,
+        val item: SavedItem?,
+        val savedItemBefore: SavedItem?,
         val contextData: Map<String, Any?>,
     )
 
@@ -142,8 +142,8 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
 
     /** Channel-based overload: event is passed directly, StateFlow already cleared. */
     fun promoteSnackbarToFlow(event: SnackbarEvent) {
-        _currentReminder = event.reminder
-        _currentReminderBefore = event.reminderBefore
+        _currentReminder = event.item
+        _currentSavedItemBefore = event.savedItemBefore
         _bottomSheetStep.value = BottomSheetStep.Chips(event.entryPoint, event.contextData, getChipOptions(event.entryPoint))
     }
 
@@ -169,25 +169,25 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
     private val _bottomSheetStep = MutableStateFlow<BottomSheetStep>(BottomSheetStep.Hidden)
     val bottomSheetStep: StateFlow<BottomSheetStep> = _bottomSheetStep
 
-    // context for the current reminder being operated on
+    // context for the current item being operated on
     private var _currentReminder: SavedItem? = null
-    private var _currentReminderBefore: SavedItem? = null
+    private var _currentSavedItemBefore: SavedItem? = null
 
     /**
      * Build rich contextData from a [SavedItem] so that n8n always receives
      * semantic content (title, description, flags) — not just metadata.
      *
      * Callers may pass extra entries via [extraContext]; they are merged in but
-     * never override the reminder-derived keys.
+     * never override the item-derived keys.
      */
     private fun buildContextData(
-        reminder: SavedItem?,
-        reminderBefore: SavedItem? = null,
+        item: SavedItem?,
+        savedItemBefore: SavedItem? = null,
         extraContext: Map<String, Any?> = emptyMap(),
     ): Map<String, Any?> {
         val ctx = extraContext.toMutableMap()
-        reminder?.let { r ->
-            ctx["reminder"] = mapOf(
+        item?.let { r ->
+            ctx["item"] = mapOf(
                 "savedItemId" to r.savedItemId,
                 "title" to r.title,
                 "content" to r.content,
@@ -197,8 +197,8 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
                 "origin" to r.origin,
             )
         }
-        reminderBefore?.let { r ->
-            ctx["reminderBefore"] = mapOf(
+        savedItemBefore?.let { r ->
+            ctx["savedItemBefore"] = mapOf(
                 "savedItemId" to r.savedItemId,
                 "title" to r.title,
                 "content" to r.content,
@@ -216,23 +216,23 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
      * - DELETE / MANUAL_EXTRACT: shows a lightweight Snackbar. Only if the user
      *   clicks the action button do we open the full BottomSheet.
      *
-     * Rich contextData (reminder title/content, before/after snapshots) is
-     * auto-built from [reminder] and [reminderBefore]; callers may pass additional
+     * Rich contextData (item title/content, before/after snapshots) is
+     * auto-built from [item] and [savedItemBefore]; callers may pass additional
      * metadata (e.g. notiKey, appName) via [contextData] which is merged in.
      */
     fun startFlow(
         entryPoint: PreferenceEntryPoint,
-        reminder: SavedItem?,
-        reminderBefore: SavedItem? = null,
+        item: SavedItem?,
+        savedItemBefore: SavedItem? = null,
         contextData: Map<String, Any?> = emptyMap(),
     ) {
-        val enriched = buildContextData(reminder, reminderBefore, contextData)
+        val enriched = buildContextData(item, savedItemBefore, contextData)
 
         when (entryPoint) {
             PreferenceEntryPoint.EDIT -> {
                 // Opens BottomSheet immediately (user is in detail screen)
-                _currentReminder = reminder
-                _currentReminderBefore = reminderBefore
+                _currentReminder = item
+                _currentSavedItemBefore = savedItemBefore
                 _bottomSheetStep.value = BottomSheetStep.Chips(entryPoint, enriched, getChipOptions(entryPoint))
             }
             PreferenceEntryPoint.DELETE,
@@ -240,8 +240,8 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
                 // Show a lightweight Snackbar; only open BottomSheet if user clicks action
                 _snackbarEvent.value = SnackbarEvent(
                     entryPoint = entryPoint,
-                    reminder = reminder,
-                    reminderBefore = reminderBefore,
+                    item = item,
+                    savedItemBefore = savedItemBefore,
                     contextData = enriched,
                 )
             }
@@ -254,20 +254,20 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
      */
     fun startFlowSheet(
         entryPoint: PreferenceEntryPoint,
-        reminder: SavedItem?,
-        reminderBefore: SavedItem? = null,
+        item: SavedItem?,
+        savedItemBefore: SavedItem? = null,
         contextData: Map<String, Any?> = emptyMap(),
     ) {
-        val enriched = buildContextData(reminder, reminderBefore, contextData)
-        _currentReminder = reminder
-        _currentReminderBefore = reminderBefore
+        val enriched = buildContextData(item, savedItemBefore, contextData)
+        _currentReminder = item
+        _currentSavedItemBefore = savedItemBefore
         _bottomSheetStep.value = BottomSheetStep.Chips(entryPoint, enriched, getChipOptions(entryPoint))
     }
 
     fun dismissBottomSheet() {
         _bottomSheetStep.value = BottomSheetStep.Hidden
         _currentReminder = null
-        _currentReminderBefore = null
+        _currentSavedItemBefore = null
     }
 
     /**
@@ -330,7 +330,7 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
         // Close the sheet right away — the user can navigate anywhere while the sync runs.
         _bottomSheetStep.value = BottomSheetStep.Hidden
         _currentReminder = null
-        _currentReminderBefore = null
+        _currentSavedItemBefore = null
 
         viewModelScope.launch(Dispatchers.IO) {
             try {
@@ -511,7 +511,7 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
      * Opens the Chat screen pre-seeded from a progressive-disclosure redirect.
      * Clears any previous conversation first so the new context is unambiguous.
      *
-     * [contextData] is already enriched with reminder/reminderBefore maps
+     * [contextData] is already enriched with item/savedItemBefore maps
      * by [buildContextData] in [startFlow], so we only add flowEntryPoint here.
      */
     private fun openChatFromFlow(entryPoint: PreferenceEntryPoint, contextData: Map<String, Any?>) {
@@ -519,18 +519,18 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
         _chatMessages.value = emptyList()
         _pendingActions.value = emptyList()
 
-        // Build a ChatFlowContext from the current reminder state
+        // Build a ChatFlowContext from the current item state
         val flowCtx = ChatFlowContext(
             entryPoint = entryPoint,
             title = _currentReminder?.title,
             content = _currentReminder?.content,
-            reminderBeforeTitle = _currentReminderBefore?.title,
-            reminderBeforeContent = _currentReminderBefore?.content,
+            savedItemBeforeTitle = _currentSavedItemBefore?.title,
+            savedItemBeforeContent = _currentSavedItemBefore?.content,
             notiKey = contextData["notiKey"] as? String,
         )
         _chatFlowContext.value = flowCtx
 
-        // Merge in flowEntryPoint; reminder/reminderBefore are already present.
+        // Merge in flowEntryPoint; item/savedItemBefore are already present.
         val enrichedContext = contextData.toMutableMap().apply {
             put("flowEntryPoint", entryPoint.wire)
         }
@@ -794,7 +794,7 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
     // ══════════════════════════════════════════════════════════════════
 
     /**
-     * Sends a curated summary of notifications and reminders to an n8n endpoint
+     * Sends a curated summary of notifications and savedItems to an n8n endpoint
      * that infers factual statements about the user.
      * Results are displayed as ProposedAction cards in the chat UI.
      * Chat remains active afterwards so the user can correct / discuss.
@@ -823,8 +823,8 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
                 }
 
                 // Current saved items
-                val reminders = reminderListDao.getAll()
-                val remindersPayload = reminders.map { r ->
+                val savedItems = savedItemDao.getAll()
+                val savedItemsPayload = savedItems.map { r ->
                     mapOf(
                         "title" to r.title,
                         "content" to r.content,
@@ -842,7 +842,7 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
                     userId = SharedPreferencesManager.userId,
                     language = Locale.getDefault().toLanguageTag(),
                     notificationSummary = notiSummary,
-                    currentReminders = remindersPayload,
+                    currentSavedItems = savedItemsPayload,
                     existingUserContexts = contextsPayload,
                 )
 
@@ -931,17 +931,6 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
         _navigateToChat.value = true
     }
 }
-
-
-
-
-
-
-
-
-
-
-
 
 
 

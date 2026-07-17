@@ -11,7 +11,7 @@ import androidx.room.Index
 /**
  * Room entity for one captured notification content record.
  *
- * Records are the durable notification timeline used for context, scan, extraction, and reminder provenance.
+ * Records are the durable notification timeline used for context, scan, extraction, and SavedItem provenance.
  * Keep display-level mutable state on NotiUnit unless the flag describes processing of this specific record.
  */
 @Entity(

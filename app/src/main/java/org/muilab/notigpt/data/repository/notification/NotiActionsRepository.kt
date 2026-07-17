@@ -132,7 +132,8 @@ class NotiActionsRepository(
     suspend fun actOnNotiLegacy(notiKey: String, action: String) {
         // Special-case actions that carry payload after :: (record ids are no longer used — the
         // forced pipeline extracts from the thread's unprocessed records).
-        if (action.startsWith("extract_reminder_with_records")) {
+        if (action.startsWith("extract_saved_item_with_records") ||
+            action.startsWith("extract_reminder_with_records")) {
             notiDrawerDao.getByNotiKey(notiKey) ?: return
             enqueueExtractionPipeline(appContext, notiKey, forced = true)
             return

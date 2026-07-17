@@ -4,10 +4,10 @@ import org.muilab.notigpt.model.features.SavedItem
 import org.muilab.notigpt.model.features.SavedSubItem
 
 /**
- * Small adapter interface for exporting reminders and subtasks through one formatting path.
+ * Small adapter interface for exporting SavedItems and subtasks through one formatting path.
  *
  * Keep this as a presentation/export shape only. If export rules start affecting app behavior,
- * move those rules back to the reminder or subtask domain layer.
+ * move those rules back to the SavedItem or subtask domain layer.
  */
 interface ExportableItem {
     val exportTitle: String
@@ -30,10 +30,10 @@ fun SavedItem.asExportable(): ExportableItem = object : ExportableItem {
 
 /** Adapt a [SavedSubItem] to [ExportableItem]. */
 fun SavedSubItem.asExportable(): ExportableItem = object : ExportableItem {
-    override val exportTitle = title
-    override val exportDescription = description
-    override val exportDeadlineTimestamp = deadlineAtMs
-    override val exportStartTime = startAtMs
-    override val exportEndTime = endAtMs
+    override val exportTitle = text
+    override val exportDescription = ""
+    override val exportDeadlineTimestamp = 0L
+    override val exportStartTime = 0L
+    override val exportEndTime = 0L
     override val exportIsCompleted = isCompleted
 }

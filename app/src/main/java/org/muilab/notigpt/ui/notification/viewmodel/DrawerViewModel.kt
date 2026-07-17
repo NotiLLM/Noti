@@ -324,7 +324,10 @@ class DrawerViewModel @Inject constructor(
                 actionsController.actOnNotiLegacy(notiKey, action)
                 if (action.contains("dismiss")) postOngoingNotification(context)
                 // Emit event for preference learning (Flow 3: Manual Extract)
-                if (action == "extract_reminder" || action.startsWith("extract_reminder_with_records")) {
+                if (action == "extract_saved_item" ||
+                    action.startsWith("extract_saved_item_with_records") ||
+                    action == "extract_reminder" ||
+                    action.startsWith("extract_reminder_with_records")) {
                     _manualExtractEvent.tryEmit(notiKey)
                 }
             }

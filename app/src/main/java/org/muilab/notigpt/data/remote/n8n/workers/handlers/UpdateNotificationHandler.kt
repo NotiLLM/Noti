@@ -17,7 +17,7 @@ import org.muilab.notigpt.data.remote.n8n.mapper.toN8nNotiRecords
 /**
  * Handler for updating notification summaries/actions through the n8n backend.
  *
- * Keep this workflow scoped to one notification key and its available records/actions. Reminder extraction and
+ * Keep this workflow scoped to one notification key and its available records/actions. SavedItem extraction and
  * preference sync have their own handlers because their persistence rules differ.
  */
 internal object UpdateNotificationHandler {

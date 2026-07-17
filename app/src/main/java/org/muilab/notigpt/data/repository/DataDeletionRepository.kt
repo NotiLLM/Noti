@@ -41,8 +41,14 @@ class DataDeletionRepository @Inject constructor(
         runCatching {
             val uid = auth.currentUser?.uid?.takeIf(String::isNotBlank)
                 ?: error("No signed-in account")
-            val rootDoc = firestore.collection(REMINDERS_ROOT).document(uid)
-            val itemDocs = rootDoc.collection(REMINDERS).get().await().documents
+            val userDoc = firestore.collection(USERS).document(uid)
+            userDoc.collection(SAVED_ITEMS).get().await().documents.forEach { item ->
+                item.reference.delete().await()
+            }
+
+            // Also clear the pre-v50 SavedItem path. It never contained scheduled push reminders.
+            val rootDoc = firestore.collection(LEGACY_SAVED_ITEMS_ROOT).document(uid)
+            val itemDocs = rootDoc.collection(LEGACY_SAVED_ITEMS).get().await().documents
 
             // Delete the known legacy raw subcollection before each generated parent document.
             // Firestore does not cascade subcollections when a parent is deleted.
@@ -58,7 +64,7 @@ class DataDeletionRepository @Inject constructor(
                 proposal.reference.delete().await()
             }
             proposalRoot.delete().await()
-            firestore.collection(USERS).document(uid).delete().await()
+            userDoc.delete().await()
 
             clearLocalGeneratedData(uid)
         }
@@ -66,7 +72,7 @@ class DataDeletionRepository @Inject constructor(
 
     private suspend fun clearLocalGeneratedData(uid: String) {
         database.withTransaction {
-            database.reminderListDao().deleteAllForAccountSwitch()
+            database.savedItemDao().deleteAllForAccountSwitch()
             database.subTaskDao().deleteAllForAccountSwitch()
             database.pendingProposedOpDao().deleteAllForAccountSwitch()
             database.rejectedMergeDao().deleteAllForAccountSwitch()
@@ -85,8 +91,9 @@ class DataDeletionRepository @Inject constructor(
 
     private companion object {
         const val USERS = "users"
-        const val REMINDERS_ROOT = "reminders"
-        const val REMINDERS = "reminders"
+        const val SAVED_ITEMS = "savedItems"
+        const val LEGACY_SAVED_ITEMS_ROOT = "reminders"
+        const val LEGACY_SAVED_ITEMS = "reminders"
         const val LEGACY_NOTIS = "notis"
         const val GENERATED_PROPOSALS_ROOT = "proposedOpRecords"
         const val PROPOSALS = "proposals"

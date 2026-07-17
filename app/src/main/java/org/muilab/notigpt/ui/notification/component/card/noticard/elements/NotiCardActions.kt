@@ -74,7 +74,7 @@ fun NotiCardBackgroundActions(
 
             NotiActionIconButton(
                 R.drawable.task,
-                stringResource(R.string.ui_action_extract_reminder),
+                stringResource(R.string.ui_action_extract_saved_item),
                 {
                     if (canClickActions.value) {
                         drawerViewModel.actOnNoti(notiUnit.notiKey, "extract_reminder")

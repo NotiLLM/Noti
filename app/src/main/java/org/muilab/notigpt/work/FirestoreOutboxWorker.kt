@@ -36,11 +36,11 @@ class FirestoreOutboxWorker @AssistedInject constructor(
             for (operation in pending) {
                 val succeeded = when (operation.kind) {
                     FirestoreOutboxKind.UpsertSavedItem -> {
-                        val item = database.reminderListDao().getById(operation.entityId)
-                        item == null || sync.syncReminder(item)
+                        val item = database.savedItemDao().getById(operation.entityId)
+                        item == null || sync.syncSavedItem(item)
                     }
                     FirestoreOutboxKind.DeleteSavedItem ->
-                        sync.markReminderDeleted(operation.entityId, operation.createdAt)
+                        sync.markSavedItemDeleted(operation.entityId, operation.createdAt)
                     FirestoreOutboxKind.SyncProposedOpRecord -> {
                         val proposal = database.proposedOpRecordDao().getById(operation.entityId)
                         proposal == null || sync.syncProposedOpRecord(proposal)

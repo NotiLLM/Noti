@@ -294,13 +294,13 @@ private fun HistoryActionMenu(
                 },
             )
             ListItem(
-                headlineContent = { Text(stringResource(R.string.ui_action_extract_reminder)) },
+                headlineContent = { Text(stringResource(R.string.ui_action_extract_saved_item)) },
                 leadingContent = { Icon(painterResource(R.drawable.task), contentDescription = null, modifier = Modifier.size(24.dp)) },
                 colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
                 modifier = Modifier.clickable {
                     scope.launch {
                         val idsJson = com.google.gson.Gson().toJson(target.recordIds.distinct())
-                        drawerViewModel.actOnNoti(target.notiKey, "extract_reminder_with_records::$idsJson")
+                        drawerViewModel.actOnNoti(target.notiKey, "extract_saved_item_with_records::$idsJson")
                         AppSnackbar.show(extractRequestedMessage)
                     }
                     onDismiss()

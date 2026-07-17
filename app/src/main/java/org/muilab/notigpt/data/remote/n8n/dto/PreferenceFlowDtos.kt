@@ -57,13 +57,13 @@ data class N8nChatInteractRequestDto(
 
 /**
  * Request to the context-discover n8n endpoint.
- * Sends a curated summary of notifications and reminders so the LLM can infer factual statements about the user.
+ * Sends a curated summary of notifications and SavedItems so the LLM can infer factual statements about the user.
  */
 data class N8nContextDiscoverRequestDto(
     val userId: String,
     val language: String,
     val notificationSummary: List<Map<String, String>>,
-    val currentReminders: List<Map<String, String>>,
+    val currentSavedItems: List<Map<String, String>>,
     val existingUserContexts: List<Map<String, String>>,
 )
 

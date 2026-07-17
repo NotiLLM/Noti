@@ -1,4 +1,4 @@
-package org.muilab.notigpt.ui.reminder.component
+package org.muilab.notigpt.ui.saveditem.component
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
@@ -26,7 +26,7 @@ import org.muilab.notigpt.R
 import org.muilab.notigpt.model.features.SavedSubItem
 
 /**
- * Inline sub-task list shown inside ReminderCard on the list screen.
+ * Inline sub-task list shown inside SavedItemCard on the list screen.
  *
  * Shows at most [maxVisible] incomplete sub-tasks, plus a clickable
  * "N more" / "N completed" summary that expands to reveal hidden items.
@@ -163,6 +163,4 @@ fun SavedSubItemListInCard(
         }
     }
 }
-
-
 

@@ -1,4 +1,4 @@
-package org.muilab.notigpt.data.repository.reminder
+package org.muilab.notigpt.data.repository.saveditem
 
 import android.content.Context
 import kotlinx.coroutines.Dispatchers
@@ -9,12 +9,12 @@ import org.muilab.notigpt.model.notifications.NotiRecord
 import org.muilab.notigpt.model.notifications.NotiUnit
 
 /**
- * Repository for resolving notification context attached to a reminder.
+ * Repository for resolving notification context attached to a SavedItem.
  *
- * This bridges reminder associations back to active notification units and records. Keep it read-focused so
- * reminder editing does not mutate notification history through this path.
+ * This bridges SavedItem associations back to active notification units and records. Keep it read-focused so
+ * SavedItem editing does not mutate notification history through this path.
  */
-class ReminderRelatedNotificationsRepository(context: Context) {
+class SavedItemRelatedNotificationsRepository(context: Context) {
     private val db = AppDatabase.getInstance(context.applicationContext)
 
     data class RelatedNotifications(
@@ -30,8 +30,8 @@ class ReminderRelatedNotificationsRepository(context: Context) {
         }
     }
 
-    suspend fun getRelatedNotifications(reminder: SavedItem): RelatedNotifications = withContext(Dispatchers.IO) {
-        val links = db.notiSavedItemLinkDao().getBySavedItemId(reminder.savedItemId)
+    suspend fun getRelatedNotifications(item: SavedItem): RelatedNotifications = withContext(Dispatchers.IO) {
+        val links = db.notiSavedItemLinkDao().getBySavedItemId(item.savedItemId)
         getByRecordIds(links.map { it.notiRecordId })
     }
 

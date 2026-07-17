@@ -24,7 +24,7 @@ import org.muilab.notigpt.ui.common.feedback.AppSnackbar
 import org.muilab.notigpt.ui.notification.component.AutoControlBar
 import org.muilab.notigpt.ui.notification.viewmodel.DrawerViewModel
 import org.muilab.notigpt.util.SharedPreferencesManager
-import org.muilab.notigpt.work.ReminderPeriodicWork
+import org.muilab.notigpt.work.ExtractionPeriodicWork
 
 /**
  * Developer-only control panel for invoking notification/debug operations from the UI.
@@ -92,8 +92,8 @@ fun DevControlPanel(context: Context, drawerViewModel: DrawerViewModel) {
                 Button(onClick = {
                     try {
                         SharedPreferencesManager.init(context.applicationContext)
-                        ReminderPeriodicWork.logStatus(context.applicationContext)
-                        val t = SharedPreferencesManager.lastReminderPeriodicRunTime
+                        ExtractionPeriodicWork.logStatus(context.applicationContext)
+                        val t = SharedPreferencesManager.lastExtractionPeriodicRunTime
                         AppSnackbar.show(
                             if (t == 0L) "Periodic worker hasn't run yet (or prefs cleared)" else "Last periodic run: $t"
                         )

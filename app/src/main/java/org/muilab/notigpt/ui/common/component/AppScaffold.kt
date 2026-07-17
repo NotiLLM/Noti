@@ -68,7 +68,7 @@ import org.muilab.notigpt.ui.home.viewmodel.HomeViewModel
 import org.muilab.notigpt.ui.settings.SettingsScreen
 import org.muilab.notigpt.ui.preference.component.PreferenceLearningBottomSheet
 import org.muilab.notigpt.ui.preference.screen.PreferenceChatScreen
-import org.muilab.notigpt.ui.reminder.screen.RemindersScreen
+import org.muilab.notigpt.ui.saveditem.screen.SavedItemsScreen
 import org.muilab.notigpt.ui.reminder.screen.ScheduledRemindersScreen
 import org.muilab.notigpt.ui.common.navigation.AppMenuScreen
 import org.muilab.notigpt.ui.common.navigation.HomeDestination
@@ -78,7 +78,7 @@ import org.muilab.notigpt.ui.notification.screen.NotificationHistoryScreen
 import org.muilab.notigpt.ui.notification.viewmodel.DrawerViewModel
 import org.muilab.notigpt.ui.preference.viewmodel.PreferenceViewModel
 import org.muilab.notigpt.ui.review.ReviewScreen
-import org.muilab.notigpt.ui.reminder.viewmodel.ReminderViewModel
+import org.muilab.notigpt.ui.saveditem.viewmodel.SavedItemsViewModel
 import org.muilab.notigpt.ui.reminder.viewmodel.ScheduledReminderViewModel
 import org.muilab.notigpt.ui.theme.MotionSpecs
 import kotlin.coroutines.cancellation.CancellationException
@@ -145,7 +145,7 @@ fun AppScaffold(
         topBarState.contentOffset = 0f
     }
 
-    val reminderViewModel: ReminderViewModel = viewModel()
+    val savedItemsViewModel: SavedItemsViewModel = viewModel()
     val scheduledReminderViewModel: ScheduledReminderViewModel = viewModel()
     val preferenceViewModel: PreferenceViewModel = viewModel()
     // Shared with HomeScreen (same activity ViewModelStoreOwner) — used here only for the drawer badges.
@@ -208,7 +208,7 @@ fun AppScaffold(
     // Saved-list screens honor the shared search bar; other destinations ignore it.
     LaunchedEffect(appSearchQuery, currentDest, menuScreen) {
         if (menuScreen == null && currentDest is HomeDestination.SavedList) {
-            reminderViewModel.updateSearchQuery(appSearchQuery)
+            savedItemsViewModel.updateSearchQuery(appSearchQuery)
         }
     }
 
@@ -247,7 +247,7 @@ fun AppScaffold(
             }
             preferenceViewModel.startFlow(
                 entryPoint = PreferenceEntryPoint.MANUAL_EXTRACT,
-                reminder = null,
+                item = null,
                 contextData = contextData,
             )
         }
@@ -449,7 +449,7 @@ fun AppScaffold(
                             )
                             HomeDestination.Review -> ReviewScreen(
                                 drawerViewModel = drawerViewModel,
-                                reminderViewModel = reminderViewModel,
+                                savedItemsViewModel = savedItemsViewModel,
                                 preferenceViewModel = preferenceViewModel,
                                 onBack = popBack,
                                 onOpenUndetermined = {
@@ -474,17 +474,17 @@ fun AppScaffold(
                             )
                             is HomeDestination.SavedList -> {
                                 val listMode = when (dest.filter) {
-                                    SavedListFilter.Tasks -> ReminderViewModel.ListMode.Tasks
-                                    SavedListFilter.Keep -> ReminderViewModel.ListMode.Keep
-                                    else -> ReminderViewModel.ListMode.All
+                                    SavedListFilter.Tasks -> SavedItemsViewModel.ListMode.Tasks
+                                    SavedListFilter.Keep -> SavedItemsViewModel.ListMode.Keep
+                                    else -> SavedItemsViewModel.ListMode.All
                                 }
                                 val smart = when (dest.filter) {
                                     SavedListFilter.Tasks, SavedListFilter.Keep -> null
                                     else -> dest.filter
                                 }
-                                RemindersScreen(
+                                SavedItemsScreen(
                                     drawerViewModel = drawerViewModel,
-                                    reminderViewModel = reminderViewModel,
+                                    savedItemsViewModel = savedItemsViewModel,
                                     scheduledReminderViewModel = scheduledReminderViewModel,
                                     preferenceViewModel = preferenceViewModel,
                                     listMode = listMode,

@@ -176,7 +176,7 @@ private fun ScheduledReminderCard(
 
 @Composable
 fun ReminderDateTimeDialog(
-    title: String = stringResource(R.string.ui_reminders_create_button),
+    title: String = stringResource(R.string.ui_reminder_create_button),
     initialAtMs: Long = System.currentTimeMillis(),
     onDismiss: () -> Unit,
     onConfirm: (Long) -> Unit,

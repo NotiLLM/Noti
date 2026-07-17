@@ -112,7 +112,7 @@ fun postOngoingNotification(context: Context) {
     CoroutineScope(Dispatchers.IO).launch {
         val appDatabase = AppDatabase.getInstance(context)
         val drawerDao = appDatabase.drawerDao()
-        val savedItemDao = appDatabase.reminderListDao()
+        val savedItemDao = appDatabase.savedItemDao()
 
         val windowHours = SharedPreferencesManager.homeNotiWindowHours.coerceAtLeast(1)
         val cutoffMs = System.currentTimeMillis() - windowHours * 60L * 60L * 1000L

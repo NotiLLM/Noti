@@ -1,4 +1,4 @@
-package org.muilab.notigpt.data.repository.reminder
+package org.muilab.notigpt.data.repository.saveditem
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -9,7 +9,7 @@ import org.muilab.notigpt.model.features.SavedItemChangeLog
 /**
  * Repository for the append-only saved-item change history.
  *
- * Handlers write one row per LLM op or user edit; the reminder detail UI reads newest-first to
+ * Handlers write one row per LLM op or user edit; the SavedItem detail UI reads newest-first to
  * render "what's new" (rows newer than SavedItem.lastViewedChangeAt) and the full change history.
  */
 class SavedItemChangeLogRepository(private val changeLogDao: SavedItemChangeLogDao) {

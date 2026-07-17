@@ -39,7 +39,7 @@ sealed interface N8nWorkerInput {
         val payloadJson: String,
     ) : N8nWorkerInput
 
-    /** Regenerate a single reminder. */
+    /** Regenerate a single SavedItem. */
     data class RegenerateOne(
         override val webhookPath: String,
         val savedItemId: String,
@@ -74,7 +74,9 @@ sealed interface N8nWorkerInput {
 
                 N8N_REGENERATE_ONE -> RegenerateOne(
                     webhookPath = webhookPath,
-                    savedItemId = input.getString("reminder_id") ?: return null,
+                    savedItemId = input.getString("saved_item_id")
+                        ?: input.getString("reminder_id")
+                        ?: return null,
                 )
 
                 else -> null
