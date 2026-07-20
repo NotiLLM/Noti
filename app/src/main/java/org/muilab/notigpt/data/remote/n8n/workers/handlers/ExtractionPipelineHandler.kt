@@ -114,8 +114,29 @@ internal object ExtractionPipelineHandler {
                 addAll(ctx.database.notiSavedItemLinkDao().getSavedItemIdsByNotiKey(notiKey))
                 addAll(ctx.journalRepository.getSavedItemIdsForKeys(listOf(notiKey)))
             }
-            val linkedItems = linkedItemIds.mapNotNull { id -> ctx.savedItemRepository.getById(id) }
-                .map { ExtractionStageSupport.itemDetail(ctx, it) }
+            val pendingRepo = ctx.pendingProposedOpRepository()
+            val pendingByTarget = pendingRepo.groupOps(pendingRepo.getPending())
+                .mapNotNull { group -> group.targetItemId?.let { it to group } }
+                .toMap()
+            val linkedItems = linkedItemIds.mapNotNull { id ->
+                val item = ctx.savedItemRepository.getById(id) ?: return@mapNotNull null
+                val pendingGroup = pendingByTarget[id]
+                if (pendingGroup == null) {
+                    ExtractionStageSupport.itemDetail(ctx, item)
+                } else {
+                    val draft = ctx.database.pendingReviewDraftDao().getByKey(pendingGroup.key)
+                    val preview = pendingRepo.buildPreview(pendingGroup, reviewWhenAtMs = draft?.whenAtMs)
+                        ?: return@mapNotNull ExtractionStageSupport.itemDetail(ctx, item)
+                    val pendingEvidence = pendingGroup.ops.flatMap { op ->
+                        runCatching {
+                            val ids = JSONArray(op.evidenceRecordIds)
+                            buildList { for (i in 0 until ids.length()) ids.optString(i).takeIf(String::isNotBlank)?.let(::add) }
+                        }.getOrDefault(emptyList())
+                    }
+                    val existingEvidence = ctx.savedItemRepository.getLinkedRecordIds(id)
+                    ExtractionStageSupport.pendingPreviewDetail(preview, id, existingEvidence + pendingEvidence)
+                }
+            }
 
             val journalEntries = ctx.journalRepository.payloadFor(listOf(notiKey))[notiKey]
                 ?.recentEntries?.map { e ->

@@ -1,6 +1,6 @@
 [versions]
 # Plugin versions
-android-gradle = "9.3.0"
+android-gradle = "9.2.1"
 kotlin = "2.3.21"
 ksp = "2.3.9"
 

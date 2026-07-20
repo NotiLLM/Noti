@@ -205,6 +205,161 @@ class PendingProposedOpRepository(private val appContext: Context) {
         staged
     }
 
+    /**
+     * Stages one E2 result set whose members are expressed as reflection candidate references.
+     * Source pending groups are deliberately squashed: their evidence rides the replacement op,
+     * their rows disappear from review, and rejecting the eventual target group therefore returns
+     * to the last user-approved SavedItem state.
+     */
+    suspend fun stageReflectionOps(
+        batchId: String,
+        ops: JSONArray,
+        pendingGroupsByRef: Map<String, OpGroup>,
+        savedItemIdsByRef: Map<String, String>,
+        candidateWhenByRef: Map<String, Long>,
+        now: Long = System.currentTimeMillis(),
+    ): List<PendingProposedOp> = withContext(Dispatchers.IO) {
+        data class Prepared(
+            val row: PendingProposedOp,
+            val consumed: List<PendingProposedOp>,
+            val inheritedWhen: Long?,
+        )
+
+        val prepared = mutableListOf<Prepared>()
+        val globallyConsumed = mutableSetOf<Long>()
+        for (i in 0 until ops.length()) {
+            val op = ops.optJSONObject(i) ?: continue
+            val targetRef = op.optString("targetCandidateRef")
+            val sourceRefs = op.optJSONArray("sourceCandidateRefs")?.let { arr ->
+                buildList { for (j in 0 until arr.length()) arr.optString(j).takeIf(String::isNotBlank)?.let(::add) }
+            }.orEmpty().distinct()
+            val allRefs = (listOf(targetRef) + sourceRefs).filter(String::isNotBlank).distinct()
+            if (allRefs.size < 2) continue
+
+            val whenValues = allRefs.mapNotNull(candidateWhenByRef::get)
+                .filter { SavedItem.hasPlannedDate(it) }
+                .distinct()
+            if (whenValues.size > 1) continue
+            val inheritedWhen = whenValues.singleOrNull()
+
+            when (op.optString("op")) {
+                "consolidate_create" -> {
+                    val groups = allRefs.mapNotNull(pendingGroupsByRef::get)
+                    if (groups.size != allRefs.size || groups.any { !it.isCreate }) continue
+                    val consumed = groups.flatMap { it.ops }.distinctBy(PendingProposedOp::opId)
+                    if (consumed.any { it.opId in globallyConsumed }) continue
+                    val types = consumed.map(PendingProposedOp::itemType).distinct()
+                    if (types.size != 1) continue
+                    val evidence = consumed.flatMap(::evidenceOf).toSet()
+                    val payload = JSONObject(op.toString()).apply {
+                        put("op", "create")
+                        put("reviewOperationKind", "merge")
+                        put("evidenceRecordIds", JSONArray(evidence.toList()))
+                    }
+                    prepared += Prepared(
+                        row = PendingProposedOp(
+                            notiKey = consumed.firstNotNullOfOrNull { it.notiKey.takeIf(String::isNotBlank) }.orEmpty(),
+                            opType = PendingProposedOpType.Create,
+                            payload = payload.toString(),
+                            evidenceRecordIds = JSONArray(evidence.toList()).toString(),
+                            reason = reasonFrom(payload),
+                            itemType = types.single(),
+                            batchId = batchId,
+                            createdAt = now,
+                        ),
+                        consumed = consumed,
+                        inheritedWhen = inheritedWhen,
+                    )
+                    globallyConsumed.addAll(consumed.map(PendingProposedOp::opId))
+                }
+
+                "merge" -> {
+                    val targetGroup = pendingGroupsByRef[targetRef]
+                    if (targetGroup?.isCreate == true) continue
+                    val targetId = targetGroup?.targetItemId ?: savedItemIdsByRef[targetRef] ?: continue
+                    val target = savedItemDao.getById(targetId) ?: continue
+                    val sourceGroups = sourceRefs.mapNotNull(pendingGroupsByRef::get)
+                    val consumed = sourceGroups.flatMap { it.ops }.distinctBy(PendingProposedOp::opId)
+                    if (consumed.any { it.opId in globallyConsumed }) continue
+
+                    val sourceIds = buildList {
+                        sourceRefs.mapNotNull(savedItemIdsByRef::get).forEach(::add)
+                        sourceGroups.forEach { group ->
+                            group.targetItemId?.takeIf { it != targetId }?.let(::add)
+                            group.ops.flatMap(::mergeSourceIdsOf).filter { it != targetId }.forEach(::add)
+                        }
+                        val explicit = op.optJSONArray("sourceItemIds")
+                        if (explicit != null) for (j in 0 until explicit.length()) {
+                            explicit.optString(j).takeIf { it.isNotBlank() && it != targetId }?.let(::add)
+                        }
+                    }.distinct()
+                    val sourceItems = sourceIds.mapNotNull { savedItemDao.getById(it) }
+                    if (sourceItems.size != sourceIds.size || sourceItems.any { it.itemType != target.itemType }) continue
+                    if (consumed.any { it.itemType != target.itemType }) continue
+                    if (SavedItemMergePolicy.preservedUserState(listOf(target) + sourceItems) == null) continue
+
+                    val evidence = consumed.flatMap(::evidenceOf).toMutableSet().apply {
+                        addAll(SavedItemAssociationMerger.evidenceIdsFrom(op))
+                    }
+                    val payload = JSONObject(op.toString()).apply {
+                        put("targetItemId", targetId)
+                        put("sourceItemIds", JSONArray(sourceIds))
+                        put("evidenceRecordIds", JSONArray(evidence.toList()))
+                    }
+                    prepared += Prepared(
+                        row = PendingProposedOp(
+                            notiKey = consumed.firstNotNullOfOrNull { it.notiKey.takeIf(String::isNotBlank) }.orEmpty(),
+                            opType = PendingProposedOpType.Merge,
+                            payload = payload.toString(),
+                            targetItemId = targetId,
+                            mergeSourceItemIds = JSONArray(sourceIds).toString(),
+                            evidenceRecordIds = JSONArray(evidence.toList()).toString(),
+                            reason = reasonFrom(payload),
+                            itemType = target.itemType,
+                            batchId = batchId,
+                            createdAt = now,
+                        ),
+                        consumed = consumed,
+                        inheritedWhen = inheritedWhen,
+                    )
+                    globallyConsumed.addAll(consumed.map(PendingProposedOp::opId))
+                }
+            }
+        }
+        if (prepared.isEmpty()) return@withContext emptyList()
+
+        val staged = db.withTransaction {
+            // Re-check that every source is still pending before consuming it; a review action may
+            // have raced the network request while E2 was running.
+            val consumedIds = prepared.flatMap { it.consumed }.map(PendingProposedOp::opId).distinct()
+            val stillPending = if (consumedIds.isEmpty()) emptySet() else pendingProposedOpDao.getByIds(consumedIds)
+                .map(PendingProposedOp::opId).toSet()
+            if (stillPending.size != consumedIds.size) return@withTransaction emptyList()
+
+            prepared.flatMap { it.consumed }.map { it.opId }.distinct().takeIf { it.isNotEmpty() }?.let { ids ->
+                pendingProposedOpDao.deleteByIds(ids)
+                setProposalDecision(ids, ProposedOpRecordDecision.Superseded, now)
+            }
+            prepared.flatMap { it.consumed }.map { op ->
+                if (op.targetItemId.isBlank()) "create_${op.opId}" else "item_${op.targetItemId}"
+            }.distinct().forEach { db.pendingReviewDraftDao().deleteByKey(it) }
+
+            val rows = prepared.map(Prepared::row)
+            val ids = pendingProposedOpDao.insertAll(rows)
+            val inserted = rows.mapIndexed { index, row -> row.copy(opId = ids[index]) }
+            persistProposedOpRecords(inserted)
+            inserted.forEachIndexed { index, row ->
+                prepared[index].inheritedWhen?.let { whenAt ->
+                    val reviewKey = if (row.opType == PendingProposedOpType.Create) "create_${row.opId}" else "item_${row.targetItemId}"
+                    db.pendingReviewDraftDao().upsert(PendingReviewDraft(reviewKey, whenAt, now))
+                }
+            }
+            inserted
+        }
+        if (staged.isNotEmpty()) FirestoreOutboxWork.enqueue(appContext)
+        staged
+    }
+
     // ========== Item-level grouping & preview ==========
 
     /** One reviewable unit: a would-be item (create) or an existing item with staged changes. */

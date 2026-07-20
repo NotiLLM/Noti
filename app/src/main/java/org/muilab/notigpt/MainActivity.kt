@@ -2,7 +2,9 @@ package org.muilab.notigpt
 
 import android.content.ComponentName
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.util.Log
@@ -21,6 +23,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import dagger.hilt.android.AndroidEntryPoint
 import org.muilab.notigpt.service.NotiListenerService
 import org.muilab.notigpt.ui.theme.NotiTheme
@@ -54,6 +58,8 @@ class MainActivity : ComponentActivity() {
         // WorkManager.getInstance(applicationContext).cancelAllWork()
 
         SharedPreferencesManager.init(this)
+
+        requestLocalNetworkPermissionIfNeeded()
 
         // Identity is always the signed-in Firebase UID. Keep it blank before sign-in; the device
         // ID is not an account identity and must never be used for Firestore or n8n payloads.
@@ -135,6 +141,20 @@ class MainActivity : ComponentActivity() {
 
     private val drawerViewModel: DrawerViewModel by viewModels()
 
+    /** Requests Android 17's LAN permission only for builds pointed at the local test server. */
+    private fun requestLocalNetworkPermissionIfNeeded() {
+        if (!BuildConfig.USE_LOCAL_N8N || Build.VERSION.SDK_INT < 37) return
+
+        val permission = "android.permission.ACCESS_LOCAL_NETWORK"
+        if (ContextCompat.checkSelfPermission(this, permission) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(permission),
+                LOCAL_NETWORK_PERMISSION_REQUEST_CODE,
+            )
+        }
+    }
+
 
     private fun isNotiListenerEnabled(): Boolean {
         val cn = ComponentName(this, NotiListenerService::class.java)
@@ -146,6 +166,10 @@ class MainActivity : ComponentActivity() {
     fun isBatteryOptimizationsIgnored(): Boolean {
         val pm = getSystemService(POWER_SERVICE) as android.os.PowerManager
         return pm.isIgnoringBatteryOptimizations(packageName)
+    }
+
+    private companion object {
+        const val LOCAL_NETWORK_PERMISSION_REQUEST_CODE = 1001
     }
 
     override fun onResume() {

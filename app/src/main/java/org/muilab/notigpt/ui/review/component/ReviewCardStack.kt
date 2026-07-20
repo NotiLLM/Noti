@@ -5,6 +5,7 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -47,6 +48,7 @@ fun ReviewCardStack(
     onExpand: (ReviewViewModel.ReviewEntry) -> Unit,
     modifier: Modifier = Modifier,
     minimalCard: @Composable (item: ReviewViewModel.ReviewEntry, approveProgress: Float, rejectProgress: Float) -> Unit,
+    footer: @Composable () -> Unit = {},
 ) {
     BoxWithConstraints(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         val density = LocalDensity.current
@@ -54,36 +56,51 @@ fun ReviewCardStack(
         val commitThreshold = stackWidthPx * 0.30f
 
         val visible = items.take(MAX_VISIBLE)
-        // Draw deepest first so the top card renders last (in front).
-        visible.reversed().forEachIndexed { indexFromBack, item ->
-            val depth = visible.lastIndex - indexFromBack // 0 = top
-            if (depth == 0) {
-                key(item.key) {
-                    TopCard(
-                        item = item,
-                        commitThreshold = commitThreshold,
-                        screenWidthPx = stackWidthPx,
-                        onApprove = onApprove,
-                        onReject = onReject,
-                        onExpand = onExpand,
-                        minimalCard = minimalCard,
-                    )
-                }
-            } else {
-                val scale = 1f - depth * 0.04f
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 24.dp)
-                        .graphicsLayer {
-                            scaleX = scale
-                            scaleY = scale
-                            translationY = with(density) { (depth * 10).dp.toPx() }
-                        },
-                ) {
-                    minimalCard(item, 0f, 0f)
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    // Translated rear cards do not affect measurement; reserve their visual depth
+                    // so the footer can never be covered by the deck.
+                    .padding(bottom = ((visible.size - 1).coerceAtLeast(0) * 10).dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                // Draw deepest first so the top card renders last (in front).
+                visible.reversed().forEachIndexed { indexFromBack, item ->
+                    val depth = visible.lastIndex - indexFromBack // 0 = top
+                    if (depth == 0) {
+                        key(item.key) {
+                            TopCard(
+                                item = item,
+                                commitThreshold = commitThreshold,
+                                screenWidthPx = stackWidthPx,
+                                onApprove = onApprove,
+                                onReject = onReject,
+                                onExpand = onExpand,
+                                minimalCard = minimalCard,
+                            )
+                        }
+                    } else {
+                        val scale = 1f - depth * 0.04f
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 24.dp)
+                                .graphicsLayer {
+                                    scaleX = scale
+                                    scaleY = scale
+                                    translationY = with(density) { (depth * 10).dp.toPx() }
+                                },
+                        ) {
+                            minimalCard(item, 0f, 0f)
+                        }
+                    }
                 }
             }
+            footer()
         }
     }
 }

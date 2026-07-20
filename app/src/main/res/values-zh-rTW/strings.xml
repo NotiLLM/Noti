@@ -570,6 +570,24 @@
     <string name="review_merge_field_value">%1$s：%2$s</string>
     <string name="review_merge_buttons">將加入的動作</string>
     <string name="review_further_review">檢視項目</string>
+    <string name="review_why">原因</string>
+    <string name="review_digest_merged">合併來源</string>
+    <string name="review_digest_added">新增內容</string>
+    <string name="review_digest_changed">變更內容</string>
+    <string name="review_compare_show">顯示變更前後</string>
+    <string name="review_compare_hide">隱藏變更前後</string>
+    <string name="review_compare_value">%1$s → %2$s</string>
+    <string name="review_evidence_show">顯示相關通知</string>
+    <string name="review_evidence_hide">隱藏相關通知</string>
+    <string name="review_history_show">顯示變更紀錄</string>
+    <string name="review_history_hide">隱藏變更紀錄</string>
+    <string name="review_result">結果</string>
+    <string name="review_result_subtasks">%1$d 個子任務</string>
+    <string name="review_field_title">標題</string>
+    <string name="review_field_deadline">截止時間</string>
+    <string name="review_field_start">開始時間</string>
+    <string name="review_field_end">結束時間</string>
+    <string name="review_field_other">%1$s</string>
     <string name="a11y_review_approve">向右滑動以核准</string>
     <string name="a11y_review_reject">向左滑動以拒絕</string>
 

@@ -7,6 +7,11 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Declaring this does not show a prompt. MainActivity requests it only when
+         BuildConfig.USE_LOCAL_N8N is true on Android 17+ (target SDK 37+). -->
+    <uses-permission
+        android:name="android.permission.ACCESS_LOCAL_NETWORK"
+        tools:targetApi="37" />
     <meta-data
         android:name="com.google.android.gms.oauth_client_id"
         android:value="66870957113-lub0vean2rgdd1qegv9dnm5cktd658ld.apps.googleusercontent.com" />
@@ -18,9 +23,11 @@
         android:fullBackupContent="@xml/backup_rules"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
+        android:networkSecurityConfig="${networkSecurityConfig}"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.NotiTask"
+        android:usesCleartextTraffic="${usesCleartextTraffic}"
         tools:targetApi="31">
 
         <!-- NotiApplication supplies HiltWorkerFactory through Configuration.Provider. Removing

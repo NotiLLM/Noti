@@ -129,6 +129,37 @@ internal object ExtractionStageSupport {
         },
     )
 
+    /** Full detail for an already-staged eventual preview, used when a later update replaces it. */
+    fun pendingPreviewDetail(
+        preview: PendingProposedOpRepository.Preview,
+        savedItemId: String,
+        evidenceRecordIds: Collection<String>,
+    ): Map<String, Any> = mapOf(
+        "itemId" to savedItemId,
+        "title" to preview.item.title,
+        "content" to preview.item.content,
+        "type" to if (preview.item.isTask) "task" else "keep",
+        "deadline" to iso(preview.item.deadlineAtMs),
+        "startTime" to iso(preview.item.startAtMs),
+        "endTime" to iso(preview.item.endAtMs),
+        "when" to if (SavedItem.isSomeday(preview.item.whenAtMs)) "someday" else iso(preview.item.whenAtMs),
+        "userEdited" to preview.item.userEdited,
+        "isStarred" to preview.item.isStarred,
+        "isCompleted" to preview.item.isCompleted,
+        "buttons" to preview.item.buttons,
+        "sourceNotiRecordIds" to evidenceRecordIds.distinct(),
+        "sourceNotiKeys" to evidenceRecordIds.map { it.substringBeforeLast("_") }.distinct(),
+        "subTasks" to preview.subItems.map { st ->
+            mapOf(
+                "subTaskId" to st.savedSubItemId,
+                "text" to st.text,
+                "isCompleted" to st.isCompleted,
+                "position" to st.position,
+            )
+        },
+        "pendingProposal" to true,
+    )
+
     /**
      * Active items (excluding completed/archived) as compact lines, minus items that already have
      * unreviewed staged ops against them — the merge stages must not target items mid-review.

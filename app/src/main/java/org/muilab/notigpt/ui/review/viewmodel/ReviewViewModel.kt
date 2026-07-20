@@ -71,7 +71,7 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
         val reason: String,
         val operationKind: ReviewOperationKind,
     ) {
-        val isNewLike: Boolean get() = operationKind == ReviewOperationKind.Create
+        val isNewLike: Boolean get() = group?.isCreate == true || operationKind == ReviewOperationKind.Create
     }
 
     /** All entries awaiting review. The screen applies the chip filter locally. */
@@ -91,6 +91,10 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
                     reviewWhenAtMs = draftsByKey[group.key]?.whenAtMs,
                 ) ?: return@mapNotNull null
                 val kind = when {
+                    group.isCreate && group.ops.any { pending ->
+                        runCatching { org.json.JSONObject(pending.payload).optString("reviewOperationKind") == "merge" }
+                            .getOrDefault(false)
+                    } -> ReviewOperationKind.Merge
                     group.isCreate -> ReviewOperationKind.Create
                     group.ops.any { it.opType == PendingProposedOpType.Merge } -> ReviewOperationKind.Merge
                     else -> ReviewOperationKind.Update

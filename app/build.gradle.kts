@@ -1,5 +1,21 @@
 import java.util.Properties
 
+val useLocalN8n = providers.gradleProperty("noti.useLocalN8n")
+    .orElse("false")
+    .map(String::toBooleanStrict)
+    .get()
+val localN8nBaseUrl = providers.gradleProperty("noti.localN8nBaseUrl")
+    .orElse("http://192.168.1.165:5678/")
+    .get()
+val publicN8nBaseUrl = "https://n8n.udchen.tw/"
+
+require(localN8nBaseUrl.endsWith('/')) {
+    "noti.localN8nBaseUrl must end with '/' so Retrofit can resolve webhook paths"
+}
+
+fun String.asBuildConfigString(): String =
+    "\"${replace("\\", "\\\\").replace("\"", "\\\"")}\""
+
 plugins {
     alias(libs.plugins.androidApplication)
     alias(libs.plugins.compose.compiler)
@@ -24,6 +40,21 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
             useSupportLibrary = true
+        }
+
+        // One switch controls every part of LAN testing: URL selection, cleartext HTTP, and the
+        // Android 17 local-network runtime prompt. Set noti.useLocalN8n=false for the public server.
+        buildConfigField("boolean", "USE_LOCAL_N8N", useLocalN8n.toString())
+        buildConfigField(
+            "String",
+            "N8N_BASE_URL",
+            (if (useLocalN8n) localN8nBaseUrl else publicN8nBaseUrl).asBuildConfigString(),
+        )
+        manifestPlaceholders["usesCleartextTraffic"] = useLocalN8n.toString()
+        manifestPlaceholders["networkSecurityConfig"] = if (useLocalN8n) {
+            "@xml/network_security_config_local"
+        } else {
+            "@xml/network_security_config_public"
         }
 
         // Per-notiKey extraction pipeline (contract v3). Each stage is its own n8n workflow/webhook.

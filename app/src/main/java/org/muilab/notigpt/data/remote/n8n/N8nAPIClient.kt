@@ -18,11 +18,7 @@ object N8nAPIClient {
     @Volatile
     private var retrofit: Retrofit? = null
 
-    // The current temporary n8n host is public HTTPS. Endpoint paths remain BuildConfig values so
-    // the Android client can migrate to the planned GCP service without reintroducing LAN access.
-    private const val BASE_URL = "https://n8n.udchen.tw/"
-
-    private fun createRetrofit(baseUrl: String = BASE_URL): Retrofit {
+    private fun createRetrofit(baseUrl: String = BuildConfig.N8N_BASE_URL): Retrofit {
         val logging = HttpLoggingInterceptor().apply {
             // Never log notification-derived request/response bodies. Debug builds retain only
             // method/URL/status/timing metadata; release builds emit no OkHttp traffic logs.
@@ -42,7 +38,7 @@ object N8nAPIClient {
             .build()
 
         return Retrofit.Builder()
-            .baseUrl(baseUrl) // e.g. https://n8n.udchen.tw/
+            .baseUrl(baseUrl)
             .addConverterFactory(GsonConverterFactory.create())
             .client(client)
             .build()

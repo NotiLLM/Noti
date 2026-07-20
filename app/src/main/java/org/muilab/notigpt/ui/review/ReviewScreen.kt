@@ -148,6 +148,7 @@ fun ReviewScreen(
                     ) { Text(stringResource(R.string.review_restore_skipped)) }
                 }
             } else {
+                val top = active.first()
                 ReviewCardStack(
                     items = active,
                     modifier = Modifier.weight(1f),
@@ -157,27 +158,27 @@ fun ReviewScreen(
                     minimalCard = { entry, approveProgress, rejectProgress ->
                         MinimalReviewCard(entry, approveProgress, rejectProgress, reviewViewModel)
                     },
+                    footer = {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 24.dp, vertical = 8.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            if (top.preview.isTask) {
+                                SavedItemWhenButton(
+                                    whenAtMs = top.preview.whenAtMs,
+                                    accent = NotiTheme.semantic.taskAccent,
+                                    onClick = { whenEntry = top },
+                                )
+                            }
+                            TextButton(onClick = { reviewViewModel.reviewLater(top) }) {
+                                Text(stringResource(R.string.review_later))
+                            }
+                        }
+                    },
                 )
-
-                val top = active.first()
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 24.dp, vertical = 12.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    if (top.preview.isTask) {
-                        SavedItemWhenButton(
-                            whenAtMs = top.preview.whenAtMs,
-                            accent = NotiTheme.semantic.taskAccent,
-                            onClick = { whenEntry = top },
-                        )
-                    }
-                    TextButton(onClick = { reviewViewModel.reviewLater(top) }) {
-                        Text(stringResource(R.string.review_later))
-                    }
-                }
             }
         }
 

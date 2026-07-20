@@ -32,6 +32,9 @@ google-services.json
 # Android Profiling
 *.hprof
 
+# Local device-data migration backups
+local-backups/
+
 # Kotlin 2.0
 .kotlin/
 

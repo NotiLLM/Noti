@@ -590,6 +590,24 @@
     <string name="review_merge_field_value">%1$s: %2$s</string>
     <string name="review_merge_buttons">Actions to add</string>
     <string name="review_further_review">Review item</string>
+    <string name="review_why">Why</string>
+    <string name="review_digest_merged">Merged from</string>
+    <string name="review_digest_added">Added</string>
+    <string name="review_digest_changed">Changed</string>
+    <string name="review_compare_show">Show before and after</string>
+    <string name="review_compare_hide">Hide before and after</string>
+    <string name="review_compare_value">%1$s → %2$s</string>
+    <string name="review_evidence_show">Show supporting notifications</string>
+    <string name="review_evidence_hide">Hide supporting notifications</string>
+    <string name="review_history_show">Show change history</string>
+    <string name="review_history_hide">Hide change history</string>
+    <string name="review_result">Result</string>
+    <string name="review_result_subtasks">%1$d subtasks</string>
+    <string name="review_field_title">Title</string>
+    <string name="review_field_deadline">Deadline</string>
+    <string name="review_field_start">Start</string>
+    <string name="review_field_end">End</string>
+    <string name="review_field_other">%1$s</string>
     <string name="a11y_review_approve">Swipe right to approve</string>
     <string name="a11y_review_reject">Swipe left to reject</string>
 
