@@ -73,7 +73,6 @@
     <string name="change_field_end">結束時間</string>
     <string name="change_field_estimate">預估時間</string>
     <string name="change_field_row">%1$s：%2$s → %3$s</string>
-    <string name="saved_item_show_surrounding_context">顯示前後訊息</string>
     <string name="saved_item_evidence_legend">標示的訊息是此項目的來源</string>
     <string name="extraction_pending_banner">擷取待處理——無法連線伺服器（%1$d 則通知排隊中）</string>
     <string name="extraction_retry">重試</string>
@@ -533,13 +532,18 @@
     <!-- Review (swipe) screen -->
     <string name="review_title">檢視</string>
     <string name="review_empty">全部處理完畢</string>
+    <string name="review_skipped_empty">其餘卡片皆已暫時略過</string>
+    <string name="review_restore_skipped">檢視已略過的卡片</string>
+    <string name="review_later">稍後檢視</string>
+    <string name="review_badge_created">已建立</string>
+    <string name="review_badge_updated">已更新</string>
+    <string name="review_badge_merged">已合併</string>
     <string name="review_chip_new_tasks">%1$d 個新任務</string>
     <string name="review_chip_updated_tasks">%1$d 個已編輯任務</string>
     <string name="review_chip_new_keeps">%1$d 則新備忘</string>
     <string name="review_chip_updated_keeps">%1$d 則已編輯備忘</string>
     <string name="review_approve">核准</string>
     <string name="review_reject">拒絕</string>
-    <string name="review_approve_all">全部核准</string>
     <string name="review_undo">復原</string>
     <string name="review_approved_toast">已核准</string>
     <string name="review_rejected_toast">已拒絕</string>
@@ -551,13 +555,29 @@
     <string name="review_when_offer_skip">略過</string>
     <string name="review_edit">編輯</string>
     <string name="review_save_approve">儲存並核准</string>
+    <string name="review_reject_change">拒絕變更</string>
     <string name="review_triggered_this">觸發此次編輯</string>
     <string name="review_previous_context">先前脈絡</string>
+    <string name="review_why_created">建立此項目的原因</string>
+    <string name="review_why_updated">更新此項目的原因</string>
+    <string name="review_why_merged">合併這些項目的原因</string>
+    <string name="review_merge_into">將內容合併至「%1$s」</string>
+    <string name="review_merge_survivor">保留項目</string>
+    <string name="review_merge_source">來源項目</string>
+    <string name="review_merge_description">將加入的描述</string>
+    <string name="review_merge_subtasks">將加入的子任務</string>
+    <string name="review_merge_fields">將變更的欄位</string>
+    <string name="review_merge_field_value">%1$s：%2$s</string>
+    <string name="review_merge_buttons">將加入的動作</string>
+    <string name="review_further_review">檢視項目</string>
     <string name="a11y_review_approve">向右滑動以核准</string>
     <string name="a11y_review_reject">向左滑動以拒絕</string>
 
     <!-- Change history -->
     <string name="change_type_reverted">已還原</string>
+    <string name="change_type_merged">已合併</string>
+    <string name="change_history_source">來源：%1$s</string>
+    <string name="change_merged_content">原始描述：%1$s</string>
 
     <!-- Card action row -->
     <string name="export_chooser_title">匯出至</string>

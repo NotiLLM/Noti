@@ -75,6 +75,7 @@ class DataDeletionRepository @Inject constructor(
             database.savedItemDao().deleteAllForAccountSwitch()
             database.subTaskDao().deleteAllForAccountSwitch()
             database.pendingProposedOpDao().deleteAllForAccountSwitch()
+            database.pendingReviewDraftDao().deleteAll()
             database.rejectedMergeDao().deleteAllForAccountSwitch()
             database.extractionJournalDao().deleteAllEntries()
             database.extractionJournalDao().deleteAllSummaries()

@@ -24,6 +24,7 @@ import org.muilab.notigpt.data.remote.n8n.N8nOpParsing
 import org.muilab.notigpt.domain.saveditem.SavedItemRevertLogic
 import org.muilab.notigpt.domain.saveditem.SavedItemNormalization
 import org.muilab.notigpt.model.features.SavedSubItem
+import org.muilab.notigpt.model.features.ReviewItemDraft
 import org.muilab.notigpt.util.SharedPreferencesManager
 import org.muilab.notigpt.work.FirestoreOutboxWork
 import org.json.JSONArray
@@ -167,6 +168,8 @@ class SavedItemRepository(
             savedItemDao.hardDeleteById(savedItemId)
             // Staged ops against a gone item are unreviewable; merge cool-downs are moot too.
             pendingProposedOpDao.deleteByTargetItemId(savedItemId)
+            db.pendingReviewDraftDao().deleteByKey("item_$savedItemId")
+            db.pendingReviewDraftDao().deleteByKey("legacy_$savedItemId")
             rejectedMergeDao.deleteForItem(savedItemId)
         }
         FirestoreOutboxWork.enqueue(appContext)
@@ -211,6 +214,8 @@ class SavedItemRepository(
             savedItemDao.hardDeleteByIds(savedItemIds)
             savedItemIds.forEach {
                 pendingProposedOpDao.deleteByTargetItemId(it)
+                db.pendingReviewDraftDao().deleteByKey("item_$it")
+                db.pendingReviewDraftDao().deleteByKey("legacy_$it")
                 rejectedMergeDao.deleteForItem(it)
             }
         }
@@ -279,8 +284,17 @@ class SavedItemRepository(
     }
 
     /** Explicit user acknowledgment of a New/Updated item (the review "got it" action). */
-    suspend fun acknowledgeReview(savedItemId: String, ts: Long) = withContext(Dispatchers.IO) {
-        savedItemDao.acknowledgeReview(savedItemId, ts)
+    suspend fun acknowledgeReview(
+        savedItemId: String,
+        ts: Long,
+        whenAtMs: Long? = null,
+        reviewKey: String? = null,
+    ) = withContext(Dispatchers.IO) {
+        db.withTransaction {
+            if (whenAtMs != null) savedItemDao.setWhen(savedItemId, whenAtMs, ts)
+            savedItemDao.acknowledgeReview(savedItemId, ts)
+            if (reviewKey != null) db.pendingReviewDraftDao().deleteByKey(reviewKey)
+        }
         val updated = savedItemDao.getById(savedItemId) ?: return@withContext
         queueAndSync(updated, ts)
     }
@@ -290,6 +304,53 @@ class SavedItemRepository(
         if (savedItemIds.isEmpty()) return@withContext
         savedItemDao.acknowledgeReviewByIds(savedItemIds, ts)
         savedItemIds.mapNotNull { savedItemDao.getById(it) }.forEach { queueAndSync(it, ts) }
+    }
+
+    /** Persists the complete editor draft for a legacy review row in one local transaction. */
+    suspend fun saveReviewedDraft(
+        draft: ReviewItemDraft,
+        ts: Long,
+        reviewKey: String? = null,
+    ) = withContext(Dispatchers.IO) {
+        val existing = savedItemDao.getById(draft.item.savedItemId) ?: return@withContext
+        val existingChildren = subTaskDao.getBySavedItemId(existing.savedItemId)
+        val contentEdited = existing.title != draft.item.title || existing.content != draft.item.content ||
+            existing.itemType != draft.item.itemType ||
+            existing.deadlineAtMs != draft.item.deadlineAtMs || existing.startAtMs != draft.item.startAtMs ||
+            existing.endAtMs != draft.item.endAtMs ||
+            existingChildren.map { SavedSubItem.normalizeText(it.text) to it.isCompleted } !=
+                draft.subItems.map { SavedSubItem.normalizeText(it.text) to it.isCompleted }
+        val normalized = SavedItemNormalization.normalize(
+            draft.item.copy(
+                state = if (draft.item.isTask && draft.item.isCompleted) SavedItemState.Completed else SavedItemState.Saved,
+                origin = if (contentEdited) "manual" else existing.origin,
+                humanEditCount = existing.humanEditCount + if (contentEdited) 1 else 0,
+                userEdited = existing.userEdited || contentEdited,
+                lastUpdateTimestamp = ts,
+                lastViewedChangeAt = ts,
+                isViewed = true,
+            ),
+            draft.subItems.mapIndexed { index, child ->
+                child.copy(parentSavedItemId = existing.savedItemId, position = index)
+            },
+        )
+        db.withTransaction {
+            savedItemDao.upsert(normalized.item)
+            subTaskDao.hardDeleteByParentId(existing.savedItemId)
+            if (normalized.subItems.isNotEmpty()) subTaskDao.upsertAll(normalized.subItems)
+            if (contentEdited) {
+                changeLogDao.insert(
+                    SavedItemChangeLog(
+                        savedItemId = existing.savedItemId,
+                        createdAt = ts,
+                        changeType = SavedItemChangeType.UserEdit,
+                        origin = "user",
+                    )
+                )
+            }
+            if (reviewKey != null) db.pendingReviewDraftDao().deleteByKey(reviewKey)
+        }
+        queueAndSync(normalized.item, ts)
     }
 
     // ========== Reject-an-update (revert) ==========
@@ -473,7 +534,7 @@ class SavedItemRepository(
         type: String,
         source: String,
         role: String = NotiSavedItemLinkRole.Evidence,
-    ) = withContext(Dispatchers.IO) {
+    ): List<Long> = withContext(Dispatchers.IO) {
         val now = System.currentTimeMillis()
         val links = recordIds
             .filter { it.isNotBlank() }
@@ -489,7 +550,7 @@ class SavedItemRepository(
                     createdAt = now,
                 )
             }
-        if (links.isNotEmpty()) linkDao.insertAll(links)
+        if (links.isNotEmpty()) linkDao.insertAll(links) else emptyList()
     }
 
     /** Record ids linked to [savedItemId], in no particular order. */

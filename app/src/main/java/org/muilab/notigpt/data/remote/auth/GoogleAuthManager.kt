@@ -171,6 +171,7 @@ object GoogleAuthManager {
             db.savedItemDao().deleteAllForAccountSwitch()
             db.subTaskDao().deleteAllForAccountSwitch()
             db.pendingProposedOpDao().deleteAllForAccountSwitch()
+            db.pendingReviewDraftDao().deleteAll()
             db.rejectedMergeDao().deleteAllForAccountSwitch()
             db.extractionJournalDao().deleteAllEntries()
             db.extractionJournalDao().deleteAllSummaries()

@@ -16,10 +16,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
@@ -52,6 +50,8 @@ import org.muilab.notigpt.ui.review.component.ReviewCardStack
 import org.muilab.notigpt.ui.review.component.ReviewDetailSheet
 import org.muilab.notigpt.ui.review.viewmodel.ReviewViewModel
 import org.muilab.notigpt.ui.saveditem.viewmodel.SavedItemsViewModel
+import org.muilab.notigpt.ui.saveditem.component.SavedItemWhenButton
+import org.muilab.notigpt.ui.saveditem.component.SavedItemWhenPickerDialog
 import org.muilab.notigpt.ui.theme.NotiTheme
 
 /**
@@ -72,10 +72,10 @@ fun ReviewScreen(
 ) {
     val allNew by reviewViewModel.entries.collectAsState()
     val filter by reviewViewModel.filter.collectAsState()
+    val deferredKeys by reviewViewModel.deferredKeys.collectAsState()
 
     val filtered = remember(allNew, filter) { allNew.filter { reviewViewModel.matchesFilter(it, filter) } }
-
-    val context = androidx.compose.ui.platform.LocalContext.current
+    val active = remember(filtered, deferredKeys) { filtered.filterNot { it.key in deferredKeys } }
 
     // Custom snackbar: Undo + (on rejects) "Tell it why". A single state holds the current one, so a
     // fresh action supersedes the previous snackbar rather than queueing behind it.
@@ -119,6 +119,7 @@ fun ReviewScreen(
     var editingItem by remember { mutableStateOf<ReviewViewModel.ReviewEntry?>(null) }
     androidx.compose.runtime.LaunchedEffect(editingItem) { onDetailOpenChange(editingItem != null) }
     val subtasksBySavedItem by savedItemsViewModel.allSavedSubItemsBySavedItem.collectAsState()
+    var whenEntry by remember { mutableStateOf<ReviewViewModel.ReviewEntry?>(null) }
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
@@ -134,9 +135,21 @@ fun ReviewScreen(
                     text = stringResource(R.string.review_empty),
                     modifier = Modifier.fillMaxSize(),
                 )
+            } else if (active.isEmpty()) {
+                Box(Modifier.fillMaxSize()) {
+                    EmptyState(
+                        iconRes = R.drawable.inbox,
+                        text = stringResource(R.string.review_skipped_empty),
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                    TextButton(
+                        onClick = reviewViewModel::restoreDeferred,
+                        modifier = Modifier.align(Alignment.BottomCenter).padding(24.dp),
+                    ) { Text(stringResource(R.string.review_restore_skipped)) }
+                }
             } else {
                 ReviewCardStack(
-                    items = filtered,
+                    items = active,
                     modifier = Modifier.weight(1f),
                     onApprove = reviewViewModel::approve,
                     onReject = reviewViewModel::reject,
@@ -146,40 +159,23 @@ fun ReviewScreen(
                     },
                 )
 
-                // Bottom action bar: explicit reject / approve buttons + approve-all.
-                Row(
+                val top = active.first()
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 24.dp, vertical = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        .padding(horizontal = 24.dp, vertical = 12.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
-                    val top = filtered.firstOrNull()
-                    FilledIconButton(
-                        onClick = { top?.let(reviewViewModel::reject) },
-                        modifier = Modifier.size(56.dp),
-                        colors = IconButtonDefaults.filledIconButtonColors(
-                            containerColor = MaterialTheme.colorScheme.errorContainer,
-                            contentColor = MaterialTheme.colorScheme.onErrorContainer,
-                        ),
-                    ) {
-                        Icon(painterResource(R.drawable.close), contentDescription = stringResource(R.string.review_reject))
+                    if (top.preview.isTask) {
+                        SavedItemWhenButton(
+                            whenAtMs = top.preview.whenAtMs,
+                            accent = NotiTheme.semantic.taskAccent,
+                            onClick = { whenEntry = top },
+                        )
                     }
-                    TextButton(
-                        onClick = { reviewViewModel.approveAll(filtered) },
-                        modifier = Modifier.weight(1f),
-                    ) {
-                        Text(stringResource(R.string.review_approve_all))
-                    }
-                    FilledIconButton(
-                        onClick = { top?.let(reviewViewModel::approve) },
-                        modifier = Modifier.size(56.dp),
-                        colors = IconButtonDefaults.filledIconButtonColors(
-                            containerColor = NotiTheme.semantic.keepContainer,
-                            contentColor = NotiTheme.semantic.onKeepContainer,
-                        ),
-                    ) {
-                        Icon(painterResource(R.drawable.check), contentDescription = stringResource(R.string.review_approve))
+                    TextButton(onClick = { reviewViewModel.reviewLater(top) }) {
+                        Text(stringResource(R.string.review_later))
                     }
                 }
             }
@@ -242,9 +238,7 @@ fun ReviewScreen(
             ReviewDetailSheet(
                 entry = entry,
                 reviewViewModel = reviewViewModel,
-                onApprove = { reviewViewModel.approve(entry); expanded = null },
-                onReject = { reviewViewModel.reject(entry); expanded = null },
-                onEdit = { editingItem = entry; expanded = null },
+                onFurtherReview = { editingItem = entry; expanded = null },
             )
         }
     }
@@ -252,9 +246,6 @@ fun ReviewScreen(
     // Full-screen editor overlay (review mode: Save & Approve / Delete footer).
     editingItem?.let { entry ->
         val item = entry.preview
-        // Staged entries have no DB rows yet: sub-tasks come from the preview and editing them
-        // waits until the group is applied. Legacy entries edit real rows as before.
-        val staged = entry.group != null
         androidx.compose.foundation.layout.Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -275,14 +266,18 @@ fun ReviewScreen(
                 onSaveApprove = { updated -> reviewViewModel.saveApprove(entry, updated); editingItem = null },
                 onRejectDelete = { reviewViewModel.reject(entry); editingItem = null },
                 changeLog = reviewViewModel.changeLogFlow(item.savedItemId),
-                subTasks = if (staged) entry.previewSubItems else subtasksBySavedItem[item.savedItemId] ?: emptyList(),
-                subTasksEditable = !staged,
-                onAddSavedSubItem = { if (!staged) savedItemsViewModel.addSavedSubItem(item.savedItemId) },
-                onSavedSubItemToggle = { stId, checked -> if (!staged) savedItemsViewModel.toggleSavedSubItemCompleted(stId, checked) },
-                onSavedSubItemEdit = { st -> if (!staged) savedItemsViewModel.upsertSavedSubItem(st) },
-                onSavedSubItemDelete = { st -> if (!staged) savedItemsViewModel.deleteSavedSubItem(st.savedSubItemId) },
+                subTasks = entry.previewSubItems.ifEmpty { subtasksBySavedItem[item.savedItemId] ?: emptyList() },
+                subTasksEditable = true,
             )
         }
+    }
+
+    whenEntry?.let { entry ->
+        SavedItemWhenPickerDialog(
+            currentWhenAtMs = entry.preview.whenAtMs,
+            onDismiss = { whenEntry = null },
+            onSet = { value -> reviewViewModel.setReviewWhen(entry, value); whenEntry = null },
+        )
     }
 }
 
@@ -340,10 +335,10 @@ private fun MinimalReviewCard(
     reviewViewModel: ReviewViewModel,
 ) {
     val item = entry.preview
-    // Updated items surface the pipeline's one-line "what changed"; new items show a content preview.
+    // Every operation surfaces why it needs review; content is only the final fallback.
     var changeSummary by remember(entry.key) { mutableStateOf<String?>(null) }
     androidx.compose.runtime.LaunchedEffect(entry.key) {
-        if (!entry.isNewLike) changeSummary = reviewViewModel.latestChangeSummary(entry)
+        changeSummary = reviewViewModel.latestChangeSummary(entry)
     }
 
     Surface(
@@ -355,7 +350,7 @@ private fun MinimalReviewCard(
         Box {
             Column(Modifier.padding(20.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    ReviewBadge(isNew = entry.isNewLike)
+                    ReviewBadge(entry.operationKind)
                     Spacer(Modifier.weight(1f))
                     Text(
                         text = if (item.isTask) stringResource(R.string.home_collection_tasks)
@@ -444,15 +439,18 @@ private fun androidx.compose.foundation.layout.BoxScope.SwipeOverlay(
 }
 
 @Composable
-private fun ReviewBadge(isNew: Boolean) {
+private fun ReviewBadge(kind: ReviewViewModel.ReviewOperationKind) {
     Surface(
         shape = CircleShape,
         color = MaterialTheme.colorScheme.secondaryContainer,
     ) {
         Text(
             text = stringResource(
-                if (isNew) R.string.saved_item_badge_new
-                else R.string.saved_item_badge_updated
+                when (kind) {
+                    ReviewViewModel.ReviewOperationKind.Create -> R.string.review_badge_created
+                    ReviewViewModel.ReviewOperationKind.Update -> R.string.review_badge_updated
+                    ReviewViewModel.ReviewOperationKind.Merge -> R.string.review_badge_merged
+                }
             ),
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSecondaryContainer,

@@ -422,21 +422,6 @@ class SavedItemsViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
-    /** Lazily expands one related-notification group with the thread's surrounding records. */
-    fun loadSurroundingContext(savedItemId: String, notiKey: String) {
-        val current = _relatedNotificationsState.value
-        if (current.savedItemId != savedItemId || current.isLoading) return
-        viewModelScope.launch {
-            val expanded = try {
-                relatedNotificationsRepo.withSurroundingContext(current.related, notiKey)
-            } catch (t: Throwable) {
-                Log.e("SavedItemRelatedNotis", "Failed loading surrounding context", t)
-                return@launch
-            }
-            _relatedNotificationsState.value = current.copy(related = expanded)
-        }
-    }
-
     // ========== Sub-task CRUD ==========
 
     fun addSavedSubItem(parentSavedItemId: String) {

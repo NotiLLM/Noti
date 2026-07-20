@@ -26,6 +26,9 @@ import org.muilab.notigpt.model.features.SavedItemChangeLog
 import org.muilab.notigpt.model.features.SavedItemState
 import org.muilab.notigpt.model.features.SavedItemType
 import org.muilab.notigpt.model.features.SavedSubItem
+import org.muilab.notigpt.model.features.ReviewItemDraft
+import org.muilab.notigpt.model.features.PendingReviewDraft
+import org.muilab.notigpt.model.features.PendingProposedOpType
 
 /**
  * Drives the swipe-to-review screen over the fully-staged model: pipeline proposals live in
@@ -42,10 +45,16 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
     private val pendingProposedOpRepo = PendingProposedOpRepository(application.applicationContext)
 
     enum class ReviewFilter { All, NewTasks, UpdatedTasks, NewKeeps, UpdatedKeeps }
+    enum class ReviewOperationKind { Create, Update, Merge }
 
     private val _filter = MutableStateFlow(ReviewFilter.All)
     val filter: StateFlow<ReviewFilter> = _filter
     fun setFilter(f: ReviewFilter) { _filter.value = f }
+
+    private val _deferredKeys = MutableStateFlow<Set<String>>(emptySet())
+    val deferredKeys: StateFlow<Set<String>> = _deferredKeys
+    fun reviewLater(entry: ReviewEntry) { _deferredKeys.value += entry.key }
+    fun restoreDeferred() { _deferredKeys.value = emptySet() }
 
     /**
      * One review card: [preview] is what accepting would produce (a would-be item for creates, the
@@ -56,10 +65,13 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
         val key: String,
         val preview: SavedItem,
         val previewSubItems: List<SavedSubItem>,
+        val survivor: PendingProposedOpRepository.MergeSourceSnapshot?,
+        val mergeSources: List<PendingProposedOpRepository.MergeSourceSnapshot>,
         val group: PendingProposedOpRepository.OpGroup?,
         val reason: String,
+        val operationKind: ReviewOperationKind,
     ) {
-        val isNewLike: Boolean get() = preview.state == SavedItemState.New
+        val isNewLike: Boolean get() = operationKind == ReviewOperationKind.Create
     }
 
     /** All entries awaiting review. The screen applies the chip filter locally. */
@@ -67,30 +79,47 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
     val entries: StateFlow<List<ReviewEntry>> = combine(
         pendingProposedOpRepo.observePending(),
         repo.observeNewItems(),
-    ) { ops, legacyItems -> ops to legacyItems }
-        .mapLatest { (ops, legacyItems) ->
+        pendingProposedOpRepo.observeReviewDrafts(),
+    ) { ops, legacyItems, drafts -> Triple(ops, legacyItems, drafts) }
+        .mapLatest { (ops, legacyItems, drafts) ->
+            val draftsByKey = drafts.associateBy { it.reviewKey }
             val groups = pendingProposedOpRepo.groupOps(ops)
             val targeted = groups.mapNotNull { it.targetItemId }.toSet()
             val groupEntries = groups.mapNotNull { group ->
-                val preview = pendingProposedOpRepo.buildPreview(group) ?: return@mapNotNull null
+                val preview = pendingProposedOpRepo.buildPreview(
+                    group,
+                    reviewWhenAtMs = draftsByKey[group.key]?.whenAtMs,
+                ) ?: return@mapNotNull null
+                val kind = when {
+                    group.isCreate -> ReviewOperationKind.Create
+                    group.ops.any { it.opType == PendingProposedOpType.Merge } -> ReviewOperationKind.Merge
+                    else -> ReviewOperationKind.Update
+                }
                 ReviewEntry(
                     key = group.key,
                     preview = preview.item,
                     previewSubItems = preview.subItems,
+                    survivor = preview.survivor,
+                    mergeSources = preview.mergeSources,
                     group = group,
                     reason = group.reason,
+                    operationKind = kind,
                 )
             }
             // Legacy items already targeted by a staged group show once, as the group entry.
             val legacyEntries = legacyItems
                 .filter { it.savedItemId !in targeted }
                 .map { item ->
+                    val key = "legacy_${item.savedItemId}"
                     ReviewEntry(
-                        key = "legacy_${item.savedItemId}",
-                        preview = item,
-                        previewSubItems = emptyList(),
+                        key = key,
+                        preview = item.copy(whenAtMs = draftsByKey[key]?.whenAtMs ?: item.whenAtMs),
+                        previewSubItems = db.subTaskDao().getBySavedItemId(item.savedItemId),
+                        survivor = null,
+                        mergeSources = emptyList(),
                         group = null,
                         reason = "",
+                        operationKind = if (item.state == SavedItemState.New) ReviewOperationKind.Create else ReviewOperationKind.Update,
                     )
                 }
             groupEntries + legacyEntries
@@ -123,6 +152,10 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
             ?.changeSummary
     }
 
+    fun setReviewWhen(entry: ReviewEntry, whenAtMs: Long) {
+        viewModelScope.launch { pendingProposedOpRepo.setReviewWhen(entry.key, whenAtMs) }
+    }
+
     private val _related = MutableStateFlow(RelatedState())
     val related: StateFlow<RelatedState> = _related
 
@@ -140,12 +173,17 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
             val value = try {
                 val group = entry.group
                 if (group != null) {
-                    // Staged ops carry their evidence in the payload — no link rows exist yet.
-                    val evidence = group.ops.flatMap { op ->
+                    // Review shows the full eventual provenance: target links, merge-source links,
+                    // and the exact new records cited by staged ops.
+                    val stagedEvidence = group.ops.flatMap { op ->
                         val arr = JSONArray(op.evidenceRecordIds)
                         buildList { for (i in 0 until arr.length()) arr.optString(i).takeIf(String::isNotBlank)?.let(::add) }
                     }
-                    relatedRepo.getByRecordIds(evidence)
+                    val targetEvidence = group.targetItemId?.let { repo.getLinkedRecordIds(it) }.orEmpty()
+                    val sourceEvidence = entry.mergeSources.flatMap { source ->
+                        source.evidenceLinks.map { it.notiRecordId }
+                    }
+                    relatedRepo.getByRecordIds(targetEvidence + sourceEvidence + stagedEvidence)
                 } else {
                     relatedRepo.getRelatedNotifications(entry.preview)
                 }
@@ -163,12 +201,28 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
         data class ApplyGroup(val outcome: PendingProposedOpRepository.ApplyOutcome) : UndoableAction
 
         /** A staged group was discarded; undo re-inserts the ops. */
-        data class DiscardGroup(val group: PendingProposedOpRepository.OpGroup) : UndoableAction
+        data class DiscardGroup(
+            val group: PendingProposedOpRepository.OpGroup,
+            val reviewDraft: PendingReviewDraft?,
+        ) : UndoableAction
 
         // Legacy (non-staged) items keep their old semantics.
-        data class Approve(val item: SavedItem) : UndoableAction
-        data class RejectNew(val item: SavedItem, val subTasks: List<SavedSubItem>) : UndoableAction
-        data class RejectUpdated(val outcome: SavedItemRepository.RevertOutcome) : UndoableAction
+        data class Approve(val item: SavedItem, val reviewDraft: PendingReviewDraft?) : UndoableAction
+        data class SaveLegacy(
+            val item: SavedItem,
+            val subTasks: List<SavedSubItem>,
+            val history: List<SavedItemChangeLog>,
+            val reviewDraft: PendingReviewDraft?,
+        ) : UndoableAction
+        data class RejectNew(
+            val item: SavedItem,
+            val subTasks: List<SavedSubItem>,
+            val reviewDraft: PendingReviewDraft?,
+        ) : UndoableAction
+        data class RejectUpdated(
+            val outcome: SavedItemRepository.RevertOutcome,
+            val reviewDraft: PendingReviewDraft?,
+        ) : UndoableAction
     }
 
     private var pendingUndo: UndoableAction? = null
@@ -187,7 +241,10 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
     // Drives the end-of-stack "set Whens?" offer. Reset when the screen is (re)entered.
     private val approvedNeedingWhen = linkedSetOf<String>()
     fun approvedNeedingWhenCount(): Int = approvedNeedingWhen.size
-    fun resetReviewSession() = approvedNeedingWhen.clear()
+    fun resetReviewSession() {
+        approvedNeedingWhen.clear()
+        _deferredKeys.value = emptySet()
+    }
 
     private fun noteApprovedForWhen(item: SavedItem) {
         if (item.isTask && !SavedItem.hasPlannedDate(item.whenAtMs)) approvedNeedingWhen.add(item.savedItemId)
@@ -201,8 +258,15 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
                 pendingUndo = UndoableAction.ApplyGroup(outcome)
                 noteApprovedForWhen(entry.preview.copy(savedItemId = outcome.appliedItemId))
             } else {
-                repo.acknowledgeReview(entry.preview.savedItemId, System.currentTimeMillis())
-                pendingUndo = UndoableAction.Approve(entry.preview)
+                val draft = db.pendingReviewDraftDao().getByKey(entry.key)
+                val before = db.savedItemDao().getById(entry.preview.savedItemId) ?: return@launch
+                repo.acknowledgeReview(
+                    entry.preview.savedItemId,
+                    System.currentTimeMillis(),
+                    draft?.whenAtMs,
+                    entry.key,
+                )
+                pendingUndo = UndoableAction.Approve(before, draft)
                 noteApprovedForWhen(entry.preview)
             }
             _snackbar.trySend(ReviewSnackbar(R.string.review_approved_toast, entry.preview, canTeach = false))
@@ -211,31 +275,24 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
 
     /** Edit-in-review "Save & Approve": apply the staged group, then persist the user's edits on
      *  top (which shields them from later LLM updates). Editing implies acceptance. */
-    fun saveApprove(entry: ReviewEntry, edited: SavedItem) {
+    fun saveApprove(entry: ReviewEntry, edited: ReviewItemDraft) {
         viewModelScope.launch {
             val ts = System.currentTimeMillis()
             val group = entry.group
             if (group != null) {
-                val outcome = pendingProposedOpRepo.applyGroup(group) ?: return@launch
-                // The editor edited the preview; retarget its id to the real applied item.
-                repo.upsert(
-                    edited.copy(
-                        savedItemId = outcome.appliedItemId,
-                        state = SavedItemState.Saved,
-                        origin = "manual",
-                        userEdited = true,
-                        lastUpdateTimestamp = ts,
-                        lastViewedChangeAt = ts,
-                    )
-                )
-                noteApprovedForWhen(edited.copy(savedItemId = outcome.appliedItemId))
+                val outcome = pendingProposedOpRepo.applyGroup(group, editedDraft = edited, now = ts) ?: return@launch
+                pendingUndo = UndoableAction.ApplyGroup(outcome)
+                noteApprovedForWhen(edited.item.copy(savedItemId = outcome.appliedItemId))
             } else {
-                repo.upsert(edited.copy(origin = "manual", userEdited = true, lastUpdateTimestamp = ts))
-                repo.acknowledgeReview(edited.savedItemId, ts)
-                noteApprovedForWhen(edited)
+                val before = db.savedItemDao().getById(entry.preview.savedItemId) ?: return@launch
+                val beforeSubTasks = db.subTaskDao().getBySavedItemId(before.savedItemId)
+                val beforeHistory = db.savedItemChangeLogDao().getByItem(before.savedItemId)
+                val reviewDraft = db.pendingReviewDraftDao().getByKey(entry.key)
+                repo.saveReviewedDraft(edited, ts, entry.key)
+                pendingUndo = UndoableAction.SaveLegacy(before, beforeSubTasks, beforeHistory, reviewDraft)
+                noteApprovedForWhen(edited.item)
             }
-            pendingUndo = null
-            _snackbar.trySend(ReviewSnackbar(R.string.review_approved_toast, edited, canTeach = false))
+            _snackbar.trySend(ReviewSnackbar(R.string.review_approved_toast, edited.item, canTeach = false))
         }
     }
 
@@ -244,44 +301,27 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
             val ts = System.currentTimeMillis()
             val group = entry.group
             if (group != null) {
-                pendingProposedOpRepo.discardGroup(group, ts)
-                pendingUndo = UndoableAction.DiscardGroup(group)
+                val reviewDraft = pendingProposedOpRepo.discardGroup(group, ts)
+                pendingUndo = UndoableAction.DiscardGroup(group, reviewDraft)
                 _snackbar.trySend(ReviewSnackbar(R.string.review_rejected_toast, entry.preview, canTeach = true))
                 return@launch
             }
-            val item = entry.preview
+            val item = db.savedItemDao().getById(entry.preview.savedItemId) ?: return@launch
+            val reviewDraft = db.pendingReviewDraftDao().getByKey(entry.key)
+            db.pendingReviewDraftDao().deleteByKey(entry.key)
             if (item.state == SavedItemState.Updated) {
                 val outcome = repo.revertPendingLlmUpdates(item.savedItemId, ts)
                 if (outcome != null) {
-                    pendingUndo = UndoableAction.RejectUpdated(outcome)
+                    pendingUndo = UndoableAction.RejectUpdated(outcome, reviewDraft)
                     _snackbar.trySend(ReviewSnackbar(R.string.review_reverted_toast, item, canTeach = true))
                 }
             } else {
                 // Legacy new item → hard delete; capture rows so undo can restore them.
                 val subTasks = db.subTaskDao().getBySavedItemId(item.savedItemId)
                 repo.deleteById(item.savedItemId, ts)
-                pendingUndo = UndoableAction.RejectNew(item, subTasks)
+                pendingUndo = UndoableAction.RejectNew(item, subTasks, reviewDraft)
                 _snackbar.trySend(ReviewSnackbar(R.string.review_rejected_toast, item, canTeach = true))
             }
-        }
-    }
-
-    fun approveAll(entries: List<ReviewEntry>) {
-        if (entries.isEmpty()) return
-        viewModelScope.launch {
-            val ts = System.currentTimeMillis()
-            entries.forEach { entry ->
-                val group = entry.group
-                if (group != null) {
-                    val outcome = pendingProposedOpRepo.applyGroup(group, ts) ?: return@forEach
-                    noteApprovedForWhen(entry.preview.copy(savedItemId = outcome.appliedItemId))
-                } else {
-                    repo.acknowledgeReview(entry.preview.savedItemId, ts)
-                    noteApprovedForWhen(entry.preview)
-                }
-            }
-            // Bulk approve isn't individually undoable; clear any stale single-action undo.
-            pendingUndo = null
         }
     }
 
@@ -292,9 +332,19 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
             val ts = System.currentTimeMillis()
             when (action) {
                 is UndoableAction.ApplyGroup -> pendingProposedOpRepo.undoApply(action.outcome, ts)
-                is UndoableAction.DiscardGroup -> pendingProposedOpRepo.restoreDiscarded(action.group)
+                is UndoableAction.DiscardGroup -> pendingProposedOpRepo.restoreDiscarded(action.group, action.reviewDraft)
                 is UndoableAction.Approve -> {
                     repo.upsert(action.item)
+                    action.reviewDraft?.let { db.pendingReviewDraftDao().upsert(it) }
+                    approvedNeedingWhen.remove(action.item.savedItemId)
+                }
+                is UndoableAction.SaveLegacy -> {
+                    repo.upsert(action.item)
+                    db.subTaskDao().hardDeleteByParentId(action.item.savedItemId)
+                    if (action.subTasks.isNotEmpty()) db.subTaskDao().upsertAll(action.subTasks)
+                    db.savedItemChangeLogDao().deleteByItem(action.item.savedItemId)
+                    if (action.history.isNotEmpty()) db.savedItemChangeLogDao().upsertAll(action.history)
+                    action.reviewDraft?.let { db.pendingReviewDraftDao().upsert(it) }
                     approvedNeedingWhen.remove(action.item.savedItemId)
                 }
                 is UndoableAction.RejectNew -> {
@@ -302,8 +352,12 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
                     if (action.item.isTask && action.subTasks.isNotEmpty()) {
                         db.subTaskDao().upsertAll(action.subTasks)
                     }
+                    action.reviewDraft?.let { db.pendingReviewDraftDao().upsert(it) }
                 }
-                is UndoableAction.RejectUpdated -> repo.undoRevert(action.outcome, ts)
+                is UndoableAction.RejectUpdated -> {
+                    repo.undoRevert(action.outcome, ts)
+                    action.reviewDraft?.let { db.pendingReviewDraftDao().upsert(it) }
+                }
             }
         }
     }

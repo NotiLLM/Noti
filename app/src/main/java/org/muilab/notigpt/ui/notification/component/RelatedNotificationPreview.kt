@@ -16,7 +16,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -49,10 +48,6 @@ fun RelatedNotificationPreview(
     onOpen: (() -> Unit)? = null,
     /** Record ids that directly evidence the owning saved item; rendered highlighted. */
     evidenceRecordIds: Set<String> = emptySet(),
-    /** True once the thread's surrounding (non-evidence) records were lazily loaded in. */
-    contextLoaded: Boolean = false,
-    /** Loads the surrounding records of this thread; null hides the affordance. */
-    onLoadContext: (() -> Unit)? = null,
 ) {
     val notiUnit = notiDisplayUnit.notiUnit
     val notiRecords = notiDisplayUnit.notiRecords.sortedBy { it.time }
@@ -148,7 +143,7 @@ fun RelatedNotificationPreview(
 
             if (expanded) {
                 val recordsToShow = if (notiRecords.size > 30) notiRecords.takeLast(30) else notiRecords
-                val highlightEvidence = evidenceRecordIds.isNotEmpty() && contextLoaded
+                val highlightEvidence = evidenceRecordIds.isNotEmpty()
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -158,8 +153,6 @@ fun RelatedNotificationPreview(
                         val content = record.content
                         if (content.isBlank() || content == "null") return@forEach
                         val isEvidence = record.notiRecordId in evidenceRecordIds
-                        // Once surrounding context is loaded, evidence rows keep a tinted background
-                        // so the messages that produced the item stand out from the conversation.
                         val rowModifier = if (highlightEvidence && isEvidence) {
                             Modifier
                                 .fillMaxWidth()
@@ -178,17 +171,7 @@ fun RelatedNotificationPreview(
                         }
                     }
 
-                    if (onLoadContext != null && !contextLoaded) {
-                        TextButton(
-                            onClick = onLoadContext,
-                            modifier = Modifier.align(Alignment.CenterHorizontally),
-                        ) {
-                            Text(
-                                text = stringResource(R.string.saved_item_show_surrounding_context),
-                                style = MaterialTheme.typography.labelMedium,
-                            )
-                        }
-                    } else if (highlightEvidence) {
+                    if (highlightEvidence) {
                         Text(
                             text = stringResource(R.string.saved_item_evidence_legend),
                             style = MaterialTheme.typography.labelSmall,

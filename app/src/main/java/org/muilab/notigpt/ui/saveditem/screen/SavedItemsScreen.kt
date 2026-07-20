@@ -105,6 +105,7 @@ import org.muilab.notigpt.model.features.SavedItem
 import org.muilab.notigpt.model.features.SavedItemType
 import org.muilab.notigpt.model.features.SavedItemState
 import org.muilab.notigpt.model.features.SavedSubItem
+import org.muilab.notigpt.model.features.ReviewItemDraft
 import org.muilab.notigpt.data.export.asExportable
 import org.muilab.notigpt.ui.preference.component.PreferenceLearningBottomSheet
 import org.muilab.notigpt.ui.common.component.DueChip
@@ -117,6 +118,8 @@ import org.muilab.notigpt.ui.notification.component.RelatedNotificationPreview
 import org.muilab.notigpt.ui.saveditem.component.SavedSubItemRow
 import org.muilab.notigpt.ui.saveditem.component.SavedSubItemListInCard
 import org.muilab.notigpt.ui.saveditem.component.TaskCompletionToggle
+import org.muilab.notigpt.ui.saveditem.component.SavedItemWhenButton
+import org.muilab.notigpt.ui.saveditem.component.SavedItemWhenPickerDialog
 import org.muilab.notigpt.ui.notification.viewmodel.DrawerViewModel
 import org.muilab.notigpt.ui.preference.viewmodel.PreferenceViewModel
 import org.muilab.notigpt.ui.saveditem.viewmodel.SavedItemsViewModel
@@ -687,7 +690,6 @@ fun SavedItemsScreen(
                     onLoadRelatedNotifications = { item -> vm.loadRelatedNotifications(item) },
                     changeLog = remember(current.savedItemId) { vm.changeLogFlow(current.savedItemId) },
                     onAcknowledgeReview = { vm.acknowledgeReview(current.savedItemId) },
-                    onLoadSurroundingContext = { key -> vm.loadSurroundingContext(current.savedItemId, key) },
                     // Sub-task parameters
                     subTasks = allSavedSubItemsBySavedItem[current.savedItemId] ?: emptyList(),
                     onAddSavedSubItem = { vm.addSavedSubItem(current.savedItemId) },
@@ -1020,7 +1022,7 @@ fun SavedItemCard(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         if (onSetWhen != null) {
-                            WhenBottomButton(
+                            SavedItemWhenButton(
                                 whenAtMs = item.whenAtMs,
                                 accent = rowAccent,
                                 onClick = { showWhenPicker = true },
@@ -1102,106 +1104,13 @@ fun SavedItemCard(
         )
     }
     if (showWhenPicker && onSetWhen != null) {
-        CardWhenPickerDialog(
+        SavedItemWhenPickerDialog(
             currentWhenAtMs = item.whenAtMs,
             onDismiss = { showWhenPicker = false },
             onSet = { newVal ->
                 onSetWhen(newVal)
                 showWhenPicker = false
             },
-        )
-    }
-}
-
-/**
- * Compact When picker used from a item card's bottom row: pick a concrete day, or mark the
- * task "Someday" / clear it. Mirrors the detail editor's date-merge (keeps existing time-of-day, else
- * defaults to 09:00 — a work-start plan, not a 23:59 deadline).
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun CardWhenPickerDialog(
-    currentWhenAtMs: Long,
-    onDismiss: () -> Unit,
-    onSet: (Long) -> Unit,
-) {
-    val pickerState = rememberDatePickerState(
-        initialSelectedDateMillis = if (SavedItem.hasPlannedDate(currentWhenAtMs)) currentWhenAtMs else System.currentTimeMillis()
-    )
-    DatePickerDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = {
-            TextButton(onClick = {
-                val selectedDate = pickerState.selectedDateMillis
-                if (selectedDate != null) {
-                    val hadTime = SavedItem.hasPlannedDate(currentWhenAtMs)
-                    val existingCal = Calendar.getInstance().apply {
-                        timeInMillis = if (hadTime) currentWhenAtMs else System.currentTimeMillis()
-                    }
-                    val newCal = Calendar.getInstance().apply {
-                        timeInMillis = selectedDate
-                        // Whens are date-only by default; end-of-day time-of-day so "today" stays
-                        // due through the day and timezone shifts don't bump the calendar day.
-                        set(Calendar.HOUR_OF_DAY, if (hadTime) existingCal.get(Calendar.HOUR_OF_DAY) else 23)
-                        set(Calendar.MINUTE, if (hadTime) existingCal.get(Calendar.MINUTE) else 59)
-                        set(Calendar.SECOND, 0)
-                        set(Calendar.MILLISECOND, 0)
-                    }
-                    onSet(newCal.timeInMillis)
-                }
-            }) { Text(stringResource(R.string.ui_action_ok)) }
-        },
-        dismissButton = {
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                TextButton(onClick = { onSet(0L) }) { Text(stringResource(R.string.ui_action_clear)) }
-                TextButton(onClick = { onSet(SavedItem.WHEN_SOMEDAY) }) {
-                    Text(stringResource(R.string.when_someday))
-                }
-            }
-        },
-    ) {
-        DatePicker(state = pickerState)
-    }
-}
-
-/**
- * The bottom-row When affordance: a calendar icon plus a "when I'll handle it" label
- * (a concrete relative date, "Someday", or a muted "Set When" when unset). Tapping opens the
- * picker. Sits on the left of the card's bottom action row.
- */
-@Composable
-private fun WhenBottomButton(
-    whenAtMs: Long,
-    accent: Color,
-    onClick: () -> Unit,
-) {
-    val context = LocalContext.current
-    val hasDo = whenAtMs > 0L
-    val label = when {
-        SavedItem.isSomeday(whenAtMs) -> stringResource(R.string.when_someday)
-        SavedItem.hasPlannedDate(whenAtMs) ->
-            stringResource(R.string.ui_saved_items_when_chip, getRelativeTimeStr(whenAtMs, context))
-        else -> stringResource(R.string.a11y_set_when)
-    }
-    val tint = if (hasDo) accent else MaterialTheme.colorScheme.onSurfaceVariant
-    Row(
-        modifier = Modifier
-            .clip(MaterialTheme.shapes.small)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(
-            painter = painterResource(R.drawable.ic_calendar_today),
-            contentDescription = stringResource(R.string.a11y_set_when),
-            modifier = Modifier.size(16.dp),
-            tint = tint,
-        )
-        Spacer(Modifier.width(4.dp))
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelMedium,
-            color = tint,
         )
     }
 }
@@ -1264,11 +1173,10 @@ fun SavedItemDetailScreen(
     // Review flow + change history
     changeLog: kotlinx.coroutines.flow.Flow<List<org.muilab.notigpt.model.features.SavedItemChangeLog>>? = null,
     onAcknowledgeReview: (() -> Unit)? = null,
-    onLoadSurroundingContext: ((String) -> Unit)? = null,
     // Edit-in-review: replaces the inline "Got it" / export chips with a pinned Save&Approve / Delete
     // footer. Editing an item during review is itself the accept (per product decision).
     reviewMode: Boolean = false,
-    onSaveApprove: ((SavedItem) -> Unit)? = null,
+    onSaveApprove: ((ReviewItemDraft) -> Unit)? = null,
     onRejectDelete: (() -> Unit)? = null,
     // Sub-task parameters
     subTasks: List<SavedSubItem> = emptyList(),
@@ -1292,6 +1200,8 @@ fun SavedItemDetailScreen(
     var isCompleted by remember(initial.savedItemId) { mutableStateOf(initial.isCompleted) }
     var deadlineAtMs by remember(initial.savedItemId) { mutableStateOf(initial.deadlineAtMs) }
     var whenAtMs by remember(initial.savedItemId) { mutableStateOf(initial.whenAtMs) }
+    var reviewSubTasks by remember(initial.savedItemId) { mutableStateOf(subTasks) }
+    val visibleSubTasks = if (reviewMode) reviewSubTasks else subTasks
 
     // Per-type accent: indigo for Task, green for Keep.
     val accent = if (isTask) NotiTheme.semantic.taskAccent else NotiTheme.semantic.keepAccent
@@ -1361,7 +1271,7 @@ fun SavedItemDetailScreen(
                         innerTextField()
                     }
                 )
-                Box {
+                if (!reviewMode) Box {
                     IconButton(onClick = { headerMenuOpen = true }) {
                         Icon(painterResource(R.drawable.more_vert), contentDescription = stringResource(R.string.a11y_subtask_more))
                     }
@@ -1425,7 +1335,7 @@ fun SavedItemDetailScreen(
                 FilterChip(
                     selected = !isTask,
                     onClick = {
-                        if (isTask && (deadlineAtMs > 0L || subTasks.isNotEmpty())) {
+                        if (isTask && (deadlineAtMs > 0L || visibleSubTasks.isNotEmpty())) {
                             showTaskToKeepDialog = true
                         } else {
                             isTask = false
@@ -1647,8 +1557,16 @@ fun SavedItemDetailScreen(
                         stringResource(R.string.subtask_section_title),
                         style = MaterialTheme.typography.titleMedium,
                     )
-                    if (subTasksEditable) {
-                        TextButton(onClick = onAddSavedSubItem) {
+                    if (subTasksEditable || reviewMode) {
+                        TextButton(onClick = {
+                            if (reviewMode) {
+                                reviewSubTasks = reviewSubTasks + SavedSubItem(
+                                    savedSubItemId = "st_${java.util.UUID.randomUUID().toString().take(8)}",
+                                    parentSavedItemId = initial.savedItemId,
+                                    position = reviewSubTasks.size,
+                                )
+                            } else onAddSavedSubItem()
+                        }) {
                             Icon(painterResource(R.drawable.add), contentDescription = stringResource(R.string.a11y_add_subtask), modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(4.dp))
                             Text(stringResource(R.string.subtask_add), style = MaterialTheme.typography.labelMedium)
@@ -1656,14 +1574,25 @@ fun SavedItemDetailScreen(
                     }
                 }
 
-                subTasks.forEach { st ->
+                visibleSubTasks.forEach { st ->
                     SavedSubItemRow(
                         subTask = st,
-                        onToggleCompleted = { checked -> onSavedSubItemToggle(st.savedSubItemId, checked) },
-                        onDelete = { onSavedSubItemDelete(st) },
-                        editable = subTasksEditable,
-                        completionEnabled = subTasksEditable,
-                        onTextChange = { text -> onSavedSubItemEdit(st.copy(text = text)) },
+                        onToggleCompleted = { checked ->
+                            if (reviewMode) reviewSubTasks = reviewSubTasks.map {
+                                if (it.savedSubItemId == st.savedSubItemId) it.copy(isCompleted = checked) else it
+                            } else onSavedSubItemToggle(st.savedSubItemId, checked)
+                        },
+                        onDelete = {
+                            if (reviewMode) reviewSubTasks = reviewSubTasks.filterNot { it.savedSubItemId == st.savedSubItemId }
+                            else onSavedSubItemDelete(st)
+                        },
+                        editable = subTasksEditable || reviewMode,
+                        completionEnabled = subTasksEditable || reviewMode,
+                        onTextChange = { text ->
+                            if (reviewMode) reviewSubTasks = reviewSubTasks.map {
+                                if (it.savedSubItemId == st.savedSubItemId) it.copy(text = text) else it
+                            } else onSavedSubItemEdit(st.copy(text = text))
+                        },
                     )
                 }
             }
@@ -1787,8 +1716,6 @@ fun SavedItemDetailScreen(
                                 val unit = relatedUnitsByKey[key]
 
                                 if (unit != null) {
-                                    // Evidence records come from the link table; the rest of the
-                                    // thread loads lazily via "show surrounding messages".
                                     val displayUnit = org.muilab.notigpt.model.notifications.NotiDisplayUnit(unit, recs)
                                     RelatedNotificationPreview(
                                         notiDisplayUnit = displayUnit,
@@ -1799,8 +1726,6 @@ fun SavedItemDetailScreen(
                                             }
                                         },
                                         evidenceRecordIds = relatedNotificationsState.related.evidenceRecordIds,
-                                        contextLoaded = key in relatedNotificationsState.related.contextLoadedKeys,
-                                        onLoadContext = onLoadSurroundingContext?.let { load -> { load(key) } },
                                     )
                                 } else {
                                     // Fallback: drawer entry missing; show text-only context.
@@ -1848,10 +1773,10 @@ fun SavedItemDetailScreen(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     OutlinedButton(onClick = { onRejectDelete?.invoke() }) {
-                        Text(stringResource(R.string.a11y_delete), color = MaterialTheme.colorScheme.error)
+                        Text(stringResource(R.string.review_reject_change), color = MaterialTheme.colorScheme.error)
                     }
                     Button(
-                        onClick = { onSaveApprove?.invoke(buildUpdated()) },
+                        onClick = { onSaveApprove?.invoke(ReviewItemDraft(buildUpdated(), reviewSubTasks)) },
                         modifier = Modifier.weight(1f),
                     ) {
                         Text(stringResource(R.string.review_save_approve))

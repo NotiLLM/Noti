@@ -132,7 +132,6 @@
     <string name="change_field_end">End</string>
     <string name="change_field_estimate">Estimate</string>
     <string name="change_field_row">%1$s: %2$s → %3$s</string>
-    <string name="saved_item_show_surrounding_context">Show surrounding messages</string>
     <string name="saved_item_evidence_legend">Highlighted messages are the source of this item</string>
     <string name="extraction_pending_banner">Extraction pending — server unreachable (%1$d notifications queued)</string>
     <string name="extraction_retry">Retry</string>
@@ -553,13 +552,18 @@
     <!-- Review (swipe) screen -->
     <string name="review_title">Review</string>
     <string name="review_empty">All caught up</string>
+    <string name="review_skipped_empty">All remaining cards are set aside</string>
+    <string name="review_restore_skipped">Review skipped cards</string>
+    <string name="review_later">Review later</string>
+    <string name="review_badge_created">Created</string>
+    <string name="review_badge_updated">Updated</string>
+    <string name="review_badge_merged">Merged</string>
     <string name="review_chip_new_tasks">%1$d new tasks</string>
     <string name="review_chip_updated_tasks">%1$d edited tasks</string>
     <string name="review_chip_new_keeps">%1$d new keeps</string>
     <string name="review_chip_updated_keeps">%1$d edited keeps</string>
     <string name="review_approve">Approve</string>
     <string name="review_reject">Reject</string>
-    <string name="review_approve_all">Approve all</string>
     <string name="review_undo">Undo</string>
     <string name="review_approved_toast">Approved</string>
     <string name="review_rejected_toast">Rejected</string>
@@ -571,13 +575,29 @@
     <string name="review_when_offer_skip">Skip</string>
     <string name="review_edit">Edit</string>
     <string name="review_save_approve">Save &amp; Approve</string>
+    <string name="review_reject_change">Reject change</string>
     <string name="review_triggered_this">Triggered this edit</string>
     <string name="review_previous_context">Previous context</string>
+    <string name="review_why_created">Why this item was created</string>
+    <string name="review_why_updated">Why this item was updated</string>
+    <string name="review_why_merged">Why these items were merged</string>
+    <string name="review_merge_into">Combining into %1$s</string>
+    <string name="review_merge_survivor">Survivor</string>
+    <string name="review_merge_source">Source item</string>
+    <string name="review_merge_description">Description to add</string>
+    <string name="review_merge_subtasks">Subtasks to add</string>
+    <string name="review_merge_fields">Fields to change</string>
+    <string name="review_merge_field_value">%1$s: %2$s</string>
+    <string name="review_merge_buttons">Actions to add</string>
+    <string name="review_further_review">Review item</string>
     <string name="a11y_review_approve">Swipe right to approve</string>
     <string name="a11y_review_reject">Swipe left to reject</string>
 
     <!-- Change history -->
     <string name="change_type_reverted">Reverted</string>
+    <string name="change_type_merged">Merged</string>
+    <string name="change_history_source">From %1$s</string>
+    <string name="change_merged_content">Original description: %1$s</string>
 
     <!-- Card action row -->
     <string name="export_chooser_title">Export to</string>

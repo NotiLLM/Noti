@@ -130,6 +130,7 @@ private fun ChangeRow(change: SavedItemChangeLog, showDivider: Boolean = false) 
         SavedItemChangeType.UserEdit -> stringResource(R.string.change_type_user_edit)
         SavedItemChangeType.Regenerated -> stringResource(R.string.change_type_regenerated)
         SavedItemChangeType.Reverted -> stringResource(R.string.change_type_reverted)
+        SavedItemChangeType.Merged -> stringResource(R.string.change_type_merged)
         else -> stringResource(R.string.change_type_llm_update)
     }
 
@@ -152,12 +153,23 @@ private fun ChangeRow(change: SavedItemChangeLog, showDivider: Boolean = false) 
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+            if (change.sourceItemTitle.isNotBlank()) {
+                Text(
+                    text = stringResource(R.string.change_history_source, change.sourceItemTitle),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             if (change.changeSummary.isNotBlank()) {
                 Text(text = change.changeSummary, style = MaterialTheme.typography.bodySmall)
             }
             if (change.appendedContent.isNotBlank()) {
                 Text(
-                    text = stringResource(R.string.change_added_content, change.appendedContent),
+                    text = if (change.changeType == SavedItemChangeType.Merged) {
+                        stringResource(R.string.change_merged_content, change.appendedContent)
+                    } else {
+                        stringResource(R.string.change_added_content, change.appendedContent)
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 3,
@@ -212,7 +224,8 @@ private fun parseSubTaskTitles(json: String): List<String> = try {
     val arr = JSONArray(json)
     buildList {
         for (i in 0 until arr.length()) {
-            val t = arr.optJSONObject(i)?.optString("title").orEmpty()
+            val row = arr.optJSONObject(i)
+            val t = row?.optString("title").orEmpty().ifBlank { row?.optString("text").orEmpty() }
             if (t.isNotBlank()) add(t)
         }
     }

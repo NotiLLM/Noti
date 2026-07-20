@@ -14,6 +14,9 @@ object SavedItemChangeType {
 
     /** The user rejected pending LLM updates in review; the item was rolled back to its prior state. */
     const val Reverted = "reverted"
+
+    /** One or more source items were folded into the surviving item. */
+    const val Merged = "merged"
 }
 
 /**
@@ -66,4 +69,9 @@ data class SavedItemChangeLog(
     /** "llm" | "user" — coarse actor label alongside [changeType]. */
     @ColumnInfo(defaultValue = "'llm'")
     val origin: String = "llm",
+    /** Original owner when history was transferred into a merge survivor. */
+    @ColumnInfo(defaultValue = "''")
+    val sourceSavedItemId: String = "",
+    @ColumnInfo(defaultValue = "''")
+    val sourceItemTitle: String = "",
 )

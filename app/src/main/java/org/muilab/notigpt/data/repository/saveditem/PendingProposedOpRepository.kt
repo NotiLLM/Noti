@@ -14,6 +14,7 @@ import org.muilab.notigpt.data.remote.n8n.N8nOpParsing
 import org.muilab.notigpt.domain.saveditem.SavedItemAssociationMerger
 import org.muilab.notigpt.domain.saveditem.SavedItemMergePolicy
 import org.muilab.notigpt.domain.saveditem.SavedItemNormalization
+import org.muilab.notigpt.domain.saveditem.ReviewMergeSemantics
 import org.muilab.notigpt.model.features.ExtractionJournalEntry
 import org.muilab.notigpt.model.features.ExtractionJournalEventType
 import org.muilab.notigpt.model.features.FirestoreOutboxKind
@@ -21,6 +22,7 @@ import org.muilab.notigpt.model.features.FirestoreOutboxOp
 import org.muilab.notigpt.model.features.ProposedOpRecord
 import org.muilab.notigpt.model.features.ProposedOpRecordDecision
 import org.muilab.notigpt.model.features.NotiSavedItemLinkSource
+import org.muilab.notigpt.model.features.NotiSavedItemLink
 import org.muilab.notigpt.model.features.PendingProposedOp
 import org.muilab.notigpt.model.features.PendingProposedOpType
 import org.muilab.notigpt.model.features.RejectedMerge
@@ -30,6 +32,8 @@ import org.muilab.notigpt.model.features.SavedItemChangeType
 import org.muilab.notigpt.model.features.SavedItemState
 import org.muilab.notigpt.model.features.SavedItemType
 import org.muilab.notigpt.model.features.SavedSubItem
+import org.muilab.notigpt.model.features.ReviewItemDraft
+import org.muilab.notigpt.model.features.PendingReviewDraft
 import java.util.UUID
 import org.muilab.notigpt.work.FirestoreOutboxWork
 
@@ -56,6 +60,13 @@ class PendingProposedOpRepository(private val appContext: Context) {
     private val firestoreSync by lazy { FirestoreSyncRepository(appContext.applicationContext) }
 
     fun observePending(): Flow<List<PendingProposedOp>> = pendingProposedOpDao.observeAll()
+
+    fun observeReviewDrafts(): Flow<List<PendingReviewDraft>> = db.pendingReviewDraftDao().observeAll()
+
+    suspend fun setReviewWhen(reviewKey: String, whenAtMs: Long, now: Long = System.currentTimeMillis()) =
+        withContext(Dispatchers.IO) {
+            db.pendingReviewDraftDao().upsert(PendingReviewDraft(reviewKey, whenAtMs, now))
+        }
 
     suspend fun getPending(): List<PendingProposedOp> = withContext(Dispatchers.IO) { pendingProposedOpDao.getAll() }
 
@@ -222,40 +233,86 @@ class PendingProposedOpRepository(private val appContext: Context) {
         return groups.sortedBy { it.ops.first().createdAt }
     }
 
-    data class Preview(val item: SavedItem, val subItems: List<SavedSubItem>)
+    data class MergeSourceSnapshot(
+        val item: SavedItem,
+        val subItems: List<SavedSubItem>,
+        val history: List<SavedItemChangeLog>,
+        val evidenceLinks: List<NotiSavedItemLink>,
+    )
+
+    data class Preview(
+        val item: SavedItem,
+        val subItems: List<SavedSubItem>,
+        val survivor: MergeSourceSnapshot? = null,
+        val mergeSources: List<MergeSourceSnapshot> = emptyList(),
+    )
 
     /**
      * Computes what the group would produce, without touching the database: creates render the
      * would-be item; updates/merges render the current item with the staged changes applied in
      * memory. Returns null when an update group's target vanished (the ops should be purged).
      */
-    suspend fun buildPreview(group: OpGroup, now: Long = System.currentTimeMillis()): Preview? = withContext(Dispatchers.IO) {
+    suspend fun buildPreview(
+        group: OpGroup,
+        now: Long = System.currentTimeMillis(),
+        reviewWhenAtMs: Long? = null,
+    ): Preview? = withContext(Dispatchers.IO) {
         if (group.isCreate) {
             val op = JSONObject(group.ops.first().payload)
             val previewId = "pending_${group.ops.first().opId}"
             var item = itemFromCreateOp(op, previewId, now).copy(state = SavedItemState.New)
             val subs = N8nOpParsing.parseSubTasks(op.optJSONArray("subTasks"), previewId, now, baseSortOrder = 0)
             item = item.copy(buttons = SavedItemNormalization.mergeButtons(item.buttons, N8nOpParsing.childButtons(op.optJSONArray("subTasks"))))
+            if (reviewWhenAtMs != null) item = item.copy(whenAtMs = reviewWhenAtMs)
             val normalized = SavedItemNormalization.normalize(item, subs)
             return@withContext Preview(normalized.item, normalized.subItems)
         }
         val current = savedItemDao.getById(group.targetItemId!!) ?: return@withContext null
+        val sourceItems = group.ops.flatMap(::mergeSourceIdsOf).distinct()
+            .mapNotNull { savedItemDao.getById(it) }
+        val preservedUserState = SavedItemMergePolicy.preservedUserState(listOf(current) + sourceItems)
+            ?: return@withContext null
+        val survivorSnapshot = MergeSourceSnapshot(
+            item = current,
+            subItems = subTaskDao.getBySavedItemId(current.savedItemId),
+            history = changeLogDao.getByItem(current.savedItemId),
+            evidenceLinks = db.notiSavedItemLinkDao().getBySavedItemId(current.savedItemId),
+        )
+        val sourceSnapshots = sourceItems.map { source ->
+            MergeSourceSnapshot(
+                item = source,
+                subItems = subTaskDao.getBySavedItemId(source.savedItemId),
+                history = changeLogDao.getByItem(source.savedItemId),
+                evidenceLinks = db.notiSavedItemLinkDao().getBySavedItemId(source.savedItemId),
+            )
+        }
         var item = current
-        val existingSubs = subTaskDao.getBySavedItemId(current.savedItemId)
+        val existingSubs = survivorSnapshot.subItems
         val subs = existingSubs.toMutableList()
+        sourceSnapshots.flatMap { it.subItems }.forEach { sourceSub ->
+            appendUniqueSubItem(subs, sourceSub.copy(parentSavedItemId = current.savedItemId))
+        }
         group.ops.forEach { pending ->
             val op = JSONObject(pending.payload)
             val changes = op.optJSONObject("changes") ?: JSONObject()
             item = applyChangesInMemory(item, changes, now)
             item = applyOperationButtons(item, op, changes)
-            subs += N8nOpParsing.parseSubTasks(changes.optJSONArray("addedSubTasks"), current.savedItemId, now, baseSortOrder = subs.size)
+            N8nOpParsing.parseSubTasks(
+                changes.optJSONArray("addedSubTasks"), current.savedItemId, now, baseSortOrder = subs.size,
+            ).forEach { appendUniqueSubItem(subs, it) }
             removedSubTaskIds(changes).forEach { removedId -> subs.removeAll { it.savedSubItemId == removedId } }
         }
         val normalized = SavedItemNormalization.normalize(
-            item.copy(state = SavedItemState.Updated, lastUpdateTimestamp = now),
-            subs,
+            item.copy(
+                state = SavedItemState.Updated,
+                lastUpdateTimestamp = now,
+                whenAtMs = reviewWhenAtMs ?: preservedUserState.whenAtMs,
+                isStarred = preservedUserState.isStarred,
+                userEdited = preservedUserState.userEdited,
+            ),
+            subs.mapIndexed { index, sub -> sub.copy(parentSavedItemId = current.savedItemId, position = index) },
         )
-        Preview(normalized.item, normalized.subItems)
+        Preview(normalized.item, normalized.subItems, survivorSnapshot, sourceSnapshots)
     }
 
     // ========== Apply (accept) ==========
@@ -265,24 +322,38 @@ class PendingProposedOpRepository(private val appContext: Context) {
         val ops: List<PendingProposedOp>,
         val createdItemId: String?,
         val beforeTarget: SavedItem?,
+        val beforeTargetSubItems: List<SavedSubItem>,
         val deletedSourceItems: List<SavedItem>,
         val deletedSourceSubItems: List<SavedSubItem>,
-        val addedSubItemIds: List<String>,
-        val removedSubItems: List<SavedSubItem>,
+        val sourceLinks: List<NotiSavedItemLink>,
+        val insertedTargetLinkIds: List<Long>,
+        val sourceHistories: List<SavedItemChangeLog>,
+        val transferredHistoryIds: List<Long>,
         val changeLogIds: List<Long>,
         val appliedItemId: String,
+        val reviewWhenAtMs: Long?,
     )
 
     /**
      * Applies an accepted group to the database and deletes its op rows. Accepted items land in
      * the `saved` state directly — review acceptance *is* the acknowledgment.
      */
-    suspend fun applyGroup(group: OpGroup, now: Long = System.currentTimeMillis()): ApplyOutcome? = withContext(Dispatchers.IO) {
+    suspend fun applyGroup(
+        group: OpGroup,
+        editedDraft: ReviewItemDraft? = null,
+        now: Long = System.currentTimeMillis(),
+    ): ApplyOutcome? = withContext(Dispatchers.IO) {
         val outcome = db.withTransaction {
-            val applied = if (group.isCreate) applyCreate(group, now) else applyOnTarget(group, now)
+            val pendingDraft = db.pendingReviewDraftDao().getByKey(group.key)
+            val applied = if (group.isCreate) {
+                applyCreate(group, pendingDraft?.whenAtMs, editedDraft, now)
+            } else {
+                applyOnTarget(group, pendingDraft?.whenAtMs, editedDraft, now)
+            }
             if (applied != null) {
                 val opIds = group.ops.map { it.opId }
                 pendingProposedOpDao.deleteByIds(opIds)
+                db.pendingReviewDraftDao().deleteByKey(group.key)
                 setProposalDecision(opIds, ProposedOpRecordDecision.Approved, now)
             }
             applied
@@ -290,27 +361,41 @@ class PendingProposedOpRepository(private val appContext: Context) {
         if (outcome != null) {
             FirestoreOutboxWork.enqueue(appContext)
             outcome.deletedSourceItems.forEach { firestoreSync.markSavedItemDeleted(it.savedItemId, now) }
-            outcome.appliedItemId?.let { savedItemDao.getById(it) }?.let { firestoreSync.syncSavedItem(it) }
+            savedItemDao.getById(outcome.appliedItemId)?.let { firestoreSync.syncSavedItem(it) }
         }
         outcome
     }
 
-    private suspend fun applyCreate(group: OpGroup, now: Long): ApplyOutcome {
+    private suspend fun applyCreate(
+        group: OpGroup,
+        reviewWhenAtMs: Long?,
+        editedDraft: ReviewItemDraft?,
+        now: Long,
+    ): ApplyOutcome {
         val pending = group.ops.first()
         val op = JSONObject(pending.payload)
         val itemId = "r_" + UUID.randomUUID().toString().take(8)
         var item = itemFromCreateOp(op, itemId, now)
         val subs = N8nOpParsing.parseSubTasks(op.optJSONArray("subTasks"), itemId, now, baseSortOrder = 0)
         item = item.copy(buttons = SavedItemNormalization.mergeButtons(item.buttons, N8nOpParsing.childButtons(op.optJSONArray("subTasks"))))
-        val normalized = SavedItemNormalization.normalize(item, subs)
-        item = normalized.item
+        if (reviewWhenAtMs != null) item = item.copy(whenAtMs = reviewWhenAtMs)
+        var normalized = SavedItemNormalization.normalize(item, subs)
+        val autoDraft = ReviewItemDraft(normalized.item, normalized.subItems)
+        if (editedDraft != null) normalized = normalizeEditedDraft(autoDraft, editedDraft, itemId, now)
+        item = normalized.item.copy(
+            state = SavedItemState.Saved,
+            isViewed = true,
+            lastViewedChangeAt = now,
+            lastUpdateTimestamp = now,
+        )
         savedItemDao.upsert(item)
         if (normalized.subItems.isNotEmpty()) subTaskDao.upsertAll(normalized.subItems)
 
         val evidence = evidenceOf(pending)
         itemRepo.addEvidenceLinks(itemId, evidence, item.itemType, NotiSavedItemLinkSource.LlmAutoExtraction)
 
-        val changeLogId = changeLogDao.insert(
+        val changeLogIds = mutableListOf<Long>()
+        changeLogIds += changeLogDao.insert(
             SavedItemChangeLog(
                 savedItemId = itemId,
                 createdAt = now,
@@ -320,6 +405,9 @@ class PendingProposedOpRepository(private val appContext: Context) {
                 origin = "llm",
             )
         )
+        if (editedDraft != null && draftChangesGeneratedContent(autoDraft, editedDraft)) {
+            changeLogIds += changeLogDao.insert(userEditChange(itemId, now))
+        }
         journalAccepted(evidence, pending.notiKey, ExtractionJournalEventType.ItemCreated, itemId, item.title, reasonFrom(op), now)
         queueSavedItem(itemId, FirestoreOutboxKind.UpsertSavedItem, now)
 
@@ -327,16 +415,25 @@ class PendingProposedOpRepository(private val appContext: Context) {
             ops = group.ops,
             createdItemId = itemId,
             beforeTarget = null,
+            beforeTargetSubItems = emptyList(),
             deletedSourceItems = emptyList(),
             deletedSourceSubItems = emptyList(),
-            addedSubItemIds = normalized.subItems.map { it.savedSubItemId },
-            removedSubItems = emptyList(),
-            changeLogIds = listOf(changeLogId),
+            sourceLinks = emptyList(),
+            insertedTargetLinkIds = emptyList(),
+            sourceHistories = emptyList(),
+            transferredHistoryIds = emptyList(),
+            changeLogIds = changeLogIds,
             appliedItemId = itemId,
+            reviewWhenAtMs = reviewWhenAtMs,
         )
     }
 
-    private suspend fun applyOnTarget(group: OpGroup, now: Long): ApplyOutcome? {
+    private suspend fun applyOnTarget(
+        group: OpGroup,
+        reviewWhenAtMs: Long?,
+        editedDraft: ReviewItemDraft?,
+        now: Long,
+    ): ApplyOutcome? {
         val targetId = group.targetItemId!!
         val before = savedItemDao.getById(targetId) ?: return null
         val sourceSnapshots = buildList {
@@ -348,11 +445,20 @@ class PendingProposedOpRepository(private val appContext: Context) {
             ?: return null
 
         var item = before
-        val addedSubItemIds = mutableListOf<String>()
-        val removedSubItems = mutableListOf<SavedSubItem>()
+        val beforeTargetSubItems = subTaskDao.getBySavedItemId(targetId)
+        val deletedSourceSubItems = sourceSnapshots.flatMap { subTaskDao.getBySavedItemId(it.savedItemId) }
+        val workingSubItems = beforeTargetSubItems.toMutableList()
+        deletedSourceSubItems.forEach { sourceSub ->
+            appendUniqueSubItem(workingSubItems, sourceSub.copy(parentSavedItemId = targetId))
+        }
+        val linkDao = db.notiSavedItemLinkDao()
+        val sourceIds = sourceSnapshots.map { it.savedItemId }
+        val sourceLinks = if (sourceIds.isEmpty()) emptyList() else linkDao.getBySavedItemIds(sourceIds)
+        val sourceHistories = if (sourceIds.isEmpty()) emptyList() else changeLogDao.getByItems(sourceIds)
+        val insertedTargetLinkIds = mutableListOf<Long>()
+        val transferredHistoryIds = mutableListOf<Long>()
         val changeLogIds = mutableListOf<Long>()
         val deletedItems = mutableListOf<SavedItem>()
-        val deletedSubs = mutableListOf<SavedSubItem>()
 
         group.ops.forEach { pending ->
             val op = JSONObject(pending.payload)
@@ -362,33 +468,18 @@ class PendingProposedOpRepository(private val appContext: Context) {
 
             val added = N8nOpParsing.parseSubTasks(
                 changes.optJSONArray("addedSubTasks"), targetId, now,
-                baseSortOrder = subTaskDao.getBySavedItemId(targetId).size,
+                baseSortOrder = workingSubItems.size,
             )
-            if (added.isNotEmpty()) {
-                subTaskDao.upsertAll(added)
-                addedSubItemIds += added.map { it.savedSubItemId }
-            }
+            added.forEach { appendUniqueSubItem(workingSubItems, it) }
             val removedIds = removedSubTaskIds(changes)
-            val removed = removedIds.mapNotNull { subTaskDao.getById(it) }
-            if (removedIds.isNotEmpty()) {
-                if (removed.isNotEmpty()) subTaskDao.hardDeleteByIds(removed.map { it.savedSubItemId })
-                removedSubItems += removed
-            }
-
-            // Merge: fold the sources away for good (links + change logs cascade; sub-items explicit).
-            mergeSourceIdsOf(pending).forEach { sourceId ->
-                val source = savedItemDao.getById(sourceId) ?: return@forEach
-                deletedItems += source
-                deletedSubs += subTaskDao.getBySavedItemId(sourceId)
-                subTaskDao.hardDeleteByParentId(sourceId)
-                savedItemDao.hardDeleteById(sourceId)
-                rejectedMergeDao.deleteForItem(sourceId)
-                queueSavedItem(sourceId, FirestoreOutboxKind.DeleteSavedItem, now)
-            }
+            val removed = workingSubItems.filter { it.savedSubItemId in removedIds }
+            if (removedIds.isNotEmpty()) workingSubItems.removeAll { it.savedSubItemId in removedIds }
 
             val evidence = evidenceOf(pending)
             if (evidence.isNotEmpty()) {
-                itemRepo.addEvidenceLinks(targetId, evidence, before.itemType, NotiSavedItemLinkSource.LlmAutoExtraction)
+                insertedTargetLinkIds += itemRepo.addEvidenceLinks(
+                    targetId, evidence, before.itemType, NotiSavedItemLinkSource.LlmAutoExtraction,
+                ).filter { it > 0L }
             }
             changeLogIds += changeLogDao.insert(
                 SavedItemChangeLog(
@@ -407,20 +498,71 @@ class PendingProposedOpRepository(private val appContext: Context) {
             journalAccepted(evidence, pending.notiKey, ExtractionJournalEventType.ItemUpdated, targetId, item.title, pending.reason, now)
         }
 
+        // Preserve every source evidence link before deleting the source item. Duplicate target
+        // links are ignored by the unique index and therefore do not participate in Undo.
+        if (sourceLinks.isNotEmpty()) {
+            insertedTargetLinkIds += linkDao.insertAll(sourceLinks.map { link ->
+                link.copy(linkId = 0L, savedItemId = targetId, type = before.itemType)
+            }).filter { it > 0L }
+        }
+
+        // Move source histories to the survivor without rewriting their original content, and add
+        // one explicit snapshot row per source so its final description/subtasks remain inspectable.
+        sourceSnapshots.forEach { source ->
+            val history = sourceHistories.filter { it.savedItemId == source.savedItemId }
+            if (history.isNotEmpty()) {
+                val ids = history.map { it.changeId }
+                changeLogDao.deleteByIds(ids)
+                changeLogDao.upsertAll(history.map { row ->
+                    row.copy(
+                        savedItemId = targetId,
+                        sourceSavedItemId = row.sourceSavedItemId.ifBlank { source.savedItemId },
+                        sourceItemTitle = row.sourceItemTitle.ifBlank { source.title },
+                    )
+                })
+                transferredHistoryIds += ids
+            }
+            val sourceSubs = deletedSourceSubItems.filter { it.parentSavedItemId == source.savedItemId }
+            val sourceEvidence = sourceLinks.filter { it.savedItemId == source.savedItemId }.map { it.notiRecordId }
+            changeLogIds += changeLogDao.insert(
+                SavedItemChangeLog(
+                    savedItemId = targetId,
+                    createdAt = now,
+                    changeType = SavedItemChangeType.Merged,
+                    changeSummary = source.title,
+                    appendedContent = source.content,
+                    addedSubTasksJson = subItemsToJson(sourceSubs),
+                    evidenceRecordIdsJson = JSONArray(sourceEvidence).toString(),
+                    origin = "llm",
+                    sourceSavedItemId = source.savedItemId,
+                    sourceItemTitle = source.title,
+                )
+            )
+        }
+
+        sourceSnapshots.forEach { source ->
+            deletedItems += source
+            subTaskDao.hardDeleteByParentId(source.savedItemId)
+            savedItemDao.hardDeleteById(source.savedItemId)
+            rejectedMergeDao.deleteForItem(source.savedItemId)
+            queueSavedItem(source.savedItemId, FirestoreOutboxKind.DeleteSavedItem, now)
+        }
+
         // Acceptance is the acknowledgment: land in `saved` with the change cursor moved.
         item = item.copy(
-            whenAtMs = preservedUserState.whenAtMs,
+            whenAtMs = reviewWhenAtMs ?: preservedUserState.whenAtMs,
             isStarred = preservedUserState.isStarred,
             userEdited = preservedUserState.userEdited,
         )
-        val currentSubs = subTaskDao.getBySavedItemId(targetId)
-        val normalized = SavedItemNormalization.normalize(
+        var normalized = SavedItemNormalization.normalize(
             item,
-            currentSubs + if (item.isTask) emptyList() else deletedSubs,
+            workingSubItems.mapIndexed { index, sub -> sub.copy(parentSavedItemId = targetId, position = index) },
         )
-        if (normalized.subItems.size != currentSubs.size || normalized.subItems != currentSubs) {
-            subTaskDao.hardDeleteByParentId(targetId)
-            if (normalized.subItems.isNotEmpty()) subTaskDao.upsertAll(normalized.subItems)
+        val autoDraft = ReviewItemDraft(normalized.item, normalized.subItems)
+        if (editedDraft != null) normalized = normalizeEditedDraft(autoDraft, editedDraft, targetId, now)
+        subTaskDao.hardDeleteByParentId(targetId)
+        if (normalized.subItems.isNotEmpty()) {
+            subTaskDao.upsertAll(normalized.subItems)
         }
         val applied = normalized.item.copy(
             state = if (before.isCompleted || before.isArchived) before.state else SavedItemState.Saved,
@@ -429,18 +571,25 @@ class PendingProposedOpRepository(private val appContext: Context) {
             lastUpdateTimestamp = now,
         )
         savedItemDao.upsert(applied)
+        if (editedDraft != null && draftChangesGeneratedContent(autoDraft, editedDraft)) {
+            changeLogIds += changeLogDao.insert(userEditChange(targetId, now))
+        }
         queueSavedItem(targetId, FirestoreOutboxKind.UpsertSavedItem, now)
 
         return ApplyOutcome(
             ops = group.ops,
             createdItemId = null,
             beforeTarget = before,
+            beforeTargetSubItems = beforeTargetSubItems,
             deletedSourceItems = deletedItems,
-            deletedSourceSubItems = deletedSubs,
-            addedSubItemIds = addedSubItemIds,
-            removedSubItems = removedSubItems,
+            deletedSourceSubItems = deletedSourceSubItems,
+            sourceLinks = sourceLinks,
+            insertedTargetLinkIds = insertedTargetLinkIds,
+            sourceHistories = sourceHistories,
+            transferredHistoryIds = transferredHistoryIds,
             changeLogIds = changeLogIds,
             appliedItemId = targetId,
+            reviewWhenAtMs = reviewWhenAtMs,
         )
     }
 
@@ -454,8 +603,8 @@ class PendingProposedOpRepository(private val appContext: Context) {
             }
             outcome.beforeTarget?.let { before ->
                 savedItemDao.upsert(before)
-                if (outcome.addedSubItemIds.isNotEmpty()) subTaskDao.hardDeleteByIds(outcome.addedSubItemIds)
-                if (outcome.removedSubItems.isNotEmpty()) subTaskDao.upsertAll(outcome.removedSubItems)
+                subTaskDao.hardDeleteByParentId(before.savedItemId)
+                if (outcome.beforeTargetSubItems.isNotEmpty()) subTaskDao.upsertAll(outcome.beforeTargetSubItems)
                 queueSavedItem(before.savedItemId, FirestoreOutboxKind.UpsertSavedItem, now)
             }
             outcome.deletedSourceItems.forEach {
@@ -463,8 +612,23 @@ class PendingProposedOpRepository(private val appContext: Context) {
                 queueSavedItem(it.savedItemId, FirestoreOutboxKind.UpsertSavedItem, now)
             }
             if (outcome.deletedSourceSubItems.isNotEmpty()) subTaskDao.upsertAll(outcome.deletedSourceSubItems)
+            if (outcome.insertedTargetLinkIds.isNotEmpty()) {
+                db.notiSavedItemLinkDao().deleteByIds(outcome.insertedTargetLinkIds)
+            }
+            if (outcome.sourceLinks.isNotEmpty()) db.notiSavedItemLinkDao().insertAll(outcome.sourceLinks)
             outcome.changeLogIds.forEach { changeLogDao.deleteById(it) }
+            if (outcome.transferredHistoryIds.isNotEmpty()) changeLogDao.deleteByIds(outcome.transferredHistoryIds)
+            if (outcome.sourceHistories.isNotEmpty()) changeLogDao.upsertAll(outcome.sourceHistories)
             pendingProposedOpDao.insertAll(outcome.ops)
+            if (outcome.reviewWhenAtMs != null) {
+                db.pendingReviewDraftDao().upsert(
+                    org.muilab.notigpt.model.features.PendingReviewDraft(
+                        reviewKey = if (outcome.createdItemId != null) "create_${outcome.ops.first().opId}" else "item_${outcome.appliedItemId}",
+                        whenAtMs = outcome.reviewWhenAtMs,
+                        updatedAt = now,
+                    )
+                )
+            }
             setProposalDecision(
                 outcome.ops.map { it.opId },
                 ProposedOpRecordDecision.Pending,
@@ -483,8 +647,12 @@ class PendingProposedOpRepository(private val appContext: Context) {
      * Rejects a group: op rows are deleted (nothing was ever applied), the verdict is journaled so
      * later extraction runs know, and rejected merges enter the cool-down table.
      */
-    suspend fun discardGroup(group: OpGroup, now: Long = System.currentTimeMillis()) = withContext(Dispatchers.IO) {
-        db.withTransaction {
+    suspend fun discardGroup(
+        group: OpGroup,
+        now: Long = System.currentTimeMillis(),
+    ): PendingReviewDraft? = withContext(Dispatchers.IO) {
+        val draft = db.withTransaction {
+          val reviewDraft = db.pendingReviewDraftDao().getByKey(group.key)
           group.ops.forEach { pending ->
             val keys = journalKeysOf(pending)
             val title = when {
@@ -513,9 +681,12 @@ class PendingProposedOpRepository(private val appContext: Context) {
           }
           val opIds = group.ops.map { it.opId }
           pendingProposedOpDao.deleteByIds(opIds)
+          db.pendingReviewDraftDao().deleteByKey(group.key)
           setProposalDecision(opIds, ProposedOpRecordDecision.Rejected, now)
+          reviewDraft
         }
         FirestoreOutboxWork.enqueue(appContext)
+        draft
     }
 
     private suspend fun queueSavedItem(savedItemId: String, kind: String, ts: Long) {
@@ -560,8 +731,12 @@ class PendingProposedOpRepository(private val appContext: Context) {
     }
 
     /** Undo of a reject: the ops come back exactly as they were (fresh row ids). */
-    suspend fun restoreDiscarded(group: OpGroup) = withContext(Dispatchers.IO) {
-        pendingProposedOpDao.insertAll(group.ops.map { it.copy(opId = 0L) })
+    suspend fun restoreDiscarded(group: OpGroup, reviewDraft: PendingReviewDraft? = null) = withContext(Dispatchers.IO) {
+        val insertedIds = pendingProposedOpDao.insertAll(group.ops.map { it.copy(opId = 0L) })
+        reviewDraft?.let { draft ->
+            val restoredKey = if (group.isCreate) "create_${insertedIds.first()}" else group.key
+            db.pendingReviewDraftDao().upsert(draft.copy(reviewKey = restoredKey))
+        }
         // The cool-down entries a rejected merge wrote are left in place; re-rejecting would
         // recreate them anyway and an accepted merge deletes them via deleteForItem.
     }
@@ -573,6 +748,9 @@ class PendingProposedOpRepository(private val appContext: Context) {
             .map { it.opId }
             .takeIf { it.isNotEmpty() }
             ?.let { pendingProposedOpDao.deleteByIds(it) }
+        val activeKeys = groupOps(pendingProposedOpDao.getAll()).map { it.key }
+        if (activeKeys.isEmpty()) db.pendingReviewDraftDao().deleteNonLegacy()
+        else db.pendingReviewDraftDao().deleteOrphans(activeKeys)
     }
 
     // ========== Helpers ==========
@@ -648,6 +826,50 @@ class PendingProposedOpRepository(private val appContext: Context) {
             })
         }
     }.toString()
+
+    private fun appendUniqueSubItem(target: MutableList<SavedSubItem>, candidate: SavedSubItem) {
+        ReviewMergeSemantics.appendUnique(target, candidate)
+    }
+
+    private fun draftChangesGeneratedContent(auto: ReviewItemDraft, edited: ReviewItemDraft): Boolean {
+        val a = auto.item
+        val e = edited.item
+        if (a.title != e.title || a.content != e.content || a.itemType != e.itemType ||
+            a.deadlineAtMs != e.deadlineAtMs || a.startAtMs != e.startAtMs ||
+            a.endAtMs != e.endAtMs || a.buttons != e.buttons
+        ) return true
+        fun normalized(items: List<SavedSubItem>) = items.map {
+            SavedSubItem.normalizeText(it.text) to it.isCompleted
+        }
+        return normalized(auto.subItems) != normalized(edited.subItems)
+    }
+
+    private fun normalizeEditedDraft(
+        auto: ReviewItemDraft,
+        edited: ReviewItemDraft,
+        realItemId: String,
+        now: Long,
+    ): SavedItemNormalization.Result {
+        val contentEdited = draftChangesGeneratedContent(auto, edited)
+        val retargetedSubs = edited.subItems.mapIndexed { index, sub ->
+            sub.copy(parentSavedItemId = realItemId, position = index)
+        }
+        val item = edited.item.copy(
+            savedItemId = realItemId,
+            origin = if (contentEdited) "manual" else auto.item.origin,
+            humanEditCount = auto.item.humanEditCount + if (contentEdited) 1 else 0,
+            userEdited = auto.item.userEdited || contentEdited,
+            lastUpdateTimestamp = now,
+        )
+        return SavedItemNormalization.normalize(item, retargetedSubs)
+    }
+
+    private fun userEditChange(savedItemId: String, now: Long) = SavedItemChangeLog(
+        savedItemId = savedItemId,
+        createdAt = now,
+        changeType = SavedItemChangeType.UserEdit,
+        origin = "user",
+    )
 
     private fun mergeSourceIdsOf(pending: PendingProposedOp): List<String> = try {
         val arr = JSONArray(pending.mergeSourceItemIds)

@@ -12,6 +12,7 @@ import org.muilab.notigpt.model.features.PreferenceConflict
 import org.muilab.notigpt.model.features.NotiLlmState
 import org.muilab.notigpt.model.features.NotiSavedItemLink
 import org.muilab.notigpt.model.features.PendingProposedOp
+import org.muilab.notigpt.model.features.PendingReviewDraft
 import org.muilab.notigpt.model.features.RejectedMerge
 import org.muilab.notigpt.model.features.SavedItemChangeLog
 import org.muilab.notigpt.model.features.Reminder
@@ -34,6 +35,7 @@ import org.muilab.notigpt.data.local.room.dao.NotiLlmStateDao
 import org.muilab.notigpt.data.local.room.dao.NotiRecordDao
 import org.muilab.notigpt.data.local.room.dao.NotiSavedItemLinkDao
 import org.muilab.notigpt.data.local.room.dao.PendingProposedOpDao
+import org.muilab.notigpt.data.local.room.dao.PendingReviewDraftDao
 import org.muilab.notigpt.data.local.room.dao.PreferenceConflictDao
 import org.muilab.notigpt.data.local.room.dao.RejectedMergeDao
 import org.muilab.notigpt.data.local.room.dao.ReminderDao
@@ -71,8 +73,9 @@ import org.muilab.notigpt.data.local.room.dao.ProposedOpRecordDao
         UserContext::class,
         FirestoreOutboxOp::class,
         ProposedOpRecord::class,
+        PendingReviewDraft::class,
     ],
-    version = 51,
+    version = 52,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -95,6 +98,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun userContextDao(): UserContextDao
     abstract fun firestoreOutboxDao(): FirestoreOutboxDao
     abstract fun proposedOpRecordDao(): ProposedOpRecordDao
+    abstract fun pendingReviewDraftDao(): PendingReviewDraftDao
 
     companion object {
         @Volatile

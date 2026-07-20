@@ -25,7 +25,7 @@ interface NotiSavedItemLinkDao {
      * savedItemId+notiRecordId+role), and existing evidence is never displaced by later responses.
      */
     @Insert(onConflict = OnConflictStrategy.IGNORE)
-    suspend fun insertAll(links: List<NotiSavedItemLink>)
+    suspend fun insertAll(links: List<NotiSavedItemLink>): List<Long>
 
     @Query("SELECT * FROM noti_saved_item_link WHERE savedItemId = :savedItemId")
     suspend fun getBySavedItemId(savedItemId: String): List<NotiSavedItemLink>
@@ -73,6 +73,9 @@ interface NotiSavedItemLinkDao {
 
     @Query("DELETE FROM noti_saved_item_link WHERE notiRecordId = :notiRecordId")
     suspend fun deleteByNotiRecordId(notiRecordId: String)
+
+    @Query("DELETE FROM noti_saved_item_link WHERE linkId IN (:linkIds)")
+    suspend fun deleteByIds(linkIds: List<Long>)
 
     @Query("DELETE FROM noti_saved_item_link")
     suspend fun deleteAll()

@@ -19,8 +19,13 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
+import org.muilab.notigpt.R
 import org.muilab.notigpt.ui.review.viewmodel.ReviewViewModel
 import org.muilab.notigpt.ui.common.feedback.Haptics
 import org.muilab.notigpt.ui.theme.MotionSpecs
@@ -99,6 +104,8 @@ private fun TopCard(
 
     val approveProgress = (offsetX.value / commitThreshold).coerceIn(0f, 1f)
     val rejectProgress = (-offsetX.value / commitThreshold).coerceIn(0f, 1f)
+    val approveLabel = stringResource(R.string.review_approve)
+    val rejectLabel = stringResource(R.string.review_reject)
 
     Box(
         modifier = Modifier
@@ -107,6 +114,18 @@ private fun TopCard(
             .graphicsLayer {
                 translationX = offsetX.value
                 rotationZ = (offsetX.value / screenWidthPx) * MAX_ROTATION_DEG
+            }
+            .semantics {
+                customActions = listOf(
+                    CustomAccessibilityAction(approveLabel) {
+                        onApprove(item)
+                        true
+                    },
+                    CustomAccessibilityAction(rejectLabel) {
+                        onReject(item)
+                        true
+                    },
+                )
             }
             .pointerInput(item.key) {
                 // `acc` is the source of truth for both threshold ticks and the commit decision;
