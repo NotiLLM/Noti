@@ -555,6 +555,10 @@
     <string name="review_skipped_empty">All remaining cards are set aside</string>
     <string name="review_restore_skipped">Review skipped cards</string>
     <string name="review_later">Review later</string>
+    <string name="review_change_language">Change language</string>
+    <string name="review_language_future_prompt">Translate this item to %1$s. Use this language for all future items too?</string>
+    <string name="review_language_this_item">This item only</string>
+    <string name="review_language_all_future">All future items</string>
     <string name="review_badge_created">Created</string>
     <string name="review_badge_updated">Updated</string>
     <string name="review_badge_merged">Merged</string>

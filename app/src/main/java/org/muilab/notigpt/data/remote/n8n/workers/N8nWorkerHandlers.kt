@@ -7,6 +7,7 @@ import org.muilab.notigpt.data.remote.n8n.workers.handlers.ExtractionPipelineHan
 import org.muilab.notigpt.data.remote.n8n.workers.handlers.PreferenceQuickSyncHandler
 import org.muilab.notigpt.data.remote.n8n.workers.handlers.ReflectionPipelineHandler
 import org.muilab.notigpt.data.remote.n8n.workers.handlers.SavedItemRegenerationHandler
+import org.muilab.notigpt.data.remote.n8n.workers.handlers.ReviewTranslationHandler
 
 /**
  * Dispatcher from typed WorkManager input to the matching n8n workflow handler.
@@ -21,12 +22,18 @@ internal object N8nWorkerHandlers {
      *
      * Keep the mapping exhaustive with N8nWorkerInput so unsupported WorkManager Data fails before side effects.
      */
-    suspend fun dispatch(ctx: N8nWorkerContext, input: N8nWorkerInput, raw: Data): ListenableWorker.Result {
+    suspend fun dispatch(
+        ctx: N8nWorkerContext,
+        input: N8nWorkerInput,
+        raw: Data,
+        runAttemptCount: Int = 0,
+    ): ListenableWorker.Result {
         return when (input) {
             is N8nWorkerInput.ExtractionPipeline -> ExtractionPipelineHandler.handle(ctx, input)
             is N8nWorkerInput.ReflectionPipeline -> ReflectionPipelineHandler.handle(ctx)
             is N8nWorkerInput.PreferenceQuickSync -> PreferenceQuickSyncHandler.handle(ctx, raw)
             is N8nWorkerInput.RegenerateOne -> SavedItemRegenerationHandler.handleOne(ctx, raw)
+            is N8nWorkerInput.ReviewTranslation -> ReviewTranslationHandler.handle(ctx, input, runAttemptCount)
         }
     }
 }

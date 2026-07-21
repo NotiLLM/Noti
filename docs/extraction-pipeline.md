@@ -20,6 +20,8 @@ flowchart LR
     Saved --> D2[D2: cross-thread grouping]
     D2 --> E2[E2: cross-thread merge proposals]
     E2 --> Pending
+    Pending -->|change language| F[F: translate review text]
+    F --> Pending
 ```
 
 - **A — scan:** classifies the thread and decides whether extraction work is justified.
@@ -27,6 +29,9 @@ flowchart LR
 - **C — summary:** advances the thread fold watermark and keeps future context bounded.
 - **D1/E1 — local merge:** finds related existing saved items and proposes conservative merges.
 - **D2/E2 — reflection:** periodically considers relationships across notification keys.
+- **F — translation:** translates one current review preview and its subtasks/button labels using
+  associated notification records for language context. It does not extract, summarize, update,
+  merge, schedule, or change item structure.
 
 ## Item and merge semantics
 
@@ -85,3 +90,17 @@ not enforce them. The future GCP service must verify both tokens and derive acco
 trusting request `userId`.
 
 Logs may include stage names, IDs, counts, status codes, and byte counts—never request/response bodies.
+
+## Review translation contract
+
+Pipeline F starts only from the review screen. Android snapshots the current preview and its evidence
+record IDs into the existing `pending_review_draft` row, then temporarily omits that card while the
+request is pending. The workflow receives only that item, its subtasks, the selected target language,
+and associated `notiRecords`.
+
+The response contains translated title/content, subtask text keyed by the original subtask IDs, and
+button labels keyed by their original array indexes. Android overlays those strings on its local
+snapshot; all IDs, operation/type/state fields, timestamps, user-set When/star/completion fields,
+button intents/types, evidence, and merge structure remain authoritative locally. A failed request
+clears the translation attribute and reveals the original proposal again. A successful request returns
+the translated preview to the same approve/reject flow.

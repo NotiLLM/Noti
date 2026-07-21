@@ -75,7 +75,7 @@ import org.muilab.notigpt.data.local.room.dao.ProposedOpRecordDao
         ProposedOpRecord::class,
         PendingReviewDraft::class,
     ],
-    version = 52,
+    version = 53,
     exportSchema = true
 )
 @TypeConverters(Converters::class)

@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -53,6 +54,9 @@ import org.muilab.notigpt.ui.saveditem.viewmodel.SavedItemsViewModel
 import org.muilab.notigpt.ui.saveditem.component.SavedItemWhenButton
 import org.muilab.notigpt.ui.saveditem.component.SavedItemWhenPickerDialog
 import org.muilab.notigpt.ui.theme.NotiTheme
+import org.muilab.notigpt.ui.settings.ExtractionLanguagePickerDialog
+import org.muilab.notigpt.ui.settings.extractionLanguageLabel
+import org.muilab.notigpt.util.SharedPreferencesManager
 
 /**
  * Tinder-style review of new/updated generated items. Swipe right to approve (acknowledge), left to
@@ -101,6 +105,8 @@ fun ReviewScreen(
     androidx.compose.runtime.LaunchedEffect(editingItem) { onDetailOpenChange(editingItem != null) }
     val subtasksBySavedItem by savedItemsViewModel.allSavedSubItemsBySavedItem.collectAsState()
     var whenEntry by remember { mutableStateOf<ReviewViewModel.ReviewEntry?>(null) }
+    var languageEntry by remember { mutableStateOf<ReviewViewModel.ReviewEntry?>(null) }
+    var languageChoice by remember { mutableStateOf<Pair<ReviewViewModel.ReviewEntry, String>?>(null) }
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
@@ -153,6 +159,9 @@ fun ReviewScreen(
                                     accent = NotiTheme.semantic.taskAccent,
                                     onClick = { whenEntry = top },
                                 )
+                            }
+                            TextButton(onClick = { languageEntry = top }) {
+                                Text(stringResource(R.string.review_change_language))
                             }
                             TextButton(onClick = { reviewViewModel.reviewLater(top) }) {
                                 Text(stringResource(R.string.review_later))
@@ -238,6 +247,45 @@ fun ReviewScreen(
             currentWhenAtMs = entry.preview.whenAtMs,
             onDismiss = { whenEntry = null },
             onSet = { value -> reviewViewModel.setReviewWhen(entry, value); whenEntry = null },
+        )
+    }
+
+    val originalLanguageLabel = stringResource(R.string.ui_settings_extraction_language_original)
+    languageEntry?.let { entry ->
+        ExtractionLanguagePickerDialog(
+            selected = SharedPreferencesManager.targetExtractionLanguage,
+            originalLabel = originalLanguageLabel,
+            onSelect = { language ->
+                languageEntry = null
+                languageChoice = entry to language
+            },
+            onDismiss = { languageEntry = null },
+        )
+    }
+
+    languageChoice?.let { (entry, language) ->
+        val languageLabel = extractionLanguageLabel(language, originalLanguageLabel)
+        AlertDialog(
+            onDismissRequest = { languageChoice = null },
+            title = { Text(stringResource(R.string.review_change_language)) },
+            text = { Text(stringResource(R.string.review_language_future_prompt, languageLabel)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    reviewViewModel.translate(entry, language, applyToFutureItems = true)
+                    languageChoice = null
+                }) { Text(stringResource(R.string.review_language_all_future)) }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = {
+                        reviewViewModel.translate(entry, language, applyToFutureItems = false)
+                        languageChoice = null
+                    }) { Text(stringResource(R.string.review_language_this_item)) }
+                    TextButton(onClick = { languageChoice = null }) {
+                        Text(stringResource(R.string.ui_action_cancel))
+                    }
+                }
+            },
         )
     }
 }

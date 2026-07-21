@@ -12,6 +12,7 @@ import org.muilab.notigpt.BuildConfig
 import org.muilab.notigpt.data.remote.n8n.workers.N8nAPIWorker
 import org.muilab.notigpt.util.Constants.Companion.N8N_EXTRACTION_PIPELINE
 import org.muilab.notigpt.util.Constants.Companion.N8N_REFLECTION_PIPELINE
+import org.muilab.notigpt.util.Constants.Companion.N8N_REVIEW_TRANSLATION
 import org.muilab.notigpt.util.Constants.Companion.N8N_REGENERATE_ONE
 import org.muilab.notigpt.util.SharedPreferencesManager
 import java.util.concurrent.TimeUnit
@@ -98,6 +99,28 @@ fun enqueueReflectionPipeline(context: Context) {
 
     WorkManager.getInstance(context)
         .enqueueUniqueWork("n8n_reflection_pipeline", ExistingWorkPolicy.KEEP, workerRequest)
+}
+
+/** Queues translation-only Pipeline F for one durable review-draft snapshot. */
+fun enqueueReviewTranslation(context: Context, reviewKey: String) {
+    if (reviewKey.isBlank()) return
+    val inputData = Data.Builder()
+        .putString("api_type", N8N_REVIEW_TRANSLATION)
+        .putString("webhook_path", BuildConfig.N8N_EXTRACT_F_TRANSLATION_PATH)
+        .putString("review_key", reviewKey)
+        .build()
+    val request = OneTimeWorkRequestBuilder<N8nAPIWorker>()
+        .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
+        .setConstraints(
+            Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build(),
+        )
+        .setInputData(inputData)
+        .build()
+    WorkManager.getInstance(context).enqueueUniqueWork(
+        "n8n_review_translation_$reviewKey",
+        ExistingWorkPolicy.REPLACE,
+        request,
+    )
 }
 
 /** Queues regeneration for one SavedItem from its stored notification context. */

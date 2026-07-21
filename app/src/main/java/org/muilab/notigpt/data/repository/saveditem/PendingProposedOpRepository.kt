@@ -65,8 +65,28 @@ class PendingProposedOpRepository(private val appContext: Context) {
 
     suspend fun setReviewWhen(reviewKey: String, whenAtMs: Long, now: Long = System.currentTimeMillis()) =
         withContext(Dispatchers.IO) {
-            db.pendingReviewDraftDao().upsert(PendingReviewDraft(reviewKey, whenAtMs, now))
+            val current = db.pendingReviewDraftDao().getByKey(reviewKey)
+            db.pendingReviewDraftDao().upsert(
+                current?.copy(whenAtMs = whenAtMs, updatedAt = now)
+                    ?: PendingReviewDraft(reviewKey = reviewKey, whenAtMs = whenAtMs, updatedAt = now),
+            )
         }
+
+    suspend fun setReviewTranslation(
+        reviewKey: String,
+        translationStateJson: String?,
+        now: Long = System.currentTimeMillis(),
+    ) = withContext(Dispatchers.IO) {
+        val current = db.pendingReviewDraftDao().getByKey(reviewKey)
+        db.pendingReviewDraftDao().upsert(
+            current?.copy(translationStateJson = translationStateJson, updatedAt = now)
+                ?: PendingReviewDraft(
+                    reviewKey = reviewKey,
+                    translationStateJson = translationStateJson,
+                    updatedAt = now,
+                ),
+        )
+    }
 
     suspend fun getPending(): List<PendingProposedOp> = withContext(Dispatchers.IO) { pendingProposedOpDao.getAll() }
 
@@ -351,7 +371,9 @@ class PendingProposedOpRepository(private val appContext: Context) {
             inserted.forEachIndexed { index, row ->
                 prepared[index].inheritedWhen?.let { whenAt ->
                     val reviewKey = if (row.opType == PendingProposedOpType.Create) "create_${row.opId}" else "item_${row.targetItemId}"
-                    db.pendingReviewDraftDao().upsert(PendingReviewDraft(reviewKey, whenAt, now))
+                    db.pendingReviewDraftDao().upsert(
+                        PendingReviewDraft(reviewKey = reviewKey, whenAtMs = whenAt, updatedAt = now),
+                    )
                 }
             }
             inserted
@@ -487,6 +509,7 @@ class PendingProposedOpRepository(private val appContext: Context) {
         val changeLogIds: List<Long>,
         val appliedItemId: String,
         val reviewWhenAtMs: Long?,
+        val reviewTranslationStateJson: String? = null,
     )
 
     /**
@@ -496,14 +519,15 @@ class PendingProposedOpRepository(private val appContext: Context) {
     suspend fun applyGroup(
         group: OpGroup,
         editedDraft: ReviewItemDraft? = null,
+        editedDraftIsUserEdit: Boolean = true,
         now: Long = System.currentTimeMillis(),
     ): ApplyOutcome? = withContext(Dispatchers.IO) {
         val outcome = db.withTransaction {
             val pendingDraft = db.pendingReviewDraftDao().getByKey(group.key)
             val applied = if (group.isCreate) {
-                applyCreate(group, pendingDraft?.whenAtMs, editedDraft, now)
+                applyCreate(group, pendingDraft?.whenAtMs, editedDraft, editedDraftIsUserEdit, now)
             } else {
-                applyOnTarget(group, pendingDraft?.whenAtMs, editedDraft, now)
+                applyOnTarget(group, pendingDraft?.whenAtMs, editedDraft, editedDraftIsUserEdit, now)
             }
             if (applied != null) {
                 val opIds = group.ops.map { it.opId }
@@ -511,7 +535,7 @@ class PendingProposedOpRepository(private val appContext: Context) {
                 db.pendingReviewDraftDao().deleteByKey(group.key)
                 setProposalDecision(opIds, ProposedOpRecordDecision.Approved, now)
             }
-            applied
+            applied?.copy(reviewTranslationStateJson = pendingDraft?.translationStateJson)
         }
         if (outcome != null) {
             FirestoreOutboxWork.enqueue(appContext)
@@ -525,6 +549,7 @@ class PendingProposedOpRepository(private val appContext: Context) {
         group: OpGroup,
         reviewWhenAtMs: Long?,
         editedDraft: ReviewItemDraft?,
+        editedDraftIsUserEdit: Boolean,
         now: Long,
     ): ApplyOutcome {
         val pending = group.ops.first()
@@ -536,7 +561,9 @@ class PendingProposedOpRepository(private val appContext: Context) {
         if (reviewWhenAtMs != null) item = item.copy(whenAtMs = reviewWhenAtMs)
         var normalized = SavedItemNormalization.normalize(item, subs)
         val autoDraft = ReviewItemDraft(normalized.item, normalized.subItems)
-        if (editedDraft != null) normalized = normalizeEditedDraft(autoDraft, editedDraft, itemId, now)
+        if (editedDraft != null) {
+            normalized = normalizeEditedDraft(autoDraft, editedDraft, itemId, now, editedDraftIsUserEdit)
+        }
         item = normalized.item.copy(
             state = SavedItemState.Saved,
             isViewed = true,
@@ -560,7 +587,7 @@ class PendingProposedOpRepository(private val appContext: Context) {
                 origin = "llm",
             )
         )
-        if (editedDraft != null && draftChangesGeneratedContent(autoDraft, editedDraft)) {
+        if (editedDraftIsUserEdit && editedDraft != null && draftChangesGeneratedContent(autoDraft, editedDraft)) {
             changeLogIds += changeLogDao.insert(userEditChange(itemId, now))
         }
         journalAccepted(evidence, pending.notiKey, ExtractionJournalEventType.ItemCreated, itemId, item.title, reasonFrom(op), now)
@@ -587,6 +614,7 @@ class PendingProposedOpRepository(private val appContext: Context) {
         group: OpGroup,
         reviewWhenAtMs: Long?,
         editedDraft: ReviewItemDraft?,
+        editedDraftIsUserEdit: Boolean,
         now: Long,
     ): ApplyOutcome? {
         val targetId = group.targetItemId!!
@@ -714,7 +742,9 @@ class PendingProposedOpRepository(private val appContext: Context) {
             workingSubItems.mapIndexed { index, sub -> sub.copy(parentSavedItemId = targetId, position = index) },
         )
         val autoDraft = ReviewItemDraft(normalized.item, normalized.subItems)
-        if (editedDraft != null) normalized = normalizeEditedDraft(autoDraft, editedDraft, targetId, now)
+        if (editedDraft != null) {
+            normalized = normalizeEditedDraft(autoDraft, editedDraft, targetId, now, editedDraftIsUserEdit)
+        }
         subTaskDao.hardDeleteByParentId(targetId)
         if (normalized.subItems.isNotEmpty()) {
             subTaskDao.upsertAll(normalized.subItems)
@@ -726,7 +756,7 @@ class PendingProposedOpRepository(private val appContext: Context) {
             lastUpdateTimestamp = now,
         )
         savedItemDao.upsert(applied)
-        if (editedDraft != null && draftChangesGeneratedContent(autoDraft, editedDraft)) {
+        if (editedDraftIsUserEdit && editedDraft != null && draftChangesGeneratedContent(autoDraft, editedDraft)) {
             changeLogIds += changeLogDao.insert(userEditChange(targetId, now))
         }
         queueSavedItem(targetId, FirestoreOutboxKind.UpsertSavedItem, now)
@@ -775,11 +805,12 @@ class PendingProposedOpRepository(private val appContext: Context) {
             if (outcome.transferredHistoryIds.isNotEmpty()) changeLogDao.deleteByIds(outcome.transferredHistoryIds)
             if (outcome.sourceHistories.isNotEmpty()) changeLogDao.upsertAll(outcome.sourceHistories)
             pendingProposedOpDao.insertAll(outcome.ops)
-            if (outcome.reviewWhenAtMs != null) {
+            if (outcome.reviewWhenAtMs != null || outcome.reviewTranslationStateJson != null) {
                 db.pendingReviewDraftDao().upsert(
                     org.muilab.notigpt.model.features.PendingReviewDraft(
                         reviewKey = if (outcome.createdItemId != null) "create_${outcome.ops.first().opId}" else "item_${outcome.appliedItemId}",
                         whenAtMs = outcome.reviewWhenAtMs,
+                        translationStateJson = outcome.reviewTranslationStateJson,
                         updatedAt = now,
                     )
                 )
@@ -1004,6 +1035,7 @@ class PendingProposedOpRepository(private val appContext: Context) {
         edited: ReviewItemDraft,
         realItemId: String,
         now: Long,
+        markAsUserEdit: Boolean,
     ): SavedItemNormalization.Result {
         val contentEdited = draftChangesGeneratedContent(auto, edited)
         val retargetedSubs = edited.subItems.mapIndexed { index, sub ->
@@ -1011,9 +1043,9 @@ class PendingProposedOpRepository(private val appContext: Context) {
         }
         val item = edited.item.copy(
             savedItemId = realItemId,
-            origin = if (contentEdited) "manual" else auto.item.origin,
-            humanEditCount = auto.item.humanEditCount + if (contentEdited) 1 else 0,
-            userEdited = auto.item.userEdited || contentEdited,
+            origin = if (markAsUserEdit && contentEdited) "manual" else auto.item.origin,
+            humanEditCount = auto.item.humanEditCount + if (markAsUserEdit && contentEdited) 1 else 0,
+            userEdited = auto.item.userEdited || (markAsUserEdit && contentEdited),
             lastUpdateTimestamp = now,
         )
         return SavedItemNormalization.normalize(item, retargetedSubs)

@@ -32,7 +32,7 @@ class N8nAPIWorker @AssistedInject constructor(
         }
 
         return try {
-            N8nWorkerHandlers.dispatch(workerContext, parsed, inputData)
+            N8nWorkerHandlers.dispatch(workerContext, parsed, inputData, runAttemptCount)
         } catch (e: Exception) {
             Log.e("N8nWebhook", "Error in worker", e)
             Result.failure()

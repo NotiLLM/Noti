@@ -29,6 +29,9 @@ import org.muilab.notigpt.model.features.SavedSubItem
 import org.muilab.notigpt.model.features.ReviewItemDraft
 import org.muilab.notigpt.model.features.PendingReviewDraft
 import org.muilab.notigpt.model.features.PendingProposedOpType
+import org.muilab.notigpt.model.features.ReviewTranslationState
+import org.muilab.notigpt.data.remote.n8n.enqueueReviewTranslation
+import org.muilab.notigpt.util.SharedPreferencesManager
 
 /**
  * Drives the swipe-to-review screen over the fully-staged model: pipeline proposals live in
@@ -70,6 +73,7 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
         val group: PendingProposedOpRepository.OpGroup?,
         val reason: String,
         val operationKind: ReviewOperationKind,
+        val translatedDraft: ReviewItemDraft? = null,
     ) {
         val isNewLike: Boolean get() = group?.isCreate == true || operationKind == ReviewOperationKind.Create
     }
@@ -86,6 +90,9 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
             val groups = pendingProposedOpRepo.groupOps(ops)
             val targeted = groups.mapNotNull { it.targetItemId }.toSet()
             val groupEntries = groups.mapNotNull { group ->
+                val translation = ReviewTranslationState.fromJson(draftsByKey[group.key]?.translationStateJson)
+                val translationMatches = translation?.sourceOpIds == group.ops.map { it.opId }
+                if (translation?.isPending == true && translationMatches) return@mapNotNull null
                 val preview = pendingProposedOpRepo.buildPreview(
                     group,
                     reviewWhenAtMs = draftsByKey[group.key]?.whenAtMs,
@@ -99,31 +106,45 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
                     group.ops.any { it.opType == PendingProposedOpType.Merge } -> ReviewOperationKind.Merge
                     else -> ReviewOperationKind.Update
                 }
+                val translatedDraft = translation?.takeIf { translationMatches }?.translatedDraft?.let { translated ->
+                    overlayTranslatedText(ReviewItemDraft(preview.item, preview.subItems), translated)
+                }
                 ReviewEntry(
                     key = group.key,
-                    preview = preview.item,
-                    previewSubItems = preview.subItems,
+                    preview = translatedDraft?.item ?: preview.item,
+                    previewSubItems = translatedDraft?.subItems ?: preview.subItems,
                     survivor = preview.survivor,
                     mergeSources = preview.mergeSources,
                     group = group,
                     reason = group.reason,
                     operationKind = kind,
+                    translatedDraft = translatedDraft,
                 )
             }
             // Legacy items already targeted by a staged group show once, as the group entry.
             val legacyEntries = legacyItems
                 .filter { it.savedItemId !in targeted }
-                .map { item ->
+                .mapNotNull { item ->
                     val key = "legacy_${item.savedItemId}"
+                    val translation = ReviewTranslationState.fromJson(draftsByKey[key]?.translationStateJson)
+                    val translationMatches = translation != null && translation.sourceOpIds.isEmpty() &&
+                        translation.sourceItem.lastUpdateTimestamp == item.lastUpdateTimestamp
+                    if (translation?.isPending == true && translationMatches) return@mapNotNull null
+                    val baseItem = item.copy(whenAtMs = draftsByKey[key]?.whenAtMs ?: item.whenAtMs)
+                    val baseSubItems = db.subTaskDao().getBySavedItemId(item.savedItemId)
+                    val translatedDraft = translation?.takeIf { translationMatches }?.translatedDraft?.let { translated ->
+                        overlayTranslatedText(ReviewItemDraft(baseItem, baseSubItems), translated)
+                    }
                     ReviewEntry(
                         key = key,
-                        preview = item.copy(whenAtMs = draftsByKey[key]?.whenAtMs ?: item.whenAtMs),
-                        previewSubItems = db.subTaskDao().getBySavedItemId(item.savedItemId),
+                        preview = translatedDraft?.item ?: baseItem,
+                        previewSubItems = translatedDraft?.subItems ?: baseSubItems,
                         survivor = null,
                         mergeSources = emptyList(),
                         group = null,
                         reason = "",
                         operationKind = if (item.state == SavedItemState.New) ReviewOperationKind.Create else ReviewOperationKind.Update,
+                        translatedDraft = translatedDraft,
                     )
                 }
             groupEntries + legacyEntries
@@ -158,6 +179,36 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
 
     fun setReviewWhen(entry: ReviewEntry, whenAtMs: Long) {
         viewModelScope.launch { pendingProposedOpRepo.setReviewWhen(entry.key, whenAtMs) }
+    }
+
+    /** Snapshots this exact preview, hides it through Room state, and starts translation-only F. */
+    fun translate(entry: ReviewEntry, targetLanguage: String, applyToFutureItems: Boolean) {
+        viewModelScope.launch {
+            if (applyToFutureItems) SharedPreferencesManager.targetExtractionLanguage = targetLanguage
+            val evidence = if (entry.group != null) {
+                val staged = entry.group.ops.flatMap { op ->
+                    val ids = JSONArray(op.evidenceRecordIds)
+                    buildList {
+                        for (index in 0 until ids.length()) {
+                            ids.optString(index).takeIf(String::isNotBlank)?.let(::add)
+                        }
+                    }
+                }
+                val target = entry.group.targetItemId?.let { repo.getLinkedRecordIds(it) }.orEmpty()
+                val sources = entry.mergeSources.flatMap { source -> source.evidenceLinks.map { it.notiRecordId } }
+                target + sources + staged
+            } else {
+                repo.getLinkedRecordIds(entry.preview.savedItemId)
+            }
+            val state = ReviewTranslationState.pending(
+                targetLanguage = targetLanguage,
+                source = ReviewItemDraft(entry.preview, entry.previewSubItems),
+                evidenceRecordIds = evidence,
+                sourceOpIds = entry.group?.ops?.map { it.opId }.orEmpty(),
+            )
+            pendingProposedOpRepo.setReviewTranslation(entry.key, ReviewTranslationState.toJson(state))
+            enqueueReviewTranslation(getApplication<Application>(), entry.key)
+        }
     }
 
     private val _related = MutableStateFlow(RelatedState())
@@ -249,8 +300,24 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             val group = entry.group
             if (group != null) {
-                val outcome = pendingProposedOpRepo.applyGroup(group) ?: return@launch
+                val outcome = pendingProposedOpRepo.applyGroup(
+                    group = group,
+                    editedDraft = entry.translatedDraft,
+                    editedDraftIsUserEdit = false,
+                ) ?: return@launch
                 pendingUndo = UndoableAction.ApplyGroup(outcome)
+            } else if (entry.translatedDraft != null) {
+                val before = db.savedItemDao().getById(entry.preview.savedItemId) ?: return@launch
+                val beforeSubTasks = db.subTaskDao().getBySavedItemId(before.savedItemId)
+                val beforeHistory = db.savedItemChangeLogDao().getByItem(before.savedItemId)
+                val reviewDraft = db.pendingReviewDraftDao().getByKey(entry.key)
+                repo.saveReviewedDraft(
+                    draft = entry.translatedDraft,
+                    ts = System.currentTimeMillis(),
+                    reviewKey = entry.key,
+                    markAsUserEdit = false,
+                )
+                pendingUndo = UndoableAction.SaveLegacy(before, beforeSubTasks, beforeHistory, reviewDraft)
             } else {
                 val draft = db.pendingReviewDraftDao().getByKey(entry.key)
                 val before = db.savedItemDao().getById(entry.preview.savedItemId) ?: return@launch
@@ -348,6 +415,26 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
                     action.reviewDraft?.let { db.pendingReviewDraftDao().upsert(it) }
                 }
             }
+        }
+    }
+
+    companion object {
+        /** Applies translated strings to the latest local preview while retaining all structure/state. */
+        internal fun overlayTranslatedText(base: ReviewItemDraft, translated: ReviewItemDraft): ReviewItemDraft {
+            val translatedSubItems = translated.subItems.associateBy { it.savedSubItemId }
+            return ReviewItemDraft(
+                item = base.item.copy(
+                    title = translated.item.title,
+                    content = translated.item.content,
+                    buttons = translated.item.buttons,
+                ),
+                subItems = base.subItems.mapIndexed { index, sub ->
+                    val translatedText = translatedSubItems[sub.savedSubItemId]?.text
+                        ?: translated.subItems.getOrNull(index)?.text
+                        ?: sub.text
+                    sub.copy(text = translatedText)
+                },
+            )
         }
     }
 }

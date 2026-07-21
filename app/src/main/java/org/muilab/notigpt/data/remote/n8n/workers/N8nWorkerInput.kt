@@ -5,6 +5,7 @@ import org.muilab.notigpt.util.Constants.Companion.N8N_EXTRACTION_PIPELINE
 import org.muilab.notigpt.util.Constants.Companion.N8N_REFLECTION_PIPELINE
 import org.muilab.notigpt.util.Constants.Companion.N8N_PREFERENCE_QUICK_SYNC
 import org.muilab.notigpt.util.Constants.Companion.N8N_REGENERATE_ONE
+import org.muilab.notigpt.util.Constants.Companion.N8N_REVIEW_TRANSLATION
 
 /**
  * Typed view of WorkManager input data for N8nAPIWorker.
@@ -39,6 +40,12 @@ sealed interface N8nWorkerInput {
         val savedItemId: String,
     ) : N8nWorkerInput
 
+    /** Translates one snapshotted review preview without running extraction or merge stages. */
+    data class ReviewTranslation(
+        override val webhookPath: String,
+        val reviewKey: String,
+    ) : N8nWorkerInput
+
     companion object {
         /** Parses WorkManager Data keys into a typed worker input. */
         fun from(input: Data): N8nWorkerInput? {
@@ -66,6 +73,11 @@ sealed interface N8nWorkerInput {
                     savedItemId = input.getString("saved_item_id")
                         ?: input.getString("reminder_id")
                         ?: return null,
+                )
+
+                N8N_REVIEW_TRANSLATION -> ReviewTranslation(
+                    webhookPath = webhookPath,
+                    reviewKey = input.getString("review_key") ?: return null,
                 )
 
                 else -> null

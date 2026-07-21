@@ -311,6 +311,7 @@ class SavedItemRepository(
         draft: ReviewItemDraft,
         ts: Long,
         reviewKey: String? = null,
+        markAsUserEdit: Boolean = true,
     ) = withContext(Dispatchers.IO) {
         val existing = savedItemDao.getById(draft.item.savedItemId) ?: return@withContext
         val existingChildren = subTaskDao.getBySavedItemId(existing.savedItemId)
@@ -323,9 +324,9 @@ class SavedItemRepository(
         val normalized = SavedItemNormalization.normalize(
             draft.item.copy(
                 state = if (draft.item.isTask && draft.item.isCompleted) SavedItemState.Completed else SavedItemState.Saved,
-                origin = if (contentEdited) "manual" else existing.origin,
-                humanEditCount = existing.humanEditCount + if (contentEdited) 1 else 0,
-                userEdited = existing.userEdited || contentEdited,
+                origin = if (markAsUserEdit && contentEdited) "manual" else existing.origin,
+                humanEditCount = existing.humanEditCount + if (markAsUserEdit && contentEdited) 1 else 0,
+                userEdited = existing.userEdited || (markAsUserEdit && contentEdited),
                 lastUpdateTimestamp = ts,
                 lastViewedChangeAt = ts,
                 isViewed = true,
@@ -338,7 +339,7 @@ class SavedItemRepository(
             savedItemDao.upsert(normalized.item)
             subTaskDao.hardDeleteByParentId(existing.savedItemId)
             if (normalized.subItems.isNotEmpty()) subTaskDao.upsertAll(normalized.subItems)
-            if (contentEdited) {
+            if (markAsUserEdit && contentEdited) {
                 changeLogDao.insert(
                     SavedItemChangeLog(
                         savedItemId = existing.savedItemId,

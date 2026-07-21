@@ -8,11 +8,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.verticalScroll
@@ -23,7 +20,6 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -517,84 +513,6 @@ private fun CheckRow(checked: Boolean, onCheckedChange: (Boolean) -> Unit, label
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Checkbox(checked = checked, onCheckedChange = onCheckedChange)
-        Text(label, modifier = Modifier.padding(start = 8.dp))
-    }
-}
-
-/** Human-readable label for a stored extraction-language [code]. */
-private fun extractionLanguageLabel(code: String, originalLabel: String): String {
-    if (code == EXTRACTION_LANGUAGE_ORIGINAL) return originalLabel
-    val match = EXTRACTION_LANGUAGES.firstOrNull { it.code == code } ?: return code
-    return if (match.nativeName == match.englishName) match.englishName
-    else "${match.englishName} (${match.nativeName})"
-}
-
-/**
- * Searchable language picker. "Original language" is pinned to the top as the default; the search box
- * filters the curated list by English name, native name, or code.
- */
-@Composable
-private fun ExtractionLanguagePickerDialog(
-    selected: String,
-    originalLabel: String,
-    onSelect: (String) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    var query by remember { mutableStateOf("") }
-    val normalized = query.trim().lowercase()
-    val showOriginal = normalized.isBlank() ||
-        originalLabel.lowercase().contains(normalized) ||
-        EXTRACTION_LANGUAGE_ORIGINAL.contains(normalized)
-    val filtered = EXTRACTION_LANGUAGES.filter { it.matches(normalized) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.ui_settings_extraction_language)) },
-        text = {
-            Column {
-                OutlinedTextField(
-                    value = query,
-                    onValueChange = { query = it },
-                    singleLine = true,
-                    label = { Text(stringResource(R.string.ui_settings_extraction_language_search)) },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Spacer(Modifier.size(8.dp))
-                LazyColumn(modifier = Modifier.heightIn(max = 360.dp)) {
-                    if (showOriginal) {
-                        item {
-                            LanguageRow(
-                                label = originalLabel,
-                                selected = selected == EXTRACTION_LANGUAGE_ORIGINAL,
-                                onClick = { onSelect(EXTRACTION_LANGUAGE_ORIGINAL) },
-                            )
-                        }
-                    }
-                    items(filtered, key = { it.code }) { lang ->
-                        LanguageRow(
-                            label = extractionLanguageLabel(lang.code, originalLabel),
-                            selected = selected == lang.code,
-                            onClick = { onSelect(lang.code) },
-                        )
-                    }
-                }
-            }
-        },
-        confirmButton = {},
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.ui_action_cancel)) } },
-    )
-}
-
-@Composable
-private fun LanguageRow(label: String, selected: Boolean, onClick: () -> Unit) {
-    androidx.compose.foundation.layout.Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .selectable(selected = selected, onClick = onClick, role = Role.RadioButton)
-            .padding(vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        RadioButton(selected = selected, onClick = onClick)
         Text(label, modifier = Modifier.padding(start = 8.dp))
     }
 }

@@ -857,11 +857,16 @@ object AppDatabaseMigrations {
         db.execSQL("ALTER TABLE `saved_item_change_log` ADD COLUMN `sourceItemTitle` TEXT NOT NULL DEFAULT ''")
     }
 
+    /** Adds one review-draft attribute for pending/ready Pipeline F translation state. */
+    val MIGRATION_52_53 = Migration(52, 53) { db ->
+        db.execSQL("ALTER TABLE `pending_review_draft` ADD COLUMN `translationStateJson` TEXT")
+    }
+
     val ALL: Array<Migration> = LegacyAppDatabaseMigrations.ALL + arrayOf(
         MIGRATION_39_40, MIGRATION_40_41, MIGRATION_41_42, MIGRATION_42_43,
         MIGRATION_43_44, MIGRATION_44_45, MIGRATION_45_46, MIGRATION_46_47,
         MIGRATION_47_48, MIGRATION_48_49, MIGRATION_49_50, MIGRATION_50_51,
-        MIGRATION_51_52,
+        MIGRATION_51_52, MIGRATION_52_53,
     )
 
     private data class LegacySavedSubItem(

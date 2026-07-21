@@ -15,6 +15,7 @@ class Constants {
         // (D2→E2) is a separate scheduled job.
         const val N8N_EXTRACTION_PIPELINE = "extraction_pipeline"
         const val N8N_REFLECTION_PIPELINE = "reflection_pipeline"
+        const val N8N_REVIEW_TRANSLATION = "review_translation"
         const val N8N_REGENERATE_ONE = "regenerate_one"
 
         // n8n preference API types
