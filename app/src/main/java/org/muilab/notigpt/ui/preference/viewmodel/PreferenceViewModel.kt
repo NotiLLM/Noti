@@ -2,6 +2,8 @@ package org.muilab.notigpt.ui.preference.viewmodel
 
 import android.app.Application
 import android.util.Log
+import com.google.firebase.auth.FirebaseAuth
+import com.google.gson.Gson
 import org.muilab.notigpt.ui.common.feedback.AppSnackbar
 import org.muilab.notigpt.ui.common.feedback.AppSnackbarMessage
 import androidx.lifecycle.AndroidViewModel
@@ -29,6 +31,7 @@ import org.muilab.notigpt.ui.preference.model.ChatMessage
 import org.muilab.notigpt.data.remote.n8n.dto.N8nConflictDto
 import org.muilab.notigpt.data.remote.n8n.dto.N8nContextDiscoverRequestDto
 import org.muilab.notigpt.model.features.ExtractionPreference
+import org.muilab.notigpt.model.features.FirestoreOutboxOp
 import org.muilab.notigpt.model.features.PreferenceConflict
 import org.muilab.notigpt.ui.preference.model.PreferenceEntryPoint
 import org.muilab.notigpt.ui.preference.model.ProposedAction
@@ -38,6 +41,7 @@ import org.muilab.notigpt.model.features.SavedItem
 import org.muilab.notigpt.model.features.UserContext
 import org.muilab.notigpt.data.remote.n8n.dto.N8nUserSelectionsDto
 import org.muilab.notigpt.util.SharedPreferencesManager
+import org.muilab.notigpt.work.FirestoreOutboxWork
 import java.util.Locale
 
 /**
@@ -68,9 +72,14 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
     private val savedItemDao: SavedItemDao =
         AppDatabase.getInstance(application).savedItemDao()
 
+    private val firestoreOutboxDao =
+        AppDatabase.getInstance(application).firestoreOutboxDao()
+
     companion object {
         /** Max number of notification summaries sent to the context-discover endpoint. */
         const val CONTEXT_DISCOVER_NOTI_LIMIT = 80
+        private const val KEY_QUICK_SYNC_REVIEW = "pendingQuickSyncReview"
+        private const val KEY_PENDING_CHAT = "pendingPreferenceChat"
     }
 
     // ══════════════════════════════════════════════════════════════════
@@ -406,6 +415,7 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
                     result.toastMessage?.takeIf { it.isNotBlank() }?.let { AppSnackbar.show(it) }
                 } else {
                     val review = QuickSyncReview(reviewRules)
+                    saveQuickSyncReview(review)
                     AppSnackbar.show(
                         AppSnackbarMessage(
                             text = result.toastMessage?.takeIf { it.isNotBlank() }
@@ -439,11 +449,12 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
 
     data class QuickSyncReview(val rules: List<ReviewRule>)
 
-    private val _quickSyncReview = MutableStateFlow<QuickSyncReview?>(null)
+    private val _quickSyncReview = MutableStateFlow(loadQuickSyncReview())
     val quickSyncReview: StateFlow<QuickSyncReview?> = _quickSyncReview
 
     fun dismissQuickSyncReview() {
         _quickSyncReview.value = null
+        saveQuickSyncReview(null)
     }
 
     /**
@@ -474,6 +485,7 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
                 }
             }
             pushPrefsToCloud()
+            saveQuickSyncReview(null)
         }
     }
 
@@ -481,10 +493,12 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
     //  Chat (Flow 4)
     // ══════════════════════════════════════════════════════════════════
 
-    private val _chatMessages = MutableStateFlow<List<ChatMessage>>(emptyList())
+    private val restoredChat = loadChatState()
+
+    private val _chatMessages = MutableStateFlow(restoredChat.messages)
     val chatMessages: StateFlow<List<ChatMessage>> = _chatMessages
 
-    private val _pendingActions = MutableStateFlow<List<ProposedAction>>(emptyList())
+    private val _pendingActions = MutableStateFlow(restoredChat.actions)
     val pendingActions: StateFlow<List<ProposedAction>> = _pendingActions
 
     private val _isChatLoading = MutableStateFlow(false)
@@ -501,7 +515,8 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
         clearChatHistory()
     }
 
-    private var _chatContextData: Map<String, Any?>? = null
+    private var _chatContextData: Map<String, Any?>? =
+        restoredChat.conflictId?.let { mapOf("conflictId" to it) }
 
     /** Contextual info shown as a card at the top of the chat screen. */
     private val _chatFlowContext = MutableStateFlow<ChatFlowContext?>(null)
@@ -516,8 +531,7 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
      */
     private fun openChatFromFlow(entryPoint: PreferenceEntryPoint, contextData: Map<String, Any?>) {
         // Clear previous conversation
-        _chatMessages.value = emptyList()
-        _pendingActions.value = emptyList()
+        clearChatHistory()
 
         // Build a ChatFlowContext from the current item state
         val flowCtx = ChatFlowContext(
@@ -554,6 +568,7 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
 
         val userMsg = ChatMessage(role = "user", content = text)
         _chatMessages.value = _chatMessages.value + userMsg
+        saveChatState()
         _isChatLoading.value = true
 
         viewModelScope.launch(Dispatchers.IO) {
@@ -614,6 +629,7 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
                         )
                         _chatMessages.value = _chatMessages.value + errorMsg
                     }
+                    saveChatState()
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Chat interact error", e)
@@ -623,6 +639,7 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
                         content = "An error occurred. Please try again."
                     )
                     _chatMessages.value = _chatMessages.value + errorMsg
+                    saveChatState()
                 }
             } finally {
                 withContext(Dispatchers.Main) {
@@ -710,6 +727,7 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
                 // and no user message came after the last assistant response, clear
                 // the chat so it's fresh for the next interaction.
                 maybeAutoClearChat(updatedActions)
+                saveChatState()
             }
         }
     }
@@ -720,6 +738,7 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
         }
         _pendingActions.value = updatedActions
         maybeAutoClearChat(updatedActions)
+        saveChatState()
     }
 
     /** Batch controls for when the LLM proposes many rules at once (chat NL stays available). */
@@ -735,6 +754,7 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
         }
         _pendingActions.value = updated
         maybeAutoClearChat(updated)
+        saveChatState()
     }
 
     /**
@@ -754,6 +774,7 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
         if (hasUserMsgAfter) return
 
         // All resolved, no further user input → clear
+        if (actions.any { it.confirmed }) resolveActiveChatConflict()
         clearChatHistory()
     }
 
@@ -762,15 +783,17 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
         _pendingActions.value = emptyList()
         _chatContextData = null
         _chatFlowContext.value = null
+        saveChatState()
     }
 
-    /** Mirrors the full preference/context sets to Firestore after any mutation (best-effort). */
+    /** Durably queues the latest full preference/context snapshot for Firestore. */
     private suspend fun pushPrefsToCloud() {
-        try {
-            org.muilab.notigpt.data.remote.firestore.FirestoreSyncRepository(getApplication())
-                .syncPreferencesAndContexts()
-        } catch (_: Exception) {
-        }
+        val uid = FirebaseAuth.getInstance().currentUser?.uid.orEmpty()
+        if (uid.isBlank()) return
+        firestoreOutboxDao.upsert(
+            FirestoreOutboxOp.preferencesAndContexts(uid, System.currentTimeMillis())
+        )
+        FirestoreOutboxWork.enqueue(getApplication())
     }
 
     /** Delete a single active preference (from the active rules UI). */
@@ -808,6 +831,7 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
             content = getApplication<Application>().getString(R.string.pref_chat_discover_analyzing),
         )
         _chatMessages.value = _chatMessages.value + systemMsg
+        saveChatState()
 
         viewModelScope.launch(Dispatchers.IO) {
             try {
@@ -877,6 +901,7 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
                         )
                         _chatMessages.value = _chatMessages.value + errorMsg
                     }
+                    saveChatState()
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Context discover error", e)
@@ -886,6 +911,7 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
                         content = "An error occurred while analyzing your notifications.",
                     )
                     _chatMessages.value = _chatMessages.value + errorMsg
+                    saveChatState()
                 }
             } finally {
                 withContext(Dispatchers.Main) {
@@ -908,14 +934,10 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
 
     /**
      * Resolve a conflict via Chat.
-     * Deletes the conflict from Room, pre-seeds the chat with the conflict
-     * description as context, and navigates to the chat screen.
+     * Keeps the conflict in Room until the user confirms a proposed resolution, pre-seeds the chat
+     * with the conflict description as context, and navigates to the chat screen.
      */
     fun resolveConflictInChat(conflict: PreferenceConflict) {
-        viewModelScope.launch(Dispatchers.IO) {
-            conflictDao.deleteConflict(conflict.conflictId)
-        }
-
         // Clear previous conversation
         _chatMessages.value = emptyList()
         _pendingActions.value = emptyList()
@@ -930,12 +952,51 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
         // Navigate to the chat tab
         _navigateToChat.value = true
     }
+
+    private fun resolveActiveChatConflict() {
+        val conflictId = _chatContextData?.get("conflictId") as? String ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            conflictDao.deleteConflict(conflictId)
+        }
+        _chatContextData = null
+        saveChatState()
+    }
+
+    private fun loadQuickSyncReview(): QuickSyncReview? = runCatching {
+        val json = SharedPreferencesManager.get("local", KEY_QUICK_SYNC_REVIEW, "")
+        json.takeIf(String::isNotBlank)?.let { Gson().fromJson(it, QuickSyncReview::class.java) }
+    }.getOrNull()
+
+    private fun saveQuickSyncReview(review: QuickSyncReview?) {
+        SharedPreferencesManager.put(
+            "local",
+            KEY_QUICK_SYNC_REVIEW,
+            review?.let { Gson().toJson(it) }.orEmpty(),
+        )
+    }
+
+    private data class PersistedChatState(
+        val messages: List<ChatMessage> = emptyList(),
+        val actions: List<ProposedAction> = emptyList(),
+        val conflictId: String? = null,
+    )
+
+    private fun loadChatState(): PersistedChatState = runCatching {
+        val json = SharedPreferencesManager.get("local", KEY_PENDING_CHAT, "")
+        json.takeIf(String::isNotBlank)?.let { Gson().fromJson(it, PersistedChatState::class.java) }
+    }.getOrNull() ?: PersistedChatState()
+
+    private fun saveChatState() {
+        val conflictId = _chatContextData?.get("conflictId") as? String
+        val state = PersistedChatState(_chatMessages.value, _pendingActions.value, conflictId)
+        val json = if (state.messages.isEmpty() && state.actions.isEmpty() && conflictId == null) {
+            ""
+        } else {
+            Gson().toJson(state)
+        }
+        SharedPreferencesManager.put("local", KEY_PENDING_CHAT, json)
+    }
 }
-
-
-
-
-
 
 
 

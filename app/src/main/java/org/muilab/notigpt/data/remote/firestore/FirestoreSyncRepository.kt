@@ -48,9 +48,9 @@ class FirestoreSyncRepository(
         .document(savedItemId)
 
     private fun proposedOpRecordDoc(proposalId: String) = firestore
-        .collection(FirestorePaths.COLLECTION_GENERATED_PROPOSALS_ROOT)
+        .collection(FirestorePaths.COLLECTION_USERS)
         .document(userId())
-        .collection(FirestorePaths.SUBCOLLECTION_PROPOSALS)
+        .collection(FirestorePaths.SUBCOLLECTION_PROPOSED_OP_RECORDS)
         .document(proposalId)
 
     /** Mirrors generated output and its decision state; it contains no source notification text. */
@@ -258,8 +258,8 @@ class FirestoreSyncRepository(
      * Both sets are small (tens of rows), so whole-set replacement keeps the cloud copy trivially
      * consistent with Room after any mutation.
      */
-    suspend fun syncPreferencesAndContexts() = withContext(Dispatchers.IO) {
-        if (userId().isBlank()) return@withContext
+    suspend fun syncPreferencesAndContexts(): Boolean = withContext(Dispatchers.IO) {
+        if (userId().isBlank()) return@withContext false
         try {
             val prefs = db.extractionPreferenceDao().getAllPreferences().map { p ->
                 mapOf(
@@ -288,8 +288,10 @@ class FirestoreSyncRepository(
                 SetOptions.merge(),
             ).await()
             Log.d(tag, "syncPreferencesAndContexts succeeded uid=${userId()}")
+            true
         } catch (t: Throwable) {
             Log.w(tag, "syncPreferencesAndContexts failed", t)
+            false
         }
     }
 }

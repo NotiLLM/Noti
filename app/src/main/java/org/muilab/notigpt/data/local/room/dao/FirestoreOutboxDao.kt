@@ -14,6 +14,9 @@ interface FirestoreOutboxDao {
     @Query("SELECT * FROM firestore_outbox WHERE uid = :uid ORDER BY createdAt ASC LIMIT :limit")
     suspend fun getPending(uid: String, limit: Int = 50): List<FirestoreOutboxOp>
 
+    @Query("SELECT EXISTS(SELECT 1 FROM firestore_outbox WHERE uid = :uid AND kind = :kind)")
+    suspend fun hasPending(uid: String, kind: String): Boolean
+
     @Query("DELETE FROM firestore_outbox WHERE operationKey = :operationKey AND createdAt = :createdAt")
     suspend fun deleteIfUnchanged(operationKey: String, createdAt: Long)
 

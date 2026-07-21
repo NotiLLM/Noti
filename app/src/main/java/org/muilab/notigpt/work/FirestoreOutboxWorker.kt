@@ -45,6 +45,8 @@ class FirestoreOutboxWorker @AssistedInject constructor(
                         val proposal = database.proposedOpRecordDao().getById(operation.entityId)
                         proposal == null || sync.syncProposedOpRecord(proposal)
                     }
+                    FirestoreOutboxKind.SyncPreferencesAndContexts ->
+                        sync.syncPreferencesAndContexts()
                     else -> true // Unknown old operation: discard instead of retrying forever.
                 }
                 if (succeeded) {

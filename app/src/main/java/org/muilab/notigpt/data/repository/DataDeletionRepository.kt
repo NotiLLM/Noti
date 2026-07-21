@@ -45,25 +45,9 @@ class DataDeletionRepository @Inject constructor(
             userDoc.collection(SAVED_ITEMS).get().await().documents.forEach { item ->
                 item.reference.delete().await()
             }
-
-            // Also clear the pre-v50 SavedItem path. It never contained scheduled push reminders.
-            val rootDoc = firestore.collection(LEGACY_SAVED_ITEMS_ROOT).document(uid)
-            val itemDocs = rootDoc.collection(LEGACY_SAVED_ITEMS).get().await().documents
-
-            // Delete the known legacy raw subcollection before each generated parent document.
-            // Firestore does not cascade subcollections when a parent is deleted.
-            itemDocs.forEach { item ->
-                item.reference.collection(LEGACY_NOTIS).get().await().documents.forEach { legacy ->
-                    legacy.reference.delete().await()
-                }
-                item.reference.delete().await()
+            userDoc.collection(PROPOSED_OP_RECORDS).get().await().documents.forEach { record ->
+                record.reference.delete().await()
             }
-            rootDoc.delete().await()
-            val proposalRoot = firestore.collection(GENERATED_PROPOSALS_ROOT).document(uid)
-            proposalRoot.collection(PROPOSALS).get().await().documents.forEach { proposal ->
-                proposal.reference.delete().await()
-            }
-            proposalRoot.delete().await()
             userDoc.delete().await()
 
             clearLocalGeneratedData(uid)
@@ -93,10 +77,6 @@ class DataDeletionRepository @Inject constructor(
     private companion object {
         const val USERS = "users"
         const val SAVED_ITEMS = "savedItems"
-        const val LEGACY_SAVED_ITEMS_ROOT = "reminders"
-        const val LEGACY_SAVED_ITEMS = "reminders"
-        const val LEGACY_NOTIS = "notis"
-        const val GENERATED_PROPOSALS_ROOT = "proposedOpRecords"
-        const val PROPOSALS = "proposals"
+        const val PROPOSED_OP_RECORDS = "proposedOpRecords"
     }
 }

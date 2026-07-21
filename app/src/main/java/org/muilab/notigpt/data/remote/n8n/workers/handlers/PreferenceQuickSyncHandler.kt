@@ -4,10 +4,13 @@ import android.util.Log
 import androidx.work.Data
 import androidx.work.ListenableWorker
 import com.google.gson.Gson
+import com.google.firebase.auth.FirebaseAuth
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.muilab.notigpt.data.remote.n8n.context.N8nWorkerContext
 import org.muilab.notigpt.model.features.ExtractionPreference
+import org.muilab.notigpt.model.features.FirestoreOutboxOp
+import org.muilab.notigpt.work.FirestoreOutboxWork
 
 /**
  * Worker handler for applying n8n preference quick-sync responses.
@@ -75,10 +78,12 @@ internal object PreferenceQuickSyncHandler {
             val prefDao = ctx.database.extractionPreferenceDao()
             prefDao.replacePreferences(prefs)
             Log.d(TAG, "Replaced local preferences with ${prefs.size} rules")
-            try {
-                org.muilab.notigpt.data.remote.firestore.FirestoreSyncRepository(ctx.appContext)
-                    .syncPreferencesAndContexts()
-            } catch (_: Exception) {
+            val uid = FirebaseAuth.getInstance().currentUser?.uid.orEmpty()
+            if (uid.isNotBlank()) {
+                ctx.database.firestoreOutboxDao().upsert(
+                    FirestoreOutboxOp.preferencesAndContexts(uid, System.currentTimeMillis())
+                )
+                FirestoreOutboxWork.enqueue(ctx.appContext)
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error parsing quick-sync response", e)

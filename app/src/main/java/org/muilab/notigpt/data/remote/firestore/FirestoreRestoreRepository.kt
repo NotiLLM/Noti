@@ -5,12 +5,12 @@ import android.util.Log
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.SetOptions
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import org.muilab.notigpt.data.local.room.AppDatabase
 import org.muilab.notigpt.model.features.ExtractionPreference
+import org.muilab.notigpt.model.features.FirestoreOutboxKind
 import org.muilab.notigpt.model.features.SavedItem
 import org.muilab.notigpt.model.features.SavedItemType
 import org.muilab.notigpt.model.features.SavedItemState
@@ -92,37 +92,6 @@ class FirestoreRestoreRepository(
             .collection(FirestorePaths.COLLECTION_USERS)
             .document(uid)
             .collection(FirestorePaths.SUBCOLLECTION_SAVED_ITEMS)
-        val legacy = firestore
-            .collection(FirestorePaths.LEGACY_COLLECTION_SAVED_ITEMS_ROOT)
-            .document(uid)
-            .collection(FirestorePaths.LEGACY_SUBCOLLECTION_SAVED_ITEMS)
-
-        val currentById = destination.get().await().documents.associateBy { it.id }.toMutableMap()
-        for (legacyDoc in legacy.get().await().documents) {
-            try {
-                val current = currentById[legacyDoc.id]
-                val legacyTimestamp = maxOf(cloudUpdateTimestamp(legacyDoc), cloudDeletionTimestamp(legacyDoc))
-                val currentTimestamp = current?.let {
-                    maxOf(cloudUpdateTimestamp(it), cloudDeletionTimestamp(it))
-                } ?: Long.MIN_VALUE
-                val target = destination.document(legacyDoc.id)
-
-                if (current == null || legacyTimestamp > currentTimestamp) {
-                    target.set(legacyDoc.data.orEmpty(), SetOptions.merge()).await()
-                }
-
-                // Delete only after the destination can be read back. Failed copies remain in the
-                // legacy collection and will be retried on the next reconciliation.
-                val verified = target.get().await()
-                if (verified.exists()) {
-                    legacyDoc.reference.delete().await()
-                    currentById[legacyDoc.id] = verified
-                    Log.i(tag, "Migrated legacy SavedItem savedItemId=${legacyDoc.id} uid=$uid")
-                }
-            } catch (t: Throwable) {
-                Log.w(tag, "Legacy SavedItem migration deferred savedItemId=${legacyDoc.id}", t)
-            }
-        }
 
         val docs = destination.get().await().documents
         Log.d(tag, "Fetched ${docs.size} cloud SavedItem docs uid=$uid")
@@ -287,6 +256,12 @@ class FirestoreRestoreRepository(
 
     @Suppress("UNCHECKED_CAST")
     private suspend fun restorePreferencesAndContexts(uid: String): Boolean {
+        // Local edits made while offline are authoritative until their durable outbox row uploads.
+        // Restoring an older whole-list cloud snapshot first would otherwise resurrect deletions or
+        // overwrite edits just before the outbox worker runs.
+        if (db.firestoreOutboxDao().hasPending(uid, FirestoreOutboxKind.SyncPreferencesAndContexts)) {
+            return false
+        }
         val userDoc = firestore
             .collection(FirestorePaths.COLLECTION_USERS)
             .document(uid)
