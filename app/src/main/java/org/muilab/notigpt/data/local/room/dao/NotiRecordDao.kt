@@ -32,6 +32,10 @@ interface NotiRecordDao {
     @Query("SELECT * FROM noti_record WHERE notiKey = :notiKey AND isDismissed = 0 ORDER BY CASE WHEN whenTime != 0 THEN whenTime ELSE postTime END ASC")
     fun getActiveRecordsByKey(notiKey: String): List<NotiRecord>
 
+    /** Latest records the user has kept visible, newest first, for bounded manual extraction context. */
+    @Query("SELECT * FROM noti_record WHERE notiKey = :notiKey AND isDismissed = 0 ORDER BY CASE WHEN whenTime != 0 THEN whenTime ELSE postTime END DESC LIMIT :limit")
+    fun getLatestActiveRecordsByKey(notiKey: String, limit: Int): List<NotiRecord>
+
     @Query("SELECT * FROM noti_record WHERE notiKey = :notiKey AND isDismissed = 0 ORDER BY CASE WHEN whenTime != 0 THEN whenTime ELSE postTime END ASC")
     fun getNewRecordsByKey(notiKey: String): List<NotiRecord>
 

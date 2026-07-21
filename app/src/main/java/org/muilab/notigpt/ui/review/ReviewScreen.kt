@@ -66,7 +66,6 @@ fun ReviewScreen(
     savedItemsViewModel: SavedItemsViewModel,
     preferenceViewModel: org.muilab.notigpt.ui.preference.viewmodel.PreferenceViewModel,
     onBack: () -> Unit,
-    onOpenUndetermined: () -> Unit,
     onDetailOpenChange: (Boolean) -> Unit = {},
     reviewViewModel: ReviewViewModel = viewModel(),
 ) {
@@ -89,24 +88,6 @@ fun ReviewScreen(
         if (reviewSnackbar != null) {
             kotlinx.coroutines.delay(6000)
             reviewSnackbar = null
-        }
-    }
-
-    // End-of-stack offer: once the last item is reviewed, if any approved tasks lack a When, offer
-    // to go set them in the Undetermined list.
-    var showWhenOffer by remember { mutableStateOf(false) }
-    var offerCount by remember { mutableStateOf(0) }
-    var everHadItems by remember { mutableStateOf(false) }
-    androidx.compose.runtime.LaunchedEffect(allNew.size) {
-        if (allNew.isNotEmpty()) {
-            everHadItems = true
-        } else if (everHadItems) {
-            everHadItems = false
-            val count = reviewViewModel.approvedNeedingWhenCount()
-            if (count > 0) {
-                offerCount = count
-                showWhenOffer = true
-            }
         }
     }
 
@@ -208,27 +189,6 @@ fun ReviewScreen(
                 },
             ) { Text(stringResource(data.messageRes)) }
         }
-    }
-
-    if (showWhenOffer) {
-        androidx.compose.material3.AlertDialog(
-            onDismissRequest = { showWhenOffer = false; reviewViewModel.resetReviewSession() },
-            title = { Text(stringResource(R.string.review_when_offer_title)) },
-            text = { Text(stringResource(R.string.review_when_offer_body, offerCount)) },
-            confirmButton = {
-                TextButton(onClick = {
-                    showWhenOffer = false
-                    reviewViewModel.resetReviewSession()
-                    onOpenUndetermined()
-                }) { Text(stringResource(R.string.review_when_offer_set)) }
-            },
-            dismissButton = {
-                TextButton(onClick = {
-                    showWhenOffer = false
-                    reviewViewModel.resetReviewSession()
-                }) { Text(stringResource(R.string.review_when_offer_skip)) }
-            },
-        )
     }
 
     expanded?.let { entry ->

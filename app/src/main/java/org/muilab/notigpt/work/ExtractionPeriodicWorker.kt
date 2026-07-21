@@ -11,7 +11,6 @@ import dagger.assisted.AssistedInject
 import org.muilab.notigpt.data.local.room.AppDatabase
 import org.muilab.notigpt.data.remote.firestore.FirestoreRestoreRepository
 import org.muilab.notigpt.data.remote.n8n.enqueueExtractionPipeline
-import org.muilab.notigpt.data.remote.n8n.enqueueReflectionPipeline
 import org.muilab.notigpt.util.SharedPreferencesManager
 
 /**
@@ -79,13 +78,8 @@ class ExtractionPeriodicWorker @AssistedInject constructor(
             }
         }
 
-        // === Reflection pass (daily) ===
-        val now = System.currentTimeMillis()
-        val sinceReflection = now - SharedPreferencesManager.lastReflectionRunTime
-        if (sinceReflection >= REFLECTION_INTERVAL_MS) {
-            SharedPreferencesManager.lastReflectionRunTime = now
-            enqueueReflectionPipeline(applicationContext)
-        }
+        // === Reflection pass (daily safety net or accumulated item changes) ===
+        ReflectionTrigger.maybeEnqueue(applicationContext)
 
         Log.i(TAG, "doWork end; nudgedKeys=$nudged")
         return Result.success()
@@ -95,7 +89,5 @@ class ExtractionPeriodicWorker @AssistedInject constructor(
         private const val TAG = "ExtractionPeriodicWorker"
         private const val MAX_RETRIES = 3
 
-        /** Reflection merge cadence: once a day. */
-        private const val REFLECTION_INTERVAL_MS = 24L * 60 * 60 * 1000
     }
 }

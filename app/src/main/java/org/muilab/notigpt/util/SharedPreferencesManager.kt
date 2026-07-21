@@ -3,6 +3,7 @@ package org.muilab.notigpt.util
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.core.content.edit
+import org.json.JSONArray
 
 /**
  * SharedPreferences wrapper for app configuration and lightweight persisted flags.
@@ -111,11 +112,54 @@ object SharedPreferencesManager {
             ?: get(KEY_LOCAL_PREFS, LEGACY_KEY_LAST_REMINDER_PERIODIC_RUN_TIME, 0L)
         set(value) = put(KEY_LOCAL_PREFS, KEY_LAST_EXTRACTION_PERIODIC_RUN_TIME, value)
 
-    /** Last time the cross-thread reflection merge pass ran; gates the daily cadence. */
-    const val KEY_LAST_REFLECTION_RUN_TIME = "lastReflectionRunTime"
-    var lastReflectionRunTime: Long
-        get() = get(KEY_LOCAL_PREFS, KEY_LAST_REFLECTION_RUN_TIME, 0L)
-        set(value) = put(KEY_LOCAL_PREFS, KEY_LAST_REFLECTION_RUN_TIME, value)
+    private const val LEGACY_KEY_LAST_REFLECTION_RUN_TIME = "lastReflectionRunTime"
+    const val KEY_LAST_REFLECTION_ATTEMPT_TIME = "lastReflectionAttemptTime"
+    const val KEY_LAST_REFLECTION_SUCCESS_TIME = "lastReflectionSuccessTime"
+    private const val KEY_REFLECTION_DIRTY_ITEM_IDS = "reflectionDirtyItemIds"
+    private const val KEY_REFLECTION_DIRTY_VERSION = "reflectionDirtyVersion"
+
+    /** Last time D2 was enqueued. Used to debounce item-count-triggered runs. */
+    var lastReflectionAttemptTime: Long
+        get() = get(KEY_LOCAL_PREFS, KEY_LAST_REFLECTION_ATTEMPT_TIME, 0L).takeIf { it > 0L }
+            ?: get(KEY_LOCAL_PREFS, LEGACY_KEY_LAST_REFLECTION_RUN_TIME, 0L)
+        set(value) = put(KEY_LOCAL_PREFS, KEY_LAST_REFLECTION_ATTEMPT_TIME, value)
+
+    /** Last time D2 completed without a retryable or terminal HTTP failure. */
+    var lastReflectionSuccessTime: Long
+        get() = get(KEY_LOCAL_PREFS, KEY_LAST_REFLECTION_SUCCESS_TIME, 0L).takeIf { it > 0L }
+            ?: get(KEY_LOCAL_PREFS, LEGACY_KEY_LAST_REFLECTION_RUN_TIME, 0L)
+        set(value) = put(KEY_LOCAL_PREFS, KEY_LAST_REFLECTION_SUCCESS_TIME, value)
+
+    @Synchronized
+    fun addReflectionDirtyItemIds(itemIds: Collection<String>): Int {
+        val merged = reflectionDirtyItemIds().toMutableSet()
+        val previousSize = merged.size
+        merged += itemIds.filter(String::isNotBlank)
+        put(KEY_LOCAL_PREFS, KEY_REFLECTION_DIRTY_ITEM_IDS, JSONArray(merged.toList()).toString())
+        if (merged.size != previousSize) reflectionDirtyVersion = reflectionDirtyVersion + 1L
+        return merged.size
+    }
+
+    @Synchronized
+    fun reflectionDirtyItemCount(): Int = reflectionDirtyItemIds().size
+
+    @Synchronized
+    fun clearReflectionDirtyItemIdsIfVersion(expectedVersion: Long) {
+        if (reflectionDirtyVersion == expectedVersion) {
+            put(KEY_LOCAL_PREFS, KEY_REFLECTION_DIRTY_ITEM_IDS, "[]")
+        }
+    }
+
+    var reflectionDirtyVersion: Long
+        get() = get(KEY_LOCAL_PREFS, KEY_REFLECTION_DIRTY_VERSION, 0L)
+        private set(value) = put(KEY_LOCAL_PREFS, KEY_REFLECTION_DIRTY_VERSION, value)
+
+    private fun reflectionDirtyItemIds(): Set<String> = runCatching {
+        val values = JSONArray(get(KEY_LOCAL_PREFS, KEY_REFLECTION_DIRTY_ITEM_IDS, "[]"))
+        buildSet {
+            for (index in 0 until values.length()) values.optString(index).takeIf(String::isNotBlank)?.let(::add)
+        }
+    }.getOrDefault(emptySet())
 
     const val KEY_MAX_PAST_CONTEXT = "maxPastContext"
     var maxPastContext: Int

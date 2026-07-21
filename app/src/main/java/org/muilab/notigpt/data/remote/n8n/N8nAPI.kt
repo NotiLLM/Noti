@@ -13,6 +13,7 @@ import org.muilab.notigpt.data.remote.n8n.workers.N8nAPIWorker
 import org.muilab.notigpt.util.Constants.Companion.N8N_EXTRACTION_PIPELINE
 import org.muilab.notigpt.util.Constants.Companion.N8N_REFLECTION_PIPELINE
 import org.muilab.notigpt.util.Constants.Companion.N8N_REGENERATE_ONE
+import org.muilab.notigpt.util.SharedPreferencesManager
 import java.util.concurrent.TimeUnit
 import androidx.work.ExistingWorkPolicy
 
@@ -78,6 +79,7 @@ fun enqueueReflectionPipeline(context: Context) {
         Log.d("N8nAPI", "Skipping reflection pipeline: not signed in")
         return
     }
+    SharedPreferencesManager.lastReflectionAttemptTime = System.currentTimeMillis()
     Log.d("N8nAPI", "enqueueReflectionPipeline")
     val inputData = Data.Builder()
         .putString("api_type", N8N_REFLECTION_PIPELINE)

@@ -241,17 +241,8 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
     /** Emits when an action lands, so the screen can show a snackbar (Undo + optional Tell-it-why). */
     val snackbar: Flow<ReviewSnackbar> = _snackbar.receiveAsFlow()
 
-    // ── This review pass: tasks approved that still have no planned (do) date ──
-    // Drives the end-of-stack "set Whens?" offer. Reset when the screen is (re)entered.
-    private val approvedNeedingWhen = linkedSetOf<String>()
-    fun approvedNeedingWhenCount(): Int = approvedNeedingWhen.size
     fun resetReviewSession() {
-        approvedNeedingWhen.clear()
         _deferredKeys.value = emptySet()
-    }
-
-    private fun noteApprovedForWhen(item: SavedItem) {
-        if (item.isTask && !SavedItem.hasPlannedDate(item.whenAtMs)) approvedNeedingWhen.add(item.savedItemId)
     }
 
     fun approve(entry: ReviewEntry) {
@@ -260,7 +251,6 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
             if (group != null) {
                 val outcome = pendingProposedOpRepo.applyGroup(group) ?: return@launch
                 pendingUndo = UndoableAction.ApplyGroup(outcome)
-                noteApprovedForWhen(entry.preview.copy(savedItemId = outcome.appliedItemId))
             } else {
                 val draft = db.pendingReviewDraftDao().getByKey(entry.key)
                 val before = db.savedItemDao().getById(entry.preview.savedItemId) ?: return@launch
@@ -271,7 +261,6 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
                     entry.key,
                 )
                 pendingUndo = UndoableAction.Approve(before, draft)
-                noteApprovedForWhen(entry.preview)
             }
             _snackbar.trySend(ReviewSnackbar(R.string.review_approved_toast, entry.preview, canTeach = false))
         }
@@ -286,7 +275,6 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
             if (group != null) {
                 val outcome = pendingProposedOpRepo.applyGroup(group, editedDraft = edited, now = ts) ?: return@launch
                 pendingUndo = UndoableAction.ApplyGroup(outcome)
-                noteApprovedForWhen(edited.item.copy(savedItemId = outcome.appliedItemId))
             } else {
                 val before = db.savedItemDao().getById(entry.preview.savedItemId) ?: return@launch
                 val beforeSubTasks = db.subTaskDao().getBySavedItemId(before.savedItemId)
@@ -294,7 +282,6 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
                 val reviewDraft = db.pendingReviewDraftDao().getByKey(entry.key)
                 repo.saveReviewedDraft(edited, ts, entry.key)
                 pendingUndo = UndoableAction.SaveLegacy(before, beforeSubTasks, beforeHistory, reviewDraft)
-                noteApprovedForWhen(edited.item)
             }
             _snackbar.trySend(ReviewSnackbar(R.string.review_approved_toast, edited.item, canTeach = false))
         }
@@ -340,7 +327,6 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
                 is UndoableAction.Approve -> {
                     repo.upsert(action.item)
                     action.reviewDraft?.let { db.pendingReviewDraftDao().upsert(it) }
-                    approvedNeedingWhen.remove(action.item.savedItemId)
                 }
                 is UndoableAction.SaveLegacy -> {
                     repo.upsert(action.item)
@@ -349,7 +335,6 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
                     db.savedItemChangeLogDao().deleteByItem(action.item.savedItemId)
                     if (action.history.isNotEmpty()) db.savedItemChangeLogDao().upsertAll(action.history)
                     action.reviewDraft?.let { db.pendingReviewDraftDao().upsert(it) }
-                    approvedNeedingWhen.remove(action.item.savedItemId)
                 }
                 is UndoableAction.RejectNew -> {
                     repo.upsert(action.item)

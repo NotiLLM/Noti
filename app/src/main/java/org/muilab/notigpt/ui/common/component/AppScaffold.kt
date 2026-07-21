@@ -452,10 +452,6 @@ fun AppScaffold(
                                 savedItemsViewModel = savedItemsViewModel,
                                 preferenceViewModel = preferenceViewModel,
                                 onBack = popBack,
-                                onOpenUndetermined = {
-                                    popBack()
-                                    pushHome(HomeDestination.SavedList(SavedListFilter.Undetermined))
-                                },
                                 onDetailOpenChange = { detailOpen = it },
                             )
                             is HomeDestination.NotiList -> NotiCategoryScreen(

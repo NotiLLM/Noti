@@ -15,6 +15,7 @@ import org.muilab.notigpt.model.features.PendingProposedOpType
 import org.muilab.notigpt.model.notifications.NotiRecord
 import org.muilab.notigpt.util.GeneratingNotiUtils
 import org.muilab.notigpt.util.SharedPreferencesManager
+import org.muilab.notigpt.work.ReflectionTrigger
 import java.util.UUID
 
 /**
@@ -31,6 +32,7 @@ import java.util.UUID
 internal object ExtractionPipelineHandler {
 
     private const val ITEM_EXTRACTION_COOLDOWN_MS = 5 * 60 * 1000L
+    private const val MANUAL_EXTRACTION_VISIBLE_RECORD_LIMIT = 50
 
     suspend fun handle(ctx: N8nWorkerContext, input: N8nWorkerInput.ExtractionPipeline): ListenableWorker.Result {
         val notiKey = input.notiKey
@@ -41,6 +43,12 @@ internal object ExtractionPipelineHandler {
         val recordDao = ctx.database.recordDao()
         val watermark = ctx.journalRepository.getWatermark(notiKey)
         val records = recordDao.getRecordsByKeyAfter(notiKey, watermark).sortedBy { it.time }
+        val manualVisibleRecords = if (input.forced) {
+            recordDao.getLatestActiveRecordsByKey(notiKey, MANUAL_EXTRACTION_VISIBLE_RECORD_LIMIT)
+                .sortedBy { it.time }
+        } else {
+            emptyList()
+        }
 
         if (records.isEmpty() && !input.forced) {
             // Nothing new since the last fold; still give a quiet thread a chance to compact.
@@ -86,7 +94,9 @@ internal object ExtractionPipelineHandler {
             }
         }
 
-        if (records.isEmpty()) return ctx.success() // forced with nothing to extract
+        if (records.isEmpty() && manualVisibleRecords.isEmpty()) {
+            return ctx.success() // forced with neither new nor still-visible raw content
+        }
 
         // Manual extraction intentionally bypasses this rate limit. Auto runs still execute A;
         // B is skipped during the cooldown, so a subsequent scheduled pass must receive a fresh
@@ -156,6 +166,7 @@ internal object ExtractionPipelineHandler {
                 put("linkedItems", linkedItems)
                 put("journalEntries", journalEntries)
                 put("pastContext", ExtractionStageSupport.formatRecords(pastContext, unit.isPeople))
+                put("manualVisibleRecords", ExtractionStageSupport.formatRecords(manualVisibleRecords, unit.isPeople))
                 put("records", ExtractionStageSupport.formatRecords(records, unit.isPeople))
                 put("forced", input.forced)
             }
@@ -175,10 +186,15 @@ internal object ExtractionPipelineHandler {
             val validRecordIds = buildSet {
                 records.forEach { add(it.notiRecordId) }
                 pastContext.forEach { add(it.notiRecordId) }
+                manualVisibleRecords.forEach { add(it.notiRecordId) }
             }
 
             val batchId = UUID.randomUUID().toString()
             val staged = ctx.pendingProposedOpRepository().stageExtractionOps(notiKey, batchId, ops, validRecordIds)
+            ReflectionTrigger.noteDirtyItems(
+                ctx.appContext,
+                staged.map { op -> op.targetItemId.takeIf(String::isNotBlank) ?: "create:${op.opId}" },
+            )
 
             // NonCancellable: once B has produced staged ops, don't let a REPLACE of this work slot
             // cut off the fold/merge follow-up partway.

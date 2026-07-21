@@ -549,10 +549,6 @@
     <string name="review_rejected_toast">已拒絕</string>
     <string name="review_reverted_toast">已還原變更</string>
     <string name="review_tell_why">告訴它原因</string>
-    <string name="review_when_offer_title">要設定「何時」嗎？</string>
-    <string name="review_when_offer_body">%1$d 項已核准的任務尚未設定「何時」，現在要設定嗎？</string>
-    <string name="review_when_offer_set">設定何時</string>
-    <string name="review_when_offer_skip">略過</string>
     <string name="review_edit">編輯</string>
     <string name="review_save_approve">儲存並核准</string>
     <string name="review_reject_change">拒絕變更</string>

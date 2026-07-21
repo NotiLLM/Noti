@@ -569,10 +569,6 @@
     <string name="review_rejected_toast">Rejected</string>
     <string name="review_reverted_toast">Change reverted</string>
     <string name="review_tell_why">Tell it why</string>
-    <string name="review_when_offer_title">Set When?</string>
-    <string name="review_when_offer_body">%1$d approved task(s) don\'t have When set yet. Set it now?</string>
-    <string name="review_when_offer_set">Set When</string>
-    <string name="review_when_offer_skip">Skip</string>
     <string name="review_edit">Edit</string>
     <string name="review_save_approve">Save &amp; Approve</string>
     <string name="review_reject_change">Reject change</string>

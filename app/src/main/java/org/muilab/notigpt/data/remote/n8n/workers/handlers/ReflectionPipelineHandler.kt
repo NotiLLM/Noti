@@ -13,6 +13,8 @@ import org.muilab.notigpt.data.repository.saveditem.PendingProposedOpRepository
 import org.muilab.notigpt.model.features.PendingProposedOp
 import org.muilab.notigpt.model.features.SavedItem
 import org.muilab.notigpt.model.features.SavedSubItem
+import org.muilab.notigpt.work.ReflectionTrigger
+import org.muilab.notigpt.util.SharedPreferencesManager
 import java.util.UUID
 
 /**
@@ -36,9 +38,10 @@ internal object ReflectionPipelineHandler {
     }
 
     suspend fun handle(ctx: N8nWorkerContext): ListenableWorker.Result {
+        val dirtyVersionAtStart = SharedPreferencesManager.reflectionDirtyVersion
         val pendingRepo = ctx.pendingProposedOpRepository()
         val candidates = buildCandidates(ctx, pendingRepo)
-        if (candidates.size < 2) return ctx.success()
+        if (candidates.size < 2) return successfulReflection(ctx, dirtyVersionAtStart)
 
         val excludePairs = pendingRepo.getActiveMergeCooldowns().map { listOf(it.itemIdA, it.itemIdB) }
         val d2Payload = ExtractionStageSupport.baseEnvelope(ctx).apply {
@@ -53,10 +56,11 @@ internal object ReflectionPipelineHandler {
             is Http.Retry -> return ctx.retry()
             is Http.Fail -> return ctx.success()
         }
-        val rawGroups = ExtractionStageSupport.parseObject(d2Body)?.optJSONArray("groups") ?: return ctx.success()
+        val rawGroups = ExtractionStageSupport.parseObject(d2Body)?.optJSONArray("groups")
+            ?: return successfulReflection(ctx, dirtyVersionAtStart)
         val candidateByRef = candidates.associateBy(Candidate::ref)
         val groups = normalizeGroups(rawGroups, candidateByRef.keys, MAX_REFLECTION_GROUPS)
-        if (groups.isEmpty()) return ctx.success()
+        if (groups.isEmpty()) return successfulReflection(ctx, dirtyVersionAtStart)
 
         val preferences = ctx.getExtractionPreferencesPayload()
         val userContexts = ctx.getUserContextsPayload()
@@ -103,7 +107,15 @@ internal object ReflectionPipelineHandler {
                 }
             }
         }
-        return if (sawRetryableFailure) ctx.retry() else ctx.success()
+        return if (sawRetryableFailure) ctx.retry() else successfulReflection(ctx, dirtyVersionAtStart)
+    }
+
+    private fun successfulReflection(
+        ctx: N8nWorkerContext,
+        dirtyVersionAtStart: Long,
+    ): ListenableWorker.Result {
+        ReflectionTrigger.markSuccess(dirtyVersionAtStart)
+        return ctx.success()
     }
 
     private suspend fun buildCandidates(
