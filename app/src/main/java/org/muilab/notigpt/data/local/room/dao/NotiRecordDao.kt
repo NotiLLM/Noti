@@ -39,9 +39,6 @@ interface NotiRecordDao {
     @Query("SELECT * FROM noti_record WHERE notiKey = :notiKey AND isDismissed = 0 ORDER BY CASE WHEN whenTime != 0 THEN whenTime ELSE postTime END ASC")
     fun getNewRecordsByKey(notiKey: String): List<NotiRecord>
 
-    @Query("SELECT * FROM noti_record WHERE isDismissed = 0 ORDER BY CASE WHEN whenTime != 0 THEN whenTime ELSE postTime END DESC")
-    fun getNewRecords(): List<NotiRecord>
-
     @Query("SELECT * FROM noti_record WHERE isDismissed = 0 AND notiKey IN ( :notiKeys ) ORDER BY notiKey ASC, CASE WHEN whenTime != 0 THEN whenTime ELSE postTime END ASC")
     fun getActiveRecordsByKeys(notiKeys: List<String>): List<NotiRecord>
 

@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -71,6 +72,7 @@ fun HomeScreen(
     val smartCounts by homeViewModel.smartFilterCounts.collectAsState()
     val llmByKey by drawerViewModel.llmStatesByKey.collectAsState()
     val newUnits by drawerViewModel.newNotificationUnits.collectAsState()
+    val hasLoadedNotifications by drawerViewModel.hasLoadedInitialNotifications.collectAsState()
 
     val previews = remember(newUnits, llmByKey) {
         HomeViewModel.buildPreviews(newUnits, llmByKey, System.currentTimeMillis() - HomeViewModel.newNotiWindowMs())
@@ -93,27 +95,31 @@ fun HomeScreen(
         }
 
         item { HomeSectionHeader(stringResource(R.string.home_section_notifications)) }
-        item {
-            NotiCategoryRow(
-                iconRes = R.drawable.communication,
-                title = stringResource(R.string.home_noti_communication),
-                preview = commPreview,
-                // Both Home and the category screen count notification threads.
-                recentCount = commPreview.recentUnits,
-                olderCount = commPreview.olderUnits,
-                onClick = { onOpenNotiCategory(NotiCategory.Communication) },
-            )
-        }
-        item {
-            NotiCategoryRow(
-                iconRes = R.drawable.content,
-                title = stringResource(R.string.home_noti_content),
-                preview = contentPreview,
-                // Content also counts threads (notiKeys), not individual records.
-                recentCount = contentPreview.recentUnits,
-                olderCount = contentPreview.olderUnits,
-                onClick = { onOpenNotiCategory(NotiCategory.Content) },
-            )
+        if (!hasLoadedNotifications) {
+            item { InitialNotificationLoading() }
+        } else {
+            item {
+                NotiCategoryRow(
+                    iconRes = R.drawable.communication,
+                    title = stringResource(R.string.home_noti_communication),
+                    preview = commPreview,
+                    // Both Home and the category screen count notification threads.
+                    recentCount = commPreview.recentUnits,
+                    olderCount = commPreview.olderUnits,
+                    onClick = { onOpenNotiCategory(NotiCategory.Communication) },
+                )
+            }
+            item {
+                NotiCategoryRow(
+                    iconRes = R.drawable.content,
+                    title = stringResource(R.string.home_noti_content),
+                    preview = contentPreview,
+                    // Content also counts threads (notiKeys), not individual records.
+                    recentCount = contentPreview.recentUnits,
+                    olderCount = contentPreview.olderUnits,
+                    onClick = { onOpenNotiCategory(NotiCategory.Content) },
+                )
+            }
         }
 
         item { HomeSectionHeader(stringResource(R.string.home_section_saved)) }
@@ -123,6 +129,18 @@ fun HomeScreen(
                 onOpen = onOpenSavedList,
             )
         }
+    }
+}
+
+@Composable
+private fun InitialNotificationLoading() {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(112.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
     }
 }
 

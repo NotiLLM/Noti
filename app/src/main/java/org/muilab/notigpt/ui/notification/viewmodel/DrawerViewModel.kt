@@ -34,6 +34,7 @@ import org.muilab.notigpt.model.notifications.NotiRecord
 import org.muilab.notigpt.model.notifications.NotiUnit
 import org.muilab.notigpt.data.repository.notification.NotiClassificationRepository
 import org.muilab.notigpt.data.repository.notification.NotiRepository
+import org.muilab.notigpt.domain.notification.withActiveRecords
 import org.muilab.notigpt.ui.home.viewmodel.HomeViewModel
 import org.muilab.notigpt.util.postOngoingNotification
 import org.muilab.notigpt.ui.common.feedback.UserToaster
@@ -118,6 +119,11 @@ class DrawerViewModel @Inject constructor(
     private val _activeNotiUnits = MutableStateFlow<List<NotiDisplayUnit>>(emptyList())
     val activeNotiUnits: StateFlow<List<NotiDisplayUnit>> = _activeNotiUnits.asStateFlow()
 
+    /** False only until Room delivers its first active-drawer result, including a valid empty result. */
+    private val _hasLoadedInitialNotifications = MutableStateFlow(false)
+    val hasLoadedInitialNotifications: StateFlow<Boolean> =
+        _hasLoadedInitialNotifications.asStateFlow()
+
     @SuppressLint("StaticFieldLeak")
     val context: Context = getApplication<Application>().applicationContext
 
@@ -142,15 +148,14 @@ class DrawerViewModel @Inject constructor(
         .distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
-    private val _newNotificationRecords = MutableStateFlow<Map<String, List<NotiRecord>>>(emptyMap())
-    val newNotificationRecords: StateFlow<Map<String, List<NotiRecord>>> = _newNotificationRecords.asStateFlow()
-
-    val newNotificationUnits: StateFlow<List<NotiDisplayUnit>> = combine(activeNotiUnits, _newNotificationRecords) { units, recordsByKey ->
-        units.mapNotNull { unit ->
-            val newRecords = recordsByKey[unit.notiKey].orEmpty()
-            if (newRecords.isEmpty()) null else NotiDisplayUnit(unit.notiUnit, newRecords)
-        }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    /**
+     * The active Room stream already joins each drawer thread with its active records. Deriving this
+     * view avoids re-querying the entire active record table after every Room invalidation while
+     * preserving live updates for both existing and newly-created notification keys.
+     */
+    val newNotificationUnits: StateFlow<List<NotiDisplayUnit>> = activeNotiUnits
+        .map { it.withActiveRecords() }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /** True if a visible thread should be cleared by "Clear all": right category, time bucket, not pinned. */
     private fun isVisibleClearable(du: NotiDisplayUnit, category: String, recentOnly: Boolean, cutoff: Long, llm: Map<String, org.muilab.notigpt.model.features.NotiLlmState>): Boolean =
@@ -173,11 +178,6 @@ class DrawerViewModel @Inject constructor(
                 .eachCount()
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
 
-    private suspend fun refreshNewNotificationRecords() {
-        val records = withContext(Dispatchers.IO) { notiRepository.getNewRecords() }
-        _newNotificationRecords.value = records.groupBy { it.notiKey }
-    }
-
     // Search state (delegated)
     val searchResults: StateFlow<Map<String, List<NotiRecord>>> = searchController.searchResults
     val searchUnits: StateFlow<Map<String, NotiUnit>> = searchController.searchUnits
@@ -191,7 +191,7 @@ class DrawerViewModel @Inject constructor(
                 if (prev.size != newList.size || prev != newList) {
                     _activeNotiUnits.value = newList
                 }
-                refreshNewNotificationRecords()
+                _hasLoadedInitialNotifications.value = true
             }.launchIn(viewModelScope)
 
         // Loading state management
@@ -364,7 +364,6 @@ class DrawerViewModel @Inject constructor(
             if (activeUnit?.isPinned == true) return@launch
 
             notiRepository.removeNotiUnit(notiKey)
-            refreshNewNotificationRecords()
         }
     }
 

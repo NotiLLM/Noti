@@ -1,6 +1,7 @@
 package org.muilab.notigpt.ui.notification.screen
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -9,6 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -17,6 +19,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -52,6 +55,7 @@ fun NotiCategoryScreen(
 ) {
     val context = LocalContext.current
     val newUnits by drawerViewModel.newNotificationUnits.collectAsState()
+    val hasLoadedNotifications by drawerViewModel.hasLoadedInitialNotifications.collectAsState()
     val llmByKey by drawerViewModel.llmStatesByKey.collectAsState()
 
     // Lifted to the ViewModel so the top-bar Clear All action can scope to the same visible window.
@@ -82,52 +86,60 @@ fun NotiCategoryScreen(
     val olderCount = remember(categoryUnits, cutoff) { categoryUnits.count { !isRecent(it) } }
 
     val visibleUnits: List<NotiDisplayUnit> = remember(categoryUnits, recentOnly, cutoff) {
-        categoryUnits.filter { isRecent(it) == recentOnly }
+        categoryUnits
+            .filter { isRecent(it) == recentOnly }
+            .sortedByDescending { it.notiRecords.maxOf(NotiRecord::time) }
     }
 
     Column(Modifier.fillMaxSize()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            FilterChip(
-                selected = recentOnly,
-                onClick = { drawerViewModel.setNotiRecentOnly(true) },
-                label = { Text(stringResource(R.string.noti_filter_recent_count, SharedPreferencesManager.homeNotiWindowHours, recentCount)) },
-            )
-            FilterChip(
-                selected = !recentOnly,
-                onClick = { drawerViewModel.setNotiRecentOnly(false) },
-                label = { Text(stringResource(R.string.noti_filter_older_count, olderCount)) },
-            )
-        }
-
-        if (visibleUnits.isEmpty()) {
-            EmptyState(R.drawable.inbox, stringResource(R.string.noti_category_empty))
+        if (!hasLoadedNotifications) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(Modifier.padding(8.dp))
+            }
         } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 24.dp),
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                items(visibleUnits, key = { it.notiKey }, contentType = { "notiCard" }) { displayUnit ->
-                    NotiCard(
-                        context = context,
-                        notiDisplayUnit = displayUnit,
-                        isDragging = false,
-                        drawerViewModel = drawerViewModel,
-                        isCardVisible = true,
-                        parentViewport = Rect.Zero,
-                        onCreateReminder = { title, records ->
-                            pendingReminder = PendingReminder(
-                                title = title,
-                                content = snapshotRecordsContent(title, records, displayUnit.notiUnit.isPeople),
-                                recordIds = records.map { it.notiRecordId },
-                            )
-                        },
-                        onOpenSavedItem = onOpenSavedItem,
-                    )
+                FilterChip(
+                    selected = recentOnly,
+                    onClick = { drawerViewModel.setNotiRecentOnly(true) },
+                    label = { Text(stringResource(R.string.noti_filter_recent_count, SharedPreferencesManager.homeNotiWindowHours, recentCount)) },
+                )
+                FilterChip(
+                    selected = !recentOnly,
+                    onClick = { drawerViewModel.setNotiRecentOnly(false) },
+                    label = { Text(stringResource(R.string.noti_filter_older_count, olderCount)) },
+                )
+            }
+
+            if (visibleUnits.isEmpty()) {
+                EmptyState(R.drawable.inbox, stringResource(R.string.noti_category_empty))
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 24.dp),
+                ) {
+                    items(visibleUnits, key = { it.notiKey }, contentType = { "notiCard" }) { displayUnit ->
+                        NotiCard(
+                            context = context,
+                            notiDisplayUnit = displayUnit,
+                            isDragging = false,
+                            drawerViewModel = drawerViewModel,
+                            isCardVisible = true,
+                            parentViewport = Rect.Zero,
+                            onCreateReminder = { title, records ->
+                                pendingReminder = PendingReminder(
+                                    title = title,
+                                    content = snapshotRecordsContent(title, records, displayUnit.notiUnit.isPeople),
+                                    recordIds = records.map { it.notiRecordId },
+                                )
+                            },
+                            onOpenSavedItem = onOpenSavedItem,
+                        )
+                    }
                 }
             }
         }

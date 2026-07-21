@@ -87,8 +87,6 @@ class NotiRepository(
         actionsRepo.insertNotiRecord(sbn)
     }
 
-    fun getNewRecords(): List<NotiRecord> = notiRecordDao.getNewRecords()
-
     suspend fun setPinnedState(notiKey: String, pinned: Boolean) = withContext(Dispatchers.IO) {
         actionsRepo.setPinnedState(notiKey, pinned)
     }
