@@ -1045,6 +1045,90 @@ object AppDatabaseMigrations {
         db.execSQL("DROP TABLE `_v54_changes`")
     }
 
+    /**
+     * Prepared personalization cutover for plan 04-10.
+     *
+     * This migration deliberately remains outside [ALL] while v54 entities and accessors are live.
+     * Exact statement duplicates retain the greatest updatedAt, with the lexicographically smallest
+     * ID as the deterministic tie-breaker. Original statement text, identity, and timestamps remain
+     * byte-for-byte unchanged for the selected rows.
+     */
+    val MIGRATION_54_55 = Migration(54, 55) { db ->
+        db.execSQL(
+            """
+            CREATE TABLE `general_preferences` (
+                `id` TEXT NOT NULL,
+                `statement` TEXT NOT NULL,
+                `createdAt` INTEGER NOT NULL,
+                `updatedAt` INTEGER NOT NULL,
+                PRIMARY KEY(`id`)
+            )
+            """.trimIndent()
+        )
+
+        db.execSQL("ALTER TABLE `extraction_preferences` RENAME TO `_v54_extraction_preferences`")
+        db.execSQL(
+            """
+            CREATE TABLE `extraction_preferences` (
+                `id` TEXT NOT NULL,
+                `statement` TEXT NOT NULL,
+                `createdAt` INTEGER NOT NULL,
+                `updatedAt` INTEGER NOT NULL,
+                PRIMARY KEY(`id`)
+            )
+            """.trimIndent()
+        )
+        db.execSQL(
+            """
+            INSERT INTO `extraction_preferences` (id,statement,createdAt,updatedAt)
+            SELECT candidate.id,candidate.statement,candidate.createdAt,candidate.updatedAt
+            FROM `_v54_extraction_preferences` candidate
+            WHERE TRIM(candidate.statement) <> ''
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM `_v54_extraction_preferences` preferred
+                  WHERE preferred.statement = candidate.statement
+                    AND (
+                        preferred.updatedAt > candidate.updatedAt
+                        OR (preferred.updatedAt = candidate.updatedAt AND preferred.id < candidate.id)
+                    )
+              )
+            """.trimIndent()
+        )
+        db.execSQL("DROP TABLE `_v54_extraction_preferences`")
+
+        db.execSQL("ALTER TABLE `user_contexts` RENAME TO `_v54_user_contexts`")
+        db.execSQL(
+            """
+            CREATE TABLE `user_knowledge` (
+                `id` TEXT NOT NULL,
+                `statement` TEXT NOT NULL,
+                `createdAt` INTEGER NOT NULL,
+                `updatedAt` INTEGER NOT NULL,
+                PRIMARY KEY(`id`)
+            )
+            """.trimIndent()
+        )
+        db.execSQL(
+            """
+            INSERT INTO `user_knowledge` (id,statement,createdAt,updatedAt)
+            SELECT candidate.id,candidate.statement,candidate.createdAt,candidate.updatedAt
+            FROM `_v54_user_contexts` candidate
+            WHERE TRIM(candidate.statement) <> ''
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM `_v54_user_contexts` preferred
+                  WHERE preferred.statement = candidate.statement
+                    AND (
+                        preferred.updatedAt > candidate.updatedAt
+                        OR (preferred.updatedAt = candidate.updatedAt AND preferred.id < candidate.id)
+                    )
+              )
+            """.trimIndent()
+        )
+        db.execSQL("DROP TABLE `_v54_user_contexts`")
+    }
+
     val ALL: Array<Migration> = LegacyAppDatabaseMigrations.ALL + arrayOf(
         MIGRATION_39_40, MIGRATION_40_41, MIGRATION_41_42, MIGRATION_42_43,
         MIGRATION_43_44, MIGRATION_44_45, MIGRATION_45_46, MIGRATION_46_47,

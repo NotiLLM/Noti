@@ -52,6 +52,18 @@ class PersonalizationActivationInstrumentedTest {
             AppDatabaseMigrations.MIGRATION_54_55,
         ).use { db ->
             assertEquals(0, countRows(db, "general_preferences"))
+            assertEquals(
+                listOf("id", "statement", "createdAt", "updatedAt"),
+                columnNames(db, "general_preferences"),
+            )
+            assertEquals(
+                listOf("id", "statement", "createdAt", "updatedAt"),
+                columnNames(db, "extraction_preferences"),
+            )
+            assertEquals(
+                listOf("id", "statement", "createdAt", "updatedAt"),
+                columnNames(db, "user_knowledge"),
+            )
 
             db.query(
                 "SELECT id,statement,createdAt,updatedAt FROM extraction_preferences ORDER BY id",
@@ -107,6 +119,17 @@ class PersonalizationActivationInstrumentedTest {
     ): Int = db.query("SELECT COUNT(*) FROM $table").use { cursor ->
         cursor.moveToFirst()
         cursor.getInt(0)
+    }
+
+    private fun columnNames(
+        db: androidx.sqlite.db.SupportSQLiteDatabase,
+        table: String,
+    ): List<String> = db.query("PRAGMA table_info(`$table`)").use { cursor ->
+        buildList {
+            while (cursor.moveToNext()) {
+                add(cursor.getString(cursor.getColumnIndexOrThrow("name")))
+            }
+        }
     }
 
     private companion object {
