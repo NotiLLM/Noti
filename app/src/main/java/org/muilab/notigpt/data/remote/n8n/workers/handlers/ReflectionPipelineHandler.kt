@@ -42,9 +42,11 @@ internal object ReflectionPipelineHandler {
         val pendingRepo = ctx.pendingProposedOpRepository()
         val candidates = buildCandidates(ctx, pendingRepo)
         if (candidates.size < 2) return successfulReflection(ctx, dirtyVersionAtStart)
+        val personalization = ctx.personalizationPayloadBuilder()
 
         val excludePairs = pendingRepo.getActiveMergeCooldowns().map { listOf(it.itemIdA, it.itemIdB) }
-        val d2Payload = ExtractionStageSupport.baseEnvelope(ctx).apply {
+        val d2Payload = ExtractionStageSupport.baseEnvelope().apply {
+            putAll(personalization.stageD2Envelope())
             put("candidates", candidates.map(::compactCandidate))
             // Kept for old deployed D2 templates while the compatible workflow update rolls out.
             put("activeItems", candidates.filterNot(Candidate::isPending).map { ExtractionStageSupport.itemCompact(it.item) })
@@ -62,8 +64,6 @@ internal object ReflectionPipelineHandler {
         val groups = normalizeGroups(rawGroups, candidateByRef.keys, MAX_REFLECTION_GROUPS)
         if (groups.isEmpty()) return successfulReflection(ctx, dirtyVersionAtStart)
 
-        val preferences = ctx.getExtractionPreferencesPayload()
-        val userContexts = ctx.getUserContextsPayload()
         var sawRetryableFailure = false
 
         // Bound request bursts while still avoiding a potentially 25-minute sequential worker.
@@ -72,9 +72,8 @@ internal object ReflectionPipelineHandler {
                 chunk.map { refs ->
                     async {
                         val details = refs.mapNotNull(candidateByRef::get).map { candidateDetail(ctx, it) }
-                        val payload = ExtractionStageSupport.baseEnvelope(ctx).apply {
-                            put("extractionPreferences", preferences)
-                            put("userContexts", userContexts)
+                        val payload = ExtractionStageSupport.baseEnvelope().apply {
+                            putAll(personalization.stageE2Envelope())
                             put("group", mapOf("items" to details))
                             // Legacy compatibility: new clients guarantee exactly one element.
                             put("groups", listOf(mapOf("items" to details)))

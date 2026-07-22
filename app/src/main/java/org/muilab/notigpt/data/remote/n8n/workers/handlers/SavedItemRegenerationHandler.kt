@@ -61,6 +61,7 @@ internal object SavedItemRegenerationHandler {
             return ctx.success()
         }
 
+        val personalization = ctx.personalizationPayloadBuilder()
         val notiContext = buildNotiContextForSavedItem(ctx, item)
         val payload = buildPayload(
             savedItems = listOf(item),
@@ -68,8 +69,7 @@ internal object SavedItemRegenerationHandler {
             notiContextMap = mapOf(savedItemId to notiContext),
             linkedByItem = ctx.savedItemRepository.getLinkedRecordIdsFor(listOf(savedItemId)),
             trigger = "REGENERATE_ONE",
-            extractionPreferences = ctx.getExtractionPreferencesPayload(),
-            userContexts = ctx.getUserContextsPayload(),
+            personalizationEnvelope = personalization.regenerateEnvelope(),
         )
 
         return postAndApply(ctx, webhookPath, payload, trigger = "REGENERATE_ONE")
@@ -114,8 +114,7 @@ internal object SavedItemRegenerationHandler {
         notiContextMap: Map<String, List<Map<String, Any>>>,
         linkedByItem: Map<String, List<String>>,
         trigger: String,
-        extractionPreferences: List<Map<String, String>>,
-        userContexts: List<Map<String, String>>,
+        personalizationEnvelope: Map<String, Any>,
     ): Map<String, Any> {
         val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.getDefault())
 
@@ -136,19 +135,17 @@ internal object SavedItemRegenerationHandler {
             )
         }
 
-        return mapOf(
+        return linkedMapOf<String, Any>(
             "userId" to SharedPreferencesManager.userId,
-            "language" to Locale.getDefault().toLanguageTag(),
             // Send the stable IANA zone ID so n8n can interpret local calendar values reliably.
             "timezone" to TimeZone.getDefault().id,
             "currentTime" to sdf.format(Date()),
-            "targetExtractionLanguage" to SharedPreferencesManager.targetExtractionLanguage,
             "trigger" to trigger,
             "contractVersion" to 2,
             "savedItems" to savedItemsPayload,
-            "extractionPreferences" to extractionPreferences,
-            "userContexts" to userContexts,
-        )
+        ).apply {
+            putAll(personalizationEnvelope)
+        }
     }
 
     private suspend fun postAndApply(

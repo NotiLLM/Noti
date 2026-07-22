@@ -16,7 +16,6 @@ import org.muilab.notigpt.util.SharedPreferencesManager
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import java.util.TimeZone
 
 /**
  * Shared request/response plumbing for the per-notiKey extraction pipeline stages (A–E2).
@@ -40,12 +39,10 @@ internal object ExtractionStageSupport {
     // ========== Envelope & time ==========
 
     /** Common top-level fields every stage payload carries. Stage-specific fields are added on top. */
-    suspend fun baseEnvelope(ctx: N8nWorkerContext): MutableMap<String, Any> = mutableMapOf(
+    fun baseEnvelope(): MutableMap<String, Any> = mutableMapOf(
         "userId" to SharedPreferencesManager.userId,
-        "language" to Locale.getDefault().toLanguageTag(),
-        "timezone" to TimeZone.getDefault().id,
+        "timezone" to java.util.TimeZone.getDefault().id,
         "currentTime" to isoNow(),
-        "targetExtractionLanguage" to ctx.getTargetExtractionLanguage(),
         "contractVersion" to 4,
     )
 

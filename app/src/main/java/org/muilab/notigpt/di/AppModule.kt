@@ -11,6 +11,9 @@ import org.muilab.notigpt.data.export.MediaStoreNotiLogExporter
 import org.muilab.notigpt.data.export.NotiLogExporter
 import org.muilab.notigpt.data.local.room.AppDatabase
 import org.muilab.notigpt.data.repository.notification.NotiRepository
+import org.muilab.notigpt.data.repository.personalization.PersonalizationRepository
+import org.muilab.notigpt.data.repository.personalization.StoreBackedPersonalizationRepository
+import org.muilab.notigpt.data.repository.personalization.V54PersonalizationGateway
 import org.muilab.notigpt.ui.common.clipboard.AndroidClipboardController
 import org.muilab.notigpt.ui.common.clipboard.ClipboardController
 import org.muilab.notigpt.ui.common.feedback.SnackbarUserToaster
@@ -43,6 +46,17 @@ object AppModule {
         notiRecordDao = database.recordDao(),
         notiLlmStateDao = database.notiLlmStateDao(),
     )
+
+    /** Central compile-safe binding replaced by the v55 gateway during plan 04-10 activation. */
+    @Provides
+    @Singleton
+    fun providePersonalizationRepository(database: AppDatabase): PersonalizationRepository =
+        StoreBackedPersonalizationRepository(
+            V54PersonalizationGateway(
+                extractionPreferenceDao = database.extractionPreferenceDao(),
+                userContextDao = database.userContextDao(),
+            ),
+        )
 
     @Provides
     @Singleton

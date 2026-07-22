@@ -2,6 +2,7 @@ package org.muilab.notigpt.data.remote.n8n.workers.handlers
 
 import org.json.JSONObject
 import org.muilab.notigpt.BuildConfig
+import org.muilab.notigpt.data.remote.n8n.PersonalizationPayloadBuilder
 import org.muilab.notigpt.data.remote.n8n.context.N8nWorkerContext
 import org.muilab.notigpt.data.repository.suggestion.SuggestedItem
 import org.muilab.notigpt.data.repository.suggestion.SuggestionConstants
@@ -22,11 +23,12 @@ internal object SuggestionRefreshHandler {
                 store.replace(emptyList())
                 return ctx.success()
             }
+            val personalization = ctx.personalizationPayloadBuilder()
 
             val candidateIds = if (active.size <= SuggestionConstants.G_SKIP_AT_OR_BELOW_ITEM_COUNT) {
                 active.map { it.savedItemId }
             } else {
-                shortlist(ctx, active) ?: return retryOrFinish(ctx, store, lastHttp)
+                shortlist(ctx, active, personalization) ?: return retryOrFinish(ctx, store, lastHttp)
             }
             if (candidateIds.isEmpty()) {
                 store.replace(emptyList())
@@ -34,7 +36,7 @@ internal object SuggestionRefreshHandler {
             }
 
             val candidates = candidateIds.mapNotNull { id -> active.firstOrNull { it.savedItemId == id } }
-            decide(ctx, candidates)?.let { suggestions ->
+            decide(ctx, candidates, personalization)?.let { suggestions ->
                 store.replace(suggestions)
                 ctx.success()
             } ?: retryOrFinish(ctx, store, lastHttp)
@@ -46,11 +48,14 @@ internal object SuggestionRefreshHandler {
 
     private var lastHttp: ExtractionStageSupport.Http = ExtractionStageSupport.Http.Fail
 
-    private suspend fun shortlist(ctx: N8nWorkerContext, active: List<SavedItem>): List<String>? {
-        val payload = ExtractionStageSupport.baseEnvelope(ctx).apply {
+    private suspend fun shortlist(
+        ctx: N8nWorkerContext,
+        active: List<SavedItem>,
+        personalization: PersonalizationPayloadBuilder,
+    ): List<String>? {
+        val payload = ExtractionStageSupport.baseEnvelope().apply {
+            putAll(personalization.stageGEnvelope())
             put("items", active.map(ExtractionStageSupport::itemCompact))
-            put("extractionPreferences", ctx.getExtractionPreferencesPayload())
-            put("userContexts", ctx.getUserContextsPayload())
             put("maxCandidates", SuggestionConstants.G_MAX_CANDIDATES)
         }
         lastHttp = ExtractionStageSupport.call(ctx, BuildConfig.N8N_SUGGEST_G_SHORTLIST_PATH, payload)
@@ -67,11 +72,14 @@ internal object SuggestionRefreshHandler {
         }
     }
 
-    private suspend fun decide(ctx: N8nWorkerContext, candidates: List<SavedItem>): List<SuggestedItem>? {
-        val payload = ExtractionStageSupport.baseEnvelope(ctx).apply {
+    private suspend fun decide(
+        ctx: N8nWorkerContext,
+        candidates: List<SavedItem>,
+        personalization: PersonalizationPayloadBuilder,
+    ): List<SuggestedItem>? {
+        val payload = ExtractionStageSupport.baseEnvelope().apply {
+            putAll(personalization.stageHEnvelope())
             put("candidates", candidates.map { suggestionDetail(ctx, it) })
-            put("extractionPreferences", ctx.getExtractionPreferencesPayload())
-            put("userContexts", ctx.getUserContextsPayload())
             put("maxSuggestions", SuggestionConstants.H_MAX_SUGGESTIONS)
         }
         lastHttp = ExtractionStageSupport.call(ctx, BuildConfig.N8N_SUGGEST_H_DECIDE_PATH, payload)

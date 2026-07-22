@@ -32,7 +32,7 @@ internal object N8nWorkerHandlers {
         return when (input) {
             is N8nWorkerInput.ExtractionPipeline -> ExtractionPipelineHandler.handle(ctx, input)
             is N8nWorkerInput.ReflectionPipeline -> ReflectionPipelineHandler.handle(ctx)
-            is N8nWorkerInput.PreferenceQuickSync -> PreferenceQuickSyncHandler.handle(ctx, raw)
+            is N8nWorkerInput.PreferenceQuickSync -> PreferenceQuickSyncHandler.handle(ctx, input)
             is N8nWorkerInput.RegenerateOne -> SavedItemRegenerationHandler.handleOne(ctx, raw)
             is N8nWorkerInput.ReviewTranslation -> ReviewTranslationHandler.handle(ctx, input, runAttemptCount)
             is N8nWorkerInput.SuggestionRefresh -> SuggestionRefreshHandler.handle(ctx)

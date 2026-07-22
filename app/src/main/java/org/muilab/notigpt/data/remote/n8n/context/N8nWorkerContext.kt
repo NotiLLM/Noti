@@ -6,14 +6,17 @@ import javax.inject.Inject
 import androidx.work.ListenableWorker
 import org.muilab.notigpt.data.local.room.AppDatabase
 import org.muilab.notigpt.data.remote.n8n.N8nAPIClient
+import org.muilab.notigpt.data.remote.n8n.PersonalizationPayloadBuilder
 import org.muilab.notigpt.data.repository.notification.NotiLlmStateRepository
 import org.muilab.notigpt.data.repository.notification.NotiRepository
+import org.muilab.notigpt.data.repository.personalization.PersonalizationRepository
 import org.muilab.notigpt.data.repository.saveditem.ExtractionJournalRepository
 import org.muilab.notigpt.data.repository.saveditem.PendingProposedOpRepository
 import org.muilab.notigpt.data.repository.saveditem.SavedItemChangeLogRepository
 import org.muilab.notigpt.data.repository.saveditem.SavedItemRepository
 import org.muilab.notigpt.data.repository.saveditem.TodoStepRepository
 import org.muilab.notigpt.util.SharedPreferencesManager
+import java.util.Locale
 
 /**
  * Common dependencies for N8n worker handlers.
@@ -22,6 +25,7 @@ class N8nWorkerContext @Inject constructor(
     @param:ApplicationContext val appContext: Context,
     val database: AppDatabase,
     val notiRepository: NotiRepository,
+    private val personalizationRepository: PersonalizationRepository,
 ) {
     val n8nApiService by lazy { N8nAPIClient.n8nAPIService }
 
@@ -49,51 +53,14 @@ class N8nWorkerContext @Inject constructor(
 
     fun pendingProposedOpRepository(): PendingProposedOpRepository = pendingProposedOpRepository
 
-/**
- * Shared dependency and payload helper context for n8n worker handlers.
- *
- * Handlers should use this context for repository access and common preference/user-context payloads. Keep it as
- * a convenience boundary, not a place for workflow-specific business logic.
- */
-    suspend fun getExtractionPreferencesPayload(): List<Map<String, String>> {
-        return try {
-            database.extractionPreferenceDao().getAllPreferences().map { p ->
-                mapOf(
-                    "id" to p.id,
-                    "statement" to p.statement,
-                    "type" to p.preferenceType,
-                )
-            }
-        } catch (_: Exception) {
-            emptyList()
-        }
-    }
-
-    /**
-     * Returns the user's chosen target extraction language for n8n payloads.
-     * Values: "original", "en", "zh-TW".
-     */
-    fun getTargetExtractionLanguage(): String {
-        return SharedPreferencesManager.targetExtractionLanguage
-    }
-
-    /**
-     * Returns the current user context facts formatted
-     * for inclusion in n8n webhook payloads.
-     */
-    suspend fun getUserContextsPayload(): List<Map<String, String>> {
-        return try {
-            database.userContextDao().getAllContexts().map { c ->
-                mapOf(
-                    "id" to c.id,
-                    "statement" to c.statement,
-                    "category" to c.category,
-                )
-            }
-        } catch (_: Exception) {
-            emptyList()
-        }
-    }
+    /** Creates one immutable stage matrix from a single confirmed repository snapshot. */
+    suspend fun personalizationPayloadBuilder(
+        itemLanguage: String = SharedPreferencesManager.targetExtractionLanguage,
+    ): PersonalizationPayloadBuilder = PersonalizationPayloadBuilder(
+        snapshots = personalizationRepository.getConfirmedSnapshots(),
+        uiLanguage = Locale.getDefault().toLanguageTag(),
+        itemLanguage = itemLanguage,
+    )
 
     fun getNotiUnit(notiKey: String) = notiRepository.getNotiUnit(notiKey)
 

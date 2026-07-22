@@ -6,6 +6,7 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.muilab.notigpt.BuildConfig
+import org.muilab.notigpt.data.remote.n8n.PersonalizationPayloadBuilder
 import org.muilab.notigpt.data.remote.n8n.context.N8nWorkerContext
 import org.muilab.notigpt.data.remote.n8n.workers.N8nWorkerInput
 import org.muilab.notigpt.data.remote.n8n.workers.handlers.ExtractionStageSupport.Http
@@ -51,19 +52,18 @@ internal object ExtractionPipelineHandler {
         }
 
         if (records.isEmpty() && !input.forced) {
-            // Nothing new since the last fold; still give a quiet thread a chance to compact.
-            maybeCompact(ctx, notiKey, records, watermark)
+            // Nothing new since the last fold.
             return ctx.success()
         }
 
         val priorSummary = ctx.database.extractionJournalDao().getSummary(notiKey)?.summaryText ?: ""
+        val personalization = ctx.personalizationPayloadBuilder()
 
         // === Stage A — scan (auto runs only) ===
         var shouldExtract = input.forced
         if (!input.forced) {
-            val payload = ExtractionStageSupport.baseEnvelope(ctx).apply {
-                put("extractionPreferences", ctx.getExtractionPreferencesPayload())
-                put("userContexts", ctx.getUserContextsPayload())
+            val payload = ExtractionStageSupport.baseEnvelope().apply {
+                putAll(personalization.stageAEnvelope())
                 put("notiKey", notiKey)
                 put("appName", unit.appName)
                 put("priorSummary", priorSummary)
@@ -89,7 +89,7 @@ internal object ExtractionPipelineHandler {
                 }
             }
             if (!shouldExtract) {
-                maybeCompact(ctx, notiKey, records, watermark)
+                maybeCompact(ctx, notiKey, records, watermark, personalization)
                 return ctx.success()
             }
         }
@@ -156,9 +156,8 @@ internal object ExtractionPipelineHandler {
                     )
                 } ?: emptyList()
 
-            val bPayload = ExtractionStageSupport.baseEnvelope(ctx).apply {
-                put("extractionPreferences", ctx.getExtractionPreferencesPayload())
-                put("userContexts", ctx.getUserContextsPayload())
+            val bPayload = ExtractionStageSupport.baseEnvelope().apply {
+                putAll(personalization.stageBEnvelope())
                 put("notiKey", notiKey)
                 put("appName", unit.appName)
                 put("priorSummary", priorSummary)
@@ -200,12 +199,12 @@ internal object ExtractionPipelineHandler {
             withContext(NonCancellable) {
                 if (staged.isEmpty()) {
                     ctx.journalRepository.appendNoExtraction(notiKey, reason, System.currentTimeMillis())
-                    maybeCompact(ctx, notiKey, records, watermark)
+                    maybeCompact(ctx, notiKey, records, watermark, personalization)
                     return@withContext
                 }
                 // We processed these records into ops → fold them into the summary now.
-                runSummaryFold(ctx, notiKey, unit.isPeople, priorSummary, records)
-                runMergeResolution(ctx, batchId, staged)
+                runSummaryFold(ctx, notiKey, unit.isPeople, priorSummary, records, personalization)
+                runMergeResolution(ctx, batchId, staged, personalization)
                 ctx.database.notiLlmStateDao().setShouldExtractByKeys(listOf(notiKey), false, System.currentTimeMillis())
             }
             return ctx.success()
@@ -224,6 +223,7 @@ internal object ExtractionPipelineHandler {
         notiKey: String,
         records: List<NotiRecord>,
         watermark: Long,
+        personalization: PersonalizationPayloadBuilder,
     ) {
         if (records.isEmpty()) return
         val quietMin = SharedPreferencesManager.extractionQuietWindowMinutes
@@ -235,7 +235,7 @@ internal object ExtractionPipelineHandler {
         if (!quietTrip && !countTrip) return
         val unit = ctx.getNotiUnit(notiKey) ?: return
         val priorSummary = ctx.database.extractionJournalDao().getSummary(notiKey)?.summaryText ?: ""
-        runSummaryFold(ctx, notiKey, unit.isPeople, priorSummary, records)
+        runSummaryFold(ctx, notiKey, unit.isPeople, priorSummary, records, personalization)
         // Folded away with no items — nothing left pending for this thread.
         ctx.database.notiLlmStateDao().setShouldExtractByKeys(listOf(notiKey), false, System.currentTimeMillis())
     }
@@ -247,11 +247,13 @@ internal object ExtractionPipelineHandler {
         isPeople: Boolean,
         priorSummary: String,
         records: List<NotiRecord>,
+        personalization: PersonalizationPayloadBuilder,
     ) {
         if (records.isEmpty()) return
         val newWatermark = records.maxOf { it.postTime }
         val unit = ctx.getNotiUnit(notiKey)
-        val payload = ExtractionStageSupport.baseEnvelope(ctx).apply {
+        val payload = ExtractionStageSupport.baseEnvelope().apply {
+            putAll(personalization.stageCEnvelope())
             put("notiKey", notiKey)
             put("appName", unit?.appName ?: "")
             put("priorSummary", priorSummary)
@@ -269,7 +271,12 @@ internal object ExtractionPipelineHandler {
      * shortlisted pairs into merge ops. A resolved merge consumes the staged create (one reviewable
      * decision). Best-effort — a stage failure just leaves the creates standing.
      */
-    private suspend fun runMergeResolution(ctx: N8nWorkerContext, batchId: String, staged: List<PendingProposedOp>) {
+    private suspend fun runMergeResolution(
+        ctx: N8nWorkerContext,
+        batchId: String,
+        staged: List<PendingProposedOp>,
+        personalization: PersonalizationPayloadBuilder,
+    ) {
         val creates = staged.filter { it.opType == PendingProposedOpType.Create }
         if (creates.isEmpty()) return
         val pendingProposedOpRepo = ctx.pendingProposedOpRepository()
@@ -289,7 +296,8 @@ internal object ExtractionPipelineHandler {
         if (newItems.isEmpty()) return
 
         // D1 — shortlist.
-        val d1Payload = ExtractionStageSupport.baseEnvelope(ctx).apply {
+        val d1Payload = ExtractionStageSupport.baseEnvelope().apply {
+            putAll(personalization.stageD1Envelope())
             put("newItems", newItems)
             put("activeItems", activeItems)
         }
@@ -322,9 +330,8 @@ internal object ExtractionPipelineHandler {
         if (pairs.isEmpty()) return
 
         // E1 — resolve.
-        val e1Payload = ExtractionStageSupport.baseEnvelope(ctx).apply {
-            put("extractionPreferences", ctx.getExtractionPreferencesPayload())
-            put("userContexts", ctx.getUserContextsPayload())
+        val e1Payload = ExtractionStageSupport.baseEnvelope().apply {
+            putAll(personalization.stageE1Envelope())
             put("pairs", pairs)
         }
         val e1Body = (ExtractionStageSupport.call(ctx, BuildConfig.N8N_EXTRACT_E1_MERGE_PATH, e1Payload) as? Http.Ok)?.body ?: return

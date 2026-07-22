@@ -15,7 +15,6 @@ import org.muilab.notigpt.data.remote.n8n.workers.N8nWorkerInput
 import org.muilab.notigpt.model.features.ReviewTranslationState
 import org.muilab.notigpt.model.features.TodoStep
 import org.muilab.notigpt.util.SharedPreferencesManager
-import java.util.Locale
 import java.util.TimeZone
 
 /** Pipeline F: translate review text only, then store a validated preview override for review. */
@@ -46,6 +45,7 @@ internal object ReviewTranslationHandler {
         val state = ReviewTranslationState.fromJson(draft.translationStateJson)
             ?.takeIf { it.isPending }
             ?: return@withContext ctx.success()
+        val personalization = ctx.personalizationPayloadBuilder(itemLanguage = state.targetLanguage)
 
         val records = if (state.evidenceRecordIds.isEmpty()) emptyList() else {
             ctx.database.recordDao().getRecordsByIds(state.evidenceRecordIds)
@@ -54,19 +54,19 @@ internal object ReviewTranslationHandler {
         val units = if (keys.isEmpty()) emptyMap() else {
             ctx.database.drawerDao().getByNotiKeys(keys).associateBy { it.notiKey }
         }
-        val payload = mapOf(
+        val payload = linkedMapOf<String, Any>(
             "userId" to SharedPreferencesManager.userId,
-            "language" to Locale.getDefault().toLanguageTag(),
             "timezone" to TimeZone.getDefault().id,
             "contractVersion" to 2,
             "reviewKey" to input.reviewKey,
-            "targetLanguage" to state.targetLanguage,
             "currentItem" to state.sourceItem,
             "steps" to state.sourceSteps,
             "notiRecords" to records.sortedBy { it.time }.map { record ->
                 N8nRecordFormatter.format(record, units[record.notiKey]?.isPeople ?: false)
             },
-        )
+        ).apply {
+            putAll(personalization.stageFEnvelope())
+        }
         val body = Gson().toJson(payload).toRequestBody("application/json; charset=utf-8".toMediaType())
         Log.d(TAG, "Posting reviewKey=${input.reviewKey} records=${records.size} attempt=$runAttemptCount")
 
