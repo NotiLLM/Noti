@@ -29,7 +29,6 @@ import org.muilab.notigpt.ui.theme.Dimens
 fun AppDrawerContent(
     isHome: Boolean,
     accountEmail: String?,
-    unresolvedConflictCount: Int,
     dueUnseenReminderCount: Int,
     activeTodoCount: Int,
     activeKeepCount: Int,
@@ -102,16 +101,11 @@ fun AppDrawerContent(
         )
         NavigationDrawerItem(
             modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
-            label = { Text(stringResource(R.string.tab_preferences)) },
+            label = { Text(stringResource(R.string.personalization_title)) },
             // TODO(icon): replace `info` placeholder with a `tune` glyph (see icon request list).
             icon = { Icon(painter = painterResource(R.drawable.info), contentDescription = null) },
-            badge = {
-                if (unresolvedConflictCount > 0) {
-                    Badge { Text(unresolvedConflictCount.toString()) }
-                }
-            },
             selected = false,
-            onClick = { onMenuScreenSelected(AppMenuScreen.Preferences) },
+            onClick = { onMenuScreenSelected(AppMenuScreen.Personalization) },
         )
         NavigationDrawerItem(
             modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),

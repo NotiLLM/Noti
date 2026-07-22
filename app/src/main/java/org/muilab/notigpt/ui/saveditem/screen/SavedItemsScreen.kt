@@ -108,7 +108,6 @@ import org.muilab.notigpt.model.features.TodoStep
 import org.muilab.notigpt.model.features.ReviewItemDraft
 import org.muilab.notigpt.data.export.asExportable
 import org.muilab.notigpt.data.repository.suggestion.SuggestedItem
-import org.muilab.notigpt.ui.preference.component.PreferenceLearningBottomSheet
 import org.muilab.notigpt.ui.common.feedback.AppSnackbar
 import org.muilab.notigpt.ui.theme.NotiTheme
 import org.muilab.notigpt.ui.theme.NotiType
@@ -874,7 +873,6 @@ fun SavedItemsScreen(
     }
 
     // Preference learning BottomSheet (Flows 1-3)
-    PreferenceLearningBottomSheet(preferenceViewModel = prefVm)
 }
 
 /**

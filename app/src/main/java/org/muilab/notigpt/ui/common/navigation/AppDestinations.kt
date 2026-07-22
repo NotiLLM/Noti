@@ -41,7 +41,7 @@ enum class SavedListFilter {
 /** Secondary app sections opened from the hamburger drawer. */
 enum class AppMenuScreen {
     Reminders,
-    Preferences,
+    Personalization,
     History,
     Settings,
 }

@@ -39,6 +39,8 @@ import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -66,8 +68,8 @@ import org.muilab.notigpt.ui.common.appbar.AppTopBar
 import org.muilab.notigpt.ui.home.HomeScreen
 import org.muilab.notigpt.ui.home.viewmodel.HomeViewModel
 import org.muilab.notigpt.ui.settings.SettingsScreen
-import org.muilab.notigpt.ui.preference.component.PreferenceLearningBottomSheet
-import org.muilab.notigpt.ui.preference.screen.PreferenceChatScreen
+import org.muilab.notigpt.ui.preference.screen.PersonalizationScreen
+import org.muilab.notigpt.ui.preference.component.QuickSyncFeedbackSheet
 import org.muilab.notigpt.ui.saveditem.screen.SavedItemsScreen
 import org.muilab.notigpt.ui.reminder.screen.ScheduledRemindersScreen
 import org.muilab.notigpt.ui.common.navigation.AppMenuScreen
@@ -155,7 +157,7 @@ fun AppScaffold(
 
     val appSearchQuery by drawerViewModel.queryString.collectAsState()
 
-    val unresolvedConflicts by preferenceViewModel.unresolvedConflicts.collectAsState()
+    val personalizationState by preferenceViewModel.uiState.collectAsState()
     val dueUnseenReminderCount by scheduledReminderViewModel.dueUnseenCount.collectAsState()
 
     // ── Snackbar for delete / manual-extract preference prompt ───
@@ -164,7 +166,8 @@ fun AppScaffold(
 
     val snackDeleteMsg = stringResource(R.string.pref_snackbar_deleted)
     val snackExtractMsg = stringResource(R.string.pref_snackbar_extracted)
-    val snackAction = stringResource(R.string.pref_snackbar_action)
+    val snackEditMsg = stringResource(R.string.personalization_feedback_edited)
+    val snackAction = stringResource(R.string.personalization_tell_why)
 
     val snackbarChannel = remember { Channel<PreferenceViewModel.SnackbarEvent>(Channel.UNLIMITED) }
 
@@ -179,7 +182,7 @@ fun AppScaffold(
             val message = when (event.entryPoint) {
                 PreferenceEntryPoint.DELETE -> snackDeleteMsg
                 PreferenceEntryPoint.MANUAL_EXTRACT -> snackExtractMsg
-                PreferenceEntryPoint.EDIT -> return@collect
+                PreferenceEntryPoint.EDIT -> snackEditMsg
             }
             val result = snackbarHostState.showSnackbar(
                 message = message,
@@ -205,6 +208,8 @@ fun AppScaffold(
         }
     }
 
+    QuickSyncFeedbackSheet(preferenceViewModel = preferenceViewModel)
+
     // Saved-list screens honor the shared search bar; other destinations ignore it.
     LaunchedEffect(appSearchQuery, currentDest, menuScreen) {
         if (menuScreen == null && currentDest is HomeDestination.SavedList) {
@@ -212,13 +217,13 @@ fun AppScaffold(
         }
     }
 
-    // Navigate to Preferences chat when the preference flow redirects there.
-    val navigateToChat by preferenceViewModel.navigateToChat.collectAsState()
-    LaunchedEffect(navigateToChat) {
-        if (navigateToChat) {
-            menuScreen = AppMenuScreen.Preferences
+    // Navigate to Personalization when explicit feedback opens its assisted composer.
+    val navigateToPersonalization by preferenceViewModel.navigateToPersonalization.collectAsState()
+    LaunchedEffect(navigateToPersonalization) {
+        if (navigateToPersonalization) {
+            menuScreen = AppMenuScreen.Personalization
             isSearchExpanded = false
-            preferenceViewModel.onChatNavigated()
+            preferenceViewModel.onPersonalizationNavigated()
         }
     }
 
@@ -252,9 +257,6 @@ fun AppScaffold(
             )
         }
     }
-
-    PreferenceLearningBottomSheet(preferenceViewModel = preferenceViewModel)
-    org.muilab.notigpt.ui.preference.component.PreferenceQuickSyncReviewDialog(preferenceViewModel = preferenceViewModel)
 
     // ── Navigation helpers ──
     fun clearSearch() {
@@ -325,7 +327,6 @@ fun AppScaffold(
                 accountEmail = remember(accountRevision) {
                     org.muilab.notigpt.data.remote.auth.GoogleAuthManager.currentUser()?.email
                 },
-                unresolvedConflictCount = unresolvedConflicts.size,
                 dueUnseenReminderCount = dueUnseenReminderCount,
                 activeTodoCount = activeTodoCount,
                 activeKeepCount = activeKeepCount,
@@ -360,6 +361,45 @@ fun AppScaffold(
                         scrollBehavior = topBarScrollBehavior,
                         large = atHomeRoot,
                         actions = {
+                            if (
+                                menuScreen == AppMenuScreen.Personalization &&
+                                personalizationState.hasTemporaryConversation
+                            ) {
+                                var clearMenuExpanded by remember { mutableStateOf(false) }
+                                Box {
+                                    IconButton(onClick = { clearMenuExpanded = true }) {
+                                        Icon(
+                                            painter = painterResource(R.drawable.more_vert),
+                                            contentDescription = stringResource(R.string.a11y_more_actions),
+                                        )
+                                    }
+                                    DropdownMenu(
+                                        expanded = clearMenuExpanded,
+                                        onDismissRequest = { clearMenuExpanded = false },
+                                    ) {
+                                        DropdownMenuItem(
+                                            text = {
+                                                Text(
+                                                    text = if (personalizationState.pendingSuggestionCount > 0) {
+                                                        stringResource(
+                                                            R.string.personalization_clear_with_suggestions,
+                                                            personalizationState.pendingSuggestionCount,
+                                                        )
+                                                    } else {
+                                                        stringResource(R.string.personalization_clear)
+                                                    },
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                )
+                                            },
+                                            enabled = !personalizationState.isReadOnly,
+                                            onClick = {
+                                                clearMenuExpanded = false
+                                                preferenceViewModel.clearConversation()
+                                            },
+                                        )
+                                    }
+                                }
+                            }
                             // Clear-all bin on the notification category (Communication/Content) pages.
                             // Scoped to the visible list: the current category + time window, excluding pinned.
                             if (menuScreen == null && currentDest is HomeDestination.NotiList) {
@@ -427,7 +467,7 @@ fun AppScaffold(
                             viewModel = scheduledReminderViewModel,
                             searchQuery = appSearchQuery,
                         )
-                        AppMenuScreen.Preferences -> PreferenceChatScreen(
+                        AppMenuScreen.Personalization -> PersonalizationScreen(
                             preferenceViewModel = preferenceViewModel,
                         )
                         AppMenuScreen.History -> NotificationHistoryScreen(
@@ -544,7 +584,7 @@ fun AppScaffold(
 @Composable
 private fun menuScreenTitle(screen: AppMenuScreen): String = when (screen) {
     AppMenuScreen.Reminders -> stringResource(R.string.menu_reminders)
-    AppMenuScreen.Preferences -> stringResource(R.string.tab_preferences)
+    AppMenuScreen.Personalization -> stringResource(R.string.personalization_title)
     AppMenuScreen.History -> stringResource(R.string.menu_history)
     AppMenuScreen.Settings -> stringResource(R.string.menu_settings)
 }
