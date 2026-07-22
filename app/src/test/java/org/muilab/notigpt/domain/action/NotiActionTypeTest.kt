@@ -13,6 +13,8 @@ class NotiActionTypeTest {
         assertEquals(NotiActionType.Unpin, NotiActionType.fromWireValue("unpin"))
         assertEquals(NotiActionType.AccessClickDismiss, NotiActionType.fromWireValue("access_click_dismiss"))
         assertEquals(NotiActionType.AccessClickSearch, NotiActionType.fromWireValue("access_click_search"))
+        assertEquals(NotiActionType.MakeTodo, NotiActionType.fromWireValue("make_task"))
+        assertEquals(NotiActionType.MakeTodo, NotiActionType.fromWireValue("make_todo"))
     }
 
     @Test
@@ -20,4 +22,3 @@ class NotiActionTypeTest {
         assertNull(NotiActionType.fromWireValue("unknown_action"))
     }
 }
-

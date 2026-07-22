@@ -20,12 +20,12 @@ import androidx.compose.ui.unit.dp
 import org.muilab.notigpt.R
 
 /**
- * Task completion toggle styled after iOS Reminders' circular checkbox — filled + checkmark when
+ * Todo completion toggle styled after iOS Reminders' circular checkbox — filled + checkmark when
  * done, hollow ring in the type accent otherwise — instead of Material's square checkbox glyph.
  *
  * Shared between [org.muilab.notigpt.ui.saveditem.screen.SavedItemCard],
  * [org.muilab.notigpt.ui.saveditem.screen.SavedItemDetailScreen], and [TodoStepRow] so a task and
- * its sub-tasks use the same completion affordance.
+ * its steps use the same completion affordance.
  */
 @Composable
 fun TodoCompletionToggle(

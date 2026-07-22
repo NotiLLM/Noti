@@ -20,8 +20,9 @@ sealed class NotiActionType(val wireValue: String) {
     data object Archive : NotiActionType("archive")
     data object Unarchive : NotiActionType("unarchive")
 
-    data object MakeTask : NotiActionType("make_task")
-    data object DismissTask : NotiActionType("dismiss_task")
+    // Legacy wire values remain readable for existing analytics rows; the app domain is Todo.
+    data object MakeTodo : NotiActionType("make_task")
+    data object DismissTodo : NotiActionType("dismiss_task")
 
     data object Save : NotiActionType("save")
     data object Unsave : NotiActionType("unsave")
@@ -48,8 +49,8 @@ sealed class NotiActionType(val wireValue: String) {
             "undo_to_top" -> UndoToTop
             "archive" -> Archive
             "unarchive" -> Unarchive
-            "make_task" -> MakeTask
-            "dismiss_task" -> DismissTask
+            "make_task", "make_todo" -> MakeTodo
+            "dismiss_task", "dismiss_todo" -> DismissTodo
             "save" -> Save
             "unsave" -> Unsave
             "pin" -> Pin

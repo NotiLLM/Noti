@@ -88,7 +88,6 @@
     <string name="account_switch_keep_history_warning">現有通知文字會留在此裝置，之後可能由新帳戶處理。</string>
     <string name="account_switch_start_clean">從乾淨狀態開始</string>
     <string name="account_switch_start_clean_warning">載入新帳戶前永久刪除此裝置的通知紀錄。此資料無法從 Firestore 還原。</string>
-    <string name="ui_saved_items_when_chip">何時：%1$s</string>
     <string name="ui_saved_items_editor_ect_label">預估完成時間（分鐘）</string>
     <string name="ui_saved_items_editor_note">內容</string>
     <string name="ui_saved_items_editor_note_placeholder">寫點什麼……</string>
@@ -517,6 +516,15 @@
     <string name="home_filter_due_soon">即將到期</string>
     <string name="home_filter_recently_updated">最近更新</string>
     <string name="home_filter_all_items">所有項目</string>
+    <string name="suggested_refresh">重新整理</string>
+    <string name="suggested_refreshing">正在評估建議項目…</string>
+    <string name="suggested_refresh_failed">無法重新整理建議項目。仍可查看先前的建議。</string>
+    <string name="suggested_initial_failed">無法評估建議項目。</string>
+    <string name="suggested_reason_title">為何建議此項目</string>
+    <string name="suggested_dismiss">移除建議</string>
+    <string name="suggested_close">關閉</string>
+    <string name="suggested_reason_a11y">為何建議此項目</string>
+    <string name="saved_items_empty_filter">%1$s中沒有項目</string>
     <string name="home_collection_tasks">待辦</string>
     <string name="home_collection_keep">備忘</string>
 

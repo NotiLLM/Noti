@@ -17,6 +17,7 @@ class Constants {
         const val N8N_REFLECTION_PIPELINE = "reflection_pipeline"
         const val N8N_REVIEW_TRANSLATION = "review_translation"
         const val N8N_REGENERATE_ONE = "regenerate_one"
+        const val N8N_SUGGESTION_REFRESH = "suggestion_refresh"
 
         // n8n preference API types
         const val N8N_PREFERENCE_QUICK_SYNC = "preference_quick_sync"

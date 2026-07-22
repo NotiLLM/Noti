@@ -15,6 +15,8 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.combine
 import org.muilab.notigpt.data.local.room.AppDatabase
 import org.muilab.notigpt.data.local.room.dao.SmartFilterCounts
+import org.muilab.notigpt.data.local.room.dao.BucketCount
+import org.muilab.notigpt.data.repository.suggestion.SuggestionSnapshotStore
 import org.muilab.notigpt.data.repository.notification.NotiClassificationRepository
 import org.muilab.notigpt.model.features.NotiCategory
 import org.muilab.notigpt.model.features.NotiLlmState
@@ -64,6 +66,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     private val db = AppDatabase.getInstance(application.applicationContext)
     private val savedItemDao = db.savedItemDao()
+    private val suggestionStore = SuggestionSnapshotStore.getInstance(application.applicationContext).also {
+        it.syncAccount()
+    }
 
     /**
      * Item-level review counts: users count the eventual items they'll review, not atomic pipeline
@@ -88,6 +93,19 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             )
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SmartFilterCounts())
+
+    /** Counts only active items still present in the local H snapshot. */
+    val suggestedCount: StateFlow<BucketCount> = combine(
+        suggestionStore.state,
+        savedItemDao.observeAll(),
+    ) { suggestionState, items ->
+        val suggestedIds = suggestionState.snapshot?.items.orEmpty().mapTo(hashSetOf()) { it.savedItemId }
+        val active = items.filter { it.savedItemId in suggestedIds && !it.isCompleted && !it.isArchived }
+        BucketCount(
+            todos = active.count { it.isTodo },
+            keeps = active.count { !it.isTodo },
+        )
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), BucketCount())
 
     /** Active (non-completed) todo total, for the drawer's Todos entry badge. */
     val activeTodoCount: StateFlow<Int> = savedItemDao.observeActiveTodoCount()

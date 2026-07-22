@@ -14,6 +14,8 @@ import org.muilab.notigpt.util.Constants.Companion.N8N_EXTRACTION_PIPELINE
 import org.muilab.notigpt.util.Constants.Companion.N8N_REFLECTION_PIPELINE
 import org.muilab.notigpt.util.Constants.Companion.N8N_REVIEW_TRANSLATION
 import org.muilab.notigpt.util.Constants.Companion.N8N_REGENERATE_ONE
+import org.muilab.notigpt.util.Constants.Companion.N8N_SUGGESTION_REFRESH
+import org.muilab.notigpt.data.repository.suggestion.SuggestionSnapshotStore
 import org.muilab.notigpt.util.SharedPreferencesManager
 import java.util.concurrent.TimeUnit
 import androidx.work.ExistingWorkPolicy
@@ -99,6 +101,37 @@ fun enqueueReflectionPipeline(context: Context) {
 
     WorkManager.getInstance(context)
         .enqueueUniqueWork("n8n_reflection_pipeline", ExistingWorkPolicy.KEEP, workerRequest)
+}
+
+/**
+ * Queues one G→H Suggested evaluation. Automatic callers respect the six-hour snapshot window;
+ * opening/refreshing Suggested may force an immediate run. KEEP prevents overlapping evaluations.
+ */
+fun enqueueSuggestionRefresh(context: Context, force: Boolean = false) {
+    if (!isSignedIn()) {
+        Log.d("N8nAPI", "Skipping suggestion refresh: not signed in")
+        return
+    }
+    val store = SuggestionSnapshotStore.getInstance(context)
+    if (!force && !store.isRefreshDue()) return
+    // Reflect queued/waiting work immediately so opening an empty Suggested page never flashes a
+    // misleading empty state while WorkManager is waiting for its network constraint.
+    store.beginRefresh()
+
+    val inputData = Data.Builder()
+        .putString("api_type", N8N_SUGGESTION_REFRESH)
+        .putString("webhook_path", BuildConfig.N8N_SUGGEST_G_SHORTLIST_PATH)
+        .build()
+    val request = OneTimeWorkRequestBuilder<N8nAPIWorker>()
+        .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
+        .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+        .setInputData(inputData)
+        .build()
+    WorkManager.getInstance(context).enqueueUniqueWork(
+        "n8n_suggestion_refresh",
+        ExistingWorkPolicy.KEEP,
+        request,
+    )
 }
 
 /** Queues translation-only Pipeline F for one durable review-draft snapshot. */

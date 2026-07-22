@@ -6,6 +6,7 @@ import org.muilab.notigpt.util.Constants.Companion.N8N_REFLECTION_PIPELINE
 import org.muilab.notigpt.util.Constants.Companion.N8N_PREFERENCE_QUICK_SYNC
 import org.muilab.notigpt.util.Constants.Companion.N8N_REGENERATE_ONE
 import org.muilab.notigpt.util.Constants.Companion.N8N_REVIEW_TRANSLATION
+import org.muilab.notigpt.util.Constants.Companion.N8N_SUGGESTION_REFRESH
 
 /**
  * Typed view of WorkManager input data for N8nAPIWorker.
@@ -46,6 +47,11 @@ sealed interface N8nWorkerInput {
         val reviewKey: String,
     ) : N8nWorkerInput
 
+    /** Replaces the local Suggested snapshot through G shortlist then H rich-context ranking. */
+    data class SuggestionRefresh(
+        override val webhookPath: String,
+    ) : N8nWorkerInput
+
     companion object {
         /** Parses WorkManager Data keys into a typed worker input. */
         fun from(input: Data): N8nWorkerInput? {
@@ -78,6 +84,10 @@ sealed interface N8nWorkerInput {
                 N8N_REVIEW_TRANSLATION -> ReviewTranslation(
                     webhookPath = webhookPath,
                     reviewKey = input.getString("review_key") ?: return null,
+                )
+
+                N8N_SUGGESTION_REFRESH -> SuggestionRefresh(
+                    webhookPath = webhookPath,
                 )
 
                 else -> null

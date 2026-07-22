@@ -17,6 +17,7 @@ import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.muilab.notigpt.data.local.room.AppDatabase
 import org.muilab.notigpt.data.remote.n8n.enqueueRegenerateOne
+import org.muilab.notigpt.data.remote.n8n.enqueueSuggestionRefresh
 import org.muilab.notigpt.data.export.ExportableItem
 import org.muilab.notigpt.model.features.SavedItem
 import org.muilab.notigpt.model.features.SavedItemState
@@ -33,10 +34,12 @@ import org.muilab.notigpt.data.repository.saveditem.PendingProposedOpRepository
 import org.muilab.notigpt.data.repository.saveditem.SavedItemRelatedNotificationsRepository
 import org.muilab.notigpt.data.repository.saveditem.TodoStepRepository
 import org.muilab.notigpt.data.remote.googletasks.GoogleTasksAuthManager
+import org.muilab.notigpt.data.repository.suggestion.SuggestionSnapshotStore
+import org.muilab.notigpt.data.repository.suggestion.SuggestionUiState
 import java.util.UUID
 
 /**
- * ViewModel for savedItems, sub-tasks, related notification context, Google Tasks export, and regeneration jobs.
+ * ViewModel for saved items, Todo steps, related notification context, Google Tasks export, and regeneration jobs.
  *
  * Keep screen orchestration here while persistence stays in repositories and remote/background work stays behind
  * platform or n8n enqueue helpers.
@@ -71,6 +74,8 @@ class SavedItemsViewModel(application: Application) : AndroidViewModel(applicati
     private val relatedNotificationsRepo: SavedItemRelatedNotificationsRepository
     private val changeLogRepo: SavedItemChangeLogRepository
     private val pendingProposedOpRepo: PendingProposedOpRepository
+    private val suggestionStore = SuggestionSnapshotStore.getInstance(application.applicationContext)
+    val suggestionState: StateFlow<SuggestionUiState> = suggestionStore.state
 
     /** Extraction pipeline health, for the "server unreachable" banner. */
     val extractionStatus: StateFlow<org.muilab.notigpt.data.remote.n8n.ExtractionStatusStore.Status> =
@@ -87,6 +92,7 @@ class SavedItemsViewModel(application: Application) : AndroidViewModel(applicati
         relatedNotificationsRepo = SavedItemRelatedNotificationsRepository(application.applicationContext)
         changeLogRepo = SavedItemChangeLogRepository(db.savedItemChangeLogDao())
         pendingProposedOpRepo = PendingProposedOpRepository(application.applicationContext)
+        suggestionStore.syncAccount()
         pendingExtractionCount = db.recordDao().observePendingExtractionCount()
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
     }
@@ -195,7 +201,7 @@ class SavedItemsViewModel(application: Application) : AndroidViewModel(applicati
      * lists without changing persisted item data.
      */
     val savedItems: StateFlow<List<SavedItem>> = combine(
-        _filter, _searchQuery, _listMode, _smartFilter, allFlow, todosFlow, keepsFlow, completedFlow, activeKeepsFlow, archivedKeepsFlow, pendingPreviews
+        _filter, _searchQuery, _listMode, _smartFilter, allFlow, todosFlow, keepsFlow, completedFlow, activeKeepsFlow, archivedKeepsFlow, pendingPreviews, suggestionState
     ) { values ->
         val f = values[0] as FilterTab
         @Suppress("UNCHECKED_CAST")
@@ -216,12 +222,16 @@ class SavedItemsViewModel(application: Application) : AndroidViewModel(applicati
         val archivedKeeps = values[9] as List<SavedItem>
         @Suppress("UNCHECKED_CAST")
         val pendingPreviews = values[10] as Map<String, PendingListPreview>
+        val suggestions = values[11] as SuggestionUiState
 
-        val baseList = if (smart != null) {
+        val unsortedBaseList = if (smart != null) {
             val now = System.currentTimeMillis()
             val scoped = all.filter { !it.isCompleted && !it.isArchived }
             val filtered = when (smart) {
-                SavedListFilter.Suggested -> emptyList()
+                SavedListFilter.Suggested -> {
+                    val byId = scoped.associateBy { it.savedItemId }
+                    suggestions.snapshot?.items.orEmpty().mapNotNull { byId[it.savedItemId] }
+                }
                 SavedListFilter.Starred -> scoped.filter { it.isStarred }
                 SavedListFilter.DueSoon -> scoped.filter {
                     it.isTodo && it.deadlineAtMs > 0L &&
@@ -262,12 +272,16 @@ class SavedItemsViewModel(application: Application) : AndroidViewModel(applicati
                     else -> all // All
                 }
             }
-        }.sortedWith(
-            compareByDescending<SavedItem> { it.isStarred }
-                .thenBy { it.deadlineAtMs.takeIf { deadline -> deadline > 0L } ?: Long.MAX_VALUE }
-                .thenByDescending { it.lastUpdateTimestamp }
-                .thenByDescending { it.savedItemId }
-        )
+        }
+        // H's response order is the Suggested ranking. Other lists keep the established attention order.
+        val baseList = if (smart == SavedListFilter.Suggested) unsortedBaseList else {
+            unsortedBaseList.sortedWith(
+                compareByDescending<SavedItem> { it.isStarred }
+                    .thenBy { it.deadlineAtMs.takeIf { deadline -> deadline > 0L } ?: Long.MAX_VALUE }
+                    .thenByDescending { it.lastUpdateTimestamp }
+                    .thenByDescending { it.savedItemId }
+            )
+        }
 
         val mergeSourceIds = pendingPreviews.values
             .flatMap { it.mergeSourceItemIds }
@@ -297,7 +311,15 @@ class SavedItemsViewModel(application: Application) : AndroidViewModel(applicati
         .distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    /** Sub-tasks grouped by parent item ID. */
+    fun refreshSuggestions(force: Boolean = true) {
+        enqueueSuggestionRefresh(getApplication(), force)
+    }
+
+    fun dismissSuggestion(savedItemId: String) {
+        suggestionStore.dismiss(savedItemId)
+    }
+
+    /** Todo steps grouped by parent item ID. */
     val allTodoStepsBySavedItem: StateFlow<Map<String, List<TodoStep>>> =
         stepRepo.observeAllBySavedItem()
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())

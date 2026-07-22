@@ -107,6 +107,7 @@ import org.muilab.notigpt.model.features.SavedItemState
 import org.muilab.notigpt.model.features.TodoStep
 import org.muilab.notigpt.model.features.ReviewItemDraft
 import org.muilab.notigpt.data.export.asExportable
+import org.muilab.notigpt.data.repository.suggestion.SuggestedItem
 import org.muilab.notigpt.ui.preference.component.PreferenceLearningBottomSheet
 import org.muilab.notigpt.ui.common.feedback.AppSnackbar
 import org.muilab.notigpt.ui.theme.NotiTheme
@@ -152,7 +153,7 @@ fun SavedItemsScreen(
     scheduledReminderViewModel: ScheduledReminderViewModel? = null,
     preferenceViewModel: PreferenceViewModel? = null,
     listMode: SavedItemsViewModel.ListMode = SavedItemsViewModel.ListMode.All,
-    /** When set, this screen shows a home smart-filter list (planned-date bucket or starred) instead of the tab chips. */
+    /** When set, this screen shows a home attention-filter list instead of collection tabs. */
     smartFilter: org.muilab.notigpt.ui.common.navigation.SavedListFilter? = null,
     /** When set, opens this item's detail screen as soon as it's loaded (e.g. jumping in from a notification's linked-items sheet). Consumed once. */
     initialDetailItemId: String? = null,
@@ -184,17 +185,65 @@ fun SavedItemsScreen(
     val savedItems by vm.savedItems.collectAsState()
     val pendingPreviews by vm.pendingPreviews.collectAsState()
     val filter by vm.filter.collectAsState()
+    val suggestionState by vm.suggestionState.collectAsState()
+
+    LaunchedEffect(smartFilter, suggestionState.snapshot, suggestionState.isRefreshing) {
+        if (
+            smartFilter == org.muilab.notigpt.ui.common.navigation.SavedListFilter.Suggested &&
+            suggestionState.snapshot == null &&
+            !suggestionState.isRefreshing &&
+            suggestionState.error == null
+        ) {
+            vm.refreshSuggestions()
+        }
+    }
+
+    var suggestionInfo by remember { mutableStateOf<SuggestedItem?>(null) }
+    val suggestionById = remember(suggestionState.snapshot) {
+        suggestionState.snapshot?.items.orEmpty().associateBy { it.savedItemId }
+    }
 
     // Mixed attention-filter pages get an in-page Todo/Keep filter,
     // but only when the page actually contains both types. null = show all. Reset when the page changes.
     var smartTypeFilter by remember(smartFilter) { mutableStateOf<String?>(null) }
-    val smartHasTask = smartFilter != null && savedItems.any { it.isTodo }
+    val smartHasTodo = smartFilter != null && savedItems.any { it.isTodo }
     val smartHasKeep = smartFilter != null && savedItems.any { !it.isTodo }
-    val smartShowTypeChips = smartHasTask && smartHasKeep
+    val smartShowTypeChips = smartHasTodo && smartHasKeep
     val displayedSavedItems = if (smartFilter != null && smartTypeFilter != null) {
         savedItems.filter { it.itemType == smartTypeFilter }
     } else {
         savedItems
+    }
+
+    val activeEmptyFilterName = when (smartFilter) {
+        org.muilab.notigpt.ui.common.navigation.SavedListFilter.Suggested -> stringResource(R.string.home_filter_suggested)
+        org.muilab.notigpt.ui.common.navigation.SavedListFilter.Starred -> stringResource(R.string.home_filter_starred)
+        org.muilab.notigpt.ui.common.navigation.SavedListFilter.DueSoon -> stringResource(R.string.home_filter_due_soon)
+        org.muilab.notigpt.ui.common.navigation.SavedListFilter.RecentlyUpdated -> stringResource(R.string.home_filter_recently_updated)
+        org.muilab.notigpt.ui.common.navigation.SavedListFilter.AllItems -> stringResource(R.string.home_filter_all_items)
+        org.muilab.notigpt.ui.common.navigation.SavedListFilter.Todos -> stringResource(R.string.ui_saved_items_filter_tasks)
+        org.muilab.notigpt.ui.common.navigation.SavedListFilter.Keep -> stringResource(R.string.ui_saved_items_filter_keep)
+        null -> when (listMode) {
+            SavedItemsViewModel.ListMode.Todos -> when (filter) {
+                SavedItemsViewModel.FilterTab.Completed -> stringResource(R.string.ui_saved_items_filter_completed)
+                SavedItemsViewModel.FilterTab.Starred -> stringResource(R.string.ui_saved_items_filter_starred)
+                SavedItemsViewModel.FilterTab.All -> stringResource(R.string.ui_saved_items_filter_all)
+                else -> stringResource(R.string.ui_saved_items_filter_pending)
+            }
+            SavedItemsViewModel.ListMode.Keep -> when (filter) {
+                SavedItemsViewModel.FilterTab.Archived -> stringResource(R.string.ui_saved_items_filter_archived)
+                SavedItemsViewModel.FilterTab.Starred -> stringResource(R.string.ui_saved_items_filter_starred)
+                SavedItemsViewModel.FilterTab.All -> stringResource(R.string.ui_saved_items_filter_all)
+                else -> stringResource(R.string.ui_saved_items_filter_keep)
+            }
+            SavedItemsViewModel.ListMode.All -> when (filter) {
+                SavedItemsViewModel.FilterTab.Todos -> stringResource(R.string.ui_saved_items_filter_tasks)
+                SavedItemsViewModel.FilterTab.Keeps -> stringResource(R.string.ui_saved_items_filter_memos)
+                SavedItemsViewModel.FilterTab.Completed -> stringResource(R.string.ui_saved_items_filter_completed)
+                SavedItemsViewModel.FilterTab.Starred -> stringResource(R.string.ui_saved_items_filter_starred)
+                else -> stringResource(R.string.ui_saved_items_filter_all)
+            }
+        }
     }
 
     // Flash the destination filter chip when a card changes status (e.g. completed -> Completed chip).
@@ -202,7 +251,7 @@ fun SavedItemsScreen(
     var flashTick by remember { mutableIntStateOf(0) }
     val flashChip: (SavedItemsViewModel.FilterTab) -> Unit = { tab -> flashTarget = tab; flashTick++ }
 
-    // Section identity color for the active tab (Tasks=amber, Keep=teal). Drives card accents + FAB.
+    // Section identity color for the active tab (Todos=indigo, Keep=green). Drives card accents + FAB.
     val tabAccent: Color? = when (listMode) {
         SavedItemsViewModel.ListMode.Todos -> NotiTheme.semantic.taskAccent
         SavedItemsViewModel.ListMode.Keep -> NotiTheme.semantic.keepAccent
@@ -251,7 +300,7 @@ fun SavedItemsScreen(
         }
     }
 
-    // Bulk sub-task observation (one DB query for all savedItems)
+    // Bulk Todo-step observation (one DB query for all saved items).
     val allTodoStepsBySavedItem by vm.allTodoStepsBySavedItem.collectAsState()
 
     var scheduledReminderTarget by remember { mutableStateOf<SavedItem?>(null) }
@@ -354,7 +403,7 @@ fun SavedItemsScreen(
                     }
                 }
 
-                // Smart-filter pages get task/keep chips only when both types are present.
+                // Smart-filter pages get Todo/Keep chips only when both types are present.
                 if (smartShowTypeChips) {
                     SavedItemFilterChip(stringResource(R.string.ui_saved_items_filter_all), smartTypeFilter == null, { smartTypeFilter = null })
                     SavedItemFilterChip(stringResource(R.string.ui_saved_items_filter_tasks), smartTypeFilter == SavedItemType.Todo, { smartTypeFilter = SavedItemType.Todo }, leadingIconRes = R.drawable.check_box_unchecked, iconTint = NotiTheme.semantic.taskAccent)
@@ -362,6 +411,22 @@ fun SavedItemsScreen(
                 }
 
                 Spacer(Modifier.weight(1f))
+                if (smartFilter == org.muilab.notigpt.ui.common.navigation.SavedListFilter.Suggested) {
+                    IconButton(
+                        onClick = { vm.refreshSuggestions() },
+                        enabled = !suggestionState.isRefreshing,
+                    ) {
+                        if (suggestionState.isRefreshing) {
+                            CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                        } else {
+                            Icon(
+                                painter = painterResource(R.drawable.refresh),
+                                contentDescription = stringResource(R.string.suggested_refresh),
+                                modifier = Modifier.size(20.dp),
+                            )
+                        }
+                    }
+                }
             }
 
             // Offline banner: extraction requests are failing and records are queued locally.
@@ -394,6 +459,68 @@ fun SavedItemsScreen(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 96.dp)
             ) {
+                if (
+                    smartFilter == org.muilab.notigpt.ui.common.navigation.SavedListFilter.Suggested &&
+                    suggestionState.snapshot != null &&
+                    (suggestionState.isRefreshing || suggestionState.error != null)
+                ) {
+                    item(key = "suggestion_status") {
+                        Text(
+                            text = stringResource(
+                                if (suggestionState.isRefreshing) R.string.suggested_refreshing
+                                else R.string.suggested_refresh_failed,
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = Dimens.screenH, vertical = 8.dp),
+                        )
+                    }
+                }
+                if (displayedSavedItems.isEmpty()) {
+                    item(key = "saved_items_empty") {
+                        Box(
+                            modifier = Modifier.fillMaxWidth().height(260.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                if (
+                                    smartFilter == org.muilab.notigpt.ui.common.navigation.SavedListFilter.Suggested &&
+                                    suggestionState.snapshot == null &&
+                                    suggestionState.isRefreshing
+                                ) {
+                                    CircularProgressIndicator(Modifier.size(28.dp), strokeWidth = 2.dp)
+                                    Text(
+                                        stringResource(R.string.suggested_refreshing),
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                } else {
+                                    Text(
+                                        text = if (
+                                            smartFilter == org.muilab.notigpt.ui.common.navigation.SavedListFilter.Suggested &&
+                                            suggestionState.snapshot == null &&
+                                            suggestionState.error != null
+                                        ) stringResource(R.string.suggested_initial_failed)
+                                        else stringResource(R.string.saved_items_empty_filter, activeEmptyFilterName),
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                    if (
+                                        smartFilter == org.muilab.notigpt.ui.common.navigation.SavedListFilter.Suggested &&
+                                        suggestionState.snapshot == null &&
+                                        suggestionState.error != null
+                                    ) {
+                                        TextButton(onClick = { vm.refreshSuggestions() }) {
+                                            Text(stringResource(R.string.suggested_refresh))
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
                 items(displayedSavedItems, key = { it.savedItemId }, contentType = { "reminderCard" }) { item ->
                     val pendingPreview = pendingPreviews[item.savedItemId]
                     SavedItemCard(
@@ -410,6 +537,10 @@ fun SavedItemsScreen(
                             requestEdit(item)
                         },
                         onToggleStarred = { vm.toggleStarred(item) },
+                        suggestionReason = suggestionById[item.savedItemId]?.reason,
+                        onShowSuggestionReason = suggestionById[item.savedItemId]?.let { info ->
+                            { suggestionInfo = info }
+                        },
                         onSetDeadline = if (item.isTodo) {
                             { deadlineAtMs -> vm.setDeadline(item.savedItemId, deadlineAtMs) }
                         } else null,
@@ -432,6 +563,29 @@ fun SavedItemsScreen(
                     )
                 }
             }
+        }
+
+        suggestionInfo?.let { info ->
+            AlertDialog(
+                onDismissRequest = { suggestionInfo = null },
+                title = { Text(stringResource(R.string.suggested_reason_title)) },
+                text = { Text(info.reason) },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            vm.dismissSuggestion(info.savedItemId)
+                            suggestionInfo = null
+                        },
+                    ) {
+                        Text(stringResource(R.string.suggested_dismiss))
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { suggestionInfo = null }) {
+                        Text(stringResource(R.string.suggested_close))
+                    }
+                },
+            )
         }
 
         scheduledReminderTarget?.let { target ->
@@ -724,7 +878,7 @@ fun SavedItemsScreen(
 }
 
 /**
- * Single-select filter chip used by the Task/Keep filter rows.
+ * Single-select filter chip used by the Todo/Keep filter rows.
  *
  * Wraps Material3 [FilterChip]; pass [leadingIconRes] to show a leading icon (e.g. checkbox glyphs for
  * Pending/Completed). These are mutually-exclusive filters, which is exactly FilterChip's role.
@@ -775,12 +929,14 @@ fun SavedItemCard(
     onToggleCompleted: (Boolean) -> Unit,
     onEdit: () -> Unit,
     onToggleStarred: (() -> Unit)? = null,
+    suggestionReason: String? = null,
+    onShowSuggestionReason: (() -> Unit)? = null,
     onCreateReminder: (() -> Unit)? = null,
     /** Set/clear a task deadline date straight from the card. Time editing stays on the detail screen. */
     onSetDeadline: ((Long) -> Unit)? = null,
     onLongPress: () -> Unit = {},
     onArchive: () -> Unit = {},
-    /** Optional left-edge accent identifying the section (e.g. Tasks/Keep). Null = no accent. */
+    /** Optional left-edge accent identifying the section (e.g. Todos/Keep). Null = no accent. */
     sectionAccent: Color? = null,
     // Multi-select (New screen triage). When selectionMode, the card toggles selection instead of opening.
     selectionMode: Boolean = false,
@@ -810,7 +966,7 @@ fun SavedItemCard(
     val rowAccent = if (item.isTodo) NotiTheme.semantic.taskAccent else NotiTheme.semantic.keepAccent
     val selectedBorder = sectionAccent ?: MaterialTheme.colorScheme.primary
     // Left-edge accent: use the section accent in single-type lists, else fall back to the item's own
-    // type accent so Task (indigo) vs Keep (green) stays legible in mixed / smart-filter lists.
+    // type accent so Todo (indigo) vs Keep (green) stays legible in mixed / smart-filter lists.
     val edgeAccent = sectionAccent ?: rowAccent
     Surface(
         modifier = Modifier
@@ -954,7 +1110,7 @@ fun SavedItemCard(
                     }
                 }
 
-                // Inline sub-tasks
+                // Inline Todo steps.
                 if (steps.isNotEmpty()) {
                     TodoStepListInCard(
                         steps = steps,
@@ -983,6 +1139,16 @@ fun SavedItemCard(
                             )
                         }
                         Spacer(Modifier.weight(1f))
+                        if (!suggestionReason.isNullOrBlank() && onShowSuggestionReason != null) {
+                            IconButton(onClick = onShowSuggestionReason) {
+                                Icon(
+                                    painter = painterResource(R.drawable.info),
+                                    contentDescription = stringResource(R.string.suggested_reason_a11y),
+                                    modifier = Modifier.size(20.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
                         if (onCreateReminder != null) {
                             IconButton(onClick = onCreateReminder) {
                                 Icon(
@@ -1113,7 +1279,7 @@ fun SavedItemDetailScreen(
     var reviewSteps by remember(initial.savedItemId) { mutableStateOf(steps) }
     val visibleSteps = if (reviewMode) reviewSteps else steps
 
-    // Per-type accent: indigo for Task, green for Keep.
+    // Per-type accent: indigo for Todo, green for Keep.
     val accent = if (isTodo) NotiTheme.semantic.taskAccent else NotiTheme.semantic.keepAccent
     val accentContainer = if (isTodo) NotiTheme.semantic.taskContainer else NotiTheme.semantic.keepContainer
     val onAccentContainer = if (isTodo) NotiTheme.semantic.onTaskContainer else NotiTheme.semantic.onKeepContainer
@@ -1124,7 +1290,7 @@ fun SavedItemDetailScreen(
             content = content,
             itemType = if (isTodo) SavedItemType.Todo else SavedItemType.Keep,
             state = if (isTodo && isCompleted) SavedItemState.Completed else SavedItemState.Saved,
-            // Keep this value until persistence so Task -> Keep conversion can merge it into content.
+            // Keep this value until persistence so Todo -> Keep conversion can merge it into content.
             // SavedItemNormalization clears it before the Keep row is stored.
             deadlineAtMs = deadlineAtMs,
         )
@@ -1215,7 +1381,7 @@ fun SavedItemDetailScreen(
                 )
             }
 
-            // Type selector chips: Task (indigo) / Keep (green)
+            // Type selector chips: Todo (indigo) / Keep (green).
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(
                     selected = isTodo,
@@ -1252,7 +1418,7 @@ fun SavedItemDetailScreen(
             }
 
             if (isTodo) {
-                // Task completion remains its own compact control; scheduling controls follow below.
+                // Todo completion remains its own compact control; scheduling controls follow below.
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
                     shape = MaterialTheme.shapes.large,

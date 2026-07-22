@@ -8,6 +8,7 @@ import org.muilab.notigpt.data.remote.n8n.workers.handlers.PreferenceQuickSyncHa
 import org.muilab.notigpt.data.remote.n8n.workers.handlers.ReflectionPipelineHandler
 import org.muilab.notigpt.data.remote.n8n.workers.handlers.SavedItemRegenerationHandler
 import org.muilab.notigpt.data.remote.n8n.workers.handlers.ReviewTranslationHandler
+import org.muilab.notigpt.data.remote.n8n.workers.handlers.SuggestionRefreshHandler
 
 /**
  * Dispatcher from typed WorkManager input to the matching n8n workflow handler.
@@ -34,6 +35,7 @@ internal object N8nWorkerHandlers {
             is N8nWorkerInput.PreferenceQuickSync -> PreferenceQuickSyncHandler.handle(ctx, raw)
             is N8nWorkerInput.RegenerateOne -> SavedItemRegenerationHandler.handleOne(ctx, raw)
             is N8nWorkerInput.ReviewTranslation -> ReviewTranslationHandler.handle(ctx, input, runAttemptCount)
+            is N8nWorkerInput.SuggestionRefresh -> SuggestionRefreshHandler.handle(ctx)
         }
     }
 }

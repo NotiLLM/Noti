@@ -26,9 +26,9 @@ import org.muilab.notigpt.R
 import org.muilab.notigpt.model.features.TodoStep
 
 /**
- * Inline sub-task list shown inside SavedItemCard on the list screen.
+ * Inline Todo-step list shown inside SavedItemCard on the list screen.
  *
- * Shows at most [maxVisible] incomplete sub-tasks, plus a clickable
+ * Shows at most [maxVisible] incomplete steps, plus a clickable
  * "N more" / "N completed" summary that expands to reveal hidden items.
  */
 @Composable
@@ -74,7 +74,7 @@ fun TodoStepListInCard(
             }
     ) {
     Column(modifier = Modifier.weight(1f)) {
-        // Always-visible incomplete sub-tasks
+        // Always-visible incomplete steps.
         visible.forEach { st ->
             TodoStepRow(
                 step = st,
@@ -87,7 +87,7 @@ fun TodoStepListInCard(
             )
         }
 
-        // Expandable hidden incomplete sub-tasks
+        // Expandable hidden incomplete steps.
         if (hiddenIncomplete.isNotEmpty()) {
             AnimatedVisibility(
                 visible = showAllIncomplete,
@@ -123,7 +123,7 @@ fun TodoStepListInCard(
             )
         }
 
-        // Expandable completed sub-tasks
+        // Expandable completed steps.
         if (completed.isNotEmpty()) {
             AnimatedVisibility(
                 visible = completedVisible,
@@ -163,4 +163,3 @@ fun TodoStepListInCard(
         }
     }
 }
-

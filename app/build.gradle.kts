@@ -66,6 +66,8 @@ android {
         buildConfigField("String", "N8N_EXTRACT_D2_GROUPING_PATH", "\"webhook/extract-d2-grouping\"")
         buildConfigField("String", "N8N_EXTRACT_E2_MERGE_PATH", "\"webhook/extract-e2-merge\"")
         buildConfigField("String", "N8N_EXTRACT_F_TRANSLATION_PATH", "\"webhook/extract-f-translation\"")
+        buildConfigField("String", "N8N_SUGGEST_G_SHORTLIST_PATH", "\"webhook/suggest-g-shortlist\"")
+        buildConfigField("String", "N8N_SUGGEST_H_DECIDE_PATH", "\"webhook/suggest-h-decide\"")
         buildConfigField("String", "N8N_REGENERATE_ONE_PATH", "\"webhook/reminder-regenerate-one\"")
         buildConfigField("String", "N8N_PREFERENCE_QUICK_SYNC_PATH", "\"webhook/preference-quick-sync\"")
         buildConfigField("String", "N8N_PREFERENCE_CHAT_INTERACT_PATH", "\"webhook/preference-chat-interact\"")

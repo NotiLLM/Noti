@@ -11,6 +11,7 @@ import dagger.assisted.AssistedInject
 import org.muilab.notigpt.data.local.room.AppDatabase
 import org.muilab.notigpt.data.remote.firestore.FirestoreRestoreRepository
 import org.muilab.notigpt.data.remote.n8n.enqueueExtractionPipeline
+import org.muilab.notigpt.data.remote.n8n.enqueueSuggestionRefresh
 import org.muilab.notigpt.util.SharedPreferencesManager
 
 /**
@@ -80,6 +81,10 @@ class ExtractionPeriodicWorker @AssistedInject constructor(
 
         // === Reflection pass (daily safety net or accumulated item changes) ===
         ReflectionTrigger.maybeEnqueue(applicationContext)
+
+        // The worker already runs more often than Suggested's six-hour window. The enqueuer checks
+        // the local snapshot timestamp and does nothing until another evaluation is due.
+        enqueueSuggestionRefresh(applicationContext)
 
         Log.i(TAG, "doWork end; nudgedKeys=$nudged")
         return Result.success()

@@ -56,6 +56,10 @@ class TodoStepRepository(private val todoStepDao: TodoStepDao) {
         todoStepDao.getById(todoStepId)
     }
 
+    suspend fun getBySavedItemId(savedItemId: String): List<TodoStep> = withContext(Dispatchers.IO) {
+        todoStepDao.getBySavedItemId(savedItemId)
+    }
+
     suspend fun nextPosition(savedItemId: String): Int = withContext(Dispatchers.IO) {
         todoStepDao.nextPosition(savedItemId)
     }

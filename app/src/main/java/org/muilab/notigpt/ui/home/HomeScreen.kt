@@ -70,6 +70,7 @@ fun HomeScreen(
 ) {
     val reviewCounts by homeViewModel.reviewCounts.collectAsState()
     val smartCounts by homeViewModel.smartFilterCounts.collectAsState()
+    val suggestedCount by homeViewModel.suggestedCount.collectAsState()
     val llmByKey by drawerViewModel.llmStatesByKey.collectAsState()
     val newUnits by drawerViewModel.newNotificationUnits.collectAsState()
     val hasLoadedNotifications by drawerViewModel.hasLoadedInitialNotifications.collectAsState()
@@ -126,6 +127,7 @@ fun HomeScreen(
         item {
             SmartFilterGrid(
                 counts = smartCounts,
+                suggestedCount = suggestedCount,
                 onOpen = onOpenSavedList,
             )
         }
@@ -387,6 +389,7 @@ private fun CategoryPreviewLineRow(line: CategoryPreviewLine) {
 @Composable
 private fun SmartFilterGrid(
     counts: org.muilab.notigpt.data.local.room.dao.SmartFilterCounts,
+    suggestedCount: org.muilab.notigpt.data.local.room.dao.BucketCount,
     onOpen: (SavedListFilter) -> Unit,
 ) {
     Column(
@@ -395,7 +398,7 @@ private fun SmartFilterGrid(
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             SmartFilterBox(
-                count = counts.all,
+                count = suggestedCount,
                 label = stringResource(R.string.home_filter_suggested),
                 iconRes = R.drawable.bookmark,
                 discContainer = NotiTheme.semantic.todayContainer,

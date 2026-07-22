@@ -65,7 +65,7 @@ interface SavedItemDao {
         SELECT
           IFNULL(SUM(CASE WHEN itemType = 'todo' THEN 1 ELSE 0 END), 0) AS all_todos,
           IFNULL(SUM(CASE WHEN itemType = 'keep' THEN 1 ELSE 0 END), 0) AS all_keeps,
-          IFNULL(SUM(CASE WHEN itemType = 'todo' AND deadlineAtMs > 0 AND deadlineAtMs <= :dueEndMs THEN 1 ELSE 0 END), 0) AS due_todos,
+          IFNULL(SUM(CASE WHEN itemType = 'todo' AND deadlineAtMs > 0 AND deadlineAtMs < :dueEndMs THEN 1 ELSE 0 END), 0) AS due_todos,
           0 AS due_keeps,
           IFNULL(SUM(CASE WHEN itemType = 'todo' AND lastUpdateTimestamp >= :recentCutoffMs THEN 1 ELSE 0 END), 0) AS recent_todos,
           IFNULL(SUM(CASE WHEN itemType = 'keep' AND lastUpdateTimestamp >= :recentCutoffMs THEN 1 ELSE 0 END), 0) AS recent_keeps,

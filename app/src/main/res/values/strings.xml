@@ -147,7 +147,6 @@
     <string name="account_switch_keep_history_warning">Existing notification text stays on this device and may be processed under the new account.</string>
     <string name="account_switch_start_clean">Start clean</string>
     <string name="account_switch_start_clean_warning">Permanently deletes device-local notification history before loading the new account. It cannot be restored from Firestore.</string>
-    <string name="ui_saved_items_when_chip">When %1$s</string>
     <string name="ui_saved_items_editor_ect_label">Estimated completion time (minutes)</string>
     <string name="ui_saved_items_editor_note">Note</string>
     <string name="ui_saved_items_editor_note_placeholder">Write something…</string>
@@ -537,6 +536,15 @@
     <string name="home_filter_due_soon">Due soon</string>
     <string name="home_filter_recently_updated">Recently updated</string>
     <string name="home_filter_all_items">All items</string>
+    <string name="suggested_refresh">Refresh</string>
+    <string name="suggested_refreshing">Evaluating suggestions…</string>
+    <string name="suggested_refresh_failed">Suggestions could not be refreshed. Your previous suggestions are still available.</string>
+    <string name="suggested_initial_failed">Suggestions could not be evaluated.</string>
+    <string name="suggested_reason_title">Why this is suggested</string>
+    <string name="suggested_dismiss">Dismiss suggestion</string>
+    <string name="suggested_close">Close</string>
+    <string name="suggested_reason_a11y">Why this is suggested</string>
+    <string name="saved_items_empty_filter">No items in %1$s</string>
     <string name="home_collection_tasks">Todos</string>
     <string name="home_collection_keep">Keep</string>
 
