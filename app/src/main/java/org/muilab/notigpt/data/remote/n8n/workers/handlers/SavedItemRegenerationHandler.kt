@@ -64,6 +64,7 @@ internal object SavedItemRegenerationHandler {
         val notiContext = buildNotiContextForSavedItem(ctx, item)
         val payload = buildPayload(
             savedItems = listOf(item),
+            stepsByItem = mapOf(savedItemId to ctx.database.todoStepDao().getBySavedItemId(savedItemId)),
             notiContextMap = mapOf(savedItemId to notiContext),
             linkedByItem = ctx.savedItemRepository.getLinkedRecordIdsFor(listOf(savedItemId)),
             trigger = "REGENERATE_ONE",
@@ -109,6 +110,7 @@ internal object SavedItemRegenerationHandler {
 
     private fun buildPayload(
         savedItems: List<SavedItem>,
+        stepsByItem: Map<String, List<org.muilab.notigpt.model.features.TodoStep>>,
         notiContextMap: Map<String, List<Map<String, Any>>>,
         linkedByItem: Map<String, List<String>>,
         trigger: String,
@@ -119,21 +121,17 @@ internal object SavedItemRegenerationHandler {
 
         val savedItemsPayload = savedItems.map { r ->
             val deadlineIso = if (r.deadlineAtMs > 0L) sdf.format(Date(r.deadlineAtMs)) else -1L
-            val startAtMsIso = if (r.startAtMs > 0L) sdf.format(Date(r.startAtMs)) else -1L
-            val endAtMsIso = if (r.endAtMs > 0L) sdf.format(Date(r.endAtMs)) else -1L
             mapOf(
                 "savedItemId" to r.savedItemId,
                 "title" to r.title,
                 "content" to r.content,
-                "isTask" to r.isTask,
-                "isEvent" to r.isEvent,
+                "itemType" to r.itemType,
                 "isCompleted" to r.isCompleted,
                 "deadlineTimeString" to deadlineIso,
-                "startAtMsString" to startAtMsIso,
-                "endAtMsString" to endAtMsIso,
                 "sourceNotiRecordIds" to (linkedByItem[r.savedItemId] ?: emptyList()),
                 "userEdited" to r.userEdited,
                 "buttons" to r.buttons,
+                "steps" to stepsByItem[r.savedItemId].orEmpty(),
                 "notiContext" to (notiContextMap[r.savedItemId] ?: emptyList<Any>()),
             )
         }
@@ -146,7 +144,7 @@ internal object SavedItemRegenerationHandler {
             "currentTime" to sdf.format(Date()),
             "targetExtractionLanguage" to SharedPreferencesManager.targetExtractionLanguage,
             "trigger" to trigger,
-            "contractVersion" to 3,
+            "contractVersion" to 2,
             "savedItems" to savedItemsPayload,
             "extractionPreferences" to extractionPreferences,
             "userContexts" to userContexts,
@@ -198,17 +196,16 @@ internal object SavedItemRegenerationHandler {
 
                 val title = N8nOpParsing.titleFrom(obj, existing?.title ?: "")
                 val content = N8nOpParsing.contentFrom(obj, existing?.content ?: "")
-                val isTask = obj.optBoolean("isTask", existing?.isTask ?: true)
+                val itemType = obj.optString("itemType", existing?.itemType ?: SavedItemType.Todo)
+                if (itemType != SavedItemType.Todo && itemType != SavedItemType.Keep) continue
                 val deadlineMs = N8nOpParsing.isoToUnixMillis(obj.optString("deadlineTimeString", "-1"))
-                val startAtMsMs = N8nOpParsing.startAtMsFrom(obj)
-                val endAtMsMs = N8nOpParsing.endAtMsFrom(obj)
                 val isCompleted = obj.optBoolean("isCompleted", existing?.isCompleted ?: false)
 
                 // Parse buttons
                 val buttonsArr = obj.optJSONArray("buttons")
                 val buttons = SavedItemNormalization.mergeButtons(
                     buttonsArr?.toString() ?: existing?.buttons ?: "[]",
-                    N8nOpParsing.childButtons(obj.optJSONArray("subTasks")),
+                    N8nOpParsing.childButtons(obj.optJSONArray("steps")),
                 )
 
                 // Regeneration is user-initiated, so it must NOT drop the item into the review queue
@@ -226,12 +223,11 @@ internal object SavedItemRegenerationHandler {
                     savedItemId = savedItemId,
                     title = title,
                     content = content,
-                    itemType = if (isTask) SavedItemType.Task else SavedItemType.Keep,
+                    itemType = itemType,
                     state = newState,
                     lastUpdateTimestamp = now,
+                    syncModifiedAt = now,
                     deadlineAtMs = deadlineMs,
-                    startAtMs = startAtMsMs,
-                    endAtMs = endAtMsMs,
                     origin = existing?.origin ?: "llm_auto_extraction",
                     humanEditCount = existing?.humanEditCount ?: 0,
                     // Preserve manual-edit provenance; this flag no longer blocks model updates
@@ -241,21 +237,20 @@ internal object SavedItemRegenerationHandler {
                     isViewed = false,
                     // User-owned fields: regeneration must never reset them.
                     isStarred = existing?.isStarred ?: false,
-                    whenAtMs = existing?.whenAtMs ?: 0L,
                     // Advance the review cursor past this regeneration's change-log row so it never
                     // surfaces as "what's new" and revert never treats the rewrite as pending.
                     lastViewedChangeAt = now,
                 )
 
-                val returnedSubTasks = N8nOpParsing.parseSubTasks(
-                    obj.optJSONArray("subTasks"),
+                val returnedSteps = N8nOpParsing.parseSteps(
+                    obj.optJSONArray("steps"),
                     savedItemId,
                     now,
                     baseSortOrder = 0,
                 )
-                val normalized = SavedItemNormalization.normalize(unit, returnedSubTasks)
+                val normalized = SavedItemNormalization.normalize(unit, returnedSteps)
                 ctx.savedItemRepository.upsert(normalized.item)
-                ctx.savedSubItemRepository.replaceForParent(savedItemId, normalized.subItems)
+                ctx.todoStepRepository.replaceForParent(savedItemId, normalized.steps)
                 // Regeneration rewrites content from the item's existing noti context; it neither
                 // adds nor removes provenance, so links stay untouched.
 

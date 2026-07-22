@@ -13,7 +13,7 @@ import org.muilab.notigpt.data.remote.n8n.context.N8nWorkerContext
 import org.muilab.notigpt.data.remote.n8n.formatter.N8nRecordFormatter
 import org.muilab.notigpt.data.remote.n8n.workers.N8nWorkerInput
 import org.muilab.notigpt.model.features.ReviewTranslationState
-import org.muilab.notigpt.model.features.SavedSubItem
+import org.muilab.notigpt.model.features.TodoStep
 import org.muilab.notigpt.util.SharedPreferencesManager
 import java.util.Locale
 import java.util.TimeZone
@@ -58,11 +58,11 @@ internal object ReviewTranslationHandler {
             "userId" to SharedPreferencesManager.userId,
             "language" to Locale.getDefault().toLanguageTag(),
             "timezone" to TimeZone.getDefault().id,
-            "contractVersion" to 1,
+            "contractVersion" to 2,
             "reviewKey" to input.reviewKey,
             "targetLanguage" to state.targetLanguage,
             "currentItem" to state.sourceItem,
-            "subTasks" to state.sourceSubItems,
+            "steps" to state.sourceSteps,
             "notiRecords" to records.sortedBy { it.time }.map { record ->
                 N8nRecordFormatter.format(record, units[record.notiKey]?.isPeople ?: false)
             },
@@ -153,16 +153,16 @@ internal object ReviewTranslationHandler {
         val title = requiredString(response, "title")
         val content = requiredString(response, "content")
 
-        val sourceSubs = source.sourceSubItems.associateBy { it.savedSubItemId }
-        val translatedSubs = response.getAsJsonArray("subTasks") ?: error("subTasks is required")
+        val sourceSubs = source.sourceSteps.associateBy { it.todoStepId }
+        val translatedSubs = response.getAsJsonArray("steps") ?: error("steps is required")
         val subText = mutableMapOf<String, String>()
         for (element in translatedSubs) {
             val obj = element.asJsonObject
-            val id = requiredString(obj, "savedSubItemId")
-            require(id in sourceSubs && id !in subText) { "Unknown or duplicate subtask" }
-            subText[id] = SavedSubItem.normalizeText(requiredString(obj, "text"))
+            val id = requiredString(obj, "todoStepId")
+            require(id in sourceSubs && id !in subText) { "Unknown or duplicate step" }
+            subText[id] = TodoStep.normalizeText(requiredString(obj, "text"))
         }
-        require(subText.keys == sourceSubs.keys) { "Subtask set changed" }
+        require(subText.keys == sourceSubs.keys) { "Step set changed" }
 
         val sourceButtons = JsonParser.parseString(source.sourceItem.buttons).asJsonArray
         val translatedButtons = response.getAsJsonArray("buttons") ?: error("buttons is required")
@@ -188,8 +188,8 @@ internal object ReviewTranslationHandler {
                 content = content,
                 buttons = mergedButtons.toString(),
             ),
-            translatedSubItems = source.sourceSubItems.map { sub ->
-                sub.copy(text = subText.getValue(sub.savedSubItemId))
+            translatedSteps = source.sourceSteps.map { sub ->
+                sub.copy(text = subText.getValue(sub.todoStepId))
             },
         )
     }

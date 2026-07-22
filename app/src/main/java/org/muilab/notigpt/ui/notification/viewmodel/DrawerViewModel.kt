@@ -95,7 +95,7 @@ class DrawerViewModel @Inject constructor(
     val linkedItemCountsByKey: StateFlow<Map<String, Pair<Int, Int>>> =
         org.muilab.notigpt.data.local.room.AppDatabase.getInstance(application.applicationContext)
             .notiSavedItemLinkDao().observeLinkedTypeCounts()
-            .map { rows -> rows.associate { it.notiKey to (it.taskCount to it.keepCount) } }
+            .map { rows -> rows.associate { it.notiKey to (it.todoCount to it.keepCount) } }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
 
     /**

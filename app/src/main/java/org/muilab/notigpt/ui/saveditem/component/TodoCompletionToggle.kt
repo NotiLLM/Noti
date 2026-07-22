@@ -24,11 +24,11 @@ import org.muilab.notigpt.R
  * done, hollow ring in the type accent otherwise — instead of Material's square checkbox glyph.
  *
  * Shared between [org.muilab.notigpt.ui.saveditem.screen.SavedItemCard],
- * [org.muilab.notigpt.ui.saveditem.screen.SavedItemDetailScreen], and [SavedSubItemRow] so a task and
+ * [org.muilab.notigpt.ui.saveditem.screen.SavedItemDetailScreen], and [TodoStepRow] so a task and
  * its sub-tasks use the same completion affordance.
  */
 @Composable
-fun TaskCompletionToggle(
+fun TodoCompletionToggle(
     checked: Boolean,
     accent: Color,
     onCheckedChange: (Boolean) -> Unit,

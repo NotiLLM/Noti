@@ -7,8 +7,6 @@ import androidx.room.PrimaryKey
 @Entity(tableName = "pending_review_draft")
 data class PendingReviewDraft(
     @PrimaryKey val reviewKey: String,
-    /** Null means no override; 0 explicitly clears When; [SavedItem.WHEN_SOMEDAY] means Someday. */
-    val whenAtMs: Long? = null,
     /** Nullable JSON state for a translation requested while this proposal is under review. */
     val translationStateJson: String? = null,
     val updatedAt: Long,

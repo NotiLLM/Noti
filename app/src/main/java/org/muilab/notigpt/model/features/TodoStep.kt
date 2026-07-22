@@ -4,15 +4,10 @@ import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
 
-/**
- * A single-line checklist entry under a task SavedItem.
- *
- * Subtasks deliberately carry no independent description, type, dates, or action buttons. Their
- * position is structural persistence only; it is assigned by the app and is not user-editable.
- */
+/** A single-line action step inside one todo completion unit. */
 @Entity(
-    tableName = "saved_sub_item",
-    primaryKeys = ["savedSubItemId"],
+    tableName = "todo_step",
+    primaryKeys = ["todoStepId"],
     foreignKeys = [
         ForeignKey(
             entity = SavedItem::class,
@@ -21,19 +16,17 @@ import androidx.room.Index
             onDelete = ForeignKey.CASCADE,
         )
     ],
-    indices = [
-        Index(value = ["parentSavedItemId"], name = "idx_saved_sub_item_parent"),
-    ],
+    indices = [Index(value = ["parentSavedItemId"], name = "idx_todo_step_parent")],
 )
-data class SavedSubItem(
-    val savedSubItemId: String,
+data class TodoStep(
+    val todoStepId: String,
     val parentSavedItemId: String,
     val text: String = "",
     val isCompleted: Boolean = false,
     val position: Int = 0,
 ) {
     companion object {
-        /** One logical line; Compose may still wrap it across visual lines. */
+        /** One logical line; Compose may still wrap it visually. */
         fun normalizeText(value: String): String = value
             .replace(Regex("[\\r\\n]+"), " ")
             .replace(Regex("[\\t ]+"), " ")

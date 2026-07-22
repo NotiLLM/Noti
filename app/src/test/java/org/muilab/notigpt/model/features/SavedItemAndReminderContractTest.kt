@@ -9,8 +9,8 @@ import org.muilab.notigpt.model.notifications.NotiRecord
 class SavedItemAndReminderContractTest {
 
     @Test
-    fun savedItemType_keepsTaskAndKeepAsStableRoomValues() {
-        assertEquals("task", SavedItemType.Task)
+    fun savedItemType_usesTodoAndKeepAsStableRoomValues() {
+        assertEquals("todo", SavedItemType.Todo)
         assertEquals("keep", SavedItemType.Keep)
     }
 
@@ -42,7 +42,7 @@ class SavedItemAndReminderContractTest {
         assertTrue(SavedItemState.isNewLike(SavedItemState.New))
         assertTrue(SavedItemState.isNewLike(SavedItemState.Updated))
         assertFalse(SavedItemState.isNewLike(SavedItemState.Saved))
-        assertTrue(SavedItemState.isTaskListState(SavedItemState.Completed))
+        assertTrue(SavedItemState.isTodoListState(SavedItemState.Completed))
         assertTrue(SavedItemState.isKeepListState(SavedItemState.Archived))
     }
 

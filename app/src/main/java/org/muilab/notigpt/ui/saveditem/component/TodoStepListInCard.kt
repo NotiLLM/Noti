@@ -23,7 +23,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import org.muilab.notigpt.R
-import org.muilab.notigpt.model.features.SavedSubItem
+import org.muilab.notigpt.model.features.TodoStep
 
 /**
  * Inline sub-task list shown inside SavedItemCard on the list screen.
@@ -32,20 +32,20 @@ import org.muilab.notigpt.model.features.SavedSubItem
  * "N more" / "N completed" summary that expands to reveal hidden items.
  */
 @Composable
-fun SavedSubItemListInCard(
-    subTasks: List<SavedSubItem>,
+fun TodoStepListInCard(
+    steps: List<TodoStep>,
     onToggleCompleted: (String, Boolean) -> Unit,
-    onSavedSubItemClick: (SavedSubItem) -> Unit,
-    onSavedSubItemEdit: (SavedSubItem) -> Unit,
-    onSavedSubItemDelete: (SavedSubItem) -> Unit,
-    onSavedSubItemExportGoogleTasks: (SavedSubItem) -> Unit,
-    onSavedSubItemExportGoogleCalendar: (SavedSubItem) -> Unit,
+    onTodoStepClick: (TodoStep) -> Unit,
+    onTodoStepEdit: (TodoStep) -> Unit,
+    onTodoStepDelete: (TodoStep) -> Unit,
+    onTodoStepExportGoogleTasks: (TodoStep) -> Unit,
+    onTodoStepExportGoogleCalendar: (TodoStep) -> Unit,
     forceExpanded: Boolean = false,
 ) {
-    if (subTasks.isEmpty()) return
+    if (steps.isEmpty()) return
 
-    val incomplete = subTasks.filter { !it.isCompleted }
-    val completed = subTasks.filter { it.isCompleted }
+    val incomplete = steps.filter { !it.isCompleted }
+    val completed = steps.filter { it.isCompleted }
     // Show all when there are 3 or fewer; otherwise the first 2 + an "X more" expander.
     val visibleCount = when {
         forceExpanded -> incomplete.size
@@ -76,14 +76,14 @@ fun SavedSubItemListInCard(
     Column(modifier = Modifier.weight(1f)) {
         // Always-visible incomplete sub-tasks
         visible.forEach { st ->
-            SavedSubItemRow(
-                subTask = st,
-                onToggleCompleted = { checked -> onToggleCompleted(st.savedSubItemId, checked) },
-                onClick = { onSavedSubItemClick(st) },
-                onEdit = { onSavedSubItemEdit(st) },
-                onDelete = { onSavedSubItemDelete(st) },
-                onExportGoogleTasks = { onSavedSubItemExportGoogleTasks(st) },
-                onExportGoogleCalendar = { onSavedSubItemExportGoogleCalendar(st) },
+            TodoStepRow(
+                step = st,
+                onToggleCompleted = { checked -> onToggleCompleted(st.todoStepId, checked) },
+                onClick = { onTodoStepClick(st) },
+                onEdit = { onTodoStepEdit(st) },
+                onDelete = { onTodoStepDelete(st) },
+                onExportGoogleTasks = { onTodoStepExportGoogleTasks(st) },
+                onExportGoogleCalendar = { onTodoStepExportGoogleCalendar(st) },
             )
         }
 
@@ -96,14 +96,14 @@ fun SavedSubItemListInCard(
             ) {
                 Column {
                     hiddenIncomplete.forEach { st ->
-                        SavedSubItemRow(
-                            subTask = st,
-                            onToggleCompleted = { checked -> onToggleCompleted(st.savedSubItemId, checked) },
-                            onClick = { onSavedSubItemClick(st) },
-                            onEdit = { onSavedSubItemEdit(st) },
-                            onDelete = { onSavedSubItemDelete(st) },
-                            onExportGoogleTasks = { onSavedSubItemExportGoogleTasks(st) },
-                            onExportGoogleCalendar = { onSavedSubItemExportGoogleCalendar(st) },
+                        TodoStepRow(
+                            step = st,
+                            onToggleCompleted = { checked -> onToggleCompleted(st.todoStepId, checked) },
+                            onClick = { onTodoStepClick(st) },
+                            onEdit = { onTodoStepEdit(st) },
+                            onDelete = { onTodoStepDelete(st) },
+                            onExportGoogleTasks = { onTodoStepExportGoogleTasks(st) },
+                            onExportGoogleCalendar = { onTodoStepExportGoogleCalendar(st) },
                         )
                     }
                 }
@@ -111,9 +111,9 @@ fun SavedSubItemListInCard(
 
             Text(
                 text = if (showAllIncomplete)
-                    stringResource(R.string.subtask_show_less)
+                    stringResource(R.string.step_show_less)
                 else
-                    stringResource(R.string.subtask_n_more, hiddenIncomplete.size),
+                    stringResource(R.string.step_n_more, hiddenIncomplete.size),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier
@@ -132,14 +132,14 @@ fun SavedSubItemListInCard(
             ) {
                 Column {
                     completed.forEach { st ->
-                        SavedSubItemRow(
-                            subTask = st,
-                            onToggleCompleted = { checked -> onToggleCompleted(st.savedSubItemId, checked) },
-                            onClick = { onSavedSubItemClick(st) },
-                            onEdit = { onSavedSubItemEdit(st) },
-                            onDelete = { onSavedSubItemDelete(st) },
-                            onExportGoogleTasks = { onSavedSubItemExportGoogleTasks(st) },
-                            onExportGoogleCalendar = { onSavedSubItemExportGoogleCalendar(st) },
+                        TodoStepRow(
+                            step = st,
+                            onToggleCompleted = { checked -> onToggleCompleted(st.todoStepId, checked) },
+                            onClick = { onTodoStepClick(st) },
+                            onEdit = { onTodoStepEdit(st) },
+                            onDelete = { onTodoStepDelete(st) },
+                            onExportGoogleTasks = { onTodoStepExportGoogleTasks(st) },
+                            onExportGoogleCalendar = { onTodoStepExportGoogleCalendar(st) },
                         )
                     }
                 }
@@ -148,9 +148,9 @@ fun SavedSubItemListInCard(
             if (!forceExpanded) {
                 Text(
                     text = if (showCompleted)
-                        stringResource(R.string.subtask_hide_completed)
+                        stringResource(R.string.step_hide_completed)
                     else
-                        stringResource(R.string.subtask_n_completed, completed.size),
+                        stringResource(R.string.step_n_completed, completed.size),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier

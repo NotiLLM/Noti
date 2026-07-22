@@ -1,25 +1,25 @@
 package org.muilab.notigpt.domain.saveditem
 
 import org.muilab.notigpt.model.features.SavedItem
-import org.muilab.notigpt.model.features.SavedSubItem
+import org.muilab.notigpt.model.features.TodoStep
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
 /** Cross-boundary invariants for SavedItem type changes and legacy payload normalization. */
 object SavedItemNormalization {
-    data class Result(val item: SavedItem, val subItems: List<SavedSubItem>)
+    data class Result(val item: SavedItem, val steps: List<TodoStep>)
 
-    fun normalize(item: SavedItem, subItems: List<SavedSubItem>): Result {
-        val normalized = subItems.mapIndexedNotNull { index, child ->
-            SavedSubItem.normalizeText(child.text).takeIf(String::isNotBlank)?.let { text ->
+    fun normalize(item: SavedItem, steps: List<TodoStep>): Result {
+        val normalized = steps.mapIndexedNotNull { index, child ->
+            TodoStep.normalizeText(child.text).takeIf(String::isNotBlank)?.let { text ->
                 child.copy(text = text, position = index)
             }
         }
-        return if (item.isTask) Result(item, normalized) else {
+        return if (item.isTodo) Result(item, normalized) else {
             Result(
                 item.copy(
-                    content = appendSubtasks(item.content, normalized),
+                    content = appendSteps(item.content, normalized),
                     deadlineAtMs = 0L,
                 ),
                 emptyList(),
@@ -27,11 +27,11 @@ object SavedItemNormalization {
         }
     }
 
-    fun convertTaskToKeep(item: SavedItem, subItems: List<SavedSubItem>): Result {
+    fun convertTodoToKeep(item: SavedItem, steps: List<TodoStep>): Result {
         val withDeadline = appendDeadline(item.content, item.deadlineAtMs)
         return Result(
             item.copy(
-                content = appendSubtasks(withDeadline, subItems),
+                content = appendSteps(withDeadline, steps),
                 itemType = org.muilab.notigpt.model.features.SavedItemType.Keep,
                 state = org.muilab.notigpt.model.features.SavedItemState.Saved,
                 deadlineAtMs = 0L,
@@ -50,11 +50,11 @@ object SavedItemNormalization {
         return appendBlock(content, "$heading: $formatted")
     }
 
-    private fun appendSubtasks(content: String, subItems: List<SavedSubItem>): String {
-        if (subItems.isEmpty()) return content
-        val heading = if (Locale.getDefault().language.startsWith("zh")) "子任務" else "Subtasks"
-        val lines = subItems.mapNotNull { child ->
-            SavedSubItem.normalizeText(child.text).takeIf(String::isNotBlank)?.let { text ->
+    private fun appendSteps(content: String, steps: List<TodoStep>): String {
+        if (steps.isEmpty()) return content
+        val heading = if (Locale.getDefault().language.startsWith("zh")) "步驟" else "Steps"
+        val lines = steps.mapNotNull { child ->
+            TodoStep.normalizeText(child.text).takeIf(String::isNotBlank)?.let { text ->
                 (if (child.isCompleted) "☑ " else "☐ ") + text
             }
         }

@@ -4,7 +4,9 @@ import android.content.Context
 import android.util.Log
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.DocumentSnapshot
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.SetOptions
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
@@ -14,7 +16,7 @@ import org.muilab.notigpt.model.features.FirestoreOutboxKind
 import org.muilab.notigpt.model.features.SavedItem
 import org.muilab.notigpt.model.features.SavedItemType
 import org.muilab.notigpt.model.features.SavedItemState
-import org.muilab.notigpt.model.features.SavedSubItem
+import org.muilab.notigpt.model.features.TodoStep
 import org.muilab.notigpt.model.features.UserContext
 import org.muilab.notigpt.domain.saveditem.SavedItemNormalization
 import java.text.SimpleDateFormat
@@ -51,6 +53,7 @@ class FirestoreRestoreRepository(
 
         try {
             val remoteDocs = fetchSavedItemDocs(uid)
+            migrateRemoteSavedItemDocs(remoteDocs)
             val localItems = db.savedItemDao().getAll()
             val sync = FirestoreSyncRepository(appContext)
 
@@ -98,6 +101,51 @@ class FirestoreRestoreRepository(
         return docs
     }
 
+    /** One-time, idempotent cloud-shape migration, including soft-deleted research rows. */
+    private suspend fun migrateRemoteSavedItemDocs(docs: List<DocumentSnapshot>) {
+        docs.chunked(400).forEach { chunk ->
+            try {
+                val batch = firestore.batch()
+                chunk.forEach { doc ->
+                    val id = doc.getString("savedItemId") ?: doc.id
+                    val steps = stepsFrom(doc, id).map { step ->
+                        mapOf(
+                            "todoStepId" to step.todoStepId,
+                            "text" to step.text,
+                            "isCompleted" to step.isCompleted,
+                            "position" to step.position,
+                        )
+                    }
+                    batch.set(
+                        doc.reference,
+                        mapOf(
+                            "itemType" to if (doc.getString("itemType") == "keep") SavedItemType.Keep else SavedItemType.Todo,
+                            "steps" to steps,
+                            "subTasks" to FieldValue.delete(),
+                            "isTask" to FieldValue.delete(),
+                            "isTodo" to FieldValue.delete(),
+                            "isEvent" to FieldValue.delete(),
+                            "startAtMs" to FieldValue.delete(),
+                            "endAtMs" to FieldValue.delete(),
+                            "whenAtMs" to FieldValue.delete(),
+                            "startAtMsEpoch" to FieldValue.delete(),
+                            "endAtMsEpoch" to FieldValue.delete(),
+                            "whenAtMsEpoch" to FieldValue.delete(),
+                            "doAtMs" to FieldValue.delete(),
+                            "doAtMsEpoch" to FieldValue.delete(),
+                            "schemaVersion" to 8,
+                        ),
+                        SetOptions.merge(),
+                    )
+                }
+                batch.commit().await()
+            } catch (t: Throwable) {
+                // Shape cleanup must never prevent normal restore/reconciliation.
+                Log.w(tag, "Cloud SavedItem shape migration failed for ${chunk.size} docs", t)
+            }
+        }
+    }
+
     private suspend fun restoreSavedItems(docs: List<DocumentSnapshot>) {
         for (doc in docs) restoreOneSavedItem(doc)
         Log.d(tag, "Restored ${docs.size} SavedItem docs")
@@ -105,18 +153,18 @@ class FirestoreRestoreRepository(
 
     private suspend fun restoreOneSavedItem(doc: DocumentSnapshot) {
         val restoredItem = savedItemFrom(doc) ?: return
-        val restoredSubItems = subItemsFrom(doc, restoredItem.savedItemId)
+        val restoredSteps = stepsFrom(doc, restoredItem.savedItemId)
         val itemWithChildButtons = restoredItem.copy(
             buttons = SavedItemNormalization.mergeButtons(
                 restoredItem.buttons,
                 *legacyChildButtons(doc).toTypedArray(),
             ),
         )
-        val normalized = SavedItemNormalization.normalize(itemWithChildButtons, restoredSubItems)
+        val normalized = SavedItemNormalization.normalize(itemWithChildButtons, restoredSteps)
         // Remove stale local sub-items before applying the cloud snapshot.
-        db.subTaskDao().hardDeleteByParentId(normalized.item.savedItemId)
+        db.todoStepDao().hardDeleteByParentId(normalized.item.savedItemId)
         db.savedItemDao().upsert(normalized.item)
-        normalized.subItems.forEach { db.subTaskDao().upsert(it) }
+        normalized.steps.forEach { db.todoStepDao().upsert(it) }
     }
 
     private suspend fun reconcileSavedItems(
@@ -137,8 +185,8 @@ class FirestoreRestoreRepository(
                 local == null && !isCloudDeleted(doc) -> restoreOneSavedItem(doc)
                 local != null && isCloudDeleted(doc) -> {
                     val cloudDeletedAt = cloudDeletionTimestamp(doc)
-                    if (cloudDeletedAt <= 0L || cloudDeletedAt >= local.lastUpdateTimestamp) {
-                        db.subTaskDao().hardDeleteByParentId(id)
+                    if (cloudDeletedAt <= 0L || cloudDeletedAt >= local.syncModifiedAt) {
+                        db.todoStepDao().hardDeleteByParentId(id)
                         db.savedItemDao().hardDeleteById(id)
                         Log.i(tag, "Removed locally deleted cloud item savedItemId=$id")
                     } else {
@@ -149,9 +197,9 @@ class FirestoreRestoreRepository(
                 local != null -> {
                     val cloudUpdatedAt = cloudUpdateTimestamp(doc)
                     when {
-                        cloudUpdatedAt > local.lastUpdateTimestamp -> restoreOneSavedItem(doc)
-                        local.lastUpdateTimestamp > cloudUpdatedAt -> sync.syncSavedItem(local)
-                        else -> restoreOneSavedItem(doc)
+                        cloudUpdatedAt > local.syncModifiedAt -> restoreOneSavedItem(doc)
+                        local.syncModifiedAt > cloudUpdatedAt -> sync.syncSavedItem(local)
+                        else -> sync.syncSavedItem(local)
                     }
                 }
             }
@@ -170,7 +218,7 @@ class FirestoreRestoreRepository(
 
     /** Missing legacy timestamps sort before any current local item, preserving local data. */
     private fun cloudUpdateTimestamp(doc: DocumentSnapshot): Long =
-        doc.getLong("lastUpdateTimestampEpoch") ?: 0L
+        doc.getLong("syncModifiedAtEpoch") ?: doc.getLong("lastUpdateTimestampEpoch") ?: 0L
 
     /** A deletion without an epoch marker is still authoritative for safety. */
     private fun cloudDeletionTimestamp(doc: DocumentSnapshot): Long =
@@ -188,45 +236,48 @@ class FirestoreRestoreRepository(
             savedItemId = id,
             title = doc.getString("title").orEmpty(),
             content = doc.getString("content").orEmpty(),
-            itemType = doc.getString("itemType")
-                ?: if (doc.getBoolean("isTask") != false) SavedItemType.Task else SavedItemType.Keep,
+            itemType = when (doc.getString("itemType")) {
+                "keep" -> SavedItemType.Keep
+                else -> SavedItemType.Todo
+            },
             state = doc.getString("state") ?: SavedItemState.Saved,
             lastUpdateTimestamp = doc.getLong("lastUpdateTimestampEpoch") ?: System.currentTimeMillis(),
+            syncModifiedAt = doc.getLong("syncModifiedAtEpoch")
+                ?: doc.getLong("lastUpdateTimestampEpoch")
+                ?: System.currentTimeMillis(),
             deadlineAtMs = doc.getLong("deadlineAtMsEpoch") ?: -1L,
-            startAtMs = doc.getLong("startAtMsEpoch") ?: 0L,
-            endAtMs = doc.getLong("endAtMsEpoch") ?: 0L,
             origin = doc.getString("origin") ?: "manual",
             humanEditCount = (doc.getLong("humanEditCount") ?: 0L).toInt(),
             userEdited = doc.getBoolean("userEdited") ?: false,
             buttons = doc.getString("buttons") ?: "[]",
             isViewed = doc.getBoolean("isViewed") ?: true,
             isStarred = doc.getBoolean("isStarred") ?: false,
-            whenAtMs = doc.getLong("whenAtMsEpoch") ?: doc.getLong("doAtMsEpoch") ?: 0L,
             lastViewedChangeAt = doc.getLong("lastViewedChangeAtEpoch") ?: 0L,
         )
     }
 
     @Suppress("UNCHECKED_CAST")
-    private fun subItemsFrom(doc: DocumentSnapshot, parentId: String): List<SavedSubItem> {
-        val raw = doc.get("subTasks") as? List<Map<String, Any?>> ?: return emptyList()
+    private fun stepsFrom(doc: DocumentSnapshot, parentId: String): List<TodoStep> {
+        val raw = (doc.get("steps") ?: doc.get("subTasks")) as? List<Map<String, Any?>> ?: return emptyList()
         return raw.mapIndexedNotNull { index, m ->
-            val id = m["savedSubItemId"] as? String ?: return@mapIndexedNotNull null
+            val id = (m["todoStepId"] ?: m["savedSubItemId"] ?: m["subTaskId"]) as? String
+                ?: return@mapIndexedNotNull null
             val text = legacySubItemText(m)
             if (text.isBlank()) return@mapIndexedNotNull null
-            SavedSubItem(
-                savedSubItemId = id,
+            TodoStep(
+                todoStepId = id,
                 parentSavedItemId = parentId,
                 text = text,
                 isCompleted = m["isCompleted"] as? Boolean ?: false,
                 position = ((m["position"] ?: m["sortOrder"]) as? Number)?.toInt() ?: index,
             )
-        }.sortedWith(compareBy<SavedSubItem> { it.position }.thenBy { it.savedSubItemId })
+        }.sortedWith(compareBy<TodoStep> { it.position }.thenBy { it.todoStepId })
             .mapIndexed { index, child -> child.copy(position = index) }
     }
 
     @Suppress("UNCHECKED_CAST")
     private fun legacyChildButtons(doc: DocumentSnapshot): List<String> {
-        val raw = doc.get("subTasks") as? List<Map<String, Any?>> ?: return emptyList()
+        val raw = doc.get("steps") as? List<Map<String, Any?>> ?: return emptyList()
         return raw.mapNotNull { it["buttons"] as? String }.filter { it.isNotBlank() && it != "[]" }
     }
 
@@ -251,7 +302,7 @@ class FirestoreRestoreRepository(
                 parts += "$label: $formatted"
             }
         }
-        return SavedSubItem.normalizeText(parts.joinToString(" — "))
+        return TodoStep.normalizeText(parts.joinToString(" — "))
     }
 
     @Suppress("UNCHECKED_CAST")

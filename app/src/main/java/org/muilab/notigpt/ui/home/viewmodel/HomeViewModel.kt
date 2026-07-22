@@ -24,16 +24,16 @@ import org.muilab.notigpt.model.features.SavedItem
 import org.muilab.notigpt.model.features.SavedItemState
 import org.muilab.notigpt.model.features.SavedItemType
 import org.muilab.notigpt.model.notifications.NotiDisplayUnit
-import org.muilab.notigpt.util.time.DayBoundaries
+import org.muilab.notigpt.util.time.SmartFilterWindows
 
 /** Aggregated review + smart-filter counts for one saved-item type/state slice. */
 data class ReviewCounts(
-    val newTasks: Int = 0,
-    val updatedTasks: Int = 0,
+    val newTodos: Int = 0,
+    val updatedTodos: Int = 0,
     val newKeeps: Int = 0,
     val updatedKeeps: Int = 0,
 ) {
-    val total: Int get() = newTasks + updatedTasks + newKeeps + updatedKeeps
+    val total: Int get() = newTodos + updatedTodos + newKeeps + updatedKeeps
 }
 
 /** One preview line on a home notification row: sender/app label, record count, and the app icon. */
@@ -56,7 +56,7 @@ data class CategoryPreview(
 )
 
 /**
- * Home-screen data: review counts, planned-date smart-filter counts, and per-category notification
+ * Home-screen data: review counts, attention-filter counts, and per-category notification
  * previews. Counts come straight from Room (Flow-backed); notification previews are derived from the
  * active drawer's new records plus persisted LLM categories, passed in from the DrawerViewModel.
  */
@@ -77,46 +77,50 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     ) { ops, legacyItems -> aggregateReviewCounts(ops, legacyItems) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ReviewCounts())
 
-    /** Re-evaluates the "today" boundary at each local midnight so the buckets stay correct while idle. */
+    /** Re-evaluates time-based attention filters while the home screen remains open. */
     @OptIn(ExperimentalCoroutinesApi::class)
-    val smartFilterCounts: StateFlow<SmartFilterCounts> = midnightTicker()
-        .flatMapLatest { savedItemDao.observeSmartFilterCounts(DayBoundaries.startOfTomorrowMs()) }
+    val smartFilterCounts: StateFlow<SmartFilterCounts> = attentionTicker()
+        .flatMapLatest {
+            val now = System.currentTimeMillis()
+            savedItemDao.observeSmartFilterCounts(
+                dueEndMs = SmartFilterWindows.dueSoonEndExclusiveMs(now),
+                recentCutoffMs = now - SmartFilterWindows.RECENTLY_UPDATED_WINDOW_MS,
+            )
+        }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SmartFilterCounts())
 
-    /** Active (non-completed) task total, for the drawer's Tasks entry badge. */
-    val activeTaskCount: StateFlow<Int> = savedItemDao.observeActiveTaskCount()
+    /** Active (non-completed) todo total, for the drawer's Todos entry badge. */
+    val activeTodoCount: StateFlow<Int> = savedItemDao.observeActiveTodoCount()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
     /** Active (non-archived) keep total, for the drawer's Keep entry badge. */
     val activeKeepCount: StateFlow<Int> = savedItemDao.observeActiveKeepCount()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
-    private fun midnightTicker() = flow {
+    private fun attentionTicker() = flow {
         while (true) {
             emit(Unit)
-            val next = DayBoundaries.startOfTomorrowMs()
-            val wait = (next - System.currentTimeMillis() + 1_000L).coerceAtLeast(60_000L)
-            delay(wait)
+            delay(60_000L)
         }
     }
 
     private fun aggregateReviewCounts(ops: List<PendingProposedOp>, legacyItems: List<SavedItem>): ReviewCounts {
         var nt = 0; var ut = 0; var nk = 0; var uk = 0
         ops.filter { it.opType == PendingProposedOpType.Create }.forEach { op ->
-            if (op.itemType == SavedItemType.Task) nt++ else nk++
+            if (op.itemType == SavedItemType.Todo) nt++ else nk++
         }
         val targeted = ops.filter { it.targetItemId.isNotBlank() }
         targeted.distinctBy { it.targetItemId }.forEach { op ->
-            if (op.itemType == SavedItemType.Task) ut++ else uk++
+            if (op.itemType == SavedItemType.Todo) ut++ else uk++
         }
         val targetedIds = targeted.mapTo(mutableSetOf()) { it.targetItemId }
         legacyItems.filter { it.savedItemId !in targetedIds }.forEach { item ->
-            val isTask = item.itemType == SavedItemType.Task
+            val isTodo = item.itemType == SavedItemType.Todo
             val isNew = item.state == SavedItemState.New
             when {
-                isTask && isNew -> nt++
-                isTask && !isNew -> ut++
-                !isTask && isNew -> nk++
+                isTodo && isNew -> nt++
+                isTodo && !isNew -> ut++
+                !isTodo && isNew -> nk++
                 else -> uk++
             }
         }

@@ -71,9 +71,9 @@ data class PendingProposedOp(
     @ColumnInfo(defaultValue = "''")
     val reason: String = "",
 
-    /** "task" or "keep" ([SavedItemType]) of the item this op produces/affects, for review counts. */
-    @ColumnInfo(defaultValue = "'task'")
-    val itemType: String = SavedItemType.Task,
+    /** "todo" or "keep" ([SavedItemType]) of the item this op produces/affects, for review counts. */
+    @ColumnInfo(defaultValue = "'todo'")
+    val itemType: String = SavedItemType.Todo,
 
     /** Groups the ops staged by one pipeline run. */
     @ColumnInfo(defaultValue = "''")

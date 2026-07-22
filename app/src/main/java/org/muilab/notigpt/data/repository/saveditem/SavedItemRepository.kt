@@ -23,7 +23,7 @@ import org.muilab.notigpt.data.remote.firestore.FirestoreSyncRepository
 import org.muilab.notigpt.data.remote.n8n.N8nOpParsing
 import org.muilab.notigpt.domain.saveditem.SavedItemRevertLogic
 import org.muilab.notigpt.domain.saveditem.SavedItemNormalization
-import org.muilab.notigpt.model.features.SavedSubItem
+import org.muilab.notigpt.model.features.TodoStep
 import org.muilab.notigpt.model.features.ReviewItemDraft
 import org.muilab.notigpt.util.SharedPreferencesManager
 import org.muilab.notigpt.work.FirestoreOutboxWork
@@ -50,17 +50,17 @@ class SavedItemRepository(
         ExtractionJournalRepository(db.extractionJournalDao())
     }
     private val changeLogDao by lazy { db.savedItemChangeLogDao() }
-    private val subTaskDao by lazy { db.subTaskDao() }
+    private val todoStepDao by lazy { db.todoStepDao() }
     private val pendingProposedOpDao by lazy { db.pendingProposedOpDao() }
     private val rejectedMergeDao by lazy { db.rejectedMergeDao() }
 
     /** Returns visible savedItems in the canonical list order used by the savedItems screen. */
     fun observeAll(): Flow<List<SavedItem>> = savedItemDao.observeAll()
-    fun observeTasks(): Flow<List<SavedItem>> = savedItemDao.observeTasks()
-    fun observeMemos(): Flow<List<SavedItem>> = savedItemDao.observeMemos()
+    fun observeTodos(): Flow<List<SavedItem>> = savedItemDao.observeTodos()
+    fun observeKeeps(): Flow<List<SavedItem>> = savedItemDao.observeKeeps()
     fun observeActiveKeeps(): Flow<List<SavedItem>> = savedItemDao.observeActiveKeeps()
     fun observeArchivedKeeps(): Flow<List<SavedItem>> = savedItemDao.observeArchivedKeeps()
-    fun observeCompletedTasks(): Flow<List<SavedItem>> = savedItemDao.observeCompletedTasks()
+    fun observeCompletedTodos(): Flow<List<SavedItem>> = savedItemDao.observeCompletedTodos()
     fun observeNewItems(): Flow<List<SavedItem>> = savedItemDao.observeNewItems()
 
     suspend fun getAll(): List<SavedItem> = withContext(Dispatchers.IO) { savedItemDao.getAll() }
@@ -82,21 +82,21 @@ class SavedItemRepository(
             old != null && (old.title != item.title || old.content != item.content ||
                 old.deadlineAtMs != item.deadlineAtMs || old.itemType != item.itemType)
 
-        val existingChildren = subTaskDao.getBySavedItemId(item.savedItemId)
+        val existingChildren = todoStepDao.getBySavedItemId(item.savedItemId)
         val normalized = when {
-            old?.isTask == true && !item.isTask -> SavedItemNormalization.convertTaskToKeep(
+            old?.isTodo == true && !item.isTodo -> SavedItemNormalization.convertTodoToKeep(
                 item.copy(
                     deadlineAtMs = item.deadlineAtMs.takeIf { it > 0L } ?: old.deadlineAtMs,
                 ),
                 existingChildren,
             )
-            !item.isTask -> SavedItemNormalization.normalize(item, existingChildren)
+            !item.isTodo -> SavedItemNormalization.normalize(item, existingChildren)
             else -> SavedItemNormalization.normalize(item, existingChildren)
         }
         db.withTransaction {
             savedItemDao.upsert(normalized.item)
-            subTaskDao.hardDeleteByParentId(item.savedItemId)
-            if (normalized.subItems.isNotEmpty()) subTaskDao.upsertAll(normalized.subItems)
+            todoStepDao.hardDeleteByParentId(item.savedItemId)
+            if (normalized.steps.isNotEmpty()) todoStepDao.upsertAll(normalized.steps)
         }
 
         if (isEditorSave) {
@@ -121,35 +121,35 @@ class SavedItemRepository(
             journalUserEvent(stored.savedItemId, ExtractionJournalEventType.UserEdited, stored.title)
         }
 
-        queueAndSync(normalized.item, normalized.item.lastUpdateTimestamp)
+        queueAndSync(normalized.item, normalized.item.syncModifiedAt)
     }
 
-    suspend fun upsertSubItem(subItem: SavedSubItem, ts: Long) = withContext(Dispatchers.IO) {
+    suspend fun upsertSubItem(subItem: TodoStep, ts: Long) = withContext(Dispatchers.IO) {
         val parent = savedItemDao.getById(subItem.parentSavedItemId) ?: return@withContext
-        if (!parent.isTask) return@withContext
-        val normalizedText = SavedSubItem.normalizeText(subItem.text)
-        val existing = subTaskDao.getById(subItem.savedSubItemId)
-        val position = existing?.position ?: subTaskDao.nextPosition(parent.savedItemId)
-        subTaskDao.upsert(subItem.copy(text = normalizedText, position = position))
-        val updated = parent.copy(lastUpdateTimestamp = ts)
+        if (!parent.isTodo) return@withContext
+        val normalizedText = TodoStep.normalizeText(subItem.text)
+        val existing = todoStepDao.getById(subItem.todoStepId)
+        val position = existing?.position ?: todoStepDao.nextPosition(parent.savedItemId)
+        todoStepDao.upsert(subItem.copy(text = normalizedText, position = position))
+        val updated = parent.copy(lastUpdateTimestamp = ts, syncModifiedAt = ts)
         savedItemDao.upsert(updated)
         queueAndSync(updated, ts)
     }
 
-    suspend fun deleteSubItem(savedSubItemId: String, ts: Long) = withContext(Dispatchers.IO) {
-        val child = subTaskDao.getById(savedSubItemId) ?: return@withContext
+    suspend fun deleteSubItem(todoStepId: String, ts: Long) = withContext(Dispatchers.IO) {
+        val child = todoStepDao.getById(todoStepId) ?: return@withContext
         val parent = savedItemDao.getById(child.parentSavedItemId) ?: return@withContext
-        subTaskDao.hardDeleteById(savedSubItemId)
-        val updated = parent.copy(lastUpdateTimestamp = ts)
+        todoStepDao.hardDeleteById(todoStepId)
+        val updated = parent.copy(lastUpdateTimestamp = ts, syncModifiedAt = ts)
         savedItemDao.upsert(updated)
         queueAndSync(updated, ts)
     }
 
-    suspend fun setSubItemCompleted(savedSubItemId: String, completed: Boolean, ts: Long) = withContext(Dispatchers.IO) {
-        val child = subTaskDao.getById(savedSubItemId) ?: return@withContext
+    suspend fun setSubItemCompleted(todoStepId: String, completed: Boolean, ts: Long) = withContext(Dispatchers.IO) {
+        val child = todoStepDao.getById(todoStepId) ?: return@withContext
         val parent = savedItemDao.getById(child.parentSavedItemId) ?: return@withContext
-        subTaskDao.setCompleted(savedSubItemId, completed)
-        val updated = parent.copy(lastUpdateTimestamp = ts)
+        todoStepDao.setCompleted(todoStepId, completed)
+        val updated = parent.copy(lastUpdateTimestamp = ts, syncModifiedAt = ts)
         savedItemDao.upsert(updated)
         queueAndSync(updated, ts)
     }
@@ -164,7 +164,7 @@ class SavedItemRepository(
         db.withTransaction {
             journalUserEvent(savedItemId, ExtractionJournalEventType.UserDeleted)
             queueSavedItem(savedItemId, FirestoreOutboxKind.DeleteSavedItem, ts)
-            subTaskDao.hardDeleteByParentId(savedItemId)
+            todoStepDao.hardDeleteByParentId(savedItemId)
             savedItemDao.hardDeleteById(savedItemId)
             // Staged ops against a gone item are unreviewable; merge cool-downs are moot too.
             pendingProposedOpDao.deleteByTargetItemId(savedItemId)
@@ -210,7 +210,7 @@ class SavedItemRepository(
                 journalUserEvent(it, ExtractionJournalEventType.UserDeleted)
                 queueSavedItem(it, FirestoreOutboxKind.DeleteSavedItem, ts)
             }
-            subTaskDao.hardDeleteByParentIds(savedItemIds)
+            todoStepDao.hardDeleteByParentIds(savedItemIds)
             savedItemDao.hardDeleteByIds(savedItemIds)
             savedItemIds.forEach {
                 pendingProposedOpDao.deleteByTargetItemId(it)
@@ -229,7 +229,7 @@ class SavedItemRepository(
         db.firestoreOutboxDao().upsert(FirestoreOutboxOp.savedItem(uid, kind, savedItemId, ts))
     }
 
-    private suspend fun queueAndSync(item: SavedItem, ts: Long = item.lastUpdateTimestamp) {
+    private suspend fun queueAndSync(item: SavedItem, ts: Long = item.syncModifiedAt) {
         queueSavedItem(item.savedItemId, FirestoreOutboxKind.UpsertSavedItem, ts)
         FirestoreOutboxWork.enqueue(appContext)
         // Fast path; the outbox row remains durable until the worker independently confirms it.
@@ -276,9 +276,9 @@ class SavedItemRepository(
         queueAndSync(updated, ts)
     }
 
-    /** [whenAtMs] = 0 clears the When. */
-    suspend fun setWhen(savedItemId: String, whenAtMs: Long, ts: Long) = withContext(Dispatchers.IO) {
-        savedItemDao.setWhen(savedItemId, whenAtMs, ts)
+    /** [deadlineAtMs] = 0 clears the deadline. */
+    suspend fun setDeadline(savedItemId: String, deadlineAtMs: Long, ts: Long) = withContext(Dispatchers.IO) {
+        savedItemDao.setDeadline(savedItemId, deadlineAtMs, ts)
         val updated = savedItemDao.getById(savedItemId) ?: return@withContext
         queueAndSync(updated, ts)
     }
@@ -287,11 +287,9 @@ class SavedItemRepository(
     suspend fun acknowledgeReview(
         savedItemId: String,
         ts: Long,
-        whenAtMs: Long? = null,
         reviewKey: String? = null,
     ) = withContext(Dispatchers.IO) {
         db.withTransaction {
-            if (whenAtMs != null) savedItemDao.setWhen(savedItemId, whenAtMs, ts)
             savedItemDao.acknowledgeReview(savedItemId, ts)
             if (reviewKey != null) db.pendingReviewDraftDao().deleteByKey(reviewKey)
         }
@@ -314,31 +312,31 @@ class SavedItemRepository(
         markAsUserEdit: Boolean = true,
     ) = withContext(Dispatchers.IO) {
         val existing = savedItemDao.getById(draft.item.savedItemId) ?: return@withContext
-        val existingChildren = subTaskDao.getBySavedItemId(existing.savedItemId)
+        val existingChildren = todoStepDao.getBySavedItemId(existing.savedItemId)
         val contentEdited = existing.title != draft.item.title || existing.content != draft.item.content ||
             existing.itemType != draft.item.itemType ||
-            existing.deadlineAtMs != draft.item.deadlineAtMs || existing.startAtMs != draft.item.startAtMs ||
-            existing.endAtMs != draft.item.endAtMs ||
-            existingChildren.map { SavedSubItem.normalizeText(it.text) to it.isCompleted } !=
-                draft.subItems.map { SavedSubItem.normalizeText(it.text) to it.isCompleted }
+            existing.deadlineAtMs != draft.item.deadlineAtMs ||
+            existingChildren.map { TodoStep.normalizeText(it.text) to it.isCompleted } !=
+                draft.steps.map { TodoStep.normalizeText(it.text) to it.isCompleted }
         val normalized = SavedItemNormalization.normalize(
             draft.item.copy(
-                state = if (draft.item.isTask && draft.item.isCompleted) SavedItemState.Completed else SavedItemState.Saved,
+                state = if (draft.item.isTodo && draft.item.isCompleted) SavedItemState.Completed else SavedItemState.Saved,
                 origin = if (markAsUserEdit && contentEdited) "manual" else existing.origin,
                 humanEditCount = existing.humanEditCount + if (markAsUserEdit && contentEdited) 1 else 0,
                 userEdited = existing.userEdited || (markAsUserEdit && contentEdited),
-                lastUpdateTimestamp = ts,
+                lastUpdateTimestamp = if (contentEdited) ts else existing.lastUpdateTimestamp,
+                syncModifiedAt = ts,
                 lastViewedChangeAt = ts,
                 isViewed = true,
             ),
-            draft.subItems.mapIndexed { index, child ->
+            draft.steps.mapIndexed { index, child ->
                 child.copy(parentSavedItemId = existing.savedItemId, position = index)
             },
         )
         db.withTransaction {
             savedItemDao.upsert(normalized.item)
-            subTaskDao.hardDeleteByParentId(existing.savedItemId)
-            if (normalized.subItems.isNotEmpty()) subTaskDao.upsertAll(normalized.subItems)
+            todoStepDao.hardDeleteByParentId(existing.savedItemId)
+            if (normalized.steps.isNotEmpty()) todoStepDao.upsertAll(normalized.steps)
             if (markAsUserEdit && contentEdited) {
                 changeLogDao.insert(
                     SavedItemChangeLog(
@@ -360,12 +358,12 @@ class SavedItemRepository(
      * What a [revertPendingLlmUpdates] call changed, carried back so the caller can offer Undo.
      *
      * [previousItem] is the item exactly as it was before the revert (re-upsert to undo the field
-     * and content rollback). Child rows are captured directly because subtasks now use hard deletes.
+     * and content rollback). Child rows are captured directly because steps now use hard deletes.
      */
     data class RevertOutcome(
         val previousItem: SavedItem,
-        val deletedAddedSubItems: List<SavedSubItem>,
-        val restoredRemovedSubItems: List<SavedSubItem>,
+        val deletedAddedSteps: List<TodoStep>,
+        val restoredRemovedSteps: List<TodoStep>,
         val revertChangeId: Long,
     )
 
@@ -379,7 +377,7 @@ class SavedItemRepository(
      * what that LLM row set (so a later user edit — or a hallucinated `old` echo — is never clobbered).
      *
      * Returns null if the item no longer exists. If there is nothing pending to revert, the item is
-     * simply acknowledged (equivalent to approve) and an outcome with no subtask changes is returned.
+     * simply acknowledged (equivalent to approve) and an outcome with no step changes is returned.
      */
     suspend fun revertPendingLlmUpdates(savedItemId: String, ts: Long): RevertOutcome? = withContext(Dispatchers.IO) {
         val item = savedItemDao.getById(savedItemId) ?: return@withContext null
@@ -389,10 +387,8 @@ class SavedItemRepository(
         var content = item.content
         var title = item.title
         var deadline = item.deadlineAtMs
-        var start = item.startAtMs
-        var end = item.endAtMs
-        val deletedAddedSubItems = mutableListOf<SavedSubItem>()
-        val restoredRemovedSubItems = mutableListOf<SavedSubItem>()
+        val deletedAddedSteps = mutableListOf<TodoStep>()
+        val restoredRemovedSteps = mutableListOf<TodoStep>()
 
         // getNewerThan returns newest-first (ORDER BY createdAt DESC), which is the order we need.
         for (row in pending) {
@@ -409,24 +405,14 @@ class SavedItemRepository(
                     deadline, deadlineMsFromIso(obj.optString("new", "-1")), deadlineMsFromIso(obj.optString("old", "-1")),
                 )
             }
-            changed.optJSONObject("startTimeString")?.let { obj ->
-                start = SavedItemRevertLogic.revertField(
-                    start, startEndMsFromIso(obj.optString("new", "-1")), startEndMsFromIso(obj.optString("old", "-1")),
-                )
+            parseStepIds(row.addedStepsJson).forEach { id ->
+                todoStepDao.getById(id)?.let(deletedAddedSteps::add)
+                todoStepDao.hardDeleteById(id)
             }
-            changed.optJSONObject("endTimeString")?.let { obj ->
-                end = SavedItemRevertLogic.revertField(
-                    end, startEndMsFromIso(obj.optString("new", "-1")), startEndMsFromIso(obj.optString("old", "-1")),
-                )
-            }
-            parseSubTaskIds(row.addedSubTasksJson).forEach { id ->
-                subTaskDao.getById(id)?.let(deletedAddedSubItems::add)
-                subTaskDao.hardDeleteById(id)
-            }
-            val removed = parseSubTasks(row.removedSubTasksJson, savedItemId)
-            if (removed.isNotEmpty() && item.isTask) {
-                subTaskDao.upsertAll(removed)
-                restoredRemovedSubItems += removed
+            val removed = parseSteps(row.removedStepsJson, savedItemId)
+            if (removed.isNotEmpty() && item.isTodo) {
+                todoStepDao.upsertAll(removed)
+                restoredRemovedSteps += removed
             }
         }
 
@@ -435,10 +421,9 @@ class SavedItemRepository(
             content = content,
             state = SavedItemState.Saved,
             deadlineAtMs = deadline,
-            startAtMs = start,
-            endAtMs = end,
             lastViewedChangeAt = ts,
             lastUpdateTimestamp = ts,
+            syncModifiedAt = ts,
         )
         savedItemDao.upsert(restored)
 
@@ -457,38 +442,35 @@ class SavedItemRepository(
 
         RevertOutcome(
             previousItem = item,
-            deletedAddedSubItems = deletedAddedSubItems,
-            restoredRemovedSubItems = restoredRemovedSubItems,
+            deletedAddedSteps = deletedAddedSteps,
+            restoredRemovedSteps = restoredRemovedSteps,
             revertChangeId = revertChangeId,
         )
     }
 
     /** Undoes a [revertPendingLlmUpdates], restoring the captured child rows. */
     suspend fun undoRevert(outcome: RevertOutcome, ts: Long) = withContext(Dispatchers.IO) {
-        savedItemDao.upsert(outcome.previousItem)
-        if (outcome.deletedAddedSubItems.isNotEmpty()) subTaskDao.upsertAll(outcome.deletedAddedSubItems)
-        if (outcome.restoredRemovedSubItems.isNotEmpty()) {
-            subTaskDao.hardDeleteByIds(outcome.restoredRemovedSubItems.map { it.savedSubItemId })
+        val restored = outcome.previousItem.copy(syncModifiedAt = ts)
+        savedItemDao.upsert(restored)
+        if (outcome.deletedAddedSteps.isNotEmpty()) todoStepDao.upsertAll(outcome.deletedAddedSteps)
+        if (outcome.restoredRemovedSteps.isNotEmpty()) {
+            todoStepDao.hardDeleteByIds(outcome.restoredRemovedSteps.map { it.todoStepId })
         }
         changeLogDao.deleteById(outcome.revertChangeId)
-        queueAndSync(outcome.previousItem, ts)
+        queueAndSync(restored, ts)
     }
 
     private fun deadlineMsFromIso(iso: String): Long = N8nOpParsing.isoToUnixMillis(iso)
 
-    /** start/end use 0 (not -1) as their "unset" sentinel, mirroring how update ops are applied. */
-    private fun startEndMsFromIso(iso: String): Long =
-        N8nOpParsing.isoToUnixMillis(iso).let { if (it == -1L) 0L else it }
-
     private fun String.toJsonObjectOrEmpty(): JSONObject =
         try { JSONObject(this) } catch (_: Exception) { JSONObject() }
 
-    private fun parseSubTaskIds(json: String): List<String> = try {
+    private fun parseStepIds(json: String): List<String> = try {
         val arr = JSONArray(json)
         buildList {
             for (i in 0 until arr.length()) {
                 val obj = arr.optJSONObject(i) ?: continue
-                val id = obj.optString("savedSubItemId", obj.optString("subTaskId"))
+                val id = obj.optString("todoStepId", obj.optString("stepId"))
                 if (id.isNotBlank()) add(id)
             }
         }
@@ -496,17 +478,17 @@ class SavedItemRepository(
         emptyList()
     }
 
-    private fun parseSubTasks(json: String, parentId: String): List<SavedSubItem> = try {
+    private fun parseSteps(json: String, parentId: String): List<TodoStep> = try {
         val arr = JSONArray(json)
         buildList {
             for (index in 0 until arr.length()) {
                 val obj = arr.optJSONObject(index) ?: continue
-                val id = obj.optString("savedSubItemId", obj.optString("subTaskId"))
-                val text = SavedSubItem.normalizeText(obj.optString("text", obj.optString("title")))
+                val id = obj.optString("todoStepId", obj.optString("stepId"))
+                val text = TodoStep.normalizeText(obj.optString("text", obj.optString("title")))
                 if (id.isBlank() || text.isBlank()) continue
                 add(
-                    SavedSubItem(
-                        savedSubItemId = id,
+                    TodoStep(
+                        todoStepId = id,
                         parentSavedItemId = parentId,
                         text = text,
                         isCompleted = obj.optBoolean("isCompleted", false),
@@ -526,7 +508,7 @@ class SavedItemRepository(
      *
      * Links are add-only provenance: a record already linked (same role) is silently skipped via the
      * unique index, and links from earlier extractions are never displaced by later responses.
-     * [type] mirrors the owning saved item's itemType ("task"/"keep"); [source] labels the flow that
+     * [type] mirrors the owning saved item's itemType ("todo"/"keep"); [source] labels the flow that
      * produced the citation ([NotiSavedItemLinkSource]).
      */
     suspend fun addEvidenceLinks(
@@ -572,8 +554,8 @@ class SavedItemRepository(
             .mapValues { (_, links) -> links.map { it.notiRecordId }.distinct() }
     }
 
-    suspend fun updateButtons(savedItemId: String, buttons: String) = withContext(Dispatchers.IO) {
-        savedItemDao.updateButtons(savedItemId, buttons)
+    suspend fun updateButtons(savedItemId: String, buttons: String, ts: Long = System.currentTimeMillis()) = withContext(Dispatchers.IO) {
+        savedItemDao.updateButtons(savedItemId, buttons, ts)
         val updated = savedItemDao.getById(savedItemId) ?: return@withContext
         queueAndSync(updated)
     }

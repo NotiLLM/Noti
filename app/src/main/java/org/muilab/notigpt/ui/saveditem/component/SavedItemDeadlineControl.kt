@@ -1,7 +1,6 @@
 package org.muilab.notigpt.ui.saveditem.component
 
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
@@ -26,32 +25,32 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import java.util.Calendar
 import org.muilab.notigpt.R
-import org.muilab.notigpt.model.features.SavedItem
 import org.muilab.notigpt.util.time.getRelativeTimeStr
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SavedItemWhenPickerDialog(
-    currentWhenAtMs: Long,
+fun SavedItemDeadlinePickerDialog(
+    currentDeadlineAtMs: Long,
     onDismiss: () -> Unit,
     onSet: (Long) -> Unit,
 ) {
     val pickerState = rememberDatePickerState(
-        initialSelectedDateMillis = if (SavedItem.hasPlannedDate(currentWhenAtMs)) currentWhenAtMs else System.currentTimeMillis(),
+        initialSelectedDateMillis = currentDeadlineAtMs.takeIf { it > 0L }
+            ?: System.currentTimeMillis(),
     )
     DatePickerDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
             TextButton(onClick = {
                 pickerState.selectedDateMillis?.let { selectedDate ->
-                    val hadTime = SavedItem.hasPlannedDate(currentWhenAtMs)
+                    val hadDeadline = currentDeadlineAtMs > 0L
                     val existing = Calendar.getInstance().apply {
-                        timeInMillis = if (hadTime) currentWhenAtMs else System.currentTimeMillis()
+                        timeInMillis = if (hadDeadline) currentDeadlineAtMs else System.currentTimeMillis()
                     }
                     val selected = Calendar.getInstance().apply {
                         timeInMillis = selectedDate
-                        set(Calendar.HOUR_OF_DAY, if (hadTime) existing.get(Calendar.HOUR_OF_DAY) else 23)
-                        set(Calendar.MINUTE, if (hadTime) existing.get(Calendar.MINUTE) else 59)
+                        set(Calendar.HOUR_OF_DAY, if (hadDeadline) existing.get(Calendar.HOUR_OF_DAY) else 23)
+                        set(Calendar.MINUTE, if (hadDeadline) existing.get(Calendar.MINUTE) else 59)
                         set(Calendar.SECOND, 0)
                         set(Calendar.MILLISECOND, 0)
                     }
@@ -60,32 +59,32 @@ fun SavedItemWhenPickerDialog(
             }) { Text(stringResource(R.string.ui_action_ok)) }
         },
         dismissButton = {
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                TextButton(onClick = { onSet(0L) }) { Text(stringResource(R.string.ui_action_clear)) }
-                TextButton(onClick = { onSet(SavedItem.WHEN_SOMEDAY) }) {
-                    Text(stringResource(R.string.when_someday))
-                }
+            TextButton(onClick = { onSet(0L) }) {
+                Text(stringResource(R.string.ui_action_clear))
             }
         },
     ) { DatePicker(state = pickerState) }
 }
 
 @Composable
-fun SavedItemWhenButton(
-    whenAtMs: Long,
+fun SavedItemDeadlineButton(
+    deadlineAtMs: Long,
     accent: Color,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    val hasWhen = whenAtMs > 0L
-    val label = when {
-        SavedItem.isSomeday(whenAtMs) -> stringResource(R.string.when_someday)
-        SavedItem.hasPlannedDate(whenAtMs) ->
-            stringResource(R.string.ui_saved_items_when_chip, getRelativeTimeStr(whenAtMs, context))
-        else -> stringResource(R.string.a11y_set_when)
+    val hasDeadline = deadlineAtMs > 0L
+    val label = if (hasDeadline) {
+        getRelativeTimeStr(deadlineAtMs, context)
+    } else {
+        stringResource(R.string.a11y_set_deadline)
     }
-    val tint = if (hasWhen) accent else MaterialTheme.colorScheme.onSurfaceVariant
+    val tint = when {
+        hasDeadline && deadlineAtMs < System.currentTimeMillis() -> MaterialTheme.colorScheme.error
+        hasDeadline -> accent
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
     Row(
         modifier = modifier
             .clip(MaterialTheme.shapes.small)
@@ -94,8 +93,8 @@ fun SavedItemWhenButton(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
-            painter = painterResource(R.drawable.ic_calendar_today),
-            contentDescription = stringResource(R.string.a11y_set_when),
+            painter = painterResource(R.drawable.flag),
+            contentDescription = stringResource(R.string.a11y_set_deadline),
             modifier = Modifier.size(16.dp),
             tint = tint,
         )

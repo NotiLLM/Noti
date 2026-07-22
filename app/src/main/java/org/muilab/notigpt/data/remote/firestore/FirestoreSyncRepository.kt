@@ -161,22 +161,17 @@ class FirestoreSyncRepository(
             "origin" to item.origin,
             "humanEditCount" to item.humanEditCount,
             "userEdited" to item.userEdited,
-            "isTask" to item.isTask,
-            "isEvent" to item.isEvent,
+            "isTask" to FieldValue.delete(),
+            "isTodo" to FieldValue.delete(),
+            "isEvent" to FieldValue.delete(),
             "isCompleted" to item.isCompleted,
             "deadlineAtMs" to (if (item.deadlineAtMs > 0L) TimeFormatters.toLocalIso(item.deadlineAtMs, zoneId) else ""),
-            "startAtMs" to (if (item.startAtMs > 0L) TimeFormatters.toLocalIso(item.startAtMs, zoneId) else ""),
-            "endAtMs" to (if (item.endAtMs > 0L) TimeFormatters.toLocalIso(item.endAtMs, zoneId) else ""),
+            "startAtMs" to FieldValue.delete(),
+            "endAtMs" to FieldValue.delete(),
             "sourceNotiRecordIds" to linkedRecordIds,
             "sourceNotiRecordIdsCount" to linkedRecordIds.size,
             "isStarred" to item.isStarred,
-            // "someday" sentinel (Long.MAX_VALUE) is not a real instant — formatting it would throw;
-            // the raw value still round-trips via whenAtMsEpoch below.
-            "whenAtMs" to when {
-                SavedItem.isSomeday(item.whenAtMs) -> "someday"
-                item.whenAtMs > 0L -> TimeFormatters.toLocalIso(item.whenAtMs, zoneId)
-                else -> ""
-            },
+            "whenAtMs" to FieldValue.delete(),
             "state" to item.state,
             "lastViewedChangeAt" to (if (item.lastViewedChangeAt > 0L) TimeFormatters.toLocalIso(item.lastViewedChangeAt, zoneId) else ""),
             "lastUpdateTimestamp" to TimeFormatters.toLocalIso(item.lastUpdateTimestamp, zoneId),
@@ -185,21 +180,24 @@ class FirestoreSyncRepository(
             "syncedAt" to TimeFormatters.toLocalIso(now, zoneId),
             // Raw epoch values: the ISO fields above are for human/analysis reads; restore uses these.
             "deadlineAtMsEpoch" to item.deadlineAtMs,
-            "startAtMsEpoch" to item.startAtMs,
-            "endAtMsEpoch" to item.endAtMs,
-            "whenAtMsEpoch" to item.whenAtMs,
+            "startAtMsEpoch" to FieldValue.delete(),
+            "endAtMsEpoch" to FieldValue.delete(),
+            "whenAtMsEpoch" to FieldValue.delete(),
             "doAtMs" to FieldValue.delete(),
             "doAtMsEpoch" to FieldValue.delete(),
             "lastUpdateTimestampEpoch" to item.lastUpdateTimestamp,
+            "syncModifiedAt" to TimeFormatters.toLocalIso(item.syncModifiedAt, zoneId),
+            "syncModifiedAtEpoch" to item.syncModifiedAt,
             "lastViewedChangeAtEpoch" to item.lastViewedChangeAt,
             "itemType" to item.itemType,
-            "subTasks" to subTasksPayload(item.savedItemId),
+            "steps" to stepsPayload(item.savedItemId),
             // A normal sync is also the resurrection path for a locally edited item that was
             // previously marked deleted in Firestore.
             "deleted" to false,
             "deletedAt" to FieldValue.delete(),
             "deletedAtMsEpoch" to FieldValue.delete(),
-            "schemaVersion" to 7,
+            "subTasks" to FieldValue.delete(),
+            "schemaVersion" to 8,
         )
 
         try {
@@ -215,10 +213,10 @@ class FirestoreSyncRepository(
         true
     }
 
-    private suspend fun subTasksPayload(savedItemId: String): List<Map<String, Any?>> = try {
-        db.subTaskDao().getBySavedItemId(savedItemId).map { st ->
+    private suspend fun stepsPayload(savedItemId: String): List<Map<String, Any?>> = try {
+        db.todoStepDao().getBySavedItemId(savedItemId).map { st ->
             mapOf(
-                "savedSubItemId" to st.savedSubItemId,
+                "todoStepId" to st.todoStepId,
                 "text" to st.text,
                 "isCompleted" to st.isCompleted,
                 "position" to st.position,

@@ -9,41 +9,30 @@ import org.muilab.notigpt.model.features.SavedItemType
 
 class SavedItemMergePolicyTest {
     @Test
-    fun `rejects task and keep merge`() {
+    fun `rejects todo and keep merge`() {
         assertNull(
             SavedItemMergePolicy.preservedUserState(
-                listOf(item("task", SavedItemType.Task), item("keep", SavedItemType.Keep)),
+                listOf(item("task", SavedItemType.Todo), item("keep", SavedItemType.Keep)),
             )
         )
     }
 
     @Test
-    fun `rejects conflicting user-set when values`() {
-        assertNull(
-            SavedItemMergePolicy.preservedUserState(
-                listOf(item("a", whenAtMs = 100L), item("b", whenAtMs = 200L)),
-            )
-        )
-    }
-
-    @Test
-    fun `preserves sole when star and manual edit provenance`() {
+    fun `preserves star and manual edit provenance`() {
         val result = SavedItemMergePolicy.preservedUserState(
             listOf(
-                item("a", whenAtMs = 0L, isStarred = true),
-                item("b", whenAtMs = 200L, userEdited = true),
+                item("a", isStarred = true),
+                item("b", userEdited = true),
             )
         )!!
 
-        assertEquals(200L, result.whenAtMs)
         assertTrue(result.isStarred)
         assertTrue(result.userEdited)
     }
 
     private fun item(
         id: String,
-        type: String = SavedItemType.Task,
-        whenAtMs: Long = 0L,
+        type: String = SavedItemType.Todo,
         isStarred: Boolean = false,
         userEdited: Boolean = false,
     ) = SavedItem(
@@ -56,6 +45,5 @@ class SavedItemMergePolicyTest {
         humanEditCount = 0,
         userEdited = userEdited,
         isStarred = isStarred,
-        whenAtMs = whenAtMs,
     )
 }

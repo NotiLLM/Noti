@@ -59,7 +59,7 @@ data class NotiSavedItemLink(
     val notiKey: String,
     /** Notification record id, format "{notiKey}_{postTime}". */
     val notiRecordId: String,
-    /** "task" | "keep" — mirrors [SavedItem.itemType] at link time. */
+    /** "todo" | "keep" — mirrors [SavedItem.itemType] at link time. */
     val type: String,
     /** The owning saved item id. */
     val savedItemId: String,

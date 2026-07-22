@@ -7,9 +7,9 @@
     <string name="category_end_prompt" translatable="false">Each category should have a name within 4 characters in Traditional Chinese. Do not use more than 5 categories.</string>
     <string name="sort_lead_prompt" translatable="false">
         These are notifications from my smartphone\'s drawer. You could score of notifications judging on four aspects, namely the potential perceived time sensitiveness, sender attractiveness and content attractiveness of the notification. The rationales are listed below.\n
-        Time Sensitiveness (0-10): If the notification was received quite recently or the current moment is close to the dates and times mentioned in the notification, rate it at least 8. If from the time being it looks like a task I\'m clearly ignoring, rate it below 3. If it is clearly outdated, then rate this figure below 2.\n
+        Time Sensitiveness (0-10): If the notification was received quite recently or the current moment is close to the dates and times mentioned in the notification, rate it at least 8. If from the time being it looks like a todo I\'m clearly ignoring, rate it below 3. If it is clearly outdated, then rate this figure below 2.\n
         Sender Attractiveness (0-10): A notification should be rated above 8 if it\'s a message from individuals, especially if from friends or family. The second tier is human-sent emails or work messages sent by individuals, while chat group notifications follow them in terms of this figure, all at least 6. If the notification is triggered by system or sent by companies, apps or services (in other words, NON-HUMAN), rate it below 3. Note that some service-related or app-related emails could come from human senders, if that\'s the case give them also the bottom tier rating.\n
-        Content Attractiveness (0-10): If I may find the content it contains tasks that I MUST DO and MIGHT HAVE NOT DONE, rate it above 8. If it is a one-off notification that may catch my interest, you could rate it at least 6. If it looks like a periodically (e.g. daily bulletins) sent message or email with nothing in particular, rate it below 4. If from the time being it looks like a task I\'m clearly ignoring (e.g. warnings that had been a while ago that I should have dealt with it), rate it below 2.
+        Content Attractiveness (0-10): If I may find the content it contains todos that I MUST DO and MIGHT HAVE NOT DONE, rate it above 8. If it is a one-off notification that may catch my interest, you could rate it at least 6. If it looks like a periodically (e.g. daily bulletins) sent message or email with nothing in particular, rate it below 4. If from the time being it looks like a todo I\'m clearly ignoring (e.g. warnings that had been a while ago that I should have dealt with it), rate it below 2.
     </string>
     <string name="sort_end_prompt" translatable="false">The three scores should each be a float within 0 to 10 (inclusive), with 10 being the most highly rated. Try to produce diversing scores unless you really rate them equal.</string>
     <string name="service_name" translatable="false">NotiManager NotiListenerService</string>
@@ -23,13 +23,14 @@
     <string name="ui_action_delete">Delete</string>
     <string name="ui_action_ok">OK</string>
     <string name="ui_action_save">Save</string>
-    <string name="a11y_set_when">Set when</string>
+    <string name="a11y_set_deadline">Set deadline</string>
+    <string name="review_mark_complete">Mark as complete</string>
 
     <!-- Settings -->
     <string name="ui_settings_delete_on_swipe">Delete on swipe:</string>
     <string name="ui_settings_left">Left</string>
     <string name="ui_settings_right">Right</string>
-    <string name="ui_settings_expand_task_list">Expand Task List on startup</string>
+    <string name="ui_settings_expand_task_list">Expand Todo List on startup</string>
     <!-- Extraction language preference -->
     <string name="ui_settings_extraction_language">Extraction language</string>
     <string name="ui_settings_extraction_language_original">Original (notification language)</string>
@@ -71,13 +72,13 @@
     <string name="ui_settings_export_include_dismissed">Include dismissed notifications</string>
     <string name="ui_settings_export_include_context">Include full context</string>
     <string name="ui_settings_delete_cloud_data">Delete cloud data</string>
-    <string name="ui_settings_delete_cloud_data_desc">Permanently delete generated tasks, keeps, preferences, and their local copies</string>
+    <string name="ui_settings_delete_cloud_data_desc">Permanently delete generated todos, keeps, preferences, and their local copies</string>
     <string name="ui_settings_clear_notification_history">Clear notification history</string>
     <string name="ui_settings_clear_notification_history_desc">Permanently delete raw notification history from this device only</string>
     <string name="ui_settings_delete_cloud_confirm_title">Delete cloud data?</string>
     <string name="ui_settings_delete_cloud_confirm_message">This permanently deletes generated data from Firestore and this device. Notification history remains on this device.</string>
     <string name="ui_settings_clear_history_confirm_title">Clear notification history?</string>
-    <string name="ui_settings_clear_history_confirm_message">This permanently deletes raw notification history from this device. Generated tasks and keeps remain.</string>
+    <string name="ui_settings_clear_history_confirm_message">This permanently deletes raw notification history from this device. Generated todos and keeps remain.</string>
     <string name="ui_settings_delete_cloud_done">Cloud and local generated data deleted</string>
     <string name="ui_settings_clear_history_done">Notification history cleared</string>
     <string name="ui_settings_delete_failed">Couldn’t delete data. Check your connection and try again.</string>
@@ -85,7 +86,7 @@
     <!-- Reminders -->
     <string name="ui_saved_items_filter_all">All</string>
     <string name="ui_saved_items_filter_pending">Pending</string>
-    <string name="ui_saved_items_filter_tasks">Tasks</string>
+    <string name="ui_saved_items_filter_tasks">Todos</string>
     <string name="ui_saved_items_filter_memos">Memos</string>
     <string name="ui_saved_items_filter_completed">Completed</string>
     <string name="ui_saved_items_filter_keep">Keep</string>
@@ -93,17 +94,17 @@
     <string name="ui_saved_items_filter_starred">Starred</string>
     <string name="ui_saved_items_search_placeholder">Search saved items (use + for AND)</string>
     <string name="ui_saved_items_add_dialog_title">Add</string>
-    <string name="ui_saved_items_add_dialog_body">Create a Task or a Memo</string>
-    <string name="ui_saved_items_add_dialog_task">Task</string>
+    <string name="ui_saved_items_add_dialog_body">Create a Todo or a Memo</string>
+    <string name="ui_saved_items_add_dialog_task">Todo</string>
     <string name="ui_saved_items_add_dialog_memo">Memo</string>
-    <string name="ui_saved_items_untitled_task">(Untitled task)</string>
+    <string name="ui_saved_items_untitled_task">(Untitled todo)</string>
     <string name="ui_saved_items_untitled_memo">(Untitled memo)</string>
     <string name="ui_saved_items_no_deadline">No specific deadline</string>
     <string name="ui_saved_items_ect_short">ECT: %1$dm</string>
     <string name="ui_saved_items_editor_title_placeholder">Untitled</string>
-    <string name="ui_saved_items_editor_task_label">Task</string>
+    <string name="ui_saved_items_editor_task_label">Todo</string>
     <string name="ui_saved_items_editor_completed">Completed</string>
-    <string name="ui_saved_items_editor_when">When</string>
+    <string name="ui_saved_items_editor_deadline">Deadline</string>
     <string name="saved_item_update_section_label">Update</string>
     <string name="saved_item_badge_new">New</string>
     <string name="saved_item_badge_updated">Updated</string>
@@ -136,11 +137,11 @@
     <string name="extraction_pending_banner">Extraction pending — server unreachable (%1$d notifications queued)</string>
     <string name="extraction_retry">Retry</string>
     <string name="extraction_failed_toast">Extraction failed — will retry automatically</string>
-    <string name="sign_in_rationale">Sign in with your Google account to keep your tasks and preferences backed up and available across devices.</string>
+    <string name="sign_in_rationale">Sign in with your Google account to keep your todos and preferences backed up and available across devices.</string>
     <string name="sign_in_with_google">Sign in with Google</string>
     <string name="sign_in_failed">Sign-in failed. Please try again.</string>
     <string name="account_switch_title">Switch account?</string>
-    <string name="account_switch_message">You signed in as %1$s. Local tasks, keeps, and preferences will switch to this account. Choose what happens to this device\'s notification history.</string>
+    <string name="account_switch_message">You signed in as %1$s. Local todos, keeps, and preferences will switch to this account. Choose what happens to this device\'s notification history.</string>
     <string name="account_switch_confirm">Switch and reload</string>
     <string name="account_switch_keep_history">Keep notification history</string>
     <string name="account_switch_keep_history_warning">Existing notification text stays on this device and may be processed under the new account.</string>
@@ -191,8 +192,8 @@
         <item quantity="other">%1$d notifications</item>
     </plurals>
     <plurals name="ongoing_status_task_count">
-        <item quantity="one">%1$d task</item>
-        <item quantity="other">%1$d tasks</item>
+        <item quantity="one">%1$d todo</item>
+        <item quantity="other">%1$d todos</item>
     </plurals>
     <plurals name="ongoing_status_keep_count">
         <item quantity="one">%1$d keep</item>
@@ -221,7 +222,7 @@
 
     <!-- Bottom bar tabs -->
     <string name="tab_notifications">Notifications</string>
-    <string name="tab_tasks">Task</string>
+    <string name="tab_tasks">Todo</string>
     <string name="tab_keep">Keep</string>
     <string name="tab_preferences">Preferences</string>
     <string name="menu_settings">Settings</string>
@@ -247,8 +248,8 @@
     <!-- Google Tasks -->
     <string name="google_tasks_export">Export to Google Tasks</string>
     <string name="google_tasks_sign_in">Sign in to Google</string>
-    <string name="google_tasks_success">Task created in Google Tasks</string>
-    <string name="google_tasks_error">Failed to create task: %1$s</string>
+    <string name="google_tasks_success">Todo created in Google Tasks</string>
+    <string name="google_tasks_error">Failed to create todo: %1$s</string>
     <string name="google_tasks_not_signed_in">Please sign in to Google first</string>
     <string name="google_tasks_exporting">Exporting to Google Tasks…</string>
     <string name="a11y_export_google_tasks">Export to Google Tasks</string>
@@ -303,29 +304,29 @@
     <string name="pref_reason_other">Other (Let me explain)</string>
 
     <!-- Preference learning – BottomSheet reason (DELETE) -->
-    <string name="pref_reason_delete_title">Why wasn\'t this worth keeping as a task?</string>
+    <string name="pref_reason_delete_title">Why wasn\'t this worth keeping as a todo?</string>
 
     <!-- Preference learning – BottomSheet reason (MANUAL_EXTRACT) -->
-    <string name="pref_reason_extract_title">Why should notifications like this become tasks/memos?</string>
+    <string name="pref_reason_extract_title">Why should notifications like this become todos/memos?</string>
 
     <!-- Preference learning – Concrete quick rules -->
     <string name="pref_rule_title">Which rule should I learn?</string>
 
     <!-- DELETE Quick Rules -->
-    <string name="pref_rule_delete_sender">Ignore future tasks from this specific sender</string>
-    <string name="pref_rule_delete_group">Only extract tasks from this group if I am explicitly mentioned</string>
-    <string name="pref_rule_delete_info">This is only a one-time update; don\'t create a task or keep</string>
-    <string name="pref_rule_delete_topic">Mute tasks about this specific topic</string>
-    <string name="pref_rule_delete_app">Do not extract any tasks from this app</string>
+    <string name="pref_rule_delete_sender">Ignore future todos from this specific sender</string>
+    <string name="pref_rule_delete_group">Only extract todos from this group if I am explicitly mentioned</string>
+    <string name="pref_rule_delete_info">This is only a one-time update; don\'t create a todo or keep</string>
+    <string name="pref_rule_delete_topic">Mute todos about this specific topic</string>
+    <string name="pref_rule_delete_app">Do not extract any todos from this app</string>
 
     <!-- MANUAL EXTRACT Quick Rules -->
     <string name="pref_rule_extract_sender">Always extract action requests or questions from this person</string>
     <string name="pref_rule_extract_thread">Track all updates in this specific conversation thread</string>
-    <string name="pref_rule_extract_wording">Learn this specific phrasing as an implied task</string>
+    <string name="pref_rule_extract_wording">Learn this specific phrasing as an implied todo</string>
     <string name="pref_rule_extract_situational">I am actively monitoring this topic right now</string>
 
     <!-- EDIT Quick Rules -->
-    <string name="pref_rule_edit_context">Always include the \'why\' (the rationale) behind the task</string>
+    <string name="pref_rule_edit_context">Always include the \'why\' (the rationale) behind the todo</string>
     <string name="pref_rule_edit_urgency">Pay closer attention to implied urgency or deadlines</string>
     <string name="pref_rule_edit_responsibility">The assigned responsibility/person was incorrect</string>
     <string name="pref_rule_edit_granularity">Combine only when I would handle everything in the same session</string>
@@ -348,7 +349,7 @@
     <string name="pref_chat_mode_rules">Extraction Rules</string>
     <string name="pref_chat_mode_about_me">About Me</string>
     <string name="pref_chat_empty_prompt">Tell me how you\'d like me to handle your notifications.</string>
-    <string name="pref_chat_empty_example">For example: \"Only extract tasks from Slack if they mention me\"</string>
+    <string name="pref_chat_empty_example">For example: \"Only extract todos from Slack if they mention me\"</string>
     <string name="pref_chat_empty_prompt_about_me">Tell me about yourself so I can better understand your notifications.</string>
     <string name="pref_chat_empty_example_about_me">For example: \"I am a software engineer at Google\" or \"My partner\'s name is Alice\"</string>
     <string name="pref_chat_discover_button">Learn about me</string>
@@ -420,18 +421,18 @@
     <string name="saved_item_section_pinned">Pinned</string>
     <string name="saved_item_section_scored">All Saved Items</string>
 
-    <!-- Sub-task list / row -->
-    <string name="subtask_section_title">Sub-tasks</string>
-    <string name="subtask_add">Add sub-task</string>
-    <string name="a11y_add_subtask">Add sub-task</string>
-    <string name="subtask_untitled">(Untitled sub-task)</string>
-    <string name="subtask_show_less">Show less</string>
-    <string name="subtask_n_more">%1$d more</string>
-    <string name="subtask_hide_completed">Hide completed</string>
-    <string name="subtask_n_completed">%1$d completed</string>
-    <string name="subtask_edit">Edit</string>
-    <string name="subtask_delete">Delete</string>
-    <string name="a11y_subtask_more">More options</string>
+    <!-- Todo steps -->
+    <string name="step_section_title">Steps</string>
+    <string name="step_add">Add step</string>
+    <string name="a11y_add_step">Add step</string>
+    <string name="step_untitled">(Untitled step)</string>
+    <string name="step_show_less">Show less</string>
+    <string name="step_n_more">%1$d more</string>
+    <string name="step_hide_completed">Hide completed</string>
+    <string name="step_n_completed">%1$d completed</string>
+    <string name="step_edit">Edit</string>
+    <string name="step_delete">Delete</string>
+    <string name="a11y_step_more">More options</string>
 
     <!-- Reminder actions -->
     <string name="saved_item_refresh_all">Refresh all saved items</string>
@@ -459,7 +460,7 @@
     <string name="a11y_archive">Archive</string>
     <string name="a11y_star">Star</string>
     <string name="a11y_unstar">Unstar</string>
-    <string name="a11y_clear_when">Clear when</string>
+    <string name="a11y_clear_deadline">Clear deadline</string>
     <string name="a11y_drag_handle">Drag to reorder</string>
 
     <!-- Separate date/time pickers -->
@@ -482,7 +483,7 @@
     <string name="a11y_more_actions">More actions</string>
 
     <!-- New screen sections + triage -->
-    <string name="ui_new_tasks">New Tasks</string>
+    <string name="ui_new_tasks">New Todos</string>
     <string name="ui_new_keep">New Keep</string>
     <string name="ui_new_notifications_label">New Notifications</string>
     <string name="ui_action_save_all">Save all</string>
@@ -493,9 +494,9 @@
     <string name="a11y_cancel_selection">Cancel selection</string>
     <string name="a11y_delete_selected">Delete selected</string>
     <string name="a11y_export_selected_tasks">Export selected to Google Tasks</string>
-    <string name="toast_moved_to_tasks">Moved to Tasks</string>
+    <string name="toast_moved_to_tasks">Moved to Todos</string>
     <string name="toast_moved_to_keep">Moved to Keep</string>
-    <string name="toast_saved_to_tasks">Saved to Tasks</string>
+    <string name="toast_saved_to_tasks">Saved to Todos</string>
     <string name="toast_saved_to_keep">Saved to Keep</string>
     <string name="toast_deleted">Deleted</string>
     <string name="toast_exporting_google_tasks">Exporting to Google Tasks…</string>
@@ -520,8 +521,8 @@
     <!-- Home overview -->
     <string name="home_review_title">Review items</string>
     <string name="home_review_none">Nothing to review</string>
-    <string name="home_review_new_tasks">%1$d new tasks</string>
-    <string name="home_review_updated_tasks">%1$d updated tasks</string>
+    <string name="home_review_new_tasks">%1$d new todos</string>
+    <string name="home_review_updated_tasks">%1$d updated todos</string>
     <string name="home_review_new_keeps">%1$d new keeps</string>
     <string name="home_review_updated_keeps">%1$d updated keeps</string>
     <string name="home_section_notifications">Notifications</string>
@@ -531,12 +532,12 @@
     <string name="home_noti_window_hours">Past %dh</string>
     <string name="home_noti_older">Older</string>
     <string name="home_section_saved">Saved</string>
-    <string name="home_filter_today">Today &amp; earlier</string>
-    <string name="home_filter_upcoming">Upcoming</string>
-    <string name="home_filter_someday">Someday</string>
-    <string name="home_filter_undetermined">Unscheduled tasks</string>
     <string name="home_filter_starred">Starred</string>
-    <string name="home_collection_tasks">Tasks</string>
+    <string name="home_filter_suggested">Suggested</string>
+    <string name="home_filter_due_soon">Due soon</string>
+    <string name="home_filter_recently_updated">Recently updated</string>
+    <string name="home_filter_all_items">All items</string>
+    <string name="home_collection_tasks">Todos</string>
     <string name="home_collection_keep">Keep</string>
 
     <!-- Notification category pages -->
@@ -562,8 +563,8 @@
     <string name="review_badge_created">Created</string>
     <string name="review_badge_updated">Updated</string>
     <string name="review_badge_merged">Merged</string>
-    <string name="review_chip_new_tasks">%1$d new tasks</string>
-    <string name="review_chip_updated_tasks">%1$d edited tasks</string>
+    <string name="review_chip_new_tasks">%1$d new todos</string>
+    <string name="review_chip_updated_tasks">%1$d edited todos</string>
     <string name="review_chip_new_keeps">%1$d new keeps</string>
     <string name="review_chip_updated_keeps">%1$d edited keeps</string>
     <string name="review_approve">Approve</string>
@@ -585,7 +586,7 @@
     <string name="review_merge_survivor">Survivor</string>
     <string name="review_merge_source">Source item</string>
     <string name="review_merge_description">Description to add</string>
-    <string name="review_merge_subtasks">Subtasks to add</string>
+    <string name="review_merge_steps">Steps to add</string>
     <string name="review_merge_fields">Fields to change</string>
     <string name="review_merge_field_value">%1$s: %2$s</string>
     <string name="review_merge_buttons">Actions to add</string>
@@ -602,7 +603,7 @@
     <string name="review_history_show">Show change history</string>
     <string name="review_history_hide">Hide change history</string>
     <string name="review_result">Result</string>
-    <string name="review_result_subtasks">%1$d subtasks</string>
+    <string name="review_result_steps">%1$d steps</string>
     <string name="review_field_title">Title</string>
     <string name="review_field_deadline">Deadline</string>
     <string name="review_field_start">Start</string>
@@ -625,10 +626,7 @@
     <string name="a11y_export">Export</string>
 
     <!-- When -->
-    <string name="when_someday">Someday</string>
-    <string name="when_add_time">Add time</string>
-    <string name="when_clear">Clear</string>
-    <string name="task_to_keep_title">Change task to Keep?</string>
-    <string name="task_to_keep_message">Its deadline and subtasks, if present, will be added to the item description. When will stay unchanged.</string>
+    <string name="task_to_keep_title">Change todo to Keep?</string>
+    <string name="task_to_keep_message">Its deadline and steps, if present, will be added to the item description.</string>
     <string name="task_to_keep_confirm">Change to Keep</string>
 </resources>

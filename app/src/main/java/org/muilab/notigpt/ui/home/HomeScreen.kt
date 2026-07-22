@@ -49,11 +49,11 @@ import org.muilab.notigpt.ui.theme.NotiType
 import org.muilab.notigpt.ui.theme.NotiTheme
 
 /**
- * Home overview: the single entry portal that replaced the New/Tasks/Keep bottom tabs.
+ * Home overview: the single entry portal that replaced the New/Todos/Keep bottom tabs.
  *
  * Ordered by the user's real workflow: (1) review new/updated generated items, (2) check recent
  * notifications by category, (3) browse saved items via planned-date smart filters and the
- * Tasks/Keep collections.
+ * Todo/Keep collections.
  *
  * Visual system (Apple-restraint): a single tinted hero (the Review row); everything else is a
  * neutral card whose meaning comes from a small colored icon disc and a bold count.
@@ -249,13 +249,13 @@ private fun RemindersDueStrip(count: Int, onClick: () -> Unit) {
 private fun reviewSummary(counts: ReviewCounts): String {
     if (counts.total == 0) return stringResource(R.string.home_review_none)
     // Resolve all candidate strings up front (composable context), then pick the non-zero ones.
-    val newTasks = stringResource(R.string.home_review_new_tasks, counts.newTasks)
-    val updatedTasks = stringResource(R.string.home_review_updated_tasks, counts.updatedTasks)
+    val newTodos = stringResource(R.string.home_review_new_tasks, counts.newTodos)
+    val updatedTodos = stringResource(R.string.home_review_updated_tasks, counts.updatedTodos)
     val newKeeps = stringResource(R.string.home_review_new_keeps, counts.newKeeps)
     val updatedKeeps = stringResource(R.string.home_review_updated_keeps, counts.updatedKeeps)
     val parts = buildList {
-        if (counts.newTasks > 0) add(newTasks)
-        if (counts.updatedTasks > 0) add(updatedTasks)
+        if (counts.newTodos > 0) add(newTodos)
+        if (counts.updatedTodos > 0) add(updatedTodos)
         if (counts.newKeeps > 0) add(newKeeps)
         if (counts.updatedKeeps > 0) add(updatedKeeps)
     }
@@ -395,53 +395,51 @@ private fun SmartFilterGrid(
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             SmartFilterBox(
-                count = counts.todayEarlier,
-                label = stringResource(R.string.home_filter_today),
-                iconRes = R.drawable.ic_calendar_today,
+                count = counts.all,
+                label = stringResource(R.string.home_filter_suggested),
+                iconRes = R.drawable.bookmark,
                 discContainer = NotiTheme.semantic.todayContainer,
                 discContent = NotiTheme.semantic.todayAccent,
-                onClick = { onOpen(SavedListFilter.TodayEarlier) },
-                modifier = Modifier.weight(1f),
-            )
-            SmartFilterBox(
-                count = counts.upcoming,
-                label = stringResource(R.string.home_filter_upcoming),
-                iconRes = R.drawable.schedule,
-                discContainer = NotiTheme.semantic.upcomingContainer,
-                discContent = NotiTheme.semantic.upcomingAccent,
-                onClick = { onOpen(SavedListFilter.Upcoming) },
-                modifier = Modifier.weight(1f),
-            )
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            SmartFilterBox(
-                count = counts.someday,
-                label = stringResource(R.string.home_filter_someday),
-                iconRes = R.drawable.inbox,
-                discContainer = MaterialTheme.colorScheme.surfaceContainerHighest,
-                discContent = MaterialTheme.colorScheme.onSurfaceVariant,
-                onClick = { onOpen(SavedListFilter.Someday) },
+                onClick = { onOpen(SavedListFilter.Suggested) },
                 modifier = Modifier.weight(1f),
             )
             SmartFilterBox(
                 count = counts.starred,
                 label = stringResource(R.string.home_filter_starred),
                 iconRes = R.drawable.star_yes,
-                discContainer = NotiTheme.semantic.starredContainer,
-                discContent = NotiTheme.semantic.starred,
+                discContainer = NotiTheme.semantic.upcomingContainer,
+                discContent = NotiTheme.semantic.upcomingAccent,
                 onClick = { onOpen(SavedListFilter.Starred) },
                 modifier = Modifier.weight(1f),
             )
         }
-        // Undetermined is the large unplanned-triage pool; a full-width box, still a box (not a
-        // collection row) so it reads as a smart filter. Task-only, so it skips the type split.
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            SmartFilterBox(
+                count = counts.dueSoon,
+                label = stringResource(R.string.home_filter_due_soon),
+                iconRes = R.drawable.schedule,
+                discContainer = MaterialTheme.colorScheme.surfaceContainerHighest,
+                discContent = MaterialTheme.colorScheme.onSurfaceVariant,
+                onClick = { onOpen(SavedListFilter.DueSoon) },
+                modifier = Modifier.weight(1f),
+            )
+            SmartFilterBox(
+                count = counts.recentlyUpdated,
+                label = stringResource(R.string.home_filter_recently_updated),
+                iconRes = R.drawable.refresh,
+                discContainer = NotiTheme.semantic.starredContainer,
+                discContent = NotiTheme.semantic.starred,
+                onClick = { onOpen(SavedListFilter.RecentlyUpdated) },
+                modifier = Modifier.weight(1f),
+            )
+        }
         SmartFilterBox(
-            count = counts.undetermined,
-            label = stringResource(R.string.home_filter_undetermined),
-            iconRes = R.drawable.assignment_late,
+            count = counts.all,
+            label = stringResource(R.string.home_filter_all_items),
+            iconRes = R.drawable.inbox,
             discContainer = MaterialTheme.colorScheme.surfaceContainerHighest,
             discContent = MaterialTheme.colorScheme.onSurfaceVariant,
-            onClick = { onOpen(SavedListFilter.Undetermined) },
+            onClick = { onOpen(SavedListFilter.AllItems) },
             modifier = Modifier.fillMaxWidth(),
             fullWidth = true,
         )
@@ -536,13 +534,13 @@ private fun FilterDisc(iconRes: Int, container: Color, content: Color) {
 /** "N 📋 · M 📌" type split under a smart-filter box; each type shown only when it has items. */
 @Composable
 private fun TypeBreakdown(count: org.muilab.notigpt.data.local.room.dao.BucketCount, content: Color) {
-    if (count.tasks == 0 && count.keeps == 0) return
+    if (count.todos == 0 && count.keeps == 0) return
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        if (count.tasks > 0) TypeCountChip(count.tasks, R.drawable.task, content)
-        if (count.tasks > 0 && count.keeps > 0) {
+        if (count.todos > 0) TypeCountChip(count.todos, R.drawable.task, content)
+        if (count.todos > 0 && count.keeps > 0) {
             Text(
                 text = "·",
                 style = MaterialTheme.typography.labelMedium,

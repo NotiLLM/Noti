@@ -170,8 +170,8 @@ object AppDatabaseMigrations {
                 `changeType` TEXT NOT NULL,
                 `changeSummary` TEXT NOT NULL DEFAULT '',
                 `appendedContent` TEXT NOT NULL DEFAULT '',
-                `addedSubTasksJson` TEXT NOT NULL DEFAULT '[]',
-                `removedSubTasksJson` TEXT NOT NULL DEFAULT '[]',
+                `addedStepsJson` TEXT NOT NULL DEFAULT '[]',
+                `removedStepsJson` TEXT NOT NULL DEFAULT '[]',
                 `changedFieldsJson` TEXT NOT NULL DEFAULT '{}',
                 `evidenceRecordIdsJson` TEXT NOT NULL DEFAULT '[]',
                 `origin` TEXT NOT NULL DEFAULT 'llm',
@@ -578,20 +578,20 @@ object AppDatabaseMigrations {
      * their original names so every installed-version upgrade path remains reproducible.
      */
     val MIGRATION_49_50 = Migration(49, 50) { db ->
-        val childrenByParent = linkedMapOf<String, MutableList<LegacySavedSubItem>>()
+        val childrenByParent = linkedMapOf<String, MutableList<LegacyTodoStep>>()
         db.query(
             """
-            SELECT s.savedSubItemId, s.parentSavedItemId, s.title, s.description,
+            SELECT s.todoStepId, s.parentSavedItemId, s.title, s.description,
                    s.isCompleted, s.deadlineAtMs, s.startAtMs, s.endAtMs, s.buttons,
                    s.sortOrder, s.createdAt, i.itemType
             FROM saved_sub_item s
             JOIN saved_item i ON i.savedItemId = s.parentSavedItemId
             WHERE s.isVisible = 1
-            ORDER BY s.parentSavedItemId, s.sortOrder, s.createdAt, s.savedSubItemId
+            ORDER BY s.parentSavedItemId, s.sortOrder, s.createdAt, s.todoStepId
             """.trimIndent()
         ).use { cursor ->
             while (cursor.moveToNext()) {
-                val child = LegacySavedSubItem(
+                val child = LegacyTodoStep(
                     id = cursor.getString(0),
                     parentId = cursor.getString(1),
                     title = cursor.getString(2),
@@ -617,12 +617,12 @@ object AppDatabaseMigrations {
         db.execSQL(
             """
             CREATE TABLE IF NOT EXISTS `saved_sub_item_new` (
-                `savedSubItemId` TEXT NOT NULL,
+                `todoStepId` TEXT NOT NULL,
                 `parentSavedItemId` TEXT NOT NULL,
                 `text` TEXT NOT NULL,
                 `isCompleted` INTEGER NOT NULL,
                 `position` INTEGER NOT NULL,
-                PRIMARY KEY(`savedSubItemId`),
+                PRIMARY KEY(`todoStepId`),
                 FOREIGN KEY(`parentSavedItemId`) REFERENCES `saved_item`(`savedItemId`)
                     ON UPDATE NO ACTION ON DELETE CASCADE
             )
@@ -636,7 +636,7 @@ object AppDatabaseMigrations {
                     db.execSQL(
                         """
                         INSERT INTO saved_sub_item_new
-                            (savedSubItemId, parentSavedItemId, text, isCompleted, position)
+                            (todoStepId, parentSavedItemId, text, isCompleted, position)
                         VALUES (?, ?, ?, ?, ?)
                         """.trimIndent(),
                         arrayOf<Any?>(child.id, child.parentId, text, if (child.completed) 1 else 0, position),
@@ -703,12 +703,12 @@ object AppDatabaseMigrations {
         db.execSQL(
             """
             CREATE TABLE `saved_sub_item` (
-                `savedSubItemId` TEXT NOT NULL,
+                `todoStepId` TEXT NOT NULL,
                 `parentSavedItemId` TEXT NOT NULL,
                 `text` TEXT NOT NULL,
                 `isCompleted` INTEGER NOT NULL,
                 `position` INTEGER NOT NULL,
-                PRIMARY KEY(`savedSubItemId`),
+                PRIMARY KEY(`todoStepId`),
                 FOREIGN KEY(`parentSavedItemId`) REFERENCES `saved_item`(`savedItemId`)
                     ON UPDATE NO ACTION ON DELETE CASCADE
             )
@@ -748,8 +748,8 @@ object AppDatabaseMigrations {
                 `changeType` TEXT NOT NULL,
                 `changeSummary` TEXT NOT NULL DEFAULT '',
                 `appendedContent` TEXT NOT NULL DEFAULT '',
-                `addedSubTasksJson` TEXT NOT NULL DEFAULT '[]',
-                `removedSubTasksJson` TEXT NOT NULL DEFAULT '[]',
+                `addedStepsJson` TEXT NOT NULL DEFAULT '[]',
+                `removedStepsJson` TEXT NOT NULL DEFAULT '[]',
                 `changedFieldsJson` TEXT NOT NULL DEFAULT '{}',
                 `evidenceRecordIdsJson` TEXT NOT NULL DEFAULT '[]',
                 `origin` TEXT NOT NULL DEFAULT 'llm',
@@ -862,14 +862,197 @@ object AppDatabaseMigrations {
         db.execSQL("ALTER TABLE `pending_review_draft` ADD COLUMN `translationStateJson` TEXT")
     }
 
+    /**
+     * Makes Todo/Keep the complete SavedItem domain and removes calendar-shaped persistence.
+     * Approved content is preserved; unapproved legacy ops are cleared because their embedded JSON
+     * cannot be translated safely without re-running current validation.
+     */
+    val MIGRATION_53_54 = Migration(53, 54) { db ->
+        db.execSQL("CREATE TEMP TABLE `_v54_saved_items` AS SELECT * FROM `saved_item`")
+        db.execSQL("CREATE TEMP TABLE `_v54_steps` AS SELECT * FROM `saved_sub_item`")
+        db.execSQL("CREATE TEMP TABLE `_v54_links` AS SELECT * FROM `noti_saved_item_link`")
+        db.execSQL("CREATE TEMP TABLE `_v54_changes` AS SELECT * FROM `saved_item_change_log`")
+
+        db.execSQL("DROP TABLE `saved_sub_item`")
+        db.execSQL("DROP TABLE `noti_saved_item_link`")
+        db.execSQL("DROP TABLE `saved_item_change_log`")
+        db.execSQL("DROP TABLE `saved_item`")
+
+        db.execSQL(
+            """
+            CREATE TABLE `saved_item` (
+                `savedItemId` TEXT NOT NULL,
+                `title` TEXT NOT NULL,
+                `content` TEXT NOT NULL,
+                `itemType` TEXT NOT NULL DEFAULT 'todo',
+                `state` TEXT NOT NULL DEFAULT 'saved',
+                `lastUpdateTimestamp` INTEGER NOT NULL,
+                `syncModifiedAt` INTEGER NOT NULL DEFAULT 0,
+                `deadlineAtMs` INTEGER NOT NULL,
+                `origin` TEXT NOT NULL,
+                `humanEditCount` INTEGER NOT NULL,
+                `userEdited` INTEGER NOT NULL,
+                `buttons` TEXT NOT NULL DEFAULT '[]',
+                `isViewed` INTEGER NOT NULL DEFAULT 1,
+                `isStarred` INTEGER NOT NULL DEFAULT 0,
+                `lastViewedChangeAt` INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY(`savedItemId`)
+            )
+            """.trimIndent()
+        )
+        db.execSQL(
+            """
+            INSERT INTO `saved_item` (
+                savedItemId,title,content,itemType,state,lastUpdateTimestamp,syncModifiedAt,
+                deadlineAtMs,origin,humanEditCount,userEdited,buttons,isViewed,isStarred,
+                lastViewedChangeAt
+            )
+            SELECT
+                savedItemId,title,content,
+                CASE WHEN itemType = 'task' THEN 'todo' ELSE itemType END,
+                state,lastUpdateTimestamp,lastUpdateTimestamp,deadlineAtMs,origin,humanEditCount,
+                userEdited,buttons,isViewed,isStarred,lastViewedChangeAt
+            FROM `_v54_saved_items`
+            """.trimIndent()
+        )
+
+        db.execSQL(
+            """
+            CREATE TABLE `todo_step` (
+                `todoStepId` TEXT NOT NULL,
+                `parentSavedItemId` TEXT NOT NULL,
+                `text` TEXT NOT NULL,
+                `isCompleted` INTEGER NOT NULL,
+                `position` INTEGER NOT NULL,
+                PRIMARY KEY(`todoStepId`),
+                FOREIGN KEY(`parentSavedItemId`) REFERENCES `saved_item`(`savedItemId`)
+                    ON UPDATE NO ACTION ON DELETE CASCADE
+            )
+            """.trimIndent()
+        )
+        db.execSQL(
+            """
+            INSERT INTO `todo_step` (todoStepId,parentSavedItemId,text,isCompleted,position)
+            SELECT savedSubItemId,parentSavedItemId,text,isCompleted,position FROM `_v54_steps`
+            """.trimIndent()
+        )
+        db.execSQL("CREATE INDEX `idx_todo_step_parent` ON `todo_step` (`parentSavedItemId`)")
+
+        db.execSQL(
+            """
+            CREATE TABLE `noti_saved_item_link` (
+                `linkId` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                `notiKey` TEXT NOT NULL,
+                `notiRecordId` TEXT NOT NULL,
+                `type` TEXT NOT NULL,
+                `savedItemId` TEXT NOT NULL,
+                `role` TEXT NOT NULL,
+                `source` TEXT NOT NULL,
+                `createdAt` INTEGER NOT NULL,
+                FOREIGN KEY(`savedItemId`) REFERENCES `saved_item`(`savedItemId`)
+                    ON UPDATE NO ACTION ON DELETE CASCADE
+            )
+            """.trimIndent()
+        )
+        db.execSQL(
+            """
+            INSERT INTO `noti_saved_item_link`
+            SELECT linkId,notiKey,notiRecordId,
+                CASE WHEN type = 'task' THEN 'todo' ELSE type END,
+                savedItemId,role,source,createdAt
+            FROM `_v54_links`
+            """.trimIndent()
+        )
+        db.execSQL("CREATE UNIQUE INDEX `index_noti_saved_item_link_savedItemId_notiRecordId_role` ON `noti_saved_item_link` (`savedItemId`,`notiRecordId`,`role`)")
+        db.execSQL("CREATE INDEX `index_noti_saved_item_link_savedItemId` ON `noti_saved_item_link` (`savedItemId`)")
+        db.execSQL("CREATE INDEX `index_noti_saved_item_link_notiRecordId` ON `noti_saved_item_link` (`notiRecordId`)")
+        db.execSQL("CREATE INDEX `index_noti_saved_item_link_notiKey` ON `noti_saved_item_link` (`notiKey`)")
+
+        db.execSQL(
+            """
+            CREATE TABLE `saved_item_change_log` (
+                `changeId` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                `savedItemId` TEXT NOT NULL,
+                `createdAt` INTEGER NOT NULL,
+                `changeType` TEXT NOT NULL,
+                `changeSummary` TEXT NOT NULL DEFAULT '',
+                `appendedContent` TEXT NOT NULL DEFAULT '',
+                `addedStepsJson` TEXT NOT NULL DEFAULT '[]',
+                `removedStepsJson` TEXT NOT NULL DEFAULT '[]',
+                `changedFieldsJson` TEXT NOT NULL DEFAULT '{}',
+                `evidenceRecordIdsJson` TEXT NOT NULL DEFAULT '[]',
+                `origin` TEXT NOT NULL DEFAULT 'llm',
+                `sourceSavedItemId` TEXT NOT NULL DEFAULT '',
+                `sourceItemTitle` TEXT NOT NULL DEFAULT '',
+                FOREIGN KEY(`savedItemId`) REFERENCES `saved_item`(`savedItemId`)
+                    ON UPDATE NO ACTION ON DELETE CASCADE
+            )
+            """.trimIndent()
+        )
+        db.execSQL(
+            """
+            INSERT INTO `saved_item_change_log` (
+                changeId,savedItemId,createdAt,changeType,changeSummary,appendedContent,
+                addedStepsJson,removedStepsJson,changedFieldsJson,evidenceRecordIdsJson,
+                origin,sourceSavedItemId,sourceItemTitle
+            )
+            SELECT
+                changeId,savedItemId,createdAt,changeType,changeSummary,appendedContent,
+                REPLACE(REPLACE(addedSubTasksJson, 'savedSubItemId', 'todoStepId'), 'subTaskId', 'todoStepId'),
+                REPLACE(REPLACE(removedSubTasksJson, 'savedSubItemId', 'todoStepId'), 'subTaskId', 'todoStepId'),
+                changedFieldsJson,evidenceRecordIdsJson,origin,sourceSavedItemId,sourceItemTitle
+            FROM `_v54_changes`
+            """.trimIndent()
+        )
+        db.execSQL("CREATE INDEX `index_saved_item_change_log_savedItemId_createdAt` ON `saved_item_change_log` (`savedItemId`,`createdAt`)")
+
+        db.execSQL(
+            """
+            CREATE TABLE `pending_review_draft_new` (
+                `reviewKey` TEXT NOT NULL,
+                `translationStateJson` TEXT,
+                `updatedAt` INTEGER NOT NULL,
+                PRIMARY KEY(`reviewKey`)
+            )
+            """.trimIndent()
+        )
+        db.execSQL("DROP TABLE `pending_review_draft`")
+        db.execSQL("ALTER TABLE `pending_review_draft_new` RENAME TO `pending_review_draft`")
+
+        db.execSQL("DROP TABLE `pending_proposed_op`")
+        db.execSQL(
+            """
+            CREATE TABLE `pending_proposed_op` (
+                `opId` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                `notiKey` TEXT NOT NULL DEFAULT '',
+                `opType` TEXT NOT NULL,
+                `payload` TEXT NOT NULL,
+                `targetItemId` TEXT NOT NULL DEFAULT '',
+                `mergeSourceItemIds` TEXT NOT NULL DEFAULT '[]',
+                `evidenceRecordIds` TEXT NOT NULL DEFAULT '[]',
+                `reason` TEXT NOT NULL DEFAULT '',
+                `itemType` TEXT NOT NULL DEFAULT 'todo',
+                `batchId` TEXT NOT NULL DEFAULT '',
+                `createdAt` INTEGER NOT NULL
+            )
+            """.trimIndent()
+        )
+        db.execSQL("CREATE INDEX `index_pending_proposed_op_targetItemId` ON `pending_proposed_op` (`targetItemId`)")
+        db.execSQL("CREATE INDEX `index_pending_proposed_op_batchId` ON `pending_proposed_op` (`batchId`)")
+        db.execSQL("DROP TABLE `_v54_saved_items`")
+        db.execSQL("DROP TABLE `_v54_steps`")
+        db.execSQL("DROP TABLE `_v54_links`")
+        db.execSQL("DROP TABLE `_v54_changes`")
+    }
+
     val ALL: Array<Migration> = LegacyAppDatabaseMigrations.ALL + arrayOf(
         MIGRATION_39_40, MIGRATION_40_41, MIGRATION_41_42, MIGRATION_42_43,
         MIGRATION_43_44, MIGRATION_44_45, MIGRATION_45_46, MIGRATION_46_47,
         MIGRATION_47_48, MIGRATION_48_49, MIGRATION_49_50, MIGRATION_50_51,
-        MIGRATION_51_52, MIGRATION_52_53,
+        MIGRATION_51_52, MIGRATION_52_53, MIGRATION_53_54,
     )
 
-    private data class LegacySavedSubItem(
+    private data class LegacyTodoStep(
         val id: String,
         val parentId: String,
         val title: String,
@@ -896,7 +1079,7 @@ object AppDatabaseMigrations {
     private fun appendLegacyKeepChildren(
         db: SupportSQLiteDatabase,
         parentId: String,
-        children: List<LegacySavedSubItem>,
+        children: List<LegacyTodoStep>,
     ) {
         val lines = children.mapNotNull { child ->
             child.flattenedText().takeIf(String::isNotBlank)?.let { text ->
@@ -907,7 +1090,7 @@ object AppDatabaseMigrations {
         val existing = db.query("SELECT content FROM saved_item WHERE savedItemId = ?", arrayOf(parentId)).use { cursor ->
             if (cursor.moveToFirst()) cursor.getString(0).orEmpty() else ""
         }
-        val heading = if (Locale.getDefault().language.startsWith("zh")) "子任務" else "Subtasks"
+        val heading = if (Locale.getDefault().language.startsWith("zh")) "子任務" else "Steps"
         val block = "$heading:\n${lines.joinToString("\n")}".trim()
         val merged = listOf(existing.trim(), block).filter(String::isNotBlank).joinToString("\n\n")
         db.execSQL("UPDATE saved_item SET content = ? WHERE savedItemId = ?", arrayOf(merged, parentId))

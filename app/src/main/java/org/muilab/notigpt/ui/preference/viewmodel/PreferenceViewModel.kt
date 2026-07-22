@@ -200,8 +200,7 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
                 "savedItemId" to r.savedItemId,
                 "title" to r.title,
                 "content" to r.content,
-                "isTask" to r.isTask,
-                "isEvent" to r.isEvent,
+                "isTodo" to r.isTodo,
                 "isCompleted" to r.isCompleted,
                 "origin" to r.origin,
             )
@@ -211,8 +210,7 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
                 "savedItemId" to r.savedItemId,
                 "title" to r.title,
                 "content" to r.content,
-                "isTask" to r.isTask,
-                "isEvent" to r.isEvent,
+                "isTodo" to r.isTodo,
                 "isCompleted" to r.isCompleted,
             )
         }
@@ -852,7 +850,7 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
                     mapOf(
                         "title" to r.title,
                         "content" to r.content,
-                        "isTask" to r.isTask.toString(),
+                        "isTodo" to r.isTodo.toString(),
                     )
                 }
 
@@ -997,6 +995,5 @@ class PreferenceViewModel(application: Application) : AndroidViewModel(applicati
         SharedPreferencesManager.put("local", KEY_PENDING_CHAT, json)
     }
 }
-
 
 

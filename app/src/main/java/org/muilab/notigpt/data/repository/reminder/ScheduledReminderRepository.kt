@@ -36,7 +36,7 @@ class ScheduledReminderRepository(
         val reminder = Reminder(
             reminderId = "rem_" + UUID.randomUUID().toString().take(12),
             remindAtMs = remindAtMs,
-            title = savedItem.title.ifBlank { if (savedItem.isTask) "Task reminder" else "Keep reminder" },
+            title = savedItem.title.ifBlank { if (savedItem.isTodo) "Todo reminder" else "Keep reminder" },
             content = savedItem.content,
             status = if (remindAtMs <= now) ReminderStatus.DueUnseen else ReminderStatus.Scheduled,
             sourceType = ReminderSourceType.SavedItem,

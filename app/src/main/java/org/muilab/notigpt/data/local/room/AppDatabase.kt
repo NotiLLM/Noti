@@ -19,7 +19,7 @@ import org.muilab.notigpt.model.features.Reminder
 import org.muilab.notigpt.model.features.ReminderNotiRecordRef
 import org.muilab.notigpt.model.features.ReminderSavedItemRef
 import org.muilab.notigpt.model.features.SavedItem
-import org.muilab.notigpt.model.features.SavedSubItem
+import org.muilab.notigpt.model.features.TodoStep
 import org.muilab.notigpt.model.features.UserContext
 import org.muilab.notigpt.model.features.FirestoreOutboxOp
 import org.muilab.notigpt.model.features.ProposedOpRecord
@@ -40,7 +40,7 @@ import org.muilab.notigpt.data.local.room.dao.PreferenceConflictDao
 import org.muilab.notigpt.data.local.room.dao.RejectedMergeDao
 import org.muilab.notigpt.data.local.room.dao.ReminderDao
 import org.muilab.notigpt.data.local.room.dao.SavedItemDao
-import org.muilab.notigpt.data.local.room.dao.SavedSubItemDao
+import org.muilab.notigpt.data.local.room.dao.TodoStepDao
 import org.muilab.notigpt.data.local.room.dao.UserContextDao
 import org.muilab.notigpt.data.local.room.dao.FirestoreOutboxDao
 import org.muilab.notigpt.data.local.room.dao.ProposedOpRecordDao
@@ -58,7 +58,7 @@ import org.muilab.notigpt.data.local.room.dao.ProposedOpRecordDao
         NotiAction::class,
         NotiLlmState::class,
         SavedItem::class,
-        SavedSubItem::class,
+        TodoStep::class,
         NotiSavedItemLink::class,
         SavedItemChangeLog::class,
         PendingProposedOp::class,
@@ -75,7 +75,7 @@ import org.muilab.notigpt.data.local.room.dao.ProposedOpRecordDao
         ProposedOpRecord::class,
         PendingReviewDraft::class,
     ],
-    version = 53,
+    version = 54,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -86,7 +86,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun actionDao(): NotiActionDao
     abstract fun notiLlmStateDao(): NotiLlmStateDao
     abstract fun savedItemDao(): SavedItemDao
-    abstract fun subTaskDao(): SavedSubItemDao
+    abstract fun todoStepDao(): TodoStepDao
     abstract fun notiSavedItemLinkDao(): NotiSavedItemLinkDao
     abstract fun savedItemChangeLogDao(): SavedItemChangeLogDao
     abstract fun pendingProposedOpDao(): PendingProposedOpDao

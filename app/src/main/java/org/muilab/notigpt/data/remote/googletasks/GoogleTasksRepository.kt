@@ -64,7 +64,7 @@ class GoogleTasksRepository(
 
     /**
      * Create a task in the user's default task list from any [ExportableItem]
-     * (works for both [SavedItem] and [SavedSubItem]).
+     * (works for both [SavedItem] and [TodoStep]).
      */
     suspend fun createTaskFromExportable(item: ExportableItem): TaskResult = withContext(Dispatchers.IO) {
         val account = GoogleTasksAuthManager.getAccount(appContext)

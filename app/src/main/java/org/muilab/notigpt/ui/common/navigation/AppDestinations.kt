@@ -1,7 +1,7 @@
 package org.muilab.notigpt.ui.common.navigation
 
 /**
- * A pushed destination within the home area (the region that used to be the New/Tasks/Keep bottom
+ * A pushed destination within the home area (the region that used to be the New/Todos/Keep bottom
  * tabs). The home overview is the root; everything else is pushed onto a small back stack held by
  * AppScaffold. Kept as a lightweight sealed model rather than Navigation-Compose to match the app's
  * existing ad-hoc navigation style.
@@ -17,7 +17,7 @@ sealed interface HomeDestination {
     data class NotiList(val category: String) : HomeDestination
 
     /**
-     * A filtered saved-item list (a smart filter, or the Tasks/Keep collections). [focusItemId], when
+     * A filtered saved-item list (a smart filter, or the Todos/Keep collections). [focusItemId], when
      * set, opens that item's detail screen immediately on top of the list (e.g. jumping in from a
      * notification's linked-items sheet).
      */
@@ -25,17 +25,16 @@ sealed interface HomeDestination {
 }
 
 /**
- * Entry points into a saved-item list from the home screen. The first five are planned-date/star
- * smart filters (mixing tasks and keeps); [Tasks] and [Keep] open the type collections with their
- * own in-screen filter chips.
+ * Entry points into a saved-item list from the home screen. Attention filters mix todos and keeps
+ * unless their definition is type-specific; [Todos] and [Keep] open the full collections.
  */
 enum class SavedListFilter {
-    TodayEarlier,
-    Upcoming,
-    Someday,
-    Undetermined,
+    Suggested,
     Starred,
-    Tasks,
+    DueSoon,
+    RecentlyUpdated,
+    AllItems,
+    Todos,
     Keep,
 }
 

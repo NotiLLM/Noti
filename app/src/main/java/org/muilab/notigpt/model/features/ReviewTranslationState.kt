@@ -7,16 +7,16 @@ data class ReviewTranslationState(
     val status: String,
     val targetLanguage: String,
     val sourceItem: SavedItem,
-    val sourceSubItems: List<SavedSubItem>,
+    val sourceSteps: List<TodoStep>,
     val evidenceRecordIds: List<String>,
     /** Pending op ids snapshotted for staged groups; empty for legacy review rows. */
     val sourceOpIds: List<Long> = emptyList(),
     val translatedItem: SavedItem? = null,
-    val translatedSubItems: List<SavedSubItem> = emptyList(),
+    val translatedSteps: List<TodoStep> = emptyList(),
 ) {
     val isPending: Boolean get() = status == STATUS_PENDING
     val translatedDraft: ReviewItemDraft?
-        get() = translatedItem?.let { ReviewItemDraft(it, translatedSubItems) }
+        get() = translatedItem?.let { ReviewItemDraft(it, translatedSteps) }
 
     companion object {
         const val STATUS_PENDING = "pending"
@@ -33,7 +33,7 @@ data class ReviewTranslationState(
             status = STATUS_PENDING,
             targetLanguage = targetLanguage,
             sourceItem = source.item,
-            sourceSubItems = source.subItems,
+            sourceSteps = source.steps,
             evidenceRecordIds = evidenceRecordIds.filter(String::isNotBlank).distinct(),
             sourceOpIds = sourceOpIds.distinct(),
         )

@@ -134,8 +134,7 @@ internal object ExtractionPipelineHandler {
                 if (pendingGroup == null) {
                     ExtractionStageSupport.itemDetail(ctx, item)
                 } else {
-                    val draft = ctx.database.pendingReviewDraftDao().getByKey(pendingGroup.key)
-                    val preview = pendingRepo.buildPreview(pendingGroup, reviewWhenAtMs = draft?.whenAtMs)
+                    val preview = pendingRepo.buildPreview(pendingGroup)
                         ?: return@mapNotNull ExtractionStageSupport.itemDetail(ctx, item)
                     val pendingEvidence = pendingGroup.ops.flatMap { op ->
                         runCatching {

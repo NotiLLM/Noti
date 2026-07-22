@@ -176,14 +176,14 @@ private fun ChangeRow(change: SavedItemChangeLog, showDivider: Boolean = false) 
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            parseSubTaskTitles(change.addedSubTasksJson).forEach { title ->
+            parseStepTitles(change.addedStepsJson).forEach { title ->
                 Text(
                     text = stringResource(R.string.change_added_step, title),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            parseRemovedSubTasks(change.removedSubTasksJson).forEach { (title, reason) ->
+            parseRemovedSteps(change.removedStepsJson).forEach { (title, reason) ->
                 val label = if (reason.isBlank()) {
                     stringResource(R.string.change_removed_step, title)
                 } else {
@@ -220,7 +220,7 @@ private fun ChangeRow(change: SavedItemChangeLog, showDivider: Boolean = false) 
     }
 }
 
-private fun parseSubTaskTitles(json: String): List<String> = try {
+private fun parseStepTitles(json: String): List<String> = try {
     val arr = JSONArray(json)
     buildList {
         for (i in 0 until arr.length()) {
@@ -233,12 +233,12 @@ private fun parseSubTaskTitles(json: String): List<String> = try {
     emptyList()
 }
 
-private fun parseRemovedSubTasks(json: String): List<Pair<String, String>> = try {
+private fun parseRemovedSteps(json: String): List<Pair<String, String>> = try {
     val arr = JSONArray(json)
     buildList {
         for (i in 0 until arr.length()) {
             val o = arr.optJSONObject(i) ?: continue
-            val title = o.optString("title").ifBlank { o.optString("savedSubItemId") }
+            val title = o.optString("title").ifBlank { o.optString("todoStepId") }
             if (title.isNotBlank()) add(title to o.optString("reason"))
         }
     }

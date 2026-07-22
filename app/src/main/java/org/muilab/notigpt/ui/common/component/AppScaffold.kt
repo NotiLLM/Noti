@@ -150,7 +150,7 @@ fun AppScaffold(
     val preferenceViewModel: PreferenceViewModel = viewModel()
     // Shared with HomeScreen (same activity ViewModelStoreOwner) — used here only for the drawer badges.
     val homeViewModel: HomeViewModel = viewModel()
-    val activeTaskCount by homeViewModel.activeTaskCount.collectAsState()
+    val activeTodoCount by homeViewModel.activeTodoCount.collectAsState()
     val activeKeepCount by homeViewModel.activeKeepCount.collectAsState()
 
     val appSearchQuery by drawerViewModel.queryString.collectAsState()
@@ -327,7 +327,7 @@ fun AppScaffold(
                 },
                 unresolvedConflictCount = unresolvedConflicts.size,
                 dueUnseenReminderCount = dueUnseenReminderCount,
-                activeTaskCount = activeTaskCount,
+                activeTodoCount = activeTodoCount,
                 activeKeepCount = activeKeepCount,
                 onHomeSelected = resetToHome,
                 onSavedListSelected = openSavedListFromDrawer,
@@ -462,7 +462,7 @@ fun AppScaffold(
                                 onOpenSavedItem = { item ->
                                     pushHome(
                                         HomeDestination.SavedList(
-                                            filter = if (item.isTask) SavedListFilter.Tasks else SavedListFilter.Keep,
+                                            filter = if (item.isTodo) SavedListFilter.Todos else SavedListFilter.Keep,
                                             focusItemId = item.savedItemId,
                                         )
                                     )
@@ -470,12 +470,12 @@ fun AppScaffold(
                             )
                             is HomeDestination.SavedList -> {
                                 val listMode = when (dest.filter) {
-                                    SavedListFilter.Tasks -> SavedItemsViewModel.ListMode.Tasks
+                                    SavedListFilter.Todos -> SavedItemsViewModel.ListMode.Todos
                                     SavedListFilter.Keep -> SavedItemsViewModel.ListMode.Keep
                                     else -> SavedItemsViewModel.ListMode.All
                                 }
                                 val smart = when (dest.filter) {
-                                    SavedListFilter.Tasks, SavedListFilter.Keep -> null
+                                    SavedListFilter.Todos, SavedListFilter.Keep -> null
                                     else -> dest.filter
                                 }
                                 SavedItemsScreen(
@@ -559,12 +559,12 @@ private fun homeDestinationTitle(dest: HomeDestination): String? = when (dest) {
         else -> dest.category
     }
     is HomeDestination.SavedList -> when (dest.filter) {
-        SavedListFilter.TodayEarlier -> stringResource(R.string.home_filter_today)
-        SavedListFilter.Upcoming -> stringResource(R.string.home_filter_upcoming)
-        SavedListFilter.Someday -> stringResource(R.string.home_filter_someday)
-        SavedListFilter.Undetermined -> stringResource(R.string.home_filter_undetermined)
+        SavedListFilter.Suggested -> stringResource(R.string.home_filter_suggested)
         SavedListFilter.Starred -> stringResource(R.string.home_filter_starred)
-        SavedListFilter.Tasks -> stringResource(R.string.home_collection_tasks)
+        SavedListFilter.DueSoon -> stringResource(R.string.home_filter_due_soon)
+        SavedListFilter.RecentlyUpdated -> stringResource(R.string.home_filter_recently_updated)
+        SavedListFilter.AllItems -> stringResource(R.string.home_filter_all_items)
+        SavedListFilter.Todos -> stringResource(R.string.home_collection_tasks)
         SavedListFilter.Keep -> stringResource(R.string.home_collection_keep)
     }
 }

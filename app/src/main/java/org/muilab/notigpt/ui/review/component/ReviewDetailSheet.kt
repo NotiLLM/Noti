@@ -44,7 +44,7 @@ private data class FieldDelta(val name: String, val oldValue: String, val newVal
 
 private data class ReviewDigest(
     val appendedContent: List<String>,
-    val addedSubTasks: List<String>,
+    val addedSteps: List<String>,
     val addedButtons: List<String>,
     val fields: List<FieldDelta>,
     val sourceTitles: List<String>,
@@ -113,7 +113,7 @@ fun ReviewDetailSheet(
                 container = MaterialTheme.colorScheme.tertiaryContainer,
             )
         }
-        val additions = digest.appendedContent + digest.addedSubTasks + digest.addedButtons
+        val additions = digest.appendedContent + digest.addedSteps + digest.addedButtons
         if (additions.isNotEmpty()) {
             DigestSection(
                 icon = R.drawable.add,
@@ -149,7 +149,7 @@ fun ReviewDetailSheet(
             }
         }
 
-        CompactResultCard(item, entry.previewSubItems.size)
+        CompactResultCard(item, entry.previewSteps.size)
 
         TextButton(onClick = { showEvidence = !showEvidence }, modifier = Modifier.fillMaxWidth()) {
             Text(stringResource(if (showEvidence) R.string.review_evidence_hide else R.string.review_evidence_show))
@@ -208,7 +208,7 @@ private fun DigestSection(icon: Int, title: String, values: List<String>, contai
 }
 
 @Composable
-private fun CompactResultCard(item: SavedItem, subTaskCount: Int) {
+private fun CompactResultCard(item: SavedItem, stepCount: Int) {
     Surface(
         shape = MaterialTheme.shapes.large,
         color = MaterialTheme.colorScheme.surfaceContainerLow,
@@ -220,7 +220,7 @@ private fun CompactResultCard(item: SavedItem, subTaskCount: Int) {
             if (item.content.isNotBlank()) {
                 Text(item.content, maxLines = 3, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)
             }
-            if (subTaskCount > 0) Text(stringResource(R.string.review_result_subtasks, subTaskCount), style = MaterialTheme.typography.labelMedium)
+            if (stepCount > 0) Text(stringResource(R.string.review_result_steps, stepCount), style = MaterialTheme.typography.labelMedium)
         }
     }
 }
@@ -236,7 +236,7 @@ private fun localizedFieldName(name: String): String = when (name) {
 
 private fun buildDigest(entry: ReviewViewModel.ReviewEntry): ReviewDigest {
     val appended = mutableListOf<String>()
-    val subtasks = mutableListOf<String>()
+    val steps = mutableListOf<String>()
     val buttons = mutableListOf<String>()
     val fields = mutableListOf<FieldDelta>()
     val before = entry.survivor?.item
@@ -244,8 +244,8 @@ private fun buildDigest(entry: ReviewViewModel.ReviewEntry): ReviewDigest {
         val root = runCatching { JSONObject(pending.payload) }.getOrNull() ?: return@forEach
         val changes = root.optJSONObject("changes") ?: JSONObject()
         changes.optString("appendedContent").trim().takeIf(String::isNotBlank)?.let(appended::add)
-        changes.optJSONArray("addedSubTasks")?.let { arr ->
-            for (i in 0 until arr.length()) arr.optJSONObject(i)?.optString("text")?.takeIf(String::isNotBlank)?.let(subtasks::add)
+        changes.optJSONArray("addedSteps")?.let { arr ->
+            for (i in 0 until arr.length()) arr.optJSONObject(i)?.optString("text")?.takeIf(String::isNotBlank)?.let(steps::add)
         }
         changes.optJSONArray("addedButtons")?.let { arr ->
             for (i in 0 until arr.length()) {
@@ -260,7 +260,7 @@ private fun buildDigest(entry: ReviewViewModel.ReviewEntry): ReviewDigest {
             }
         }
     }
-    return ReviewDigest(appended, subtasks, buttons, fields, entry.mergeSources.map { it.item.title })
+    return ReviewDigest(appended, steps, buttons, fields, entry.mergeSources.map { it.item.title })
 }
 
 private fun oldFieldValue(item: SavedItem?, name: String): String {
@@ -269,8 +269,6 @@ private fun oldFieldValue(item: SavedItem?, name: String): String {
     return when (name) {
         "title" -> item.title
         "deadlineTimeString" -> time(item.deadlineAtMs)
-        "startTimeString" -> time(item.startAtMs)
-        "endTimeString" -> time(item.endAtMs)
         else -> "—"
     }
 }
@@ -282,7 +280,7 @@ private fun ReviewMergeItemSnapshot(label: String, snapshot: PendingProposedOpRe
             Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
             Text(snapshot.item.title, style = MaterialTheme.typography.titleSmall)
             if (snapshot.item.content.isNotBlank()) Text(snapshot.item.content, style = MaterialTheme.typography.bodyMedium)
-            snapshot.subItems.forEach { sub -> Text("• ${sub.text}", style = MaterialTheme.typography.bodySmall) }
+            snapshot.steps.forEach { sub -> Text("• ${sub.text}", style = MaterialTheme.typography.bodySmall) }
         }
     }
 }

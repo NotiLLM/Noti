@@ -8,13 +8,14 @@
     <string name="ui_action_delete">刪除</string>
     <string name="ui_action_ok">確定</string>
     <string name="ui_action_save">儲存</string>
-    <string name="a11y_set_when">設定何時</string>
+    <string name="a11y_set_deadline">設定截止時間</string>
+    <string name="review_mark_complete">標示為已完成</string>
 
     <!-- Settings -->
     <string name="ui_settings_delete_on_swipe">滑動刪除：</string>
     <string name="ui_settings_left">向左</string>
     <string name="ui_settings_right">向右</string>
-    <string name="ui_settings_expand_task_list">啟動時展開任務清單</string>
+    <string name="ui_settings_expand_task_list">啟動時展開待辦清單</string>
 
     <!-- Extraction language preference -->
     <string name="ui_settings_extraction_language">擷取語言</string>
@@ -26,7 +27,7 @@
     <!-- Reminders -->
     <string name="ui_saved_items_filter_all">全部</string>
     <string name="ui_saved_items_filter_pending">待辦</string>
-    <string name="ui_saved_items_filter_tasks">任務</string>
+    <string name="ui_saved_items_filter_tasks">待辦</string>
     <string name="ui_saved_items_filter_memos">備忘</string>
     <string name="ui_saved_items_filter_completed">已完成</string>
     <string name="ui_saved_items_filter_keep">保留</string>
@@ -34,17 +35,17 @@
     <string name="ui_saved_items_filter_starred">已加星號</string>
     <string name="ui_saved_items_search_placeholder">搜尋儲存項目（用 + 代表「且」）</string>
     <string name="ui_saved_items_add_dialog_title">新增</string>
-    <string name="ui_saved_items_add_dialog_body">建立任務或備忘</string>
-    <string name="ui_saved_items_add_dialog_task">任務</string>
+    <string name="ui_saved_items_add_dialog_body">建立待辦或備忘</string>
+    <string name="ui_saved_items_add_dialog_task">待辦</string>
     <string name="ui_saved_items_add_dialog_memo">備忘</string>
-    <string name="ui_saved_items_untitled_task">（未命名任務）</string>
+    <string name="ui_saved_items_untitled_task">（未命名待辦）</string>
     <string name="ui_saved_items_untitled_memo">（未命名備忘）</string>
     <string name="ui_saved_items_no_deadline">無特定截止時間</string>
     <string name="ui_saved_items_ect_short">預估：%1$d 分</string>
     <string name="ui_saved_items_editor_title_placeholder">未命名</string>
-    <string name="ui_saved_items_editor_task_label">任務</string>
+    <string name="ui_saved_items_editor_task_label">待辦</string>
     <string name="ui_saved_items_editor_completed">已完成</string>
-    <string name="ui_saved_items_editor_when">何時</string>
+    <string name="ui_saved_items_editor_deadline">截止時間</string>
     <string name="saved_item_update_section_label">更新</string>
     <string name="saved_item_badge_new">新項目</string>
     <string name="saved_item_badge_updated">已更新</string>
@@ -77,11 +78,11 @@
     <string name="extraction_pending_banner">擷取待處理——無法連線伺服器（%1$d 則通知排隊中）</string>
     <string name="extraction_retry">重試</string>
     <string name="extraction_failed_toast">擷取失敗——稍後將自動重試</string>
-    <string name="sign_in_rationale">使用 Google 帳戶登入，讓你的任務與偏好設定備份並跨裝置同步。</string>
+    <string name="sign_in_rationale">使用 Google 帳戶登入，讓你的待辦與偏好設定備份並跨裝置同步。</string>
     <string name="sign_in_with_google">使用 Google 登入</string>
     <string name="sign_in_failed">登入失敗，請再試一次。</string>
     <string name="account_switch_title">切換帳戶？</string>
-    <string name="account_switch_message">你以 %1$s 登入。本機任務、備忘與偏好設定將切換至此帳戶。請選擇如何處理此裝置的通知紀錄。</string>
+    <string name="account_switch_message">你以 %1$s 登入。本機待辦、備忘與偏好設定將切換至此帳戶。請選擇如何處理此裝置的通知紀錄。</string>
     <string name="account_switch_confirm">切換並重新載入</string>
     <string name="account_switch_keep_history">保留通知紀錄</string>
     <string name="account_switch_keep_history_warning">現有通知文字會留在此裝置，之後可能由新帳戶處理。</string>
@@ -101,7 +102,7 @@
     <string name="a11y_delete">刪除</string>
     <string name="a11y_star">加星號</string>
     <string name="a11y_unstar">取消星號</string>
-    <string name="a11y_clear_when">清除何時</string>
+    <string name="a11y_clear_deadline">清除截止時間</string>
 
     <!-- Relative / absolute time (used in reminders and elsewhere). -->
     <string name="time_now">現在</string>
@@ -139,7 +140,7 @@
     <plurals name="ongoing_status_keep_count">
         <item quantity="other">%1$d 則備忘</item>
     </plurals>
-    <string name="generating_saved_items">正在產生任務與備忘…</string>
+    <string name="generating_saved_items">正在產生待辦與備忘…</string>
 
     <!-- Notifications screen (UI chrome only; not notification content) -->
     <string name="ui_notifications_new">新通知（%1$d）</string>
@@ -161,7 +162,7 @@
 
     <!-- Bottom bar tabs -->
     <string name="tab_notifications">通知</string>
-    <string name="tab_tasks">任務</string>
+    <string name="tab_tasks">待辦</string>
     <string name="tab_keep">備忘</string>
     <string name="tab_preferences">偏好</string>
     <string name="menu_settings">設定</string>
@@ -186,8 +187,8 @@
     <!-- Google Tasks -->
     <string name="google_tasks_export">匯出到 Google Tasks</string>
     <string name="google_tasks_sign_in">登入 Google</string>
-    <string name="google_tasks_success">已在 Google Tasks 建立任務</string>
-    <string name="google_tasks_error">建立任務失敗：%1$s</string>
+    <string name="google_tasks_success">已在 Google Tasks 建立待辦</string>
+    <string name="google_tasks_error">建立待辦失敗：%1$s</string>
     <string name="google_tasks_not_signed_in">請先登入 Google</string>
     <string name="google_tasks_exporting">正在匯出到 Google Tasks…</string>
     <string name="a11y_export_google_tasks">匯出到 Google Tasks</string>
@@ -242,29 +243,29 @@
     <string name="pref_reason_other">其他（讓我說明）</string>
 
     <!-- Preference learning – BottomSheet reason (DELETE) -->
-    <string name="pref_reason_delete_title">為什麼這不值得保留為任務或備忘？</string>
+    <string name="pref_reason_delete_title">為什麼這不值得保留為待辦或備忘？</string>
 
     <!-- Preference learning – BottomSheet reason (MANUAL_EXTRACT) -->
-    <string name="pref_reason_extract_title">為什麼這類通知應該變成任務或備忘？</string>
+    <string name="pref_reason_extract_title">為什麼這類通知應該變成待辦或備忘？</string>
 
     <!-- Preference learning – Concrete quick rules -->
     <string name="pref_rule_title">我應該學習哪條規則？</string>
 
     <!-- DELETE Quick Rules -->
-    <string name="pref_rule_delete_sender">忽略此發送者未來的任務</string>
-    <string name="pref_rule_delete_group">只有在群組中明確提到我時才擷取任務</string>
-    <string name="pref_rule_delete_info">這只是一次性更新，不要建立任務或備忘</string>
-    <string name="pref_rule_delete_topic">忽略此主題的任務</string>
-    <string name="pref_rule_delete_app">不要從此應用程式擷取任何任務</string>
+    <string name="pref_rule_delete_sender">忽略此發送者未來的待辦</string>
+    <string name="pref_rule_delete_group">只有在群組中明確提到我時才擷取待辦</string>
+    <string name="pref_rule_delete_info">這只是一次性更新，不要建立待辦或備忘</string>
+    <string name="pref_rule_delete_topic">忽略此主題的待辦</string>
+    <string name="pref_rule_delete_app">不要從此應用程式擷取任何待辦</string>
 
     <!-- MANUAL EXTRACT Quick Rules -->
     <string name="pref_rule_extract_sender">總是從此人擷取行動請求或問題</string>
     <string name="pref_rule_extract_thread">追蹤此特定對話串中的所有更新</string>
-    <string name="pref_rule_extract_wording">將此特定措辭學習為隱含任務</string>
+    <string name="pref_rule_extract_wording">將此特定措辭學習為隱含待辦</string>
     <string name="pref_rule_extract_situational">我目前正在積極關注此主題</string>
 
     <!-- EDIT Quick Rules -->
-    <string name="pref_rule_edit_context">總是包含任務背後的「原因」（理由）</string>
+    <string name="pref_rule_edit_context">總是包含待辦背後的「原因」（理由）</string>
     <string name="pref_rule_edit_urgency">更加留意隱含的緊急程度或截止日期</string>
     <string name="pref_rule_edit_responsibility">指派的負責人不正確</string>
     <string name="pref_rule_edit_granularity">只有在所有內容會於同一次處理時才合併</string>
@@ -287,7 +288,7 @@
     <string name="pref_chat_mode_rules">擷取規則</string>
     <string name="pref_chat_mode_about_me">關於我</string>
     <string name="pref_chat_empty_prompt">告訴我您希望如何處理您的通知。</string>
-    <string name="pref_chat_empty_example">例如：「只有 Slack 提到我的訊息才擷取任務」</string>
+    <string name="pref_chat_empty_example">例如：「只有 Slack 提到我的訊息才擷取待辦」</string>
     <string name="pref_chat_empty_prompt_about_me">告訴我關於您自己的資訊，讓我更了解您的通知。</string>
     <string name="pref_chat_empty_example_about_me">例如：「我是 Google 的軟體工程師」或「我的伴侶叫 Alice」</string>
     <string name="pref_chat_discover_button">了解我</string>
@@ -360,17 +361,17 @@
     <string name="saved_item_section_scored">所有儲存項目</string>
 
     <!-- Sub-task list / row -->
-    <string name="subtask_section_title">子任務</string>
-    <string name="subtask_add">新增子任務</string>
-    <string name="a11y_add_subtask">新增子任務</string>
-    <string name="subtask_untitled">（未命名子任務）</string>
-    <string name="subtask_show_less">顯示較少</string>
-    <string name="subtask_n_more">還有 %1$d 項</string>
-    <string name="subtask_hide_completed">隱藏已完成</string>
-    <string name="subtask_n_completed">%1$d 項已完成</string>
-    <string name="subtask_edit">編輯</string>
-    <string name="subtask_delete">刪除</string>
-    <string name="a11y_subtask_more">更多選項</string>
+    <string name="step_section_title">步驟</string>
+    <string name="step_add">新增步驟</string>
+    <string name="a11y_add_step">新增步驟</string>
+    <string name="step_untitled">（未命名步驟）</string>
+    <string name="step_show_less">顯示較少</string>
+    <string name="step_n_more">還有 %1$d 項</string>
+    <string name="step_hide_completed">隱藏已完成</string>
+    <string name="step_n_completed">%1$d 項已完成</string>
+    <string name="step_edit">編輯</string>
+    <string name="step_delete">刪除</string>
+    <string name="a11y_step_more">更多選項</string>
 
     <!-- Reminder actions -->
     <string name="saved_item_refresh_all">重新整理所有儲存項目</string>
@@ -409,7 +410,7 @@
     <string name="menu_home">主頁</string>
     <string name="menu_reminders">排程提醒</string>
     <string name="menu_history">歷史記錄</string>
-    <string name="menu_section_collections">任務與備忘</string>
+    <string name="menu_section_collections">待辦與備忘</string>
     <string name="menu_section_more">更多</string>
     <string name="scheduled_reminder_time">提醒時間：%1$s</string>
     <string name="scheduled_pick_time">選擇時間</string>
@@ -445,13 +446,13 @@
     <string name="ui_settings_export_include_dismissed">包含已忽略的通知</string>
     <string name="ui_settings_export_include_context">包含完整內容</string>
     <string name="ui_settings_delete_cloud_data">刪除雲端資料</string>
-    <string name="ui_settings_delete_cloud_data_desc">永久刪除產生的任務、備忘、偏好設定及其本機副本</string>
+    <string name="ui_settings_delete_cloud_data_desc">永久刪除產生的待辦、備忘、偏好設定及其本機副本</string>
     <string name="ui_settings_clear_notification_history">清除通知紀錄</string>
     <string name="ui_settings_clear_notification_history_desc">僅永久刪除此裝置上的原始通知紀錄</string>
     <string name="ui_settings_delete_cloud_confirm_title">刪除雲端資料？</string>
     <string name="ui_settings_delete_cloud_confirm_message">這會永久刪除 Firestore 與此裝置上的產生內容。此裝置的通知紀錄會保留。</string>
     <string name="ui_settings_clear_history_confirm_title">清除通知紀錄？</string>
-    <string name="ui_settings_clear_history_confirm_message">這會永久刪除此裝置上的原始通知紀錄。產生的任務與備忘會保留。</string>
+    <string name="ui_settings_clear_history_confirm_message">這會永久刪除此裝置上的原始通知紀錄。產生的待辦與備忘會保留。</string>
     <string name="ui_settings_delete_cloud_done">已刪除雲端與本機產生資料</string>
     <string name="ui_settings_clear_history_done">已清除通知紀錄</string>
     <string name="ui_settings_delete_failed">無法刪除資料。請檢查連線後再試一次。</string>
@@ -462,7 +463,7 @@
     <string name="a11y_more_actions">更多動作</string>
 
     <!-- New screen sections + triage -->
-    <string name="ui_new_tasks">新任務</string>
+    <string name="ui_new_tasks">新待辦</string>
     <string name="ui_new_keep">新備忘</string>
     <string name="ui_new_notifications_label">新通知</string>
     <string name="ui_action_save_all">全部儲存</string>
@@ -473,9 +474,9 @@
     <string name="a11y_cancel_selection">取消選取</string>
     <string name="a11y_delete_selected">刪除所選</string>
     <string name="a11y_export_selected_tasks">將所選匯出到 Google Tasks</string>
-    <string name="toast_moved_to_tasks">已移至任務</string>
+    <string name="toast_moved_to_tasks">已移至待辦</string>
     <string name="toast_moved_to_keep">已移至備忘</string>
-    <string name="toast_saved_to_tasks">已儲存至任務</string>
+    <string name="toast_saved_to_tasks">已儲存至待辦</string>
     <string name="toast_saved_to_keep">已儲存至備忘</string>
     <string name="toast_deleted">已刪除</string>
     <string name="toast_exporting_google_tasks">正在匯出到 Google Tasks…</string>
@@ -500,8 +501,8 @@
     <!-- Home overview -->
     <string name="home_review_title">待檢視項目</string>
     <string name="home_review_none">沒有待檢視項目</string>
-    <string name="home_review_new_tasks">%1$d 個新任務</string>
-    <string name="home_review_updated_tasks">%1$d 個已更新任務</string>
+    <string name="home_review_new_tasks">%1$d 個新待辦</string>
+    <string name="home_review_updated_tasks">%1$d 個已更新待辦</string>
     <string name="home_review_new_keeps">%1$d 則新備忘</string>
     <string name="home_review_updated_keeps">%1$d 則已更新備忘</string>
     <string name="home_section_notifications">通知</string>
@@ -511,12 +512,12 @@
     <string name="home_noti_window_hours">近 %d 小時</string>
     <string name="home_noti_older">較早</string>
     <string name="home_section_saved">已儲存</string>
-    <string name="home_filter_today">今天及更早</string>
-    <string name="home_filter_upcoming">即將到來</string>
-    <string name="home_filter_someday">將來某天</string>
-    <string name="home_filter_undetermined">尚未安排的任務</string>
     <string name="home_filter_starred">已加星號</string>
-    <string name="home_collection_tasks">任務</string>
+    <string name="home_filter_suggested">建議項目</string>
+    <string name="home_filter_due_soon">即將到期</string>
+    <string name="home_filter_recently_updated">最近更新</string>
+    <string name="home_filter_all_items">所有項目</string>
+    <string name="home_collection_tasks">待辦</string>
     <string name="home_collection_keep">備忘</string>
 
     <!-- Notification category pages -->
@@ -542,8 +543,8 @@
     <string name="review_badge_created">已建立</string>
     <string name="review_badge_updated">已更新</string>
     <string name="review_badge_merged">已合併</string>
-    <string name="review_chip_new_tasks">%1$d 個新任務</string>
-    <string name="review_chip_updated_tasks">%1$d 個已編輯任務</string>
+    <string name="review_chip_new_tasks">%1$d 個新待辦</string>
+    <string name="review_chip_updated_tasks">%1$d 個已編輯待辦</string>
     <string name="review_chip_new_keeps">%1$d 則新備忘</string>
     <string name="review_chip_updated_keeps">%1$d 則已編輯備忘</string>
     <string name="review_approve">核准</string>
@@ -565,7 +566,7 @@
     <string name="review_merge_survivor">保留項目</string>
     <string name="review_merge_source">來源項目</string>
     <string name="review_merge_description">將加入的描述</string>
-    <string name="review_merge_subtasks">將加入的子任務</string>
+    <string name="review_merge_steps">將加入的步驟</string>
     <string name="review_merge_fields">將變更的欄位</string>
     <string name="review_merge_field_value">%1$s：%2$s</string>
     <string name="review_merge_buttons">將加入的動作</string>
@@ -582,7 +583,7 @@
     <string name="review_history_show">顯示變更紀錄</string>
     <string name="review_history_hide">隱藏變更紀錄</string>
     <string name="review_result">結果</string>
-    <string name="review_result_subtasks">%1$d 個子任務</string>
+    <string name="review_result_steps">%1$d 個步驟</string>
     <string name="review_field_title">標題</string>
     <string name="review_field_deadline">截止時間</string>
     <string name="review_field_start">開始時間</string>
@@ -605,10 +606,7 @@
     <string name="a11y_export">匯出</string>
 
     <!-- When -->
-    <string name="when_someday">將來某天</string>
-    <string name="when_add_time">新增時間</string>
-    <string name="when_clear">清除</string>
-    <string name="task_to_keep_title">要將任務改為保留項目嗎？</string>
-    <string name="task_to_keep_message">截止時間與子任務（如有）會加入項目描述；「何時」維持不變。</string>
+    <string name="task_to_keep_title">要將待辦改為保留項目嗎？</string>
+    <string name="task_to_keep_message">截止時間與步驟（如有）會加入項目描述。</string>
     <string name="task_to_keep_confirm">改為保留項目</string>
 </resources>

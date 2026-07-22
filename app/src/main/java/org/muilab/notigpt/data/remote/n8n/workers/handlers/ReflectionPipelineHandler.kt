@@ -12,7 +12,7 @@ import org.muilab.notigpt.data.remote.n8n.workers.handlers.ExtractionStageSuppor
 import org.muilab.notigpt.data.repository.saveditem.PendingProposedOpRepository
 import org.muilab.notigpt.model.features.PendingProposedOp
 import org.muilab.notigpt.model.features.SavedItem
-import org.muilab.notigpt.model.features.SavedSubItem
+import org.muilab.notigpt.model.features.TodoStep
 import org.muilab.notigpt.work.ReflectionTrigger
 import org.muilab.notigpt.util.SharedPreferencesManager
 import java.util.UUID
@@ -30,7 +30,7 @@ internal object ReflectionPipelineHandler {
     internal data class Candidate(
         val ref: String,
         val item: SavedItem,
-        val subItems: List<SavedSubItem>,
+        val steps: List<TodoStep>,
         val group: PendingProposedOpRepository.OpGroup? = null,
         val evidenceRecordIds: Set<String> = emptySet(),
     ) {
@@ -95,13 +95,11 @@ internal object ReflectionPipelineHandler {
                         val savedIds = refs.mapNotNull { ref ->
                             candidateByRef[ref]?.takeIf { it.group == null }?.item?.savedItemId?.let { ref to it }
                         }.toMap()
-                        val whens = refs.associateWith { ref -> candidateByRef.getValue(ref).item.whenAtMs }
                         pendingRepo.stageReflectionOps(
                             batchId = UUID.randomUUID().toString(),
                             ops = ops,
                             pendingGroupsByRef = pendingGroups,
                             savedItemIdsByRef = savedIds,
-                            candidateWhenByRef = whens,
                         )
                     }
                 }
@@ -134,11 +132,11 @@ internal object ReflectionPipelineHandler {
 
         val confirmed = ctx.savedItemRepository.getAllActive()
             .filter { !it.isCompleted && !it.isArchived && it.savedItemId !in blockedSavedIds }
-            .map { item -> Candidate(ref = item.savedItemId, item = item, subItems = emptyList()) }
+            .map { item -> Candidate(ref = item.savedItemId, item = item, steps = emptyList()) }
 
         val proposed = groups.mapNotNull { group ->
             val draft = ctx.database.pendingReviewDraftDao().getByKey(group.key)
-            val preview = pendingRepo.buildPreview(group, reviewWhenAtMs = draft?.whenAtMs) ?: return@mapNotNull null
+            val preview = pendingRepo.buildPreview(group) ?: return@mapNotNull null
             val participantIds = buildSet {
                 group.targetItemId?.takeIf(String::isNotBlank)?.let(::add)
                 group.ops.flatMap(::mergeSourceIdsOf).forEach(::add)
@@ -149,7 +147,7 @@ internal object ReflectionPipelineHandler {
             Candidate(
                 ref = "review:${group.key}",
                 item = preview.item,
-                subItems = preview.subItems,
+                steps = preview.steps,
                 group = group,
                 evidenceRecordIds = (group.ops.flatMap(::evidenceOf) + persistedEvidence).toSet(),
             )
@@ -171,19 +169,16 @@ internal object ReflectionPipelineHandler {
                 "itemId" to candidate.item.savedItemId,
                 "title" to candidate.item.title,
                 "content" to candidate.item.content,
-                "type" to if (candidate.item.isTask) "task" else "keep",
+                "type" to if (candidate.item.isTodo) "todo" else "keep",
                 "deadline" to ExtractionStageSupport.iso(candidate.item.deadlineAtMs),
-                "startTime" to ExtractionStageSupport.iso(candidate.item.startAtMs),
-                "endTime" to ExtractionStageSupport.iso(candidate.item.endAtMs),
-                "when" to if (SavedItem.isSomeday(candidate.item.whenAtMs)) "someday" else ExtractionStageSupport.iso(candidate.item.whenAtMs),
                 "userEdited" to candidate.item.userEdited,
                 "isStarred" to candidate.item.isStarred,
                 "isCompleted" to candidate.item.isCompleted,
                 "buttons" to candidate.item.buttons,
                 "sourceNotiRecordIds" to candidate.evidenceRecordIds.toList(),
                 "sourceNotiKeys" to candidate.evidenceRecordIds.map { it.substringBeforeLast("_") }.distinct(),
-                "subTasks" to candidate.subItems.map { sub ->
-                    mapOf("subTaskId" to sub.savedSubItemId, "text" to sub.text, "isCompleted" to sub.isCompleted, "position" to sub.position)
+                "steps" to candidate.steps.map { sub ->
+                        mapOf("todoStepId" to sub.todoStepId, "text" to sub.text, "isCompleted" to sub.isCompleted, "position" to sub.position)
                 },
             )
         }

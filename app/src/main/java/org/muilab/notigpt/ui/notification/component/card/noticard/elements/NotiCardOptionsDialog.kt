@@ -130,7 +130,7 @@ private fun LinkedItemRow(item: SavedItem, onClick: () -> Unit) {
     ListItem(
         headlineContent = {
             val fallback = stringResource(
-                if (item.isTask) R.string.ui_saved_items_untitled_task else R.string.ui_saved_items_untitled_memo
+                if (item.isTodo) R.string.ui_saved_items_untitled_task else R.string.ui_saved_items_untitled_memo
             )
             Text(
                 text = item.title.ifBlank { fallback },
@@ -139,7 +139,7 @@ private fun LinkedItemRow(item: SavedItem, onClick: () -> Unit) {
         },
         leadingContent = {
             Icon(
-                painter = painterResource(if (item.isTask) R.drawable.task else R.drawable.bookmark),
+                painter = painterResource(if (item.isTodo) R.drawable.task else R.drawable.bookmark),
                 contentDescription = null,
                 modifier = Modifier.size(20.dp),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,

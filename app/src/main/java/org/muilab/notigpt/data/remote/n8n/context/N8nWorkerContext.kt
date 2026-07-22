@@ -12,7 +12,7 @@ import org.muilab.notigpt.data.repository.saveditem.ExtractionJournalRepository
 import org.muilab.notigpt.data.repository.saveditem.PendingProposedOpRepository
 import org.muilab.notigpt.data.repository.saveditem.SavedItemChangeLogRepository
 import org.muilab.notigpt.data.repository.saveditem.SavedItemRepository
-import org.muilab.notigpt.data.repository.saveditem.SavedSubItemRepository
+import org.muilab.notigpt.data.repository.saveditem.TodoStepRepository
 import org.muilab.notigpt.util.SharedPreferencesManager
 
 /**
@@ -29,8 +29,8 @@ class N8nWorkerContext @Inject constructor(
         SavedItemRepository(database.savedItemDao(), appContext)
     }
 
-    val savedSubItemRepository: SavedSubItemRepository by lazy {
-        SavedSubItemRepository(database.subTaskDao())
+    val todoStepRepository: TodoStepRepository by lazy {
+        TodoStepRepository(database.todoStepDao())
     }
 
     val journalRepository: ExtractionJournalRepository by lazy {

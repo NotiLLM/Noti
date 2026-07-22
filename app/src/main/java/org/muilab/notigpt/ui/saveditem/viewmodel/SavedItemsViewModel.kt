@@ -18,13 +18,12 @@ import org.json.JSONArray
 import org.muilab.notigpt.data.local.room.AppDatabase
 import org.muilab.notigpt.data.remote.n8n.enqueueRegenerateOne
 import org.muilab.notigpt.data.export.ExportableItem
-import org.muilab.notigpt.model.features.WhenBucket
 import org.muilab.notigpt.model.features.SavedItem
 import org.muilab.notigpt.model.features.SavedItemState
 import org.muilab.notigpt.model.features.SavedItemType
-import org.muilab.notigpt.model.features.SavedSubItem
+import org.muilab.notigpt.model.features.TodoStep
 import org.muilab.notigpt.ui.common.navigation.SavedListFilter
-import org.muilab.notigpt.util.time.DayBoundaries
+import org.muilab.notigpt.util.time.SmartFilterWindows
 import org.muilab.notigpt.data.remote.googletasks.GoogleTasksRepository
 import kotlinx.coroutines.flow.Flow
 import org.muilab.notigpt.model.features.SavedItemChangeLog
@@ -32,7 +31,7 @@ import org.muilab.notigpt.data.repository.saveditem.SavedItemChangeLogRepository
 import org.muilab.notigpt.data.repository.saveditem.SavedItemRepository
 import org.muilab.notigpt.data.repository.saveditem.PendingProposedOpRepository
 import org.muilab.notigpt.data.repository.saveditem.SavedItemRelatedNotificationsRepository
-import org.muilab.notigpt.data.repository.saveditem.SavedSubItemRepository
+import org.muilab.notigpt.data.repository.saveditem.TodoStepRepository
 import org.muilab.notigpt.data.remote.googletasks.GoogleTasksAuthManager
 import java.util.UUID
 
@@ -44,13 +43,13 @@ import java.util.UUID
  */
 class SavedItemsViewModel(application: Application) : AndroidViewModel(application) {
 
-    enum class FilterTab { All, Pending, Tasks, Memos, Completed, Keep, Archived, Starred }
-    enum class ListMode { All, Tasks, Keep }
+    enum class FilterTab { All, Pending, Todos, Keeps, Completed, Keep, Archived, Starred }
+    enum class ListMode { All, Todos, Keep }
 
     /** A staged update/merge rendered in the saved-item lists before it is accepted. */
     data class PendingListPreview(
         val item: SavedItem,
-        val subItems: List<SavedSubItem>,
+        val steps: List<TodoStep>,
         val mergeSourceItemIds: Set<String> = emptySet(),
         val reason: String = "",
     )
@@ -67,7 +66,7 @@ class SavedItemsViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     private val repo: SavedItemRepository
-    private val subTaskRepo: SavedSubItemRepository
+    private val stepRepo: TodoStepRepository
     private val googleTasksRepo: GoogleTasksRepository
     private val relatedNotificationsRepo: SavedItemRelatedNotificationsRepository
     private val changeLogRepo: SavedItemChangeLogRepository
@@ -83,7 +82,7 @@ class SavedItemsViewModel(application: Application) : AndroidViewModel(applicati
     init {
         val db = AppDatabase.getInstance(application.applicationContext)
         repo = SavedItemRepository(db.savedItemDao(), application.applicationContext)
-        subTaskRepo = SavedSubItemRepository(db.subTaskDao())
+        stepRepo = TodoStepRepository(db.todoStepDao())
         googleTasksRepo = GoogleTasksRepository(application.applicationContext)
         relatedNotificationsRepo = SavedItemRelatedNotificationsRepository(application.applicationContext)
         changeLogRepo = SavedItemChangeLogRepository(db.savedItemChangeLogDao())
@@ -125,9 +124,8 @@ class SavedItemsViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     /**
-     * When non-null, the savedItems list is a home-screen smart filter (planned-date bucket or
-     * starred) that mixes tasks and keeps and ignores [_filter]/[_listMode]. Tasks/Keep collections
-     * are NOT routed here — they use [_listMode] with their own in-screen chips.
+     * When non-null, the list is a home-screen attention filter. Type chips use [_listMode]; the
+     * Todo/Keep drawer collections are routed without a smart filter.
      */
     private val _smartFilter = MutableStateFlow<SavedListFilter?>(null)
     val smartFilter: StateFlow<SavedListFilter?> = _smartFilter
@@ -137,11 +135,11 @@ class SavedItemsViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     private val allFlow = repo.observeAll()
-    private val tasksFlow = repo.observeTasks()
-    private val memosFlow = repo.observeMemos()
+    private val todosFlow = repo.observeTodos()
+    private val keepsFlow = repo.observeKeeps()
     private val activeKeepsFlow = repo.observeActiveKeeps()
     private val archivedKeepsFlow = repo.observeArchivedKeeps()
-    private val completedFlow = repo.observeCompletedTasks()
+    private val completedFlow = repo.observeCompletedTodos()
     private val newItemsFlow = repo.observeNewItems()
 
     /**
@@ -175,7 +173,7 @@ class SavedItemsViewModel(application: Application) : AndroidViewModel(applicati
                         // Keep completed/archived list membership stable while replacing only the
                         // content fields with the staged preview.
                         item = preview.item.copy(state = current.state),
-                        subItems = preview.subItems,
+                        steps = preview.steps,
                         mergeSourceItemIds = sourceIds,
                         reason = group.reason,
                     )
@@ -197,7 +195,7 @@ class SavedItemsViewModel(application: Application) : AndroidViewModel(applicati
      * lists without changing persisted item data.
      */
     val savedItems: StateFlow<List<SavedItem>> = combine(
-        _filter, _searchQuery, _listMode, _smartFilter, allFlow, tasksFlow, memosFlow, completedFlow, activeKeepsFlow, archivedKeepsFlow, pendingPreviews
+        _filter, _searchQuery, _listMode, _smartFilter, allFlow, todosFlow, keepsFlow, completedFlow, activeKeepsFlow, archivedKeepsFlow, pendingPreviews
     ) { values ->
         val f = values[0] as FilterTab
         @Suppress("UNCHECKED_CAST")
@@ -207,9 +205,9 @@ class SavedItemsViewModel(application: Application) : AndroidViewModel(applicati
         @Suppress("UNCHECKED_CAST")
         val all = values[4] as List<SavedItem>
         @Suppress("UNCHECKED_CAST")
-        val tasks = values[5] as List<SavedItem>
+        val todos = values[5] as List<SavedItem>
         @Suppress("UNCHECKED_CAST")
-        val memos = values[6] as List<SavedItem>
+        val keeps = values[6] as List<SavedItem>
         @Suppress("UNCHECKED_CAST")
         val completed = values[7] as List<SavedItem>
         @Suppress("UNCHECKED_CAST")
@@ -220,53 +218,56 @@ class SavedItemsViewModel(application: Application) : AndroidViewModel(applicati
         val pendingPreviews = values[10] as Map<String, PendingListPreview>
 
         val baseList = if (smart != null) {
-            // Home smart filters: planned-date buckets (or starred), mixing tasks and keeps, over the
-            // actionable set only (exclude completed/archived) to match the home-screen counts.
-            val startOfTomorrow = DayBoundaries.startOfTomorrowMs()
+            val now = System.currentTimeMillis()
             val scoped = all.filter { !it.isCompleted && !it.isArchived }
-            when (smart) {
-                SavedListFilter.TodayEarlier -> scoped.filter { SavedItem.plannedBucket(it.whenAtMs, startOfTomorrow, it.isTask) == WhenBucket.TodayEarlier }
-                SavedListFilter.Upcoming -> scoped.filter { SavedItem.plannedBucket(it.whenAtMs, startOfTomorrow, it.isTask) == WhenBucket.Upcoming }
-                SavedListFilter.Someday -> scoped.filter { SavedItem.plannedBucket(it.whenAtMs, startOfTomorrow, it.isTask) == WhenBucket.Someday }
-                SavedListFilter.Undetermined -> scoped.filter { SavedItem.plannedBucket(it.whenAtMs, startOfTomorrow, it.isTask) == WhenBucket.Undetermined }
+            val filtered = when (smart) {
+                SavedListFilter.Suggested -> emptyList()
                 SavedListFilter.Starred -> scoped.filter { it.isStarred }
-                // Tasks/Keep collections are never routed through smart filters.
-                SavedListFilter.Tasks, SavedListFilter.Keep -> scoped
-            }.sortedWith(
-                compareBy<SavedItem> {
-                    when(smart) {
-                        SavedListFilter.TodayEarlier -> it.whenAtMs
-                        SavedListFilter.Upcoming -> it.whenAtMs
-                        else -> -it.lastUpdateTimestamp
-                    }
+                SavedListFilter.DueSoon -> scoped.filter {
+                    it.isTodo && it.deadlineAtMs > 0L &&
+                        it.deadlineAtMs < SmartFilterWindows.dueSoonEndExclusiveMs(now)
                 }
-                    .thenBy { it.lastUpdateTimestamp }
-            )
+                SavedListFilter.RecentlyUpdated -> scoped.filter {
+                    it.lastUpdateTimestamp >= now - SmartFilterWindows.RECENTLY_UPDATED_WINDOW_MS
+                }
+                SavedListFilter.AllItems, SavedListFilter.Todos, SavedListFilter.Keep -> scoped
+            }
+            when {
+                smart == SavedListFilter.DueSoon -> filtered
+                mode == ListMode.Todos -> filtered.filter { it.isTodo }
+                mode == ListMode.Keep -> filtered.filter { !it.isTodo }
+                else -> filtered
+            }
         } else when (mode) {
             ListMode.Keep -> when (f) {
                 FilterTab.Keep -> activeKeeps
                 FilterTab.Archived -> archivedKeeps
-                FilterTab.Starred -> memos.filter { it.isStarred }
-                else -> memos // All
+                FilterTab.Starred -> keeps.filter { it.isStarred }
+                else -> keeps // All
             }
-            ListMode.Tasks -> when (f) {
-                FilterTab.Pending -> tasks.filter { !it.isCompleted }
+            ListMode.Todos -> when (f) {
+                FilterTab.Pending -> todos.filter { !it.isCompleted }
                 FilterTab.Completed -> completed
-                FilterTab.Starred -> tasks.filter { it.isStarred }
-                else -> tasks // All (saved + completed)
+                FilterTab.Starred -> todos.filter { it.isStarred }
+                else -> todos // All (active + completed)
             }
             ListMode.All -> {
                 val modeIds = all.mapTo(mutableSetOf()) { it.savedItemId }
                 when (f) {
                     FilterTab.Pending -> all.filter { !it.isCompleted }
-                    FilterTab.Tasks -> tasks.filter { it.savedItemId in modeIds }
-                    FilterTab.Memos -> memos.filter { it.savedItemId in modeIds }
+                    FilterTab.Todos -> todos.filter { it.savedItemId in modeIds }
+                    FilterTab.Keeps -> keeps.filter { it.savedItemId in modeIds }
                     FilterTab.Completed -> completed.filter { it.savedItemId in modeIds }
                     FilterTab.Starred -> all.filter { it.isStarred }
                     else -> all // All
                 }
             }
-        }.sortedBy { -it.lastUpdateTimestamp }
+        }.sortedWith(
+            compareByDescending<SavedItem> { it.isStarred }
+                .thenBy { it.deadlineAtMs.takeIf { deadline -> deadline > 0L } ?: Long.MAX_VALUE }
+                .thenByDescending { it.lastUpdateTimestamp }
+                .thenByDescending { it.savedItemId }
+        )
 
         val mergeSourceIds = pendingPreviews.values
             .flatMap { it.mergeSourceItemIds }
@@ -297,8 +298,8 @@ class SavedItemsViewModel(application: Application) : AndroidViewModel(applicati
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /** Sub-tasks grouped by parent item ID. */
-    val allSavedSubItemsBySavedItem: StateFlow<Map<String, List<SavedSubItem>>> =
-        subTaskRepo.observeAllBySavedItem()
+    val allTodoStepsBySavedItem: StateFlow<Map<String, List<TodoStep>>> =
+        stepRepo.observeAllBySavedItem()
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
 
     fun toggleCompleted(item: SavedItem, completed: Boolean) {
@@ -324,10 +325,10 @@ class SavedItemsViewModel(application: Application) : AndroidViewModel(applicati
     fun changeLogFlow(savedItemId: String): Flow<List<SavedItemChangeLog>> =
         changeLogRepo.observeByItem(savedItemId)
 
-    /** [whenAtMs] = 0 clears the When. */
-    fun setWhen(savedItemId: String, whenAtMs: Long) {
+    /** [deadlineAtMs] = 0 clears the deadline. */
+    fun setDeadline(savedItemId: String, deadlineAtMs: Long) {
         viewModelScope.launch {
-            repo.setWhen(savedItemId, whenAtMs, System.currentTimeMillis())
+            repo.setDeadline(savedItemId, deadlineAtMs, System.currentTimeMillis())
         }
     }
 
@@ -364,7 +365,8 @@ class SavedItemsViewModel(application: Application) : AndroidViewModel(applicati
 
     fun upsert(item: SavedItem) {
         viewModelScope.launch {
-            repo.upsert(item.copy(lastUpdateTimestamp = System.currentTimeMillis()))
+            val now = System.currentTimeMillis()
+            repo.upsert(item.copy(lastUpdateTimestamp = now, syncModifiedAt = now))
         }
     }
 
@@ -424,31 +426,31 @@ class SavedItemsViewModel(application: Application) : AndroidViewModel(applicati
 
     // ========== Sub-task CRUD ==========
 
-    fun addSavedSubItem(parentSavedItemId: String) {
+    fun addTodoStep(parentSavedItemId: String) {
         val id = "st_" + UUID.randomUUID().toString().take(8)
-        val subTask = SavedSubItem(
-            savedSubItemId = id,
+        val step = TodoStep(
+            todoStepId = id,
             parentSavedItemId = parentSavedItemId,
             text = "",
         )
-        viewModelScope.launch { repo.upsertSubItem(subTask, System.currentTimeMillis()) }
+        viewModelScope.launch { repo.upsertSubItem(step, System.currentTimeMillis()) }
     }
 
-    fun upsertSavedSubItem(subTask: SavedSubItem) {
+    fun upsertTodoStep(step: TodoStep) {
         viewModelScope.launch {
-            repo.upsertSubItem(subTask, System.currentTimeMillis())
+            repo.upsertSubItem(step, System.currentTimeMillis())
         }
     }
 
-    fun deleteSavedSubItem(savedSubItemId: String) {
+    fun deleteTodoStep(todoStepId: String) {
         viewModelScope.launch {
-            repo.deleteSubItem(savedSubItemId, System.currentTimeMillis())
+            repo.deleteSubItem(todoStepId, System.currentTimeMillis())
         }
     }
 
-    fun toggleSavedSubItemCompleted(savedSubItemId: String, completed: Boolean) {
+    fun toggleTodoStepCompleted(todoStepId: String, completed: Boolean) {
         viewModelScope.launch {
-            repo.setSubItemCompleted(savedSubItemId, completed, System.currentTimeMillis())
+            repo.setSubItemCompleted(todoStepId, completed, System.currentTimeMillis())
         }
     }
 
@@ -512,7 +514,7 @@ class SavedItemsViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     /**
-     * Export any [ExportableItem] (including SavedSubItem) to Google Tasks.
+     * Export any [ExportableItem] (including TodoStep) to Google Tasks.
      */
     fun exportToGoogleTasks(item: ExportableItem) {
         viewModelScope.launch {

@@ -23,15 +23,16 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.muilab.notigpt.R
-import org.muilab.notigpt.model.features.SavedSubItem
+import org.muilab.notigpt.model.features.TodoStep
 import org.muilab.notigpt.ui.theme.NotiTheme
 
 /** A checklist row. Cards render it read-only; the SavedItem detail surface edits it inline. */
 @Composable
-fun SavedSubItemRow(
-    subTask: SavedSubItem,
+fun TodoStepRow(
+    step: TodoStep,
     onToggleCompleted: (Boolean) -> Unit,
     onDelete: () -> Unit = {},
     editable: Boolean = false,
@@ -43,10 +44,10 @@ fun SavedSubItemRow(
     @Suppress("UNUSED_PARAMETER") onExportGoogleCalendar: () -> Unit = {},
     @Suppress("UNUSED_PARAMETER") showActionButtons: Boolean = false,
 ) {
-    var draft by remember(subTask.savedSubItemId) { mutableStateOf(subTask.text) }
-    LaunchedEffect(subTask.text) {
+    var draft by remember(step.todoStepId) { mutableStateOf(step.text) }
+    LaunchedEffect(step.text) {
         // Preserve a user's trailing space while they type, but still accept real external updates.
-        if (SavedSubItem.normalizeText(draft) != subTask.text) draft = subTask.text
+        if (TodoStep.normalizeText(draft) != step.text) draft = step.text
     }
     Row(
         modifier = Modifier
@@ -54,15 +55,15 @@ fun SavedSubItemRow(
             .padding(start = 16.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        TaskCompletionToggle(
-            checked = subTask.isCompleted,
+        TodoCompletionToggle(
+            checked = step.isCompleted,
             accent = NotiTheme.semantic.taskAccent,
             onCheckedChange = onToggleCompleted,
             enabled = completionEnabled,
         )
         Spacer(Modifier.width(4.dp))
 
-        val textStyle = if (subTask.isCompleted) {
+        val textStyle = if (step.isCompleted) {
             MaterialTheme.typography.bodyMedium.copy(textDecoration = TextDecoration.LineThrough)
         } else {
             MaterialTheme.typography.bodyMedium
@@ -83,7 +84,7 @@ fun SavedSubItemRow(
                 decorationBox = { innerTextField ->
                     if (draft.isBlank()) {
                         Text(
-                            text = stringResource(R.string.subtask_untitled),
+                            text = stringResource(R.string.step_untitled),
                             style = textStyle,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -101,8 +102,10 @@ fun SavedSubItemRow(
             }
         } else {
             Text(
-                text = subTask.text.ifBlank { stringResource(R.string.subtask_untitled) },
+                text = step.text.ifBlank { stringResource(R.string.step_untitled) },
                 style = textStyle,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
             )
         }

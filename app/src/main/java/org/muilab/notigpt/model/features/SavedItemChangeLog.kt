@@ -24,7 +24,7 @@ object SavedItemChangeType {
  * user edits it.
  *
  * The LLM never rewrites existing item content (users have already read it); updates arrive as
- * structured ops — an appended fragment, added/removed sub-tasks, and old→new field changes — and
+ * structured ops — an appended fragment, added/removed steps, and old→new field changes — and
  * each op lands here verbatim. This table powers the plain-language change history in the item
  * detail view and the "what's new since last acknowledged" block; [SavedItem.content] remains the
  * full concatenated text, so nothing here is needed to render the item itself.
@@ -54,12 +54,12 @@ data class SavedItemChangeLog(
     /** Content fragment appended to the item (without the localized timestamp header). */
     @ColumnInfo(defaultValue = "''")
     val appendedContent: String = "",
-    /** JSON array of added sub-task objects [{savedSubItemId, title}, ...]. */
+    /** JSON array of added step objects [{todoStepId, title}, ...]. */
     @ColumnInfo(defaultValue = "[]")
-    val addedSubTasksJson: String = "[]",
-    /** JSON array of removed sub-tasks [{savedSubItemId, title, reason}, ...]. */
+    val addedStepsJson: String = "[]",
+    /** JSON array of removed step objects [{todoStepId, title, reason}, ...]. */
     @ColumnInfo(defaultValue = "[]")
-    val removedSubTasksJson: String = "[]",
+    val removedStepsJson: String = "[]",
     /** JSON object of field changes {"deadlineAtMs": {"old": ..., "new": ...}, ...}. */
     @ColumnInfo(defaultValue = "{}")
     val changedFieldsJson: String = "{}",

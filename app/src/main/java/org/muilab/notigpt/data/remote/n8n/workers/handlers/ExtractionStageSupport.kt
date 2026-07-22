@@ -46,7 +46,7 @@ internal object ExtractionStageSupport {
         "timezone" to TimeZone.getDefault().id,
         "currentTime" to isoNow(),
         "targetExtractionLanguage" to ctx.getTargetExtractionLanguage(),
-        "contractVersion" to 3,
+        "contractVersion" to 4,
     )
 
     fun isoNow(): String = isoFormat.format(Date())
@@ -64,19 +64,18 @@ internal object ExtractionStageSupport {
     fun itemCompact(item: SavedItem): Map<String, Any> = mapOf(
         "itemId" to item.savedItemId,
         "title" to item.title,
-        "type" to if (item.isTask) "task" else "keep",
+        "type" to if (item.isTodo) "todo" else "keep",
         "deadline" to iso(item.deadlineAtMs),
-        "when" to if (SavedItem.isSomeday(item.whenAtMs)) "someday" else iso(item.whenAtMs),
         "isStarred" to item.isStarred,
         "userEdited" to item.userEdited,
     )
 
     /** Full item detail, used where a stage reasons over content (B linked items, E-stage pairs/groups). */
     suspend fun itemDetail(ctx: N8nWorkerContext, item: SavedItem): Map<String, Any> {
-        val subTasks = try {
-            ctx.database.subTaskDao().getBySavedItemId(item.savedItemId).map { st ->
+        val steps = try {
+            ctx.database.todoStepDao().getBySavedItemId(item.savedItemId).map { st ->
                 mapOf(
-                    "subTaskId" to st.savedSubItemId,
+                    "todoStepId" to st.todoStepId,
                     "text" to st.text,
                     "isCompleted" to st.isCompleted,
                     "position" to st.position,
@@ -95,18 +94,15 @@ internal object ExtractionStageSupport {
             "itemId" to item.savedItemId,
             "title" to item.title,
             "content" to item.content,
-            "type" to if (item.isTask) "task" else "keep",
+            "type" to if (item.isTodo) "todo" else "keep",
             "deadline" to iso(item.deadlineAtMs),
-            "startTime" to iso(item.startAtMs),
-            "endTime" to iso(item.endAtMs),
-            "when" to if (SavedItem.isSomeday(item.whenAtMs)) "someday" else iso(item.whenAtMs),
             "userEdited" to item.userEdited,
             "isStarred" to item.isStarred,
             "isCompleted" to item.isCompleted,
             "buttons" to item.buttons,
             "sourceNotiRecordIds" to recordIds,
             "sourceNotiKeys" to sourceNotiKeys,
-            "subTasks" to subTasks,
+            "steps" to steps,
         )
     }
 
@@ -115,12 +111,10 @@ internal object ExtractionStageSupport {
         "newOpRef" to newOpRef,
         "title" to preview.item.title,
         "content" to preview.item.content,
-        "type" to if (preview.item.isTask) "task" else "keep",
+        "type" to if (preview.item.isTodo) "todo" else "keep",
         "deadline" to iso(preview.item.deadlineAtMs),
-        "startTime" to iso(preview.item.startAtMs),
-        "endTime" to iso(preview.item.endAtMs),
         "buttons" to preview.item.buttons,
-        "subTasks" to preview.subItems.map { st ->
+        "steps" to preview.steps.map { st ->
             mapOf(
                 "text" to st.text,
                 "isCompleted" to st.isCompleted,
@@ -138,20 +132,17 @@ internal object ExtractionStageSupport {
         "itemId" to savedItemId,
         "title" to preview.item.title,
         "content" to preview.item.content,
-        "type" to if (preview.item.isTask) "task" else "keep",
+        "type" to if (preview.item.isTodo) "todo" else "keep",
         "deadline" to iso(preview.item.deadlineAtMs),
-        "startTime" to iso(preview.item.startAtMs),
-        "endTime" to iso(preview.item.endAtMs),
-        "when" to if (SavedItem.isSomeday(preview.item.whenAtMs)) "someday" else iso(preview.item.whenAtMs),
         "userEdited" to preview.item.userEdited,
         "isStarred" to preview.item.isStarred,
         "isCompleted" to preview.item.isCompleted,
         "buttons" to preview.item.buttons,
         "sourceNotiRecordIds" to evidenceRecordIds.distinct(),
         "sourceNotiKeys" to evidenceRecordIds.map { it.substringBeforeLast("_") }.distinct(),
-        "subTasks" to preview.subItems.map { st ->
+        "steps" to preview.steps.map { st ->
             mapOf(
-                "subTaskId" to st.savedSubItemId,
+                "todoStepId" to st.todoStepId,
                 "text" to st.text,
                 "isCompleted" to st.isCompleted,
                 "position" to st.position,

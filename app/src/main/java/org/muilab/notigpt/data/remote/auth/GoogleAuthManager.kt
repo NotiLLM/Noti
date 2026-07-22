@@ -169,7 +169,7 @@ object GoogleAuthManager {
         db.withTransaction {
             // saved_item cascades noti_saved_item_link + saved_item_change_log via FK.
             db.savedItemDao().deleteAllForAccountSwitch()
-            db.subTaskDao().deleteAllForAccountSwitch()
+            db.todoStepDao().deleteAllForAccountSwitch()
             db.pendingProposedOpDao().deleteAllForAccountSwitch()
             db.pendingReviewDraftDao().deleteAll()
             db.rejectedMergeDao().deleteAllForAccountSwitch()

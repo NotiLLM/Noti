@@ -104,22 +104,20 @@ import org.muilab.notigpt.ui.preference.model.PreferenceEntryPoint
 import org.muilab.notigpt.model.features.SavedItem
 import org.muilab.notigpt.model.features.SavedItemType
 import org.muilab.notigpt.model.features.SavedItemState
-import org.muilab.notigpt.model.features.SavedSubItem
+import org.muilab.notigpt.model.features.TodoStep
 import org.muilab.notigpt.model.features.ReviewItemDraft
 import org.muilab.notigpt.data.export.asExportable
 import org.muilab.notigpt.ui.preference.component.PreferenceLearningBottomSheet
-import org.muilab.notigpt.ui.common.component.DueChip
 import org.muilab.notigpt.ui.common.feedback.AppSnackbar
-import org.muilab.notigpt.ui.saveditem.component.ExportChooserDialog
 import org.muilab.notigpt.ui.theme.NotiTheme
 import org.muilab.notigpt.ui.theme.NotiType
 import org.muilab.notigpt.ui.theme.Dimens
 import org.muilab.notigpt.ui.notification.component.RelatedNotificationPreview
-import org.muilab.notigpt.ui.saveditem.component.SavedSubItemRow
-import org.muilab.notigpt.ui.saveditem.component.SavedSubItemListInCard
-import org.muilab.notigpt.ui.saveditem.component.TaskCompletionToggle
-import org.muilab.notigpt.ui.saveditem.component.SavedItemWhenButton
-import org.muilab.notigpt.ui.saveditem.component.SavedItemWhenPickerDialog
+import org.muilab.notigpt.ui.saveditem.component.TodoStepRow
+import org.muilab.notigpt.ui.saveditem.component.TodoStepListInCard
+import org.muilab.notigpt.ui.saveditem.component.TodoCompletionToggle
+import org.muilab.notigpt.ui.saveditem.component.SavedItemDeadlineButton
+import org.muilab.notigpt.ui.saveditem.component.SavedItemDeadlinePickerDialog
 import org.muilab.notigpt.ui.notification.viewmodel.DrawerViewModel
 import org.muilab.notigpt.ui.preference.viewmodel.PreferenceViewModel
 import org.muilab.notigpt.ui.saveditem.viewmodel.SavedItemsViewModel
@@ -142,9 +140,9 @@ import androidx.compose.material3.AssistChip
 import androidx.compose.material3.minimumInteractiveComponentSize
 
 /**
- * Main SavedItems screen for tasks, keeps, completion state, subtasks, export, and related notifications.
+ * Main SavedItems screen for todos, keeps, completion state, steps, export, and related notifications.
  *
- * This screen owns local editing dialogs, drag visuals, and edit drafts. Durable SavedItem, subtask, sync, and
+ * This screen owns local editing dialogs, drag visuals, and edit drafts. Durable SavedItem, step, sync, and
  * regeneration actions should stay in SavedItemsViewModel or related repositories.
  */
 @Composable
@@ -169,7 +167,7 @@ fun SavedItemsScreen(
         vm.setListMode(listMode)
         vm.setFilter(
             when (listMode) {
-                SavedItemsViewModel.ListMode.Tasks -> SavedItemsViewModel.FilterTab.Pending
+                SavedItemsViewModel.ListMode.Todos -> SavedItemsViewModel.FilterTab.Pending
                 SavedItemsViewModel.ListMode.Keep -> SavedItemsViewModel.FilterTab.Keep
                 else -> SavedItemsViewModel.FilterTab.All
             }
@@ -187,11 +185,11 @@ fun SavedItemsScreen(
     val pendingPreviews by vm.pendingPreviews.collectAsState()
     val filter by vm.filter.collectAsState()
 
-    // Smart-filter pages (Today/Upcoming/… mixing tasks and keeps) get an in-page task/keep filter,
+    // Mixed attention-filter pages get an in-page Todo/Keep filter,
     // but only when the page actually contains both types. null = show all. Reset when the page changes.
     var smartTypeFilter by remember(smartFilter) { mutableStateOf<String?>(null) }
-    val smartHasTask = smartFilter != null && savedItems.any { it.isTask }
-    val smartHasKeep = smartFilter != null && savedItems.any { !it.isTask }
+    val smartHasTask = smartFilter != null && savedItems.any { it.isTodo }
+    val smartHasKeep = smartFilter != null && savedItems.any { !it.isTodo }
     val smartShowTypeChips = smartHasTask && smartHasKeep
     val displayedSavedItems = if (smartFilter != null && smartTypeFilter != null) {
         savedItems.filter { it.itemType == smartTypeFilter }
@@ -206,17 +204,17 @@ fun SavedItemsScreen(
 
     // Section identity color for the active tab (Tasks=amber, Keep=teal). Drives card accents + FAB.
     val tabAccent: Color? = when (listMode) {
-        SavedItemsViewModel.ListMode.Tasks -> NotiTheme.semantic.taskAccent
+        SavedItemsViewModel.ListMode.Todos -> NotiTheme.semantic.taskAccent
         SavedItemsViewModel.ListMode.Keep -> NotiTheme.semantic.keepAccent
         else -> null
     }
     val fabContainer = when (listMode) {
-        SavedItemsViewModel.ListMode.Tasks -> NotiTheme.semantic.taskContainer
+        SavedItemsViewModel.ListMode.Todos -> NotiTheme.semantic.taskContainer
         SavedItemsViewModel.ListMode.Keep -> NotiTheme.semantic.keepContainer
         else -> MaterialTheme.colorScheme.primaryContainer
     }
     val fabContent = when (listMode) {
-        SavedItemsViewModel.ListMode.Tasks -> NotiTheme.semantic.onTaskContainer
+        SavedItemsViewModel.ListMode.Todos -> NotiTheme.semantic.onTaskContainer
         SavedItemsViewModel.ListMode.Keep -> NotiTheme.semantic.onKeepContainer
         else -> MaterialTheme.colorScheme.onPrimaryContainer
     }
@@ -254,7 +252,7 @@ fun SavedItemsScreen(
     }
 
     // Bulk sub-task observation (one DB query for all savedItems)
-    val allSavedSubItemsBySavedItem by vm.allSavedSubItemsBySavedItem.collectAsState()
+    val allTodoStepsBySavedItem by vm.allTodoStepsBySavedItem.collectAsState()
 
     var scheduledReminderTarget by remember { mutableStateOf<SavedItem?>(null) }
 
@@ -333,16 +331,16 @@ fun SavedItemsScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // Smart-filter lists (Today/Upcoming/Someday/Undetermined/Starred) show no tab chips;
+                // Attention-filter lists use their title from the shell.
                 // the shell's top bar carries the filter name.
                 if (smartFilter == null) when (listMode) {
                     SavedItemsViewModel.ListMode.All -> {
                         SavedItemFilterChip(stringResource(R.string.ui_saved_items_filter_all), filter == SavedItemsViewModel.FilterTab.All, { vm.setFilter(SavedItemsViewModel.FilterTab.All) })
-                        SavedItemFilterChip(stringResource(R.string.ui_saved_items_filter_tasks), filter == SavedItemsViewModel.FilterTab.Tasks, { vm.setFilter(SavedItemsViewModel.FilterTab.Tasks) })
-                        SavedItemFilterChip(stringResource(R.string.ui_saved_items_filter_memos), filter == SavedItemsViewModel.FilterTab.Memos, { vm.setFilter(SavedItemsViewModel.FilterTab.Memos) })
+                        SavedItemFilterChip(stringResource(R.string.ui_saved_items_filter_tasks), filter == SavedItemsViewModel.FilterTab.Todos, { vm.setFilter(SavedItemsViewModel.FilterTab.Todos) })
+                        SavedItemFilterChip(stringResource(R.string.ui_saved_items_filter_memos), filter == SavedItemsViewModel.FilterTab.Keeps, { vm.setFilter(SavedItemsViewModel.FilterTab.Keeps) })
                         SavedItemFilterChip(stringResource(R.string.ui_saved_items_filter_completed), filter == SavedItemsViewModel.FilterTab.Completed, { vm.setFilter(SavedItemsViewModel.FilterTab.Completed) })
                     }
-                    SavedItemsViewModel.ListMode.Tasks -> {
+                    SavedItemsViewModel.ListMode.Todos -> {
                         SavedItemFilterChip(stringResource(R.string.ui_saved_items_filter_pending), filter == SavedItemsViewModel.FilterTab.Pending, { vm.setFilter(SavedItemsViewModel.FilterTab.Pending) }, leadingIconRes = R.drawable.check_box_unchecked, iconTint = NotiTheme.semantic.taskAccent, flashTick = if (flashTarget == SavedItemsViewModel.FilterTab.Pending) flashTick else 0)
                         SavedItemFilterChip(stringResource(R.string.ui_saved_items_filter_completed), filter == SavedItemsViewModel.FilterTab.Completed, { vm.setFilter(SavedItemsViewModel.FilterTab.Completed) }, leadingIconRes = R.drawable.check_box_checked, iconTint = NotiTheme.semantic.taskAccent, flashTick = if (flashTarget == SavedItemsViewModel.FilterTab.Completed) flashTick else 0)
                         SavedItemFilterChip(stringResource(R.string.ui_saved_items_filter_starred), filter == SavedItemsViewModel.FilterTab.Starred, { vm.setFilter(SavedItemsViewModel.FilterTab.Starred) }, leadingIconRes = R.drawable.star_yes, iconTint = NotiTheme.semantic.taskAccent)
@@ -359,7 +357,7 @@ fun SavedItemsScreen(
                 // Smart-filter pages get task/keep chips only when both types are present.
                 if (smartShowTypeChips) {
                     SavedItemFilterChip(stringResource(R.string.ui_saved_items_filter_all), smartTypeFilter == null, { smartTypeFilter = null })
-                    SavedItemFilterChip(stringResource(R.string.ui_saved_items_filter_tasks), smartTypeFilter == SavedItemType.Task, { smartTypeFilter = SavedItemType.Task }, leadingIconRes = R.drawable.check_box_unchecked, iconTint = NotiTheme.semantic.taskAccent)
+                    SavedItemFilterChip(stringResource(R.string.ui_saved_items_filter_tasks), smartTypeFilter == SavedItemType.Todo, { smartTypeFilter = SavedItemType.Todo }, leadingIconRes = R.drawable.check_box_unchecked, iconTint = NotiTheme.semantic.taskAccent)
                     SavedItemFilterChip(stringResource(R.string.ui_saved_items_filter_keep), smartTypeFilter == SavedItemType.Keep, { smartTypeFilter = SavedItemType.Keep }, leadingIconRes = R.drawable.bookmark, iconTint = NotiTheme.semantic.keepAccent)
                 }
 
@@ -400,19 +398,10 @@ fun SavedItemsScreen(
                     val pendingPreview = pendingPreviews[item.savedItemId]
                     SavedItemCard(
                         item = item,
-                        subTasks = pendingPreview?.subItems
-                            ?: allSavedSubItemsBySavedItem[item.savedItemId].orEmpty(),
+                        steps = pendingPreview?.steps
+                            ?: allTodoStepsBySavedItem[item.savedItemId].orEmpty(),
                         pendingReview = pendingPreview != null,
                         pendingMergeSourceCount = pendingPreview?.mergeSourceItemIds?.size ?: 0,
-                        onDelete = {
-                            vm.delete(item.savedItemId)
-                            if (item.origin.contains("llm")) {
-                                prefVm.startFlow(
-                                    entryPoint = PreferenceEntryPoint.DELETE,
-                                    item = item,
-                                )
-                            }
-                        },
                         onToggleCompleted = { completed: Boolean ->
                             vm.toggleCompleted(item, completed)
                             flashChip(if (completed) SavedItemsViewModel.FilterTab.Completed else SavedItemsViewModel.FilterTab.Pending)
@@ -421,25 +410,24 @@ fun SavedItemsScreen(
                             requestEdit(item)
                         },
                         onToggleStarred = { vm.toggleStarred(item) },
-                        onSetWhen = { vm.setWhen(item.savedItemId, it) },
+                        onSetDeadline = if (item.isTodo) {
+                            { deadlineAtMs -> vm.setDeadline(item.savedItemId, deadlineAtMs) }
+                        } else null,
                         onCreateReminder = { scheduledReminderTarget = item },
                         sectionAccent = tabAccent,
                         onArchive = {
                             flashChip(if (item.isArchived) SavedItemsViewModel.FilterTab.Keep else SavedItemsViewModel.FilterTab.Archived)
                             vm.archiveKeep(item.savedItemId)
                         },
-                        // Export is available on both task and keep cards (users may push kept info to Tasks/Calendar).
-                        onQuickExportTasks = { openExportDialog(item, ExportType.GOOGLE_TASKS) },
-                        onQuickExportCalendar = { openExportDialog(item, ExportType.GOOGLE_CALENDAR) },
-                        onSavedSubItemToggle = { stId, checked ->
+                        onTodoStepToggle = { stId, checked ->
                             if (pendingPreview != null) requestEdit(item)
-                            else vm.toggleSavedSubItemCompleted(stId, checked)
+                            else vm.toggleTodoStepCompleted(stId, checked)
                         },
-                        onSavedSubItemClick = { requestEdit(item) },
-                        onSavedSubItemEdit = { requestEdit(item) },
-                        onSavedSubItemDelete = { st ->
+                        onTodoStepClick = { requestEdit(item) },
+                        onTodoStepEdit = { requestEdit(item) },
+                        onTodoStepDelete = { st ->
                             if (pendingPreview != null) requestEdit(item)
-                            else vm.deleteSavedSubItem(st.savedSubItemId)
+                            else vm.deleteTodoStep(st.todoStepId)
                         },
                     )
                 }
@@ -560,18 +548,13 @@ fun SavedItemsScreen(
                         val changed = base != null && updatedOrNull != null && (
                             base.title != updatedOrNull.title ||
                                 base.content != updatedOrNull.content ||
-                                base.isTask != updatedOrNull.isTask ||
+                                base.isTodo != updatedOrNull.isTodo ||
                                 base.isCompleted != updatedOrNull.isCompleted ||
                                 base.deadlineAtMs != updatedOrNull.deadlineAtMs
                         )
 
                         if (updatedOrNull != null) {
                             val emptyNow = updatedOrNull.title.isBlank() && updatedOrNull.content.isBlank()
-                            // When is user-owned planning: persist it via the targeted setter so a
-                            // When-only edit does not flip userEdited (which shields content from LLM updates).
-                            if (!emptyNow && base != null && base.whenAtMs != updatedOrNull.whenAtMs && !changed) {
-                                vm.setWhen(updatedOrNull.savedItemId, updatedOrNull.whenAtMs)
-                            }
                             when {
                                 emptyNow -> {
                                     // For brand-new manual savedItems, just discard. For existing savedItems, delete.
@@ -633,16 +616,12 @@ fun SavedItemsScreen(
                         val changed = base != null && (
                             base.title != updated.title ||
                                 base.content != updated.content ||
-                                base.isTask != updated.isTask ||
+                                base.isTodo != updated.isTodo ||
                                 base.isCompleted != updated.isCompleted ||
                                 base.deadlineAtMs != updated.deadlineAtMs
                         )
 
                         val emptyNow = updated.title.isBlank() && updated.content.isBlank()
-                        // See onBack: When-only edits persist without flipping userEdited.
-                        if (!emptyNow && base != null && base.whenAtMs != updated.whenAtMs && !changed) {
-                            vm.setWhen(updated.savedItemId, updated.whenAtMs)
-                        }
                         when {
                             emptyNow -> {
                                 if (!isNew) vm.delete(updated.savedItemId)
@@ -691,11 +670,11 @@ fun SavedItemsScreen(
                     changeLog = remember(current.savedItemId) { vm.changeLogFlow(current.savedItemId) },
                     onAcknowledgeReview = { vm.acknowledgeReview(current.savedItemId) },
                     // Sub-task parameters
-                    subTasks = allSavedSubItemsBySavedItem[current.savedItemId] ?: emptyList(),
-                    onAddSavedSubItem = { vm.addSavedSubItem(current.savedItemId) },
-                    onSavedSubItemToggle = { stId, checked -> vm.toggleSavedSubItemCompleted(stId, checked) },
-                    onSavedSubItemEdit = { st -> vm.upsertSavedSubItem(st) },
-                    onSavedSubItemDelete = { st -> vm.deleteSavedSubItem(st.savedSubItemId) },
+                    steps = allTodoStepsBySavedItem[current.savedItemId] ?: emptyList(),
+                    onAddTodoStep = { vm.addTodoStep(current.savedItemId) },
+                    onTodoStepToggle = { stId, checked -> vm.toggleTodoStepCompleted(stId, checked) },
+                    onTodoStepEdit = { st -> vm.upsertTodoStep(st) },
+                    onTodoStepDelete = { st -> vm.deleteTodoStep(st.todoStepId) },
                 )
             }
         }
@@ -790,18 +769,15 @@ private fun SavedItemFilterChip(
 @Composable
 fun SavedItemCard(
     item: SavedItem,
-    subTasks: List<SavedSubItem> = emptyList(),
+    steps: List<TodoStep> = emptyList(),
     pendingReview: Boolean = false,
     pendingMergeSourceCount: Int = 0,
-    onDelete: () -> Unit,
     onToggleCompleted: (Boolean) -> Unit,
     onEdit: () -> Unit,
     onToggleStarred: (() -> Unit)? = null,
     onCreateReminder: (() -> Unit)? = null,
-    onQuickExportTasks: (() -> Unit)? = null,
-    onQuickExportCalendar: (() -> Unit)? = null,
-    /** Set/clear the user's planned "When" straight from the card. Null hides the affordance. */
-    onSetWhen: ((Long) -> Unit)? = null,
+    /** Set/clear a task deadline date straight from the card. Time editing stays on the detail screen. */
+    onSetDeadline: ((Long) -> Unit)? = null,
     onLongPress: () -> Unit = {},
     onArchive: () -> Unit = {},
     /** Optional left-edge accent identifying the section (e.g. Tasks/Keep). Null = no accent. */
@@ -811,12 +787,12 @@ fun SavedItemCard(
     selected: Boolean = false,
     onSelectedChange: ((Boolean) -> Unit)? = null,
     // Sub-task callbacks
-    onSavedSubItemToggle: (String, Boolean) -> Unit = { _, _ -> },
-    onSavedSubItemClick: (SavedSubItem) -> Unit = {},
-    onSavedSubItemEdit: (SavedSubItem) -> Unit = {},
-    onSavedSubItemDelete: (SavedSubItem) -> Unit = {},
-    onSavedSubItemExportGoogleTasks: (SavedSubItem) -> Unit = {},
-    onSavedSubItemExportGoogleCalendar: (SavedSubItem) -> Unit = {},
+    onTodoStepToggle: (String, Boolean) -> Unit = { _, _ -> },
+    onTodoStepClick: (TodoStep) -> Unit = {},
+    onTodoStepEdit: (TodoStep) -> Unit = {},
+    onTodoStepDelete: (TodoStep) -> Unit = {},
+    onTodoStepExportGoogleTasks: (TodoStep) -> Unit = {},
+    onTodoStepExportGoogleCalendar: (TodoStep) -> Unit = {},
 ) {
     val context = LocalContext.current
     val locale = LocalConfiguration.current.locales[0]
@@ -829,11 +805,9 @@ fun SavedItemCard(
     }
 
     var expanded by remember(item.savedItemId) { mutableStateOf(false) }
-    var showExportChooser by remember(item.savedItemId) { mutableStateOf(false) }
-    var confirmDelete by remember(item.savedItemId) { mutableStateOf(false) }
-    var showWhenPicker by remember(item.savedItemId) { mutableStateOf(false) }
+    var showDeadlinePicker by remember(item.savedItemId) { mutableStateOf(false) }
     // Star tint follows the item's own type (fixes the previously hardcoded task accent on keep cards).
-    val rowAccent = if (item.isTask) NotiTheme.semantic.taskAccent else NotiTheme.semantic.keepAccent
+    val rowAccent = if (item.isTodo) NotiTheme.semantic.taskAccent else NotiTheme.semantic.keepAccent
     val selectedBorder = sectionAccent ?: MaterialTheme.colorScheme.primary
     // Left-edge accent: use the section accent in single-type lists, else fall back to the item's own
     // type accent so Task (indigo) vs Keep (green) stays legible in mixed / smart-filter lists.
@@ -877,8 +851,8 @@ fun SavedItemCard(
                         onCheckedChange = { onSelectedChange?.invoke(it) },
                         colors = CheckboxDefaults.colors(checkedColor = selectedBorder),
                     )
-                } else if (item.isTask) {
-                    TaskCompletionToggle(
+                } else if (item.isTodo) {
+                    TodoCompletionToggle(
                         checked = item.isCompleted,
                         accent = rowAccent,
                         onCheckedChange = onToggleCompleted,
@@ -930,14 +904,14 @@ fun SavedItemCard(
 
                 // Title row
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    val completed = item.isTask && item.isCompleted
+                    val completed = item.isTodo && item.isCompleted
                     val titleStyle = if (completed) {
                         NotiType.cardTitle.copy(textDecoration = TextDecoration.LineThrough)
                     } else NotiType.cardTitle
 
                     Text(
                         text = item.title.ifBlank {
-                            if (item.isTask) stringResource(R.string.ui_saved_items_untitled_task) else stringResource(R.string.ui_saved_items_untitled_memo)
+                            if (item.isTodo) stringResource(R.string.ui_saved_items_untitled_task) else stringResource(R.string.ui_saved_items_untitled_memo)
                         },
                         style = titleStyle,
                         color = if (completed) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
@@ -953,26 +927,6 @@ fun SavedItemCard(
                                 painter = painterResource(if (expanded) R.drawable.keyboard_arrow_up else R.drawable.keyboard_arrow_down),
                                 contentDescription = if (expanded) stringResource(R.string.a11y_collapse) else stringResource(R.string.a11y_expand),
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
-                }
-
-                // Deadline urgency chip (tasks only). The When lives on the bottom action row.
-                if (item.isTask) {
-                    val deadline = item.deadlineAtMs
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        modifier = Modifier.padding(top = 4.dp),
-                    ) {
-                        if (deadline > 0L) {
-                            DueChip(deadlineAtMs = deadline)
-                        } else {
-                            Text(
-                                text = stringResource(R.string.ui_saved_items_no_deadline),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                     }
@@ -1001,34 +955,44 @@ fun SavedItemCard(
                 }
 
                 // Inline sub-tasks
-                if (subTasks.isNotEmpty()) {
-                    SavedSubItemListInCard(
-                        subTasks = subTasks,
-                        onToggleCompleted = onSavedSubItemToggle,
-                        onSavedSubItemClick = onSavedSubItemClick,
-                        onSavedSubItemEdit = onSavedSubItemEdit,
-                        onSavedSubItemDelete = onSavedSubItemDelete,
-                        onSavedSubItemExportGoogleTasks = onSavedSubItemExportGoogleTasks,
-                        onSavedSubItemExportGoogleCalendar = onSavedSubItemExportGoogleCalendar,
+                if (steps.isNotEmpty()) {
+                    TodoStepListInCard(
+                        steps = steps,
+                        onToggleCompleted = onTodoStepToggle,
+                        onTodoStepClick = onTodoStepClick,
+                        onTodoStepEdit = onTodoStepEdit,
+                        onTodoStepDelete = onTodoStepDelete,
+                        onTodoStepExportGoogleTasks = onTodoStepExportGoogleTasks,
+                        onTodoStepExportGoogleCalendar = onTodoStepExportGoogleCalendar,
                         forceExpanded = expanded,
                     )
                 }
 
-                // Bottom action row: When affordance on the left, icon controls on the right.
+                // Bottom action row: deadline date, reminder, and star.
                 if (!selectionMode) {
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                         horizontalArrangement = Arrangement.End,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        if (onSetWhen != null) {
-                            SavedItemWhenButton(
-                                whenAtMs = item.whenAtMs,
+                        if (onSetDeadline != null) {
+                            SavedItemDeadlineButton(
+                                deadlineAtMs = item.deadlineAtMs,
                                 accent = rowAccent,
-                                onClick = { showWhenPicker = true },
+                                onClick = { showDeadlinePicker = true },
                             )
                         }
                         Spacer(Modifier.weight(1f))
+                        if (onCreateReminder != null) {
+                            IconButton(onClick = onCreateReminder) {
+                                Icon(
+                                    painter = painterResource(R.drawable.notifications),
+                                    contentDescription = stringResource(R.string.a11y_set_reminder),
+                                    modifier = Modifier.size(20.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
                         if (onToggleStarred != null) {
                             IconButton(onClick = {
                                 haptic.performHapticFeedback(if (!item.isStarred) HapticFeedbackType.ToggleOn else HapticFeedbackType.ToggleOff)
@@ -1042,37 +1006,6 @@ fun SavedItemCard(
                                 )
                             }
                         }
-                        if (onCreateReminder != null) {
-                            IconButton(onClick = onCreateReminder) {
-                                Icon(
-                                    painter = painterResource(R.drawable.notifications),
-                                    contentDescription = stringResource(R.string.a11y_set_reminder),
-                                    modifier = Modifier.size(20.dp),
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
-                        if (onQuickExportTasks != null || onQuickExportCalendar != null) {
-                            IconButton(onClick = { showExportChooser = true }) {
-                                Icon(
-                                    painter = painterResource(R.drawable.task_add),
-                                    contentDescription = stringResource(R.string.a11y_export),
-                                    modifier = Modifier.size(20.dp),
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
-                        IconButton(onClick = {
-                            // Already-reviewed items confirm; new/updated ones (from the review flow) delete directly.
-                            if (item.isNewLike) onDelete() else confirmDelete = true
-                        }) {
-                            Icon(
-                                painter = painterResource(R.drawable.delete),
-                                contentDescription = stringResource(R.string.a11y_delete),
-                                modifier = Modifier.size(20.dp),
-                                tint = MaterialTheme.colorScheme.error,
-                            )
-                        }
                     }
                 }
             }
@@ -1081,35 +1014,13 @@ fun SavedItemCard(
       }
     }
 
-    if (showExportChooser) {
-        ExportChooserDialog(
-            onDismiss = { showExportChooser = false },
-            onExportTasks = onQuickExportTasks?.let { { showExportChooser = false; it() } },
-            onExportCalendar = onQuickExportCalendar?.let { { showExportChooser = false; it() } },
-        )
-    }
-    if (confirmDelete) {
-        AlertDialog(
-            onDismissRequest = { confirmDelete = false },
-            title = { Text(stringResource(R.string.delete_confirm_title)) },
-            text = { Text(stringResource(R.string.delete_confirm_message)) },
-            confirmButton = {
-                TextButton(onClick = { confirmDelete = false; onDelete() }) {
-                    Text(stringResource(R.string.ui_action_delete), color = MaterialTheme.colorScheme.error)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { confirmDelete = false }) { Text(stringResource(R.string.ui_action_cancel)) }
-            },
-        )
-    }
-    if (showWhenPicker && onSetWhen != null) {
-        SavedItemWhenPickerDialog(
-            currentWhenAtMs = item.whenAtMs,
-            onDismiss = { showWhenPicker = false },
+    if (showDeadlinePicker && onSetDeadline != null) {
+        SavedItemDeadlinePickerDialog(
+            currentDeadlineAtMs = item.deadlineAtMs,
+            onDismiss = { showDeadlinePicker = false },
             onSet = { newVal ->
-                onSetWhen(newVal)
-                showWhenPicker = false
+                onSetDeadline(newVal)
+                showDeadlinePicker = false
             },
         )
     }
@@ -1179,15 +1090,15 @@ fun SavedItemDetailScreen(
     onSaveApprove: ((ReviewItemDraft) -> Unit)? = null,
     onRejectDelete: (() -> Unit)? = null,
     // Sub-task parameters
-    subTasks: List<SavedSubItem> = emptyList(),
-    subTasksEditable: Boolean = true,
-    onAddSavedSubItem: () -> Unit = {},
-    onSavedSubItemToggle: (String, Boolean) -> Unit = { _, _ -> },
-    onSavedSubItemClick: (SavedSubItem) -> Unit = {},
-    onSavedSubItemEdit: (SavedSubItem) -> Unit = {},
-    onSavedSubItemDelete: (SavedSubItem) -> Unit = {},
-    onSavedSubItemExportGoogleTasks: (SavedSubItem) -> Unit = {},
-    onSavedSubItemExportGoogleCalendar: (SavedSubItem) -> Unit = {},
+    steps: List<TodoStep> = emptyList(),
+    stepsEditable: Boolean = true,
+    onAddTodoStep: () -> Unit = {},
+    onTodoStepToggle: (String, Boolean) -> Unit = { _, _ -> },
+    onTodoStepClick: (TodoStep) -> Unit = {},
+    onTodoStepEdit: (TodoStep) -> Unit = {},
+    onTodoStepDelete: (TodoStep) -> Unit = {},
+    onTodoStepExportGoogleTasks: (TodoStep) -> Unit = {},
+    onTodoStepExportGoogleCalendar: (TodoStep) -> Unit = {},
 ) {
     val context = LocalContext.current
     val locale = LocalConfiguration.current.locales[0]
@@ -1196,28 +1107,26 @@ fun SavedItemDetailScreen(
 
     var title by remember(initial.savedItemId) { mutableStateOf(initial.title) }
     var content by remember(initial.savedItemId) { mutableStateOf(initial.content) }
-    var isTask by remember(initial.savedItemId) { mutableStateOf(initial.isTask) }
+    var isTodo by remember(initial.savedItemId) { mutableStateOf(initial.isTodo) }
     var isCompleted by remember(initial.savedItemId) { mutableStateOf(initial.isCompleted) }
     var deadlineAtMs by remember(initial.savedItemId) { mutableStateOf(initial.deadlineAtMs) }
-    var whenAtMs by remember(initial.savedItemId) { mutableStateOf(initial.whenAtMs) }
-    var reviewSubTasks by remember(initial.savedItemId) { mutableStateOf(subTasks) }
-    val visibleSubTasks = if (reviewMode) reviewSubTasks else subTasks
+    var reviewSteps by remember(initial.savedItemId) { mutableStateOf(steps) }
+    val visibleSteps = if (reviewMode) reviewSteps else steps
 
     // Per-type accent: indigo for Task, green for Keep.
-    val accent = if (isTask) NotiTheme.semantic.taskAccent else NotiTheme.semantic.keepAccent
-    val accentContainer = if (isTask) NotiTheme.semantic.taskContainer else NotiTheme.semantic.keepContainer
-    val onAccentContainer = if (isTask) NotiTheme.semantic.onTaskContainer else NotiTheme.semantic.onKeepContainer
+    val accent = if (isTodo) NotiTheme.semantic.taskAccent else NotiTheme.semantic.keepAccent
+    val accentContainer = if (isTodo) NotiTheme.semantic.taskContainer else NotiTheme.semantic.keepContainer
+    val onAccentContainer = if (isTodo) NotiTheme.semantic.onTaskContainer else NotiTheme.semantic.onKeepContainer
 
     fun buildUpdated(): SavedItem {
         return initial.copy(
             title = title,
             content = content,
-            itemType = if (isTask) SavedItemType.Task else SavedItemType.Keep,
-            state = if (isTask && isCompleted) SavedItemState.Completed else SavedItemState.Saved,
+            itemType = if (isTodo) SavedItemType.Todo else SavedItemType.Keep,
+            state = if (isTodo && isCompleted) SavedItemState.Completed else SavedItemState.Saved,
             // Keep this value until persistence so Task -> Keep conversion can merge it into content.
             // SavedItemNormalization clears it before the Keep row is stored.
             deadlineAtMs = deadlineAtMs,
-            whenAtMs = whenAtMs,
         )
     }
 
@@ -1228,18 +1137,7 @@ fun SavedItemDetailScreen(
 
     var showDatePicker by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
-    var showWhenPicker by remember { mutableStateOf(false) }
-    var showWhenTimePicker by remember { mutableStateOf(false) }
     var showTaskToKeepDialog by remember { mutableStateOf(false) }
-    // Do-time is opt-in: shown only if this item already carries a non-end-of-day time, or the user
-    // taps "Add time". Keeps the common path date-only.
-    var whenTimeShown by remember(initial.savedItemId) {
-        val cal = Calendar.getInstance().apply { timeInMillis = initial.whenAtMs }
-        mutableStateOf(
-            SavedItem.hasPlannedDate(initial.whenAtMs) &&
-                !(cal.get(Calendar.HOUR_OF_DAY) == 23 && cal.get(Calendar.MINUTE) == 59)
-        )
-    }
     var headerMenuOpen by remember { mutableStateOf(false) }
 
     Column(Modifier.fillMaxSize()) {
@@ -1273,7 +1171,7 @@ fun SavedItemDetailScreen(
                 )
                 if (!reviewMode) Box {
                     IconButton(onClick = { headerMenuOpen = true }) {
-                        Icon(painterResource(R.drawable.more_vert), contentDescription = stringResource(R.string.a11y_subtask_more))
+                        Icon(painterResource(R.drawable.more_vert), contentDescription = stringResource(R.string.a11y_step_more))
                     }
                     DropdownMenu(expanded = headerMenuOpen, onDismissRequest = { headerMenuOpen = false }) {
                         DropdownMenuItem(
@@ -1320,25 +1218,25 @@ fun SavedItemDetailScreen(
             // Type selector chips: Task (indigo) / Keep (green)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(
-                    selected = isTask,
-                    onClick = { isTask = true },
+                    selected = isTodo,
+                    onClick = { isTodo = true },
                     label = { Text(stringResource(R.string.tab_tasks)) },
                     leadingIcon = {
                         Icon(
                             painterResource(R.drawable.check_box_checked),
                             contentDescription = null,
                             modifier = Modifier.size(18.dp),
-                            tint = if (isTask) NotiTheme.semantic.taskAccent else MaterialTheme.colorScheme.onSurfaceVariant,
+                            tint = if (isTodo) NotiTheme.semantic.taskAccent else MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     },
                 )
                 FilterChip(
-                    selected = !isTask,
+                    selected = !isTodo,
                     onClick = {
-                        if (isTask && (deadlineAtMs > 0L || visibleSubTasks.isNotEmpty())) {
+                        if (isTodo && (deadlineAtMs > 0L || visibleSteps.isNotEmpty())) {
                             showTaskToKeepDialog = true
                         } else {
-                            isTask = false
+                            isTodo = false
                         }
                     },
                     label = { Text(stringResource(R.string.tab_keep)) },
@@ -1347,96 +1245,46 @@ fun SavedItemDetailScreen(
                             painterResource(R.drawable.bookmark),
                             contentDescription = null,
                             modifier = Modifier.size(18.dp),
-                            tint = if (!isTask) NotiTheme.semantic.keepAccent else MaterialTheme.colorScheme.onSurfaceVariant,
+                            tint = if (!isTodo) NotiTheme.semantic.keepAccent else MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     },
                 )
             }
 
-            if (isTask) {
-                // Separate date and time pickers for deadline
-                val deadlineCal = remember(deadlineAtMs) {
-                    if (deadlineAtMs > 0L) Calendar.getInstance().apply { timeInMillis = deadlineAtMs } else null
-                }
-                val deadlineDateStr = if (deadlineCal != null) {
-                    java.text.SimpleDateFormat("yyyy-MM-dd", locale).format(java.util.Date(deadlineAtMs))
-                } else stringResource(R.string.saved_item_no_date)
-                val deadlineTimeStr = if (deadlineCal != null) {
-                    java.text.SimpleDateFormat("HH:mm", locale).format(java.util.Date(deadlineAtMs))
-                } else stringResource(R.string.saved_item_no_time)
-
-                val deadlineColor = if (deadlineAtMs > 0L && deadlineAtMs < System.currentTimeMillis())
-                    MaterialTheme.colorScheme.error else accent
-
-                // Grouped detail card (iOS Reminders style): completion / deadline rows share one
-                // rounded surface with hairline dividers, instead of loose top-level label:value rows.
+            if (isTodo) {
+                // Task completion remains its own compact control; scheduling controls follow below.
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
                     shape = MaterialTheme.shapes.large,
                     color = MaterialTheme.colorScheme.surfaceContainerLow,
                 ) {
-                    Column {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
-                        ) {
-                            TaskCompletionToggle(
-                                checked = isCompleted,
-                                accent = accent,
-                                onCheckedChange = { isCompleted = it },
-                            )
-                            Spacer(Modifier.width(4.dp))
-                            Text(stringResource(R.string.ui_saved_items_editor_completed), style = MaterialTheme.typography.bodyMedium)
-                        }
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-
-                        // Deadline on two rows: Date / Time, value right-aligned.
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                        ) {
-                            Text(
-                                stringResource(R.string.saved_item_pick_date),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurface,
-                            )
-                            Spacer(Modifier.weight(1f))
-                            TextButton(onClick = { showDatePicker = true }) {
-                                Text(text = deadlineDateStr, color = deadlineColor)
-                            }
-                        }
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                        ) {
-                            Text(
-                                stringResource(R.string.saved_item_pick_time),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurface,
-                            )
-                            Spacer(Modifier.weight(1f))
-                            TextButton(onClick = { showTimePicker = true }) {
-                                Text(text = deadlineTimeStr, color = deadlineColor)
-                            }
-                        }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+                    ) {
+                        TodoCompletionToggle(
+                            checked = isCompleted,
+                            accent = accent,
+                            onCheckedChange = { isCompleted = it },
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text(stringResource(R.string.ui_saved_items_editor_completed), style = MaterialTheme.typography.bodyMedium)
                     }
                 }
             }
 
-            // User-set When (when to work on it), independent of the deadline. Available for
-            // tasks and keeps alike — a keep's When is when the user intends to revisit it.
-            run {
-                val hasRealWhen = SavedItem.hasPlannedDate(whenAtMs)
-                val isSomeday = SavedItem.isSomeday(whenAtMs)
-                val whenStr = when {
-                    isSomeday -> stringResource(R.string.when_someday)
-                    hasRealWhen -> java.text.SimpleDateFormat("yyyy-MM-dd", locale).format(java.util.Date(whenAtMs))
-                    else -> stringResource(R.string.saved_item_no_date)
-                }
-                val whenTimeStr = if (hasRealWhen) {
-                    java.text.SimpleDateFormat("HH:mm", locale).format(java.util.Date(whenAtMs))
+            // Deadlines remain available for todos; event-like start/end timing is not persisted.
+            if (isTodo) {
+                val hasDeadline = deadlineAtMs > 0L
+                val deadlineDateStr = if (hasDeadline) {
+                    java.text.SimpleDateFormat("yyyy-MM-dd", locale).format(java.util.Date(deadlineAtMs))
+                } else stringResource(R.string.saved_item_no_date)
+                val deadlineTimeStr = if (hasDeadline) {
+                    java.text.SimpleDateFormat("HH:mm", locale).format(java.util.Date(deadlineAtMs))
                 } else stringResource(R.string.saved_item_no_time)
+                val deadlineColor = if (hasDeadline && deadlineAtMs < System.currentTimeMillis()) {
+                    MaterialTheme.colorScheme.error
+                } else accent
 
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
@@ -1447,52 +1295,30 @@ fun SavedItemDetailScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
                     ) {
+                        Icon(
+                            painter = painterResource(R.drawable.flag),
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                            tint = deadlineColor,
+                        )
+                        Spacer(Modifier.width(8.dp))
                         Text(
-                            stringResource(R.string.ui_saved_items_editor_when),
+                            stringResource(R.string.ui_saved_items_editor_deadline),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurface,
                         )
                         Spacer(Modifier.weight(1f))
-                        TextButton(onClick = { showWhenPicker = true }) {
-                            Text(text = whenStr, color = accent)
+                        TextButton(onClick = { showDatePicker = true }) {
+                            Text(text = deadlineDateStr, color = deadlineColor)
                         }
-                        if (hasRealWhen) {
-                            if (whenTimeShown) {
-                                TextButton(onClick = { showWhenTimePicker = true }) {
-                                    Text(text = whenTimeStr, color = accent)
-                                }
-                            } else {
-                                // Optional, collapsed by default: reveal + open the time picker.
-                                TextButton(onClick = { whenTimeShown = true; showWhenTimePicker = true }) {
-                                    Text(
-                                        text = stringResource(R.string.when_add_time),
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                            }
+                        TextButton(onClick = { showTimePicker = true }) {
+                            Text(text = deadlineTimeStr, color = deadlineColor)
                         }
-                        // "Someday": intended eventually, no committed date. Toggles the sentinel.
-                        // A FilterChip (not plain text) so the selected state reads clearly.
-                        Spacer(Modifier.width(4.dp))
-                        FilterChip(
-                            selected = isSomeday,
-                            onClick = { whenAtMs = if (isSomeday) 0L else SavedItem.WHEN_SOMEDAY },
-                            label = { Text(stringResource(R.string.when_someday)) },
-                            leadingIcon = if (isSomeday) {
-                                {
-                                    Icon(
-                                        painter = painterResource(R.drawable.check),
-                                        contentDescription = null,
-                                        modifier = Modifier.size(16.dp),
-                                    )
-                                }
-                            } else null,
-                        )
-                        if (hasRealWhen || isSomeday) {
-                            IconButton(onClick = { whenAtMs = 0L }) {
+                        if (hasDeadline) {
+                            IconButton(onClick = { deadlineAtMs = 0L }) {
                                 Icon(
                                     painterResource(R.drawable.delete),
-                                    contentDescription = stringResource(R.string.a11y_clear_when),
+                                    contentDescription = stringResource(R.string.a11y_clear_deadline),
                                     modifier = Modifier.size(16.dp),
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -1546,7 +1372,7 @@ fun SavedItemDetailScreen(
             }
 
             // === Sub-tasks section (above action chips) ===
-            if (isTask) {
+            if (isTodo) {
                 HorizontalDivider(modifier = Modifier.padding(top = 8.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
@@ -1554,44 +1380,44 @@ fun SavedItemDetailScreen(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        stringResource(R.string.subtask_section_title),
+                        stringResource(R.string.step_section_title),
                         style = MaterialTheme.typography.titleMedium,
                     )
-                    if (subTasksEditable || reviewMode) {
+                    if (stepsEditable || reviewMode) {
                         TextButton(onClick = {
                             if (reviewMode) {
-                                reviewSubTasks = reviewSubTasks + SavedSubItem(
-                                    savedSubItemId = "st_${java.util.UUID.randomUUID().toString().take(8)}",
+                                reviewSteps = reviewSteps + TodoStep(
+                                    todoStepId = "st_${java.util.UUID.randomUUID().toString().take(8)}",
                                     parentSavedItemId = initial.savedItemId,
-                                    position = reviewSubTasks.size,
+                                    position = reviewSteps.size,
                                 )
-                            } else onAddSavedSubItem()
+                            } else onAddTodoStep()
                         }) {
-                            Icon(painterResource(R.drawable.add), contentDescription = stringResource(R.string.a11y_add_subtask), modifier = Modifier.size(16.dp))
+                            Icon(painterResource(R.drawable.add), contentDescription = stringResource(R.string.a11y_add_step), modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(4.dp))
-                            Text(stringResource(R.string.subtask_add), style = MaterialTheme.typography.labelMedium)
+                            Text(stringResource(R.string.step_add), style = MaterialTheme.typography.labelMedium)
                         }
                     }
                 }
 
-                visibleSubTasks.forEach { st ->
-                    SavedSubItemRow(
-                        subTask = st,
+                visibleSteps.forEach { st ->
+                    TodoStepRow(
+                        step = st,
                         onToggleCompleted = { checked ->
-                            if (reviewMode) reviewSubTasks = reviewSubTasks.map {
-                                if (it.savedSubItemId == st.savedSubItemId) it.copy(isCompleted = checked) else it
-                            } else onSavedSubItemToggle(st.savedSubItemId, checked)
+                            if (reviewMode) reviewSteps = reviewSteps.map {
+                                if (it.todoStepId == st.todoStepId) it.copy(isCompleted = checked) else it
+                            } else onTodoStepToggle(st.todoStepId, checked)
                         },
                         onDelete = {
-                            if (reviewMode) reviewSubTasks = reviewSubTasks.filterNot { it.savedSubItemId == st.savedSubItemId }
-                            else onSavedSubItemDelete(st)
+                            if (reviewMode) reviewSteps = reviewSteps.filterNot { it.todoStepId == st.todoStepId }
+                            else onTodoStepDelete(st)
                         },
-                        editable = subTasksEditable || reviewMode,
-                        completionEnabled = subTasksEditable || reviewMode,
+                        editable = stepsEditable || reviewMode,
+                        completionEnabled = stepsEditable || reviewMode,
                         onTextChange = { text ->
-                            if (reviewMode) reviewSubTasks = reviewSubTasks.map {
-                                if (it.savedSubItemId == st.savedSubItemId) it.copy(text = text) else it
-                            } else onSavedSubItemEdit(st.copy(text = text))
+                            if (reviewMode) reviewSteps = reviewSteps.map {
+                                if (it.todoStepId == st.todoStepId) it.copy(text = text) else it
+                            } else onTodoStepEdit(st.copy(text = text))
                         },
                     )
                 }
@@ -1776,7 +1602,7 @@ fun SavedItemDetailScreen(
                         Text(stringResource(R.string.review_reject_change), color = MaterialTheme.colorScheme.error)
                     }
                     Button(
-                        onClick = { onSaveApprove?.invoke(ReviewItemDraft(buildUpdated(), reviewSubTasks)) },
+                        onClick = { onSaveApprove?.invoke(ReviewItemDraft(buildUpdated(), reviewSteps)) },
                         modifier = Modifier.weight(1f),
                     ) {
                         Text(stringResource(R.string.review_save_approve))
@@ -1832,7 +1658,7 @@ fun SavedItemDetailScreen(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        isTask = false
+                        isTodo = false
                         isCompleted = false
                         showTaskToKeepDialog = false
                     },
@@ -1874,70 +1700,6 @@ fun SavedItemDetailScreen(
         }
     }
 
-    // When pickers. Unset Whens default to 09:00 on the picked day (a work-start plan, not a 23:59 deadline).
-    if (showWhenPicker) {
-        val whenPickerState = rememberDatePickerState(
-            initialSelectedDateMillis = if (SavedItem.hasPlannedDate(whenAtMs)) whenAtMs else System.currentTimeMillis()
-        )
-        DatePickerDialog(
-            onDismissRequest = { showWhenPicker = false },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        val selectedDate = whenPickerState.selectedDateMillis
-                        if (selectedDate != null) {
-                            val hadTime = SavedItem.hasPlannedDate(whenAtMs)
-                            val existingCal = Calendar.getInstance().apply {
-                                timeInMillis = if (hadTime) whenAtMs else System.currentTimeMillis()
-                            }
-                            val newCal = Calendar.getInstance().apply {
-                                timeInMillis = selectedDate
-                                // Date-only default → end-of-day (see CardWhenPickerDialog).
-                                set(Calendar.HOUR_OF_DAY, if (hadTime) existingCal.get(Calendar.HOUR_OF_DAY) else 23)
-                                set(Calendar.MINUTE, if (hadTime) existingCal.get(Calendar.MINUTE) else 59)
-                                set(Calendar.SECOND, 0)
-                                set(Calendar.MILLISECOND, 0)
-                            }
-                            whenAtMs = newCal.timeInMillis
-                            showWhenPicker = false
-                        }
-                    }
-                ) { Text(stringResource(R.string.ui_action_ok)) }
-            },
-            dismissButton = {
-                TextButton(onClick = { showWhenPicker = false }) { Text(stringResource(R.string.ui_action_cancel)) }
-            }
-        ) {
-            DatePicker(state = whenPickerState)
-        }
-    }
-
-    if (showWhenTimePicker) {
-        LaunchedEffect(showWhenTimePicker) {
-            val cal = Calendar.getInstance().apply {
-                timeInMillis = if (SavedItem.hasPlannedDate(whenAtMs)) whenAtMs else System.currentTimeMillis()
-            }
-            TimePickerDialog(
-                context,
-                { _, hour, minute ->
-                    val c = Calendar.getInstance().apply {
-                        timeInMillis = if (SavedItem.hasPlannedDate(whenAtMs)) whenAtMs else System.currentTimeMillis()
-                        set(Calendar.HOUR_OF_DAY, hour)
-                        set(Calendar.MINUTE, minute)
-                        set(Calendar.SECOND, 0)
-                        set(Calendar.MILLISECOND, 0)
-                    }
-                    whenAtMs = c.timeInMillis
-                    showWhenTimePicker = false
-                },
-                cal.get(Calendar.HOUR_OF_DAY),
-                cal.get(Calendar.MINUTE),
-                true
-            ).apply {
-                setOnCancelListener { showWhenTimePicker = false }
-            }.show()
-        }
-    }
 }
 
 /** Which external app the export dialog targets. */
@@ -1977,12 +1739,11 @@ private fun ExportConfirmationDialog(
     var deadlineMs by remember { mutableStateOf(state.item.deadlineAtMs) }
 
     // For Google Calendar: start / end + full-day toggle
-    val initialStart = if (state.item.startAtMs > 0L) state.item.startAtMs else 0L
+    val initialStart = 0L
     var startMs by remember { mutableStateOf(initialStart) }
     var endMs by remember {
         mutableStateOf(
             when {
-                state.item.endAtMs > 0L -> state.item.endAtMs
                 // No end time: default end date to same day as start so picker opens correctly
                 initialStart > 0L -> {
                     val cal = Calendar.getInstance().apply {

@@ -8,7 +8,7 @@ import kotlinx.coroutines.flow.Flow
 import org.muilab.notigpt.model.features.NotiSavedItemLink
 
 /** Per-notiKey count of linked active saved items by type, for the notification card badge. */
-data class LinkedTypeCount(val notiKey: String, val taskCount: Int, val keepCount: Int)
+data class LinkedTypeCount(val notiKey: String, val todoCount: Int, val keepCount: Int)
 
 /**
  * Local access layer for the noti-to-saved-item join table.
@@ -43,13 +43,13 @@ interface NotiSavedItemLinkDao {
     suspend fun getSavedItemIdsByNotiKey(notiKey: String): List<String>
 
     /**
-     * Live per-notiKey task/keep counts of linked *active* saved items (excludes completed/archived),
+     * Live per-notiKey todo/keep counts of linked *active* saved items (excludes completed/archived),
      * de-duplicated so a saved item linked via several records counts once. Drives the card badge.
      */
     @Query(
         """
         SELECT notiKey AS notiKey,
-            SUM(CASE WHEN itemType = 'task' THEN 1 ELSE 0 END) AS taskCount,
+            SUM(CASE WHEN itemType = 'todo' THEN 1 ELSE 0 END) AS todoCount,
             SUM(CASE WHEN itemType = 'keep' THEN 1 ELSE 0 END) AS keepCount
         FROM (
             SELECT DISTINCT l.notiKey AS notiKey, l.savedItemId AS savedItemId, s.itemType AS itemType

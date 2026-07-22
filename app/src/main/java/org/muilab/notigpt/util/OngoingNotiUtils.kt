@@ -126,7 +126,7 @@ fun postOngoingNotification(context: Context) {
             pendingProposedOps.count { it.itemType == type && it.targetItemId.isBlank() } +
                 pendingProposedOps.filter { it.itemType == type && it.targetItemId.isNotBlank() }.distinctBy { it.targetItemId }.size +
                 legacyNew.count { it.itemType == type }
-        val newTaskCount = countFor(SavedItemType.Task)
+        val newTodoCount = countFor(SavedItemType.Todo)
         val newKeepCount = countFor(SavedItemType.Keep)
         val notiTitle = context.getString(R.string.ongoing_status_title)
         val smallIcon = createCountIcon(context, recentNotiCount, false)
@@ -135,10 +135,10 @@ fun postOngoingNotification(context: Context) {
             recentNotiCount,
             recentNotiCount,
         )
-        val taskCount = context.resources.getQuantityString(
+        val todoCount = context.resources.getQuantityString(
             R.plurals.ongoing_status_task_count,
-            newTaskCount,
-            newTaskCount,
+            newTodoCount,
+            newTodoCount,
         )
         val keepCount = context.resources.getQuantityString(
             R.plurals.ongoing_status_keep_count,
@@ -157,13 +157,13 @@ fun postOngoingNotification(context: Context) {
         val reviewPrefix = context.getString(R.string.ongoing_status_awaiting_review)
         val reviewCounts = context.getString(
             R.string.ongoing_status_join_string,
-            taskCount,
+            todoCount,
             keepCount,
         )
-        val reviewSummary = if (newTaskCount > 0 && newKeepCount > 0) {
+        val reviewSummary = if (newTodoCount > 0 && newKeepCount > 0) {
             reviewPrefix + reviewCounts
-        } else if (newTaskCount > 0) {
-            reviewPrefix + taskCount
+        } else if (newTodoCount > 0) {
+            reviewPrefix + todoCount
         } else if (newKeepCount > 0) {
             reviewPrefix + keepCount
         } else {

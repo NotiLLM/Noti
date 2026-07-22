@@ -7,7 +7,7 @@ import org.junit.Test
 import org.muilab.notigpt.model.features.ReviewItemDraft
 import org.muilab.notigpt.model.features.ReviewTranslationState
 import org.muilab.notigpt.model.features.SavedItem
-import org.muilab.notigpt.model.features.SavedSubItem
+import org.muilab.notigpt.model.features.TodoStep
 
 class ReviewTranslationHandlerTest {
     private val item = SavedItem(
@@ -16,12 +16,11 @@ class ReviewTranslationHandlerTest {
         content = "Pay ACME invoice 42 by Friday",
         lastUpdateTimestamp = 100,
         deadlineAtMs = 900,
-        whenAtMs = 800,
         isStarred = true,
         userEdited = true,
         buttons = """[{"buttonText":"Open invoice","intent":"https://example.com/i/42","type":"link"}]""",
     )
-    private val sub = SavedSubItem("sub-1", "item-1", "Check amount", isCompleted = true, position = 0)
+    private val sub = TodoStep("sub-1", "item-1", "Check amount", isCompleted = true, position = 0)
     private val pending = ReviewTranslationState.pending(
         targetLanguage = "zh-TW",
         source = ReviewItemDraft(item, listOf(sub)),
@@ -38,7 +37,7 @@ class ReviewTranslationHandlerTest {
                   "targetLanguage":"zh-TW",
                   "title":"支付發票",
                   "content":"於星期五前支付 ACME 42 號發票",
-                  "subTasks":[{"savedSubItemId":"sub-1","text":"確認金額"}],
+                  "steps":[{"todoStepId":"sub-1","text":"確認金額"}],
                   "buttons":[{"index":0,"buttonText":"開啟發票"}]
                 }""",
         )
@@ -48,11 +47,10 @@ class ReviewTranslationHandlerTest {
         assertEquals("於星期五前支付 ACME 42 號發票", translated.content)
         assertEquals(item.savedItemId, translated.savedItemId)
         assertEquals(item.deadlineAtMs, translated.deadlineAtMs)
-        assertEquals(item.whenAtMs, translated.whenAtMs)
         assertEquals(item.isStarred, translated.isStarred)
         assertEquals(item.userEdited, translated.userEdited)
-        assertEquals("確認金額", result.translatedSubItems.single().text)
-        assertEquals(true, result.translatedSubItems.single().isCompleted)
+        assertEquals("確認金額", result.translatedSteps.single().text)
+        assertEquals(true, result.translatedSteps.single().isCompleted)
 
         val button = JsonParser.parseString(translated.buttons).asJsonArray[0].asJsonObject
         assertEquals("開啟發票", button.get("buttonText").asString)
@@ -67,7 +65,7 @@ class ReviewTranslationHandlerTest {
               "targetLanguage":"zh-TW",
               "title":"支付發票",
               "content":"內容",
-              "subTasks":[],
+              "steps":[],
               "buttons":[{"index":0,"buttonText":"開啟"}]
             }"""
 

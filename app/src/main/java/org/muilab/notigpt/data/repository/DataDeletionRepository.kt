@@ -57,7 +57,7 @@ class DataDeletionRepository @Inject constructor(
     private suspend fun clearLocalGeneratedData(uid: String) {
         database.withTransaction {
             database.savedItemDao().deleteAllForAccountSwitch()
-            database.subTaskDao().deleteAllForAccountSwitch()
+            database.todoStepDao().deleteAllForAccountSwitch()
             database.pendingProposedOpDao().deleteAllForAccountSwitch()
             database.pendingReviewDraftDao().deleteAll()
             database.rejectedMergeDao().deleteAllForAccountSwitch()

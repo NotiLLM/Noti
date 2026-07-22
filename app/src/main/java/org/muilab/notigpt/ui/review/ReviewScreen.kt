@@ -15,6 +15,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
@@ -45,14 +47,13 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import org.muilab.notigpt.R
 import org.muilab.notigpt.model.features.SavedItem
 import org.muilab.notigpt.model.features.SavedItemState
+import org.muilab.notigpt.model.features.ReviewItemDraft
 import org.muilab.notigpt.ui.common.component.EmptyState
 import org.muilab.notigpt.ui.notification.viewmodel.DrawerViewModel
 import org.muilab.notigpt.ui.review.component.ReviewCardStack
 import org.muilab.notigpt.ui.review.component.ReviewDetailSheet
 import org.muilab.notigpt.ui.review.viewmodel.ReviewViewModel
 import org.muilab.notigpt.ui.saveditem.viewmodel.SavedItemsViewModel
-import org.muilab.notigpt.ui.saveditem.component.SavedItemWhenButton
-import org.muilab.notigpt.ui.saveditem.component.SavedItemWhenPickerDialog
 import org.muilab.notigpt.ui.theme.NotiTheme
 import org.muilab.notigpt.ui.settings.ExtractionLanguagePickerDialog
 import org.muilab.notigpt.ui.settings.extractionLanguageLabel
@@ -103,8 +104,7 @@ fun ReviewScreen(
     // bars (the editor has its own header) just like the list editor does.
     var editingItem by remember { mutableStateOf<ReviewViewModel.ReviewEntry?>(null) }
     androidx.compose.runtime.LaunchedEffect(editingItem) { onDetailOpenChange(editingItem != null) }
-    val subtasksBySavedItem by savedItemsViewModel.allSavedSubItemsBySavedItem.collectAsState()
-    var whenEntry by remember { mutableStateOf<ReviewViewModel.ReviewEntry?>(null) }
+    val stepsBySavedItem by savedItemsViewModel.allTodoStepsBySavedItem.collectAsState()
     var languageEntry by remember { mutableStateOf<ReviewViewModel.ReviewEntry?>(null) }
     var languageChoice by remember { mutableStateOf<Pair<ReviewViewModel.ReviewEntry, String>?>(null) }
 
@@ -153,12 +153,26 @@ fun ReviewScreen(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
-                            if (top.preview.isTask) {
-                                SavedItemWhenButton(
-                                    whenAtMs = top.preview.whenAtMs,
-                                    accent = NotiTheme.semantic.taskAccent,
-                                    onClick = { whenEntry = top },
-                                )
+                            if (top.preview.isTodo) {
+                                TextButton(
+                                    onClick = {
+                                        reviewViewModel.saveApprove(
+                                            top,
+                                            ReviewItemDraft(
+                                                item = top.preview.copy(state = SavedItemState.Completed),
+                                                steps = top.previewSteps,
+                                            ),
+                                        )
+                                    },
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp),
+                                    )
+                                    Spacer(Modifier.size(4.dp))
+                                    Text(stringResource(R.string.review_mark_complete))
+                                }
                             }
                             TextButton(onClick = { languageEntry = top }) {
                                 Text(stringResource(R.string.review_change_language))
@@ -236,18 +250,10 @@ fun ReviewScreen(
                 onSaveApprove = { updated -> reviewViewModel.saveApprove(entry, updated); editingItem = null },
                 onRejectDelete = { reviewViewModel.reject(entry); editingItem = null },
                 changeLog = reviewViewModel.changeLogFlow(item.savedItemId),
-                subTasks = entry.previewSubItems.ifEmpty { subtasksBySavedItem[item.savedItemId] ?: emptyList() },
-                subTasksEditable = true,
+                steps = entry.previewSteps.ifEmpty { stepsBySavedItem[item.savedItemId] ?: emptyList() },
+                stepsEditable = true,
             )
         }
-    }
-
-    whenEntry?.let { entry ->
-        SavedItemWhenPickerDialog(
-            currentWhenAtMs = entry.preview.whenAtMs,
-            onDismiss = { whenEntry = null },
-            onSet = { value -> reviewViewModel.setReviewWhen(entry, value); whenEntry = null },
-        )
     }
 
     val originalLanguageLabel = stringResource(R.string.ui_settings_extraction_language_original)
@@ -296,10 +302,10 @@ private fun ReviewFilterChips(
     selected: ReviewViewModel.ReviewFilter,
     onSelect: (ReviewViewModel.ReviewFilter) -> Unit,
 ) {
-    val newTasks = items.count { it.preview.isTask && it.isNewLike }
-    val updatedTasks = items.count { it.preview.isTask && !it.isNewLike }
-    val newKeeps = items.count { !it.preview.isTask && it.isNewLike }
-    val updatedKeeps = items.count { !it.preview.isTask && !it.isNewLike }
+    val newTodos = items.count { it.preview.isTodo && it.isNewLike }
+    val updatedTodos = items.count { it.preview.isTodo && !it.isNewLike }
+    val newKeeps = items.count { !it.preview.isTodo && it.isNewLike }
+    val updatedKeeps = items.count { !it.preview.isTodo && !it.isNewLike }
 
     Row(
         modifier = Modifier
@@ -313,15 +319,15 @@ private fun ReviewFilterChips(
             onClick = { onSelect(ReviewViewModel.ReviewFilter.All) },
             label = { Text(stringResource(R.string.noti_filter_all)) },
         )
-        if (newTasks > 0) FilterChip(
-            selected = selected == ReviewViewModel.ReviewFilter.NewTasks,
-            onClick = { onSelect(ReviewViewModel.ReviewFilter.NewTasks) },
-            label = { Text(stringResource(R.string.review_chip_new_tasks, newTasks)) },
+        if (newTodos > 0) FilterChip(
+            selected = selected == ReviewViewModel.ReviewFilter.NewTodos,
+            onClick = { onSelect(ReviewViewModel.ReviewFilter.NewTodos) },
+            label = { Text(stringResource(R.string.review_chip_new_tasks, newTodos)) },
         )
-        if (updatedTasks > 0) FilterChip(
-            selected = selected == ReviewViewModel.ReviewFilter.UpdatedTasks,
-            onClick = { onSelect(ReviewViewModel.ReviewFilter.UpdatedTasks) },
-            label = { Text(stringResource(R.string.review_chip_updated_tasks, updatedTasks)) },
+        if (updatedTodos > 0) FilterChip(
+            selected = selected == ReviewViewModel.ReviewFilter.UpdatedTodos,
+            onClick = { onSelect(ReviewViewModel.ReviewFilter.UpdatedTodos) },
+            label = { Text(stringResource(R.string.review_chip_updated_tasks, updatedTodos)) },
         )
         if (newKeeps > 0) FilterChip(
             selected = selected == ReviewViewModel.ReviewFilter.NewKeeps,
@@ -362,7 +368,7 @@ private fun MinimalReviewCard(
                     ReviewBadge(entry.operationKind)
                     Spacer(Modifier.weight(1f))
                     Text(
-                        text = if (item.isTask) stringResource(R.string.home_collection_tasks)
+                        text = if (item.isTodo) stringResource(R.string.home_collection_tasks)
                         else stringResource(R.string.home_collection_keep),
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,

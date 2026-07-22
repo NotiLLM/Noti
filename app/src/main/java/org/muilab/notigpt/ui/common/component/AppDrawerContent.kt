@@ -21,8 +21,8 @@ import org.muilab.notigpt.ui.common.navigation.SavedListFilter
 import org.muilab.notigpt.ui.theme.Dimens
 
 /**
- * Hamburger drawer: an account header, then the home overview + Tasks/Keep collections, then the
- * secondary sections. Each destination has a distinct icon (previously Tasks/Reminders/Preferences all
+ * Hamburger drawer: an account header, then the home overview + Todos/Keep collections, then the
+ * secondary sections. Each destination has a distinct icon (previously Todos/Reminders/Preferences all
  * reused the same glyph) and section labels group the two tiers.
  */
 @Composable
@@ -31,7 +31,7 @@ fun AppDrawerContent(
     accountEmail: String?,
     unresolvedConflictCount: Int,
     dueUnseenReminderCount: Int,
-    activeTaskCount: Int,
+    activeTodoCount: Int,
     activeKeepCount: Int,
     onHomeSelected: () -> Unit,
     onSavedListSelected: (SavedListFilter) -> Unit,
@@ -62,14 +62,14 @@ fun AppDrawerContent(
         )
 
         DrawerSectionLabel(stringResource(R.string.menu_section_collections))
-        // Tasks / Keep collections, with a live badge of the active (non-completed / non-archived) count.
+        // Todos / Keep collections, with a live badge of the active (non-completed / non-archived) count.
         NavigationDrawerItem(
             modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
             label = { Text(stringResource(R.string.home_collection_tasks)) },
             icon = { Icon(painter = painterResource(R.drawable.checklist), contentDescription = null) },
-            badge = { if (activeTaskCount > 0) Text(activeTaskCount.toString()) },
+            badge = { if (activeTodoCount > 0) Text(activeTodoCount.toString()) },
             selected = false,
-            onClick = { onSavedListSelected(SavedListFilter.Tasks) },
+            onClick = { onSavedListSelected(SavedListFilter.Todos) },
         )
         NavigationDrawerItem(
             modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
