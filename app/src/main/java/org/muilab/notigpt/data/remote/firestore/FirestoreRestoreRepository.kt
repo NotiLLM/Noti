@@ -2,6 +2,7 @@ package org.muilab.notigpt.data.remote.firestore
 
 import android.content.Context
 import android.util.Log
+import androidx.room.withTransaction
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldValue
@@ -17,7 +18,8 @@ import org.muilab.notigpt.model.features.SavedItem
 import org.muilab.notigpt.model.features.SavedItemType
 import org.muilab.notigpt.model.features.SavedItemState
 import org.muilab.notigpt.model.features.TodoStep
-import org.muilab.notigpt.model.features.UserContext
+import org.muilab.notigpt.model.features.GeneralPreference
+import org.muilab.notigpt.model.features.UserKnowledge
 import org.muilab.notigpt.domain.saveditem.SavedItemNormalization
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -319,38 +321,57 @@ class FirestoreRestoreRepository(
             .get()
             .await()
 
-        val hasCloudState = userDoc.contains("extractionPreferences") || userDoc.contains("userContexts")
+        val hasCloudState = listOf(
+            "generalPreferences",
+            "extractionPreferences",
+            "userKnowledge",
+        ).any(userDoc::contains)
 
-        if (userDoc.contains("extractionPreferences")) {
-            val preferences = (userDoc.get("extractionPreferences") as? List<Map<String, Any?>>).orEmpty()
-            db.extractionPreferenceDao().deleteAll()
-            preferences.forEach { m ->
-                val id = m["id"] as? String ?: return@forEach
-                db.extractionPreferenceDao().upsertPreference(
-                    ExtractionPreference(
-                        id = id,
-                        statement = m["statement"] as? String ?: "",
-                        preferenceType = m["preferenceType"] as? String ?: "",
-                        createdAt = (m["createdAt"] as? Number)?.toLong() ?: System.currentTimeMillis(),
-                        updatedAt = (m["updatedAt"] as? Number)?.toLong() ?: System.currentTimeMillis(),
+        db.withTransaction {
+            if (userDoc.contains("generalPreferences")) {
+                val preferences = (userDoc.get("generalPreferences") as? List<Map<String, Any?>>).orEmpty()
+                db.generalPreferenceDao().deleteAll()
+                preferences.forEach { map ->
+                    val id = map["id"] as? String ?: return@forEach
+                    db.generalPreferenceDao().upsert(
+                        GeneralPreference(
+                            id = id,
+                            statement = map["statement"] as? String ?: "",
+                            createdAt = (map["createdAt"] as? Number)?.toLong() ?: System.currentTimeMillis(),
+                            updatedAt = (map["updatedAt"] as? Number)?.toLong() ?: System.currentTimeMillis(),
+                        ),
                     )
-                )
+                }
             }
-        }
-        if (userDoc.contains("userContexts")) {
-            val contexts = (userDoc.get("userContexts") as? List<Map<String, Any?>>).orEmpty()
-            db.userContextDao().deleteAll()
-            contexts.forEach { m ->
-                val id = m["id"] as? String ?: return@forEach
-                db.userContextDao().upsertContext(
-                    UserContext(
-                        id = id,
-                        statement = m["statement"] as? String ?: "",
-                        category = m["category"] as? String ?: "",
-                        createdAt = (m["createdAt"] as? Number)?.toLong() ?: System.currentTimeMillis(),
-                        updatedAt = (m["updatedAt"] as? Number)?.toLong() ?: System.currentTimeMillis(),
+            if (userDoc.contains("extractionPreferences")) {
+                val preferences = (userDoc.get("extractionPreferences") as? List<Map<String, Any?>>).orEmpty()
+                db.extractionPreferenceDao().deleteAll()
+                preferences.forEach { map ->
+                    val id = map["id"] as? String ?: return@forEach
+                    db.extractionPreferenceDao().upsert(
+                        ExtractionPreference(
+                            id = id,
+                            statement = map["statement"] as? String ?: "",
+                            createdAt = (map["createdAt"] as? Number)?.toLong() ?: System.currentTimeMillis(),
+                            updatedAt = (map["updatedAt"] as? Number)?.toLong() ?: System.currentTimeMillis(),
+                        ),
                     )
-                )
+                }
+            }
+            if (userDoc.contains("userKnowledge")) {
+                val knowledge = (userDoc.get("userKnowledge") as? List<Map<String, Any?>>).orEmpty()
+                db.userKnowledgeDao().deleteAll()
+                knowledge.forEach { map ->
+                    val id = map["id"] as? String ?: return@forEach
+                    db.userKnowledgeDao().upsert(
+                        UserKnowledge(
+                            id = id,
+                            statement = map["statement"] as? String ?: "",
+                            createdAt = (map["createdAt"] as? Number)?.toLong() ?: System.currentTimeMillis(),
+                            updatedAt = (map["updatedAt"] as? Number)?.toLong() ?: System.currentTimeMillis(),
+                        ),
+                    )
+                }
             }
         }
         return hasCloudState

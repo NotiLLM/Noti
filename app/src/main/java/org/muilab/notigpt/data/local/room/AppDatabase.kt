@@ -8,7 +8,7 @@ import androidx.room.TypeConverters
 import org.muilab.notigpt.model.features.ExtractionJournalEntry
 import org.muilab.notigpt.model.features.ExtractionJournalSummary
 import org.muilab.notigpt.model.features.ExtractionPreference
-import org.muilab.notigpt.model.features.PreferenceConflict
+import org.muilab.notigpt.model.features.GeneralPreference
 import org.muilab.notigpt.model.features.NotiLlmState
 import org.muilab.notigpt.model.features.NotiSavedItemLink
 import org.muilab.notigpt.model.features.PendingProposedOp
@@ -20,7 +20,7 @@ import org.muilab.notigpt.model.features.ReminderNotiRecordRef
 import org.muilab.notigpt.model.features.ReminderSavedItemRef
 import org.muilab.notigpt.model.features.SavedItem
 import org.muilab.notigpt.model.features.TodoStep
-import org.muilab.notigpt.model.features.UserContext
+import org.muilab.notigpt.model.features.UserKnowledge
 import org.muilab.notigpt.model.features.FirestoreOutboxOp
 import org.muilab.notigpt.model.features.ProposedOpRecord
 import org.muilab.notigpt.model.notifications.NotiAction
@@ -28,6 +28,7 @@ import org.muilab.notigpt.model.notifications.NotiRecord
 import org.muilab.notigpt.model.notifications.NotiUnit
 import org.muilab.notigpt.data.local.room.dao.ExtractionJournalDao
 import org.muilab.notigpt.data.local.room.dao.ExtractionPreferenceDao
+import org.muilab.notigpt.data.local.room.dao.GeneralPreferenceDao
 import org.muilab.notigpt.data.local.room.dao.SavedItemChangeLogDao
 import org.muilab.notigpt.data.local.room.dao.NotiActionDao
 import org.muilab.notigpt.data.local.room.dao.NotiDrawerDao
@@ -36,12 +37,11 @@ import org.muilab.notigpt.data.local.room.dao.NotiRecordDao
 import org.muilab.notigpt.data.local.room.dao.NotiSavedItemLinkDao
 import org.muilab.notigpt.data.local.room.dao.PendingProposedOpDao
 import org.muilab.notigpt.data.local.room.dao.PendingReviewDraftDao
-import org.muilab.notigpt.data.local.room.dao.PreferenceConflictDao
 import org.muilab.notigpt.data.local.room.dao.RejectedMergeDao
 import org.muilab.notigpt.data.local.room.dao.ReminderDao
 import org.muilab.notigpt.data.local.room.dao.SavedItemDao
 import org.muilab.notigpt.data.local.room.dao.TodoStepDao
-import org.muilab.notigpt.data.local.room.dao.UserContextDao
+import org.muilab.notigpt.data.local.room.dao.UserKnowledgeDao
 import org.muilab.notigpt.data.local.room.dao.FirestoreOutboxDao
 import org.muilab.notigpt.data.local.room.dao.ProposedOpRecordDao
 
@@ -68,14 +68,14 @@ import org.muilab.notigpt.data.local.room.dao.ProposedOpRecordDao
         Reminder::class,
         ReminderSavedItemRef::class,
         ReminderNotiRecordRef::class,
+        GeneralPreference::class,
         ExtractionPreference::class,
-        PreferenceConflict::class,
-        UserContext::class,
+        UserKnowledge::class,
         FirestoreOutboxOp::class,
         ProposedOpRecord::class,
         PendingReviewDraft::class,
     ],
-    version = 54,
+    version = 55,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -93,9 +93,9 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun rejectedMergeDao(): RejectedMergeDao
     abstract fun extractionJournalDao(): ExtractionJournalDao
     abstract fun reminderDao(): ReminderDao
+    abstract fun generalPreferenceDao(): GeneralPreferenceDao
     abstract fun extractionPreferenceDao(): ExtractionPreferenceDao
-    abstract fun preferenceConflictDao(): PreferenceConflictDao
-    abstract fun userContextDao(): UserContextDao
+    abstract fun userKnowledgeDao(): UserKnowledgeDao
     abstract fun firestoreOutboxDao(): FirestoreOutboxDao
     abstract fun proposedOpRecordDao(): ProposedOpRecordDao
     abstract fun pendingReviewDraftDao(): PendingReviewDraftDao

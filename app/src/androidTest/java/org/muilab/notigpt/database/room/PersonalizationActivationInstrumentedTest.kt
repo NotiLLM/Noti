@@ -4,13 +4,10 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
-import androidx.room.withTransaction
 import androidx.room.testing.MigrationTestHelper
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -24,23 +21,19 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.muilab.notigpt.data.local.room.AppDatabase
 import org.muilab.notigpt.data.local.room.AppDatabaseMigrations
-import org.muilab.notigpt.data.local.room.dao.ExtractionPreferenceV2Dao
+import org.muilab.notigpt.data.local.room.dao.ExtractionPreferenceDao
 import org.muilab.notigpt.data.local.room.dao.FirestoreOutboxDao
 import org.muilab.notigpt.data.local.room.dao.GeneralPreferenceDao
 import org.muilab.notigpt.data.local.room.dao.UserKnowledgeDao
 import org.muilab.notigpt.data.repository.personalization.PersonalizationApplyResult
-import org.muilab.notigpt.data.repository.personalization.PersonalizationStoreGateway
-import org.muilab.notigpt.data.repository.personalization.StoreBackedPersonalizationRepository
+import org.muilab.notigpt.data.repository.personalization.RoomPersonalizationRepository
 import org.muilab.notigpt.domain.personalization.ExpectedTarget
 import org.muilab.notigpt.domain.personalization.PersonalizationChangeSet
 import org.muilab.notigpt.domain.personalization.PersonalizationMutation
-import org.muilab.notigpt.domain.personalization.PersonalizationMutationPlan
 import org.muilab.notigpt.domain.personalization.PersonalizationOperation
 import org.muilab.notigpt.domain.personalization.PersonalizationPreflightFailure
-import org.muilab.notigpt.domain.personalization.PersonalizationRecordSnapshot
 import org.muilab.notigpt.domain.personalization.PersonalizationStore
-import org.muilab.notigpt.domain.personalization.PlannedPersonalizationWrite
-import org.muilab.notigpt.model.features.ExtractionPreferenceV2
+import org.muilab.notigpt.model.features.ExtractionPreference
 import org.muilab.notigpt.model.features.FirestoreOutboxKind
 import org.muilab.notigpt.model.features.FirestoreOutboxOp
 import org.muilab.notigpt.model.features.GeneralPreference
@@ -56,7 +49,7 @@ class PersonalizationActivationInstrumentedTest {
     )
 
     private lateinit var database: ActivationTestDatabase
-    private lateinit var repository: StoreBackedPersonalizationRepository
+    private lateinit var repository: RoomPersonalizationRepository
 
     @Before
     fun setUp() {
@@ -64,8 +57,13 @@ class PersonalizationActivationInstrumentedTest {
         database = Room.inMemoryDatabaseBuilder(context, ActivationTestDatabase::class.java)
             .allowMainThreadQueries()
             .build()
-        repository = StoreBackedPersonalizationRepository(
-            gateway = ActivationTestGateway(database),
+        repository = RoomPersonalizationRepository(
+            database = database,
+            generalPreferenceDao = database.generalPreferenceDao(),
+            extractionPreferenceDao = database.extractionPreferenceDao(),
+            userKnowledgeDao = database.userKnowledgeDao(),
+            firestoreOutboxDao = database.firestoreOutboxDao(),
+            uidProvider = { TEST_UID },
             clock = { COMMITTED_AT },
         )
     }
@@ -119,6 +117,7 @@ class PersonalizationActivationInstrumentedTest {
                 listOf("id", "statement", "createdAt", "updatedAt"),
                 columnNames(db, "user_knowledge"),
             )
+            assertFalse(tableExists(db, "preference_conflicts"))
 
             db.query(
                 "SELECT id,statement,createdAt,updatedAt FROM extraction_preferences ORDER BY id",
@@ -171,7 +170,7 @@ class PersonalizationActivationInstrumentedTest {
     @Test
     fun apply_validCrossStoreSet_commitsCrudUuidAndOutboxTogether() = runBlocking {
         database.extractionPreferenceDao().upsert(
-            ExtractionPreferenceV2("extraction-1", "Create Keeps for receipts.", 10, 20),
+            ExtractionPreference("extraction-1", "Create Keeps for receipts.", 10, 20),
         )
         database.userKnowledgeDao().upsert(
             UserKnowledge("knowledge-1", "I work remotely.", 30, 40),
@@ -232,7 +231,7 @@ class PersonalizationActivationInstrumentedTest {
     @Test
     fun apply_staleTarget_rejectsWithoutWritesOrOutbox() = runBlocking {
         database.extractionPreferenceDao().upsert(
-            ExtractionPreferenceV2("extraction-1", "Create Keeps for receipts.", 10, 20),
+            ExtractionPreference("extraction-1", "Create Keeps for receipts.", 10, 20),
         )
 
         val result = repository.apply(
@@ -380,6 +379,14 @@ class PersonalizationActivationInstrumentedTest {
         }
     }
 
+    private fun tableExists(
+        db: androidx.sqlite.db.SupportSQLiteDatabase,
+        table: String,
+    ): Boolean = db.query(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+        arrayOf(table),
+    ).use { it.moveToFirst() }
+
     private companion object {
         const val DB_NAME = "personalization-activation-test"
         const val TEST_UID = "uid-test"
@@ -390,7 +397,7 @@ class PersonalizationActivationInstrumentedTest {
 @Database(
     entities = [
         GeneralPreference::class,
-        ExtractionPreferenceV2::class,
+        ExtractionPreference::class,
         UserKnowledge::class,
         FirestoreOutboxOp::class,
     ],
@@ -399,115 +406,7 @@ class PersonalizationActivationInstrumentedTest {
 )
 abstract class ActivationTestDatabase : RoomDatabase() {
     abstract fun generalPreferenceDao(): GeneralPreferenceDao
-    abstract fun extractionPreferenceDao(): ExtractionPreferenceV2Dao
+    abstract fun extractionPreferenceDao(): ExtractionPreferenceDao
     abstract fun userKnowledgeDao(): UserKnowledgeDao
     abstract fun firestoreOutboxDao(): FirestoreOutboxDao
-}
-
-private class ActivationTestGateway(
-    private val database: ActivationTestDatabase,
-) : PersonalizationStoreGateway {
-    override fun observeConfirmedSnapshots(): Flow<List<PersonalizationRecordSnapshot>> = combine(
-        database.generalPreferenceDao().observeAll(),
-        database.extractionPreferenceDao().observeAll(),
-        database.userKnowledgeDao().observeAll(),
-    ) { general, extraction, knowledge ->
-        general.map { it.snapshot(PersonalizationStore.GENERAL_PREFERENCE) } +
-            extraction.map { it.snapshot() } +
-            knowledge.map { it.snapshot(PersonalizationStore.USER_KNOWLEDGE) }
-    }
-
-    override suspend fun getConfirmedSnapshots(): List<PersonalizationRecordSnapshot> =
-        database.generalPreferenceDao().getAll().map { it.snapshot(PersonalizationStore.GENERAL_PREFERENCE) } +
-            database.extractionPreferenceDao().getAll().map { it.snapshot() } +
-            database.userKnowledgeDao().getAll().map { it.snapshot(PersonalizationStore.USER_KNOWLEDGE) }
-
-    override suspend fun commit(
-        plan: PersonalizationMutationPlan,
-        committedAt: Long,
-    ): PersonalizationApplyResult = database.withTransaction {
-        val changedIds = plan.writes.map { write ->
-            val id = when (write) {
-                is PlannedPersonalizationWrite.Create -> UUID.randomUUID().toString()
-                is PlannedPersonalizationWrite.Update -> write.id
-                is PlannedPersonalizationWrite.Delete -> write.id
-            }
-            when (write) {
-                is PlannedPersonalizationWrite.Create -> upsert(
-                    write.targetStore,
-                    id,
-                    write.statement,
-                    committedAt,
-                    committedAt,
-                )
-                is PlannedPersonalizationWrite.Update -> upsert(
-                    write.targetStore,
-                    id,
-                    write.statement,
-                    write.createdAt,
-                    committedAt,
-                )
-                is PlannedPersonalizationWrite.Delete -> delete(write.targetStore, id)
-            }
-            database.firestoreOutboxDao().upsert(
-                FirestoreOutboxOp(
-                    operationKey = "uid-test:personalization:${write.targetStore.name.lowercase()}:$id",
-                    uid = "uid-test",
-                    kind = FirestoreOutboxKind.SyncPreferencesAndContexts,
-                    entityId = id,
-                    createdAt = committedAt,
-                ),
-            )
-            id
-        }
-        PersonalizationApplyResult.Applied(changedIds)
-    }
-
-    private suspend fun upsert(
-        store: PersonalizationStore,
-        id: String,
-        statement: String,
-        createdAt: Long,
-        updatedAt: Long,
-    ) = when (store) {
-        PersonalizationStore.GENERAL_PREFERENCE -> database.generalPreferenceDao().upsert(
-            GeneralPreference(id, statement, createdAt, updatedAt),
-        )
-        PersonalizationStore.EXTRACTION_PREFERENCE -> database.extractionPreferenceDao().upsert(
-            ExtractionPreferenceV2(id, statement, createdAt, updatedAt),
-        )
-        PersonalizationStore.USER_KNOWLEDGE -> database.userKnowledgeDao().upsert(
-            UserKnowledge(id, statement, createdAt, updatedAt),
-        )
-    }
-
-    private suspend fun delete(store: PersonalizationStore, id: String) = when (store) {
-        PersonalizationStore.GENERAL_PREFERENCE -> database.generalPreferenceDao().deleteById(id)
-        PersonalizationStore.EXTRACTION_PREFERENCE -> database.extractionPreferenceDao().deleteById(id)
-        PersonalizationStore.USER_KNOWLEDGE -> database.userKnowledgeDao().deleteById(id)
-    }
-
-    private fun GeneralPreference.snapshot(store: PersonalizationStore) = PersonalizationRecordSnapshot(
-        targetStore = store,
-        id = id,
-        statement = statement,
-        createdAt = createdAt,
-        updatedAt = updatedAt,
-    )
-
-    private fun ExtractionPreferenceV2.snapshot() = PersonalizationRecordSnapshot(
-        targetStore = PersonalizationStore.EXTRACTION_PREFERENCE,
-        id = id,
-        statement = statement,
-        createdAt = createdAt,
-        updatedAt = updatedAt,
-    )
-
-    private fun UserKnowledge.snapshot(store: PersonalizationStore) = PersonalizationRecordSnapshot(
-        targetStore = store,
-        id = id,
-        statement = statement,
-        createdAt = createdAt,
-        updatedAt = updatedAt,
-    )
 }

@@ -52,13 +52,18 @@ data class FirestoreOutboxOp(
                 createdAt = createdAt,
             )
 
-        fun preferencesAndContexts(uid: String, createdAt: Long) =
-            FirestoreOutboxOp(
-                operationKey = "$uid:preferences_and_contexts",
-                uid = uid,
-                kind = FirestoreOutboxKind.SyncPreferencesAndContexts,
-                entityId = uid,
-                createdAt = createdAt,
-            )
+        /** Temporary whole-set sync kind, keyed per record for the per-record plan 04-03 cutover. */
+        fun personalization(
+            uid: String,
+            store: String,
+            recordId: String,
+            createdAt: Long,
+        ) = FirestoreOutboxOp(
+            operationKey = "$uid:personalization:$store:$recordId",
+            uid = uid,
+            kind = FirestoreOutboxKind.SyncPreferencesAndContexts,
+            entityId = recordId,
+            createdAt = createdAt,
+        )
     }
 }

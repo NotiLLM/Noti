@@ -26,8 +26,7 @@ import org.muilab.notigpt.data.remote.n8n.dto.PersonalizationQuickSyncRequestDto
 import org.muilab.notigpt.data.remote.n8n.dto.PersonalizationQuickSyncTriggerDto
 import org.muilab.notigpt.data.remote.n8n.dto.PersonalizationRecordSnapshotDto
 import org.muilab.notigpt.data.repository.personalization.PersonalizationRepository
-import org.muilab.notigpt.data.repository.personalization.StoreBackedPersonalizationRepository
-import org.muilab.notigpt.data.repository.personalization.V54PersonalizationGateway
+import org.muilab.notigpt.data.repository.personalization.RoomPersonalizationRepository
 import org.muilab.notigpt.domain.personalization.AlternativeSetTurn
 import org.muilab.notigpt.domain.personalization.ExpectedTarget
 import org.muilab.notigpt.domain.personalization.KnowledgeCandidatesTurn
@@ -71,11 +70,12 @@ class PreferenceViewModel(
 
     init {
         val database = AppDatabase.getInstance(application)
-        repository = StoreBackedPersonalizationRepository(
-            V54PersonalizationGateway(
-                extractionPreferenceDao = database.extractionPreferenceDao(),
-                userContextDao = database.userContextDao(),
-            ),
+        repository = RoomPersonalizationRepository(
+            database = database,
+            generalPreferenceDao = database.generalPreferenceDao(),
+            extractionPreferenceDao = database.extractionPreferenceDao(),
+            userKnowledgeDao = database.userKnowledgeDao(),
+            firestoreOutboxDao = database.firestoreOutboxDao(),
         )
         viewModelScope.launch {
             repository.observeConfirmedSnapshots().collect { snapshots ->

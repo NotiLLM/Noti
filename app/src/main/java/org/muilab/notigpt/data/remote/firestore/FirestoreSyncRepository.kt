@@ -259,28 +259,35 @@ class FirestoreSyncRepository(
     suspend fun syncPreferencesAndContexts(): Boolean = withContext(Dispatchers.IO) {
         if (userId().isBlank()) return@withContext false
         try {
-            val prefs = db.extractionPreferenceDao().getAllPreferences().map { p ->
+            val general = db.generalPreferenceDao().getAll().map { preference ->
+                mapOf(
+                    "id" to preference.id,
+                    "statement" to preference.statement,
+                    "createdAt" to preference.createdAt,
+                    "updatedAt" to preference.updatedAt,
+                )
+            }
+            val prefs = db.extractionPreferenceDao().getAll().map { p ->
                 mapOf(
                     "id" to p.id,
                     "statement" to p.statement,
-                    "preferenceType" to p.preferenceType,
                     "createdAt" to p.createdAt,
                     "updatedAt" to p.updatedAt,
                 )
             }
-            val contexts = db.userContextDao().getAllContexts().map { c ->
+            val knowledge = db.userKnowledgeDao().getAll().map { item ->
                 mapOf(
-                    "id" to c.id,
-                    "statement" to c.statement,
-                    "category" to c.category,
-                    "createdAt" to c.createdAt,
-                    "updatedAt" to c.updatedAt,
+                    "id" to item.id,
+                    "statement" to item.statement,
+                    "createdAt" to item.createdAt,
+                    "updatedAt" to item.updatedAt,
                 )
             }
             usersDoc().set(
                 mapOf(
+                    "generalPreferences" to general,
                     "extractionPreferences" to prefs,
-                    "userContexts" to contexts,
+                    "userKnowledge" to knowledge,
                     "updatedAt" to TimeFormatters.toLocalIso(System.currentTimeMillis(), zoneId),
                 ),
                 SetOptions.merge(),

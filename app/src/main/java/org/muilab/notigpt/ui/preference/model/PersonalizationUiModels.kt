@@ -13,7 +13,6 @@ const val STALE_SUGGESTION_MESSAGE =
 const val REFRESH_SUGGESTION_LABEL = "Refresh suggestion"
 const val NETWORK_ASSISTANT_MESSAGE =
     "Noti couldn't reach the assistant. Check your connection and try again."
-const val ACTIVATION_PENDING_MESSAGE = "Personalization changes are temporarily unavailable."
 
 sealed interface PersonalizationTranscriptItem {
     data class UserMessage(val text: String) : PersonalizationTranscriptItem
@@ -191,11 +190,6 @@ object PersonalizationUiStateReducer {
                 }
             }
 
-            PersonalizationApplyResult.ActivationPending -> state.copy(
-                applyingSuggestionId = null,
-                errorMessage = ACTIVATION_PENDING_MESSAGE,
-                errorActionLabel = null,
-            )
         }
     }
 

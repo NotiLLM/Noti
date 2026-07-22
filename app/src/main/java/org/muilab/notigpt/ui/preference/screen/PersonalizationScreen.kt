@@ -41,7 +41,6 @@ import org.muilab.notigpt.ui.preference.component.PersonalizationComposer
 import org.muilab.notigpt.ui.preference.component.PersonalizationSection
 import org.muilab.notigpt.ui.preference.model.PendingPersonalizationSuggestion
 import org.muilab.notigpt.ui.preference.model.PersonalizationTranscriptItem
-import org.muilab.notigpt.ui.preference.model.ACTIVATION_PENDING_MESSAGE
 import org.muilab.notigpt.ui.preference.model.NETWORK_ASSISTANT_MESSAGE
 import org.muilab.notigpt.ui.preference.model.STALE_SUGGESTION_MESSAGE
 import org.muilab.notigpt.ui.preference.viewmodel.PreferenceViewModel
@@ -186,7 +185,6 @@ fun PersonalizationScreen(
                     val displayedError = when (error) {
                         STALE_SUGGESTION_MESSAGE -> stringResource(R.string.personalization_stale)
                         NETWORK_ASSISTANT_MESSAGE -> stringResource(R.string.personalization_network_error)
-                        ACTIVATION_PENDING_MESSAGE -> stringResource(R.string.personalization_activation_pending)
                         else -> error
                     }
                     Surface(

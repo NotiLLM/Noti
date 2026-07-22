@@ -23,4 +23,7 @@ interface GeneralPreferenceDao {
 
     @Query("DELETE FROM general_preferences WHERE id = :id")
     suspend fun deleteById(id: String)
+
+    @Query("DELETE FROM general_preferences")
+    suspend fun deleteAll()
 }

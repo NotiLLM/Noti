@@ -1046,9 +1046,8 @@ object AppDatabaseMigrations {
     }
 
     /**
-     * Prepared personalization cutover for plan 04-10.
+     * Activates the canonical three-store personalization schema.
      *
-     * This migration deliberately remains outside [ALL] while v54 entities and accessors are live.
      * Exact statement duplicates retain the greatest updatedAt, with the lexicographically smallest
      * ID as the deterministic tie-breaker. Original statement text, identity, and timestamps remain
      * byte-for-byte unchanged for the selected rows.
@@ -1127,13 +1126,14 @@ object AppDatabaseMigrations {
             """.trimIndent()
         )
         db.execSQL("DROP TABLE `_v54_user_contexts`")
+        db.execSQL("DROP TABLE IF EXISTS `preference_conflicts`")
     }
 
     val ALL: Array<Migration> = LegacyAppDatabaseMigrations.ALL + arrayOf(
         MIGRATION_39_40, MIGRATION_40_41, MIGRATION_41_42, MIGRATION_42_43,
         MIGRATION_43_44, MIGRATION_44_45, MIGRATION_45_46, MIGRATION_46_47,
         MIGRATION_47_48, MIGRATION_48_49, MIGRATION_49_50, MIGRATION_50_51,
-        MIGRATION_51_52, MIGRATION_52_53, MIGRATION_53_54,
+        MIGRATION_51_52, MIGRATION_52_53, MIGRATION_53_54, MIGRATION_54_55,
     )
 
     private data class LegacyTodoStep(
