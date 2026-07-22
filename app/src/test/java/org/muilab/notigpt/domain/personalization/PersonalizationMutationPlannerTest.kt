@@ -40,8 +40,14 @@ class PersonalizationMutationPlannerTest {
         val writes = (result as PersonalizationPreflightResult.Ready).plan.writes
         assertEquals(3, writes.size)
         val create = writes[0] as PlannedPersonalizationWrite.Create
-        assertEquals("add-general", create.proposalId)
-        assertFalse(create::class.members.any { it.name == "id" })
+        assertEquals(
+            PlannedPersonalizationWrite.Create(
+                proposalId = "add-general",
+                targetStore = PersonalizationStore.GENERAL_PREFERENCE,
+                statement = "Messages from my family deserve immediate attention.",
+            ),
+            create,
+        )
         val update = writes[1] as PlannedPersonalizationWrite.Update
         assertEquals("extraction-1", update.id)
         assertEquals(11L, update.createdAt)
