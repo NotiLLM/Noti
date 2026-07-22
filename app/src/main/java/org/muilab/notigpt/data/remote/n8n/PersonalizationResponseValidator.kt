@@ -2,6 +2,9 @@ package org.muilab.notigpt.data.remote.n8n
 
 import java.text.BreakIterator
 import java.util.Locale
+import com.google.gson.Gson
+import com.google.gson.JsonObject
+import com.google.gson.JsonParser
 import org.muilab.notigpt.data.remote.n8n.dto.PersonalizationAssistantResponseDto
 import org.muilab.notigpt.data.remote.n8n.dto.PersonalizationChangeSetDto
 import org.muilab.notigpt.data.remote.n8n.dto.PersonalizationMutationDto
@@ -22,6 +25,81 @@ sealed interface PersonalizationValidationResult {
     data class Valid(val turn: PersonalizationAssistantTurn) : PersonalizationValidationResult
 
     data class Invalid(val failure: PersonalizationValidationFailure) : PersonalizationValidationResult
+}
+
+/** Parses a response without Gson's default unknown-field tolerance, then applies semantic validation. */
+object PersonalizationAssistantResponseDecoder {
+    private val gson = Gson()
+
+    fun decodeAndValidate(
+        rawJson: String,
+        targetSnapshots: List<PersonalizationRecordSnapshot>,
+        evidenceIds: Set<String>? = null,
+    ): PersonalizationValidationResult {
+        val root = try {
+            JsonParser.parseString(rawJson).takeIf { it.isJsonObject }?.asJsonObject
+                ?: return invalidShape("The response root must be one JSON object.")
+        } catch (_: RuntimeException) {
+            return invalidShape("The response is not valid JSON.")
+        }
+        val turnType = root.get("turnType")?.takeIf { it.isJsonPrimitive }?.asString
+        val allowedRoot = when (turnType) {
+            "QUESTION" -> setOf("turnType", "uiLanguage", "question", "rationale", "answerStarters")
+            "ALTERNATIVE_SET" -> setOf(
+                "turnType", "uiLanguage", "decisionQuestion", "variationAxis", "alternatives",
+            )
+            "KNOWLEDGE_CANDIDATES" -> setOf("turnType", "uiLanguage", "knowledgeCandidates")
+            "MESSAGE" -> setOf("turnType", "uiLanguage", "message")
+            else -> setOf("turnType", "uiLanguage")
+        }
+        if (!hasOnlyKeys(root, allowedRoot) || !nestedShapesAreClosed(root)) {
+            return invalidShape("The response contains fields outside the selected typed turn.")
+        }
+        val dto = try {
+            gson.fromJson(root, PersonalizationAssistantResponseDto::class.java)
+        } catch (_: RuntimeException) {
+            return invalidShape("The response does not match the typed turn contract.")
+        }
+        return PersonalizationResponseValidator.validate(dto, targetSnapshots, evidenceIds)
+    }
+
+    private fun nestedShapesAreClosed(root: JsonObject): Boolean {
+        val alternatives = root.get("alternatives")
+        if (alternatives != null && alternatives.isJsonArray) {
+            for (element in alternatives.asJsonArray) {
+                if (!element.isJsonObject || !hasOnlyKeys(element.asJsonObject, CHANGE_SET_KEYS)) return false
+                val mutations = element.asJsonObject.get("mutations")
+                if (mutations != null && !closedMutations(mutations)) return false
+            }
+        }
+        val candidates = root.get("knowledgeCandidates")
+        return candidates == null || closedMutations(candidates)
+    }
+
+    private fun closedMutations(element: com.google.gson.JsonElement): Boolean {
+        if (!element.isJsonArray) return false
+        for (candidate in element.asJsonArray) {
+            if (!candidate.isJsonObject || !hasOnlyKeys(candidate.asJsonObject, MUTATION_KEYS)) return false
+            val target = candidate.asJsonObject.get("expectedTarget") ?: continue
+            if (!target.isJsonObject || !hasOnlyKeys(target.asJsonObject, TARGET_KEYS)) return false
+        }
+        return true
+    }
+
+    private fun hasOnlyKeys(value: JsonObject, allowed: Set<String>): Boolean =
+        value.keySet().all(allowed::contains)
+
+    private fun invalidShape(detail: String) = PersonalizationValidationResult.Invalid(
+        PersonalizationValidationFailure(PersonalizationValidationFailure.Code.INVALID_SHAPE, detail),
+    )
+
+    private val CHANGE_SET_KEYS = setOf(
+        "proposalId", "resultingBehavior", "mutations", "recommended", "recommendationReason", "reason", "consequence",
+    )
+    private val MUTATION_KEYS = setOf(
+        "proposalId", "targetStore", "operation", "statement", "expectedTarget", "reason", "evidenceRefs",
+    )
+    private val TARGET_KEYS = setOf("id", "updatedAt")
 }
 
 data class PersonalizationValidationFailure(

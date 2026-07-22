@@ -1,14 +1,58 @@
 package org.muilab.notigpt.data.remote.n8n.dto
 
-/** Request for the shared personalization assistant. */
-data class PersonalizationAssistantRequestDto(
-    val uiLanguage: String,
-    val userText: String? = null,
-    val targetSnapshots: List<PersonalizationRecordSnapshotDto> = emptyList(),
-    val evidenceIds: List<String> = emptyList(),
-    /** Optional input scaffolding only. Hints never represent mutations. */
-    val requestHints: List<String> = emptyList(),
+/** The three confirmed stores supplied to every personalization assistant flow. */
+data class PersonalizationConfirmedStateDto(
+    val generalPreferences: List<PersonalizationRecordSnapshotDto>,
+    val extractionPreferences: List<PersonalizationRecordSnapshotDto>,
+    val userKnowledge: List<PersonalizationRecordSnapshotDto>,
 )
+
+data class PersonalizationChatMessageDto(
+    val role: String,
+    val content: String,
+)
+
+/** Request for the shared, mode-free personalization chat. */
+data class PersonalizationChatRequestDto(
+    val uiLanguage: String,
+    val confirmedState: PersonalizationConfirmedStateDto,
+    val userText: String,
+    val conversation: List<PersonalizationChatMessageDto> = emptyList(),
+)
+
+/** Explicit user-triggered action context for Quick Sync. */
+data class PersonalizationQuickSyncTriggerDto(
+    val entryPoint: String,
+    val action: String,
+    val subjectId: String? = null,
+    val context: Map<String, String> = emptyMap(),
+    val userReason: String,
+)
+
+data class PersonalizationQuickSyncRequestDto(
+    val uiLanguage: String,
+    val confirmedState: PersonalizationConfirmedStateDto,
+    val triggerContext: PersonalizationQuickSyncTriggerDto,
+)
+
+/** Request-local, untrusted evidence available only to explicit discovery. */
+data class PersonalizationDiscoveryEvidenceDto(
+    val id: String,
+    val source: String,
+    val content: String,
+)
+
+data class PersonalizationDiscoveryRequestDto(
+    val uiLanguage: String,
+    val confirmedState: PersonalizationConfirmedStateDto,
+    val evidence: List<PersonalizationDiscoveryEvidenceDto>,
+) {
+    val evidenceIds: Set<String>
+        get() = evidence.mapTo(linkedSetOf()) { it.id }
+}
+
+fun PersonalizationConfirmedStateDto.allSnapshots(): List<PersonalizationRecordSnapshotDto> =
+    generalPreferences + extractionPreferences + userKnowledge
 
 data class PersonalizationRecordSnapshotDto(
     val targetStore: String,
