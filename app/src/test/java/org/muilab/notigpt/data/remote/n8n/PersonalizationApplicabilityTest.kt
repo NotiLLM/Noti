@@ -2,9 +2,11 @@ package org.muilab.notigpt.data.remote.n8n
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.muilab.notigpt.domain.personalization.PersonalizationRecordSnapshot
 import org.muilab.notigpt.domain.personalization.PersonalizationStore
+import java.io.File
 
 class PersonalizationApplicabilityTest {
     private val snapshots = listOf(
@@ -119,6 +121,49 @@ class PersonalizationApplicabilityTest {
         }
     }
 
+    @Test
+    fun `handlers route every pipeline call through its named stage envelope`() {
+        assertRoutes("ExtractionPipelineHandler.kt", "stageAEnvelope", "stageBEnvelope", "stageCEnvelope", "stageD1Envelope", "stageE1Envelope")
+        assertRoutes("ReflectionPipelineHandler.kt", "stageD2Envelope", "stageE2Envelope")
+        assertRoutes("SuggestionRefreshHandler.kt", "stageGEnvelope", "stageHEnvelope")
+        assertRoutes("SavedItemRegenerationHandler.kt", "regenerateEnvelope")
+        assertRoutes("ReviewTranslationHandler.kt", "stageFEnvelope")
+    }
+
+    @Test
+    fun `worker payload construction cannot reach legacy personalization stores`() {
+        val handlerSources = HANDLER_FILES.joinToString("\n") { source(HANDLER_DIR + it) }
+        listOf(
+            "getExtractionPreferencesPayload",
+            "getUserContextsPayload",
+            "preferenceType",
+            "userContextDao",
+            "extractionPreferenceDao",
+        ).forEach { forbidden ->
+            assertFalse("handler sources must not contain $forbidden", handlerSources.contains(forbidden))
+        }
+
+        val contextSource = source("context/N8nWorkerContext.kt")
+        assertTrue(contextSource.contains("PersonalizationRepository"))
+        assertTrue(contextSource.contains("getConfirmedSnapshots"))
+        assertTrue(contextSource.contains("PersonalizationPayloadBuilder"))
+        assertFalse(contextSource.contains("userContextDao"))
+        assertFalse(contextSource.contains("extractionPreferenceDao"))
+
+        val supportSource = source(HANDLER_DIR + "ExtractionStageSupport.kt")
+        assertFalse(supportSource.contains("\"language\""))
+        assertFalse(supportSource.contains("targetExtractionLanguage"))
+    }
+
+    private fun assertRoutes(fileName: String, vararg envelopeMethods: String) {
+        val handler = source(HANDLER_DIR + fileName)
+        envelopeMethods.forEach { method ->
+            assertTrue("$fileName must route through $method", handler.contains(method))
+        }
+    }
+
+    private fun source(relativePath: String): String = File(MAIN_N8N_DIR, relativePath).readText()
+
     private fun assertKeys(envelope: Map<String, Any>, vararg expected: String) {
         assertEquals(expected.toSet(), envelope.keys)
         assertFalse(envelope.containsKey("language"))
@@ -136,4 +181,17 @@ class PersonalizationApplicabilityTest {
         createdAt = 100L,
         updatedAt = 200L,
     )
+
+    private companion object {
+        const val MAIN_N8N_DIR = "src/main/java/org/muilab/notigpt/data/remote/n8n"
+        const val HANDLER_DIR = "workers/handlers/"
+        val HANDLER_FILES = listOf(
+            "ExtractionPipelineHandler.kt",
+            "ReflectionPipelineHandler.kt",
+            "SuggestionRefreshHandler.kt",
+            "SavedItemRegenerationHandler.kt",
+            "ReviewTranslationHandler.kt",
+            "PreferenceQuickSyncHandler.kt",
+        )
+    }
 }
