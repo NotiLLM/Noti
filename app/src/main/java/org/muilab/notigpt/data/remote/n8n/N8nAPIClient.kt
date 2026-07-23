@@ -31,6 +31,7 @@ object N8nAPIClient {
 
         val client: OkHttpClient = OkHttpClient.Builder()
             .addInterceptor(FirebaseTokenInterceptor())
+            .addInterceptor(UsageHeaderInterceptor())
             .addInterceptor(logging)
             .connectTimeout(10, TimeUnit.SECONDS)
             .writeTimeout(300, TimeUnit.SECONDS)

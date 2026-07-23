@@ -88,6 +88,14 @@
     <string name="account_switch_keep_history_warning">現有通知文字會留在此裝置，之後可能由新帳戶處理。</string>
     <string name="account_switch_start_clean">從乾淨狀態開始</string>
     <string name="account_switch_start_clean_warning">載入新帳戶前永久刪除此裝置的通知紀錄。此資料無法從 Firestore 還原。</string>
+    <string name="invitation_checking">正在確認使用權限……</string>
+    <string name="invitation_title">你已受邀</string>
+    <string name="invitation_rationale">輸入你的一次性邀請碼以繼續。邀請碼與帳戶綁定，不綁定裝置——換手機後不需要再次輸入。</string>
+    <string name="invitation_code_label">邀請碼</string>
+    <string name="invitation_submit">繼續</string>
+    <string name="invitation_code_invalid_or_used">此邀請碼無效或已被使用。</string>
+    <string name="invitation_network_error">無法連線伺服器，請檢查網路連線後再試一次。</string>
+    <string name="invitation_retry">重試</string>
     <string name="ui_saved_items_editor_ect_label">預估完成時間（分鐘）</string>
     <string name="ui_saved_items_editor_note">內容</string>
     <string name="ui_saved_items_editor_note_placeholder">寫點什麼……</string>

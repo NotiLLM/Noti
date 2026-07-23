@@ -7,6 +7,7 @@ import androidx.work.ExistingWorkPolicy
 import androidx.work.PeriodicWorkRequest
 import androidx.work.OneTimeWorkRequest
 import androidx.work.WorkManager
+import org.muilab.notigpt.util.SharedPreferencesManager
 import java.util.concurrent.TimeUnit
 
 /**
@@ -25,6 +26,23 @@ object ExtractionPeriodicWork {
 
     /** For diagnostics / UI. */
     fun uniqueName(): String = UNIQUE_NAME
+
+    /**
+     * Gated entry point every caller should use instead of [enqueue] directly.
+     *
+     * n8n itself never checks access (see plans/3-invitation-and-llm-usage.md's accepted-risk
+     * decision), so this cached [SharedPreferencesManager.hasAccess] check is the only thing that
+     * stops a signed-in-but-not-yet-invited account from silently accruing LLM cost in the
+     * background before it ever reaches AppScaffold.
+     */
+    fun enqueueIfEntitled(context: Context) {
+        if (SharedPreferencesManager.hasAccess) enqueue(context)
+    }
+
+    /** Gated entry point every caller should use instead of [kickNow] directly; see [enqueueIfEntitled]. */
+    fun kickNowIfEntitled(context: Context) {
+        if (SharedPreferencesManager.hasAccess) kickNow(context)
+    }
 
     /**
      * Schedules a periodic "safety-net" run.

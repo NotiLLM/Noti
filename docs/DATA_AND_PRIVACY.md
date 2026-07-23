@@ -10,6 +10,9 @@
 | Complete generated proposals | Yes | Generated there | Yes |
 | Proposal decision state | Yes | May inform later runs | Yes |
 | Account/preferences/context metadata | Yes | As required | Yes |
+| Invitation-code redemption state, entitlement flag | No (SharedPreferences cache only) | Never | Yes |
+| Per-LLM-call raw token counts (input/output/thinking/total), stage, model | No | Reflected via response header only | Yes |
+| 6-hour notification-count/character-count rollups | No | Never | Yes |
 
 HTTP logging is `BASIC` in debug and disabled in release. Do not log payload bodies, generated content,
 Firebase tokens, or Firestore document bodies. Crashlytics collection is disabled in debug.
@@ -24,6 +27,17 @@ request from deleting a newer queued mutation.
 
 The temporary n8n server accepts Firebase ID-token and App Check headers on a fail-open basis. A future
 GCP service must verify both and derive the UID server-side; client-supplied `userId` is not authentication.
+This fail-open posture is an accepted risk specific to invitation-code enforcement (see
+`plans/3-invitation-and-llm-usage.md`), not something waiting on that future GCP migration.
+
+## Invitation entitlement and LLM usage observability
+
+`entitlements/{uid}`, `invitationCodes/{code}`, `usageLogs`, and `notificationUsage` are separate
+top-level Firestore collections (see `firestore/firestore.rules`), kept out of the `users/{uid}` subtree
+so their narrow rules cannot be widened by that document's broad owner-read/write rule. `usageLogs`
+stores only raw provider-reported token counts (never prompt/response text); `notificationUsage` stores
+only a count and a character total per 6-hour window, never notification content. Cost is computed later,
+offline, by `firestore/usage_report.py` — never shipped as a pricing table in the app or n8n.
 
 ## User-visible deletion
 

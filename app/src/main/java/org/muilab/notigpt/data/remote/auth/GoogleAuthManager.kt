@@ -60,6 +60,7 @@ object GoogleAuthManager {
     suspend fun signOut(context: Context) {
         FirebaseAuth.getInstance().signOut()
         SharedPreferencesManager.userId = ""
+        SharedPreferencesManager.hasAccess = false
         try {
             FirebaseCrashlytics.getInstance().setUserId("")
         } catch (_: Exception) {
@@ -139,9 +140,15 @@ object GoogleAuthManager {
     fun abortAccountSwitch() {
         FirebaseAuth.getInstance().signOut()
         SharedPreferencesManager.userId = ""
+        SharedPreferencesManager.hasAccess = false
     }
 
     private suspend fun finalizeSignIn(context: Context, user: FirebaseUser) {
+        // hasAccess is cached per-account (see SharedPreferencesManager.hasAccess); a cached
+        // true for a DIFFERENT previous uid must never leak into this uid's entitlement state.
+        if (SharedPreferencesManager.userId != user.uid) {
+            SharedPreferencesManager.hasAccess = false
+        }
         SharedPreferencesManager.userId = user.uid
         SharedPreferencesManager.put(PREFS, KEY_LAST_UID, user.uid)
         try {

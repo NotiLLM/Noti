@@ -16,6 +16,7 @@ import org.muilab.notigpt.model.features.NotiLlmState
 import org.muilab.notigpt.model.notifications.NotiRecord
 import org.muilab.notigpt.model.notifications.NotiUnit
 import org.muilab.notigpt.data.remote.firestore.FirestoreSyncRepository
+import org.muilab.notigpt.data.remote.firestore.NotificationUsageRepository
 import org.muilab.notigpt.util.SharedPreferencesManager
 
 /**
@@ -82,6 +83,15 @@ class NotiActionsRepository(
         if (!existed) {
             try {
                 FirestoreSyncRepository(appContext).incrementNotiRecordCount()
+            } catch (_: Throwable) {
+            }
+            // 6-hour notification-volume rollup (see plans/3-invitation-and-llm-usage.md). Counted
+            // here, exactly once per genuinely new record, so later pipeline stages (A/B/C)
+            // reprocessing this same record never inflate the count.
+            try {
+                NotificationUsageRepository().recordCapturedNotification(
+                    notiRecord.title.length + notiRecord.content.length
+                )
             } catch (_: Throwable) {
             }
         }

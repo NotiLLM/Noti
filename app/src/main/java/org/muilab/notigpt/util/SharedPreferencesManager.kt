@@ -65,6 +65,18 @@ object SharedPreferencesManager {
         get() = get(KEY_SERVER_PREFS, KEY_USER_ID, "")
         set(value) = put(KEY_SERVER_PREFS, KEY_USER_ID, value)
 
+    /**
+     * Cached entitlement/invitation-redeem state for the currently signed-in [userId].
+     *
+     * Mirrors [userId]'s lifecycle exactly: cleared to false on sign-out/account-switch, then
+     * re-derived from Firestore `entitlements/{uid}` for whichever account signs in next. Never
+     * trust a stale true value across a UID change; callers must clear this alongside [userId].
+     */
+    private const val KEY_HAS_ACCESS = "hasAccess"
+    var hasAccess: Boolean
+        get() = get(KEY_SERVER_PREFS, KEY_HAS_ACCESS, false)
+        set(value) = put(KEY_SERVER_PREFS, KEY_HAS_ACCESS, value)
+
     const val KEY_WAIT_SECONDS_BEFORE_NOTI_UNIT_SYNC = "waitSecondsBeforeNotiUnitSync"
     var waitSecondsBeforeNotiUnitSync: Int
         get() = get(KEY_LOCAL_PREFS, KEY_WAIT_SECONDS_BEFORE_NOTI_UNIT_SYNC, 3 * 60)

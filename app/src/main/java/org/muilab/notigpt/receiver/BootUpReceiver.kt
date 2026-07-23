@@ -9,6 +9,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import org.muilab.notigpt.data.local.room.AppDatabase
 import org.muilab.notigpt.data.repository.reminder.ScheduledReminderRepository
+import org.muilab.notigpt.util.SharedPreferencesManager
 import org.muilab.notigpt.work.ExtractionPeriodicWork
 
 /**
@@ -25,8 +26,13 @@ class BootUpReceiver : BroadcastReceiver() {
             // On modern Android versions, starting background services from boot is heavily restricted
             // and can cause the receiver to fail early.
 
-            // Ensure periodic scan/extract restarts after reboot.
-            ExtractionPeriodicWork.enqueue(context.applicationContext)
+            // A fresh boot may deliver this broadcast before any Activity has run, so
+            // SharedPreferencesManager (which enqueueIfEntitled reads hasAccess from) may not be
+            // initialized yet in this process.
+            SharedPreferencesManager.init(context.applicationContext)
+
+            // Ensure periodic scan/extract restarts after reboot, only if already entitled.
+            ExtractionPeriodicWork.enqueueIfEntitled(context.applicationContext)
 
             val pendingResult = goAsync()
             CoroutineScope(Dispatchers.IO).launch {

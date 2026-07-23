@@ -147,6 +147,14 @@
     <string name="account_switch_keep_history_warning">Existing notification text stays on this device and may be processed under the new account.</string>
     <string name="account_switch_start_clean">Start clean</string>
     <string name="account_switch_start_clean_warning">Permanently deletes device-local notification history before loading the new account. It cannot be restored from Firestore.</string>
+    <string name="invitation_checking">Checking your access…</string>
+    <string name="invitation_title">You\'re invited</string>
+    <string name="invitation_rationale">Enter your one-time invitation code to continue. This is tied to your account, not this device — you won\'t need to enter it again after switching phones.</string>
+    <string name="invitation_code_label">Invitation code</string>
+    <string name="invitation_submit">Continue</string>
+    <string name="invitation_code_invalid_or_used">That code is invalid or has already been used.</string>
+    <string name="invitation_network_error">Couldn\'t reach the server. Check your connection and try again.</string>
+    <string name="invitation_retry">Retry</string>
     <string name="ui_saved_items_editor_ect_label">Estimated completion time (minutes)</string>
     <string name="ui_saved_items_editor_note">Note</string>
     <string name="ui_saved_items_editor_note_placeholder">Write something…</string>

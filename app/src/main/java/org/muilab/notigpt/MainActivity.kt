@@ -67,9 +67,10 @@ class MainActivity : ComponentActivity() {
             org.muilab.notigpt.data.remote.auth.GoogleAuthManager.currentUser()?.uid.orEmpty()
         org.muilab.notigpt.data.remote.n8n.ExtractionStatusStore.restore()
 
-        // Periodic safety-net for notification scan/SavedItem extraction — only once signed in.
+        // Periodic safety-net for notification scan/SavedItem extraction — only once signed in
+        // AND entitled; enqueueIfEntitled no-ops until the cached hasAccess flag is true.
         if (org.muilab.notigpt.data.remote.auth.GoogleAuthManager.isSignedIn()) {
-            ExtractionPeriodicWork.enqueue(applicationContext)
+            ExtractionPeriodicWork.enqueueIfEntitled(applicationContext)
         }
 
         if (!NotificationManagerCompat.from(applicationContext).areNotificationsEnabled()) {
@@ -121,17 +122,31 @@ class MainActivity : ComponentActivity() {
                             org.muilab.notigpt.data.remote.auth.GoogleAuthManager.isSignedIn()
                         )
                     }
-                    if (!signedIn) {
-                        org.muilab.notigpt.ui.auth.SignInScreen(
+                    // Cached per-account entitlement (see SharedPreferencesManager.hasAccess);
+                    // InvitationScreen re-derives this from Firestore when it's not yet true.
+                    var hasAccess by remember {
+                        androidx.compose.runtime.mutableStateOf(SharedPreferencesManager.hasAccess)
+                    }
+                    when {
+                        !signedIn -> org.muilab.notigpt.ui.auth.SignInScreen(
                             onSignedIn = {
                                 signedIn = true
-                                ExtractionPeriodicWork.enqueue(applicationContext)
+                                hasAccess = SharedPreferencesManager.hasAccess
+                                ExtractionPeriodicWork.enqueueIfEntitled(applicationContext)
                             },
                         )
-                    } else {
-                        AppScaffold(
+                        !hasAccess -> org.muilab.notigpt.ui.auth.InvitationScreen(
+                            onAccessGranted = {
+                                hasAccess = true
+                                ExtractionPeriodicWork.enqueueIfEntitled(applicationContext)
+                            },
+                        )
+                        else -> AppScaffold(
                             drawerViewModel = drawerViewModel,
-                            onSignedOut = { signedIn = false },
+                            onSignedOut = {
+                                signedIn = false
+                                hasAccess = false
+                            },
                         )
                     }
                 }
@@ -180,14 +195,14 @@ class MainActivity : ComponentActivity() {
         // Rate limit to avoid spamming when user switches apps quickly.
         try {
             SharedPreferencesManager.init(this)
-            ExtractionPeriodicWork.enqueue(applicationContext)
+            ExtractionPeriodicWork.enqueueIfEntitled(applicationContext)
             val now = System.currentTimeMillis()
             val last = SharedPreferencesManager.lastExtractionPeriodicRunTime
             val shouldKick = (last == 0L) || (now - last) >= (5 * 60 * 1000L)
 
             if (shouldKick) {
                 Log.i("MainActivity", "Kicking extraction periodic worker; lastRun=$last")
-                ExtractionPeriodicWork.kickNow(applicationContext)
+                ExtractionPeriodicWork.kickNowIfEntitled(applicationContext)
             }
         } catch (e: Exception) {
             Log.w("MainActivity", "Failed to enqueue/kick periodic extraction work", e)

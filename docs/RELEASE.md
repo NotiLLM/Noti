@@ -17,8 +17,11 @@
 - Store listing, screenshots using synthetic content, support contact, and account-deletion instructions.
 
 Service must not be gated by invented placeholder legal text. Add the mandatory versioned consent screen
-only when the real policy inputs exist. Invitation codes/waitlists/admin entitlement are deferred to the
-future authenticated GCP backend and must be enforced server-side on every LLM request.
+only when the real policy inputs exist. Invitation-code entitlement is enforced now via Firestore
+Security Rules and an Android-side redemption transaction (see `plans/3-invitation-and-llm-usage.md`),
+not the future GCP backend migration. n8n itself does not re-check access on LLM requests — that is an
+accepted risk documented in the same plan, not a gap waiting on GCP. Waitlists and admin entitlement
+remain unimplemented.
 
 ## Pre-upload gates
 
