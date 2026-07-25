@@ -158,6 +158,8 @@ fun AppScaffold(
     val appSearchQuery by drawerViewModel.queryString.collectAsState()
 
     val personalizationState by preferenceViewModel.uiState.collectAsState()
+    val quickSyncResult by preferenceViewModel.quickSyncResult.collectAsState()
+    var quickSyncSummaryOpen by remember { mutableStateOf(false) }
     val dueUnseenReminderCount by scheduledReminderViewModel.dueUnseenCount.collectAsState()
 
     // ── Snackbar for delete / manual-extract preference prompt ───
@@ -168,8 +170,22 @@ fun AppScaffold(
     val snackExtractMsg = stringResource(R.string.pref_snackbar_extracted)
     val snackEditMsg = stringResource(R.string.personalization_feedback_edited)
     val snackAction = stringResource(R.string.personalization_tell_why)
+    val quickSyncReadyText = stringResource(R.string.quick_sync_ready)
+    val quickSyncViewText = stringResource(R.string.quick_sync_view)
 
     val snackbarChannel = remember { Channel<PreferenceViewModel.SnackbarEvent>(Channel.UNLIMITED) }
+
+    LaunchedEffect(quickSyncResult) {
+        if (quickSyncResult == null) return@LaunchedEffect
+        val result = kotlinx.coroutines.withTimeoutOrNull(10_000) {
+            snackbarHostState.showSnackbar(
+                message = quickSyncReadyText,
+                actionLabel = quickSyncViewText,
+                duration = SnackbarDuration.Indefinite,
+            )
+        }
+        if (result == SnackbarResult.ActionPerformed) quickSyncSummaryOpen = true
+    }
 
     LaunchedEffect(snackbarEvent) {
         val event = snackbarEvent ?: return@LaunchedEffect
@@ -183,6 +199,7 @@ fun AppScaffold(
                 PreferenceEntryPoint.DELETE -> snackDeleteMsg
                 PreferenceEntryPoint.MANUAL_EXTRACT -> snackExtractMsg
                 PreferenceEntryPoint.EDIT -> snackEditMsg
+                PreferenceEntryPoint.MERGE, PreferenceEntryPoint.SPLIT, PreferenceEntryPoint.REGENERATE -> snackDeleteMsg
             }
             val result = snackbarHostState.showSnackbar(
                 message = message,
@@ -199,7 +216,15 @@ fun AppScaffold(
     // App-wide status messages (replaces scattered Toasts). Emitted via AppSnackbar from UI or VMs.
     LaunchedEffect(Unit) {
         AppSnackbar.messages.collect { msg ->
-            val result = snackbarHostState.showSnackbar(
+            val result = if (msg.durationMillis != null) {
+                kotlinx.coroutines.withTimeoutOrNull(msg.durationMillis) {
+                    snackbarHostState.showSnackbar(
+                        message = msg.text,
+                        actionLabel = msg.actionLabel,
+                        duration = SnackbarDuration.Indefinite,
+                    )
+                } ?: SnackbarResult.Dismissed
+            } else snackbarHostState.showSnackbar(
                 message = msg.text,
                 actionLabel = msg.actionLabel,
                 duration = SnackbarDuration.Short,
@@ -209,6 +234,38 @@ fun AppScaffold(
     }
 
     QuickSyncFeedbackSheet(preferenceViewModel = preferenceViewModel)
+
+    if (quickSyncSummaryOpen && quickSyncResult != null) {
+        val summary = quickSyncResult!!
+        AlertDialog(
+            onDismissRequest = { quickSyncSummaryOpen = false },
+            title = { Text(stringResource(R.string.quick_sync_summary_title)) },
+            text = {
+                Text(
+                    summary.descriptions.take(3).joinToString("\n\n").ifBlank {
+                        stringResource(R.string.quick_sync_summary_message)
+                    }
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    quickSyncSummaryOpen = false
+                    preferenceViewModel.applyQuickSyncResult()
+                }) { Text(stringResource(R.string.quick_sync_apply)) }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = {
+                        quickSyncSummaryOpen = false
+                        preferenceViewModel.discussQuickSyncResult()
+                    }) { Text(stringResource(R.string.quick_sync_discuss)) }
+                    TextButton(onClick = { quickSyncSummaryOpen = false }) {
+                        Text(stringResource(R.string.pending_review_edit_cancel))
+                    }
+                }
+            },
+        )
+    }
 
     // Saved-list screens honor the shared search bar; other destinations ignore it.
     LaunchedEffect(appSearchQuery, currentDest, menuScreen) {
@@ -527,6 +584,7 @@ fun AppScaffold(
                                     smartFilter = smart,
                                     initialDetailItemId = dest.focusItemId,
                                     onDetailOpenChange = { detailOpen = it },
+                                    onOpenReview = { pushHome(HomeDestination.Review) },
                                 )
                             }
                         }

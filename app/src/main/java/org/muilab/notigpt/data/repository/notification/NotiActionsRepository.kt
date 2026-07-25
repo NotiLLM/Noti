@@ -17,7 +17,6 @@ import org.muilab.notigpt.model.notifications.NotiRecord
 import org.muilab.notigpt.model.notifications.NotiUnit
 import org.muilab.notigpt.data.remote.firestore.FirestoreSyncRepository
 import org.muilab.notigpt.data.remote.firestore.NotificationUsageRepository
-import org.muilab.notigpt.util.SharedPreferencesManager
 
 /**
  * Repository slice for notification lifecycle actions, scan counters, extraction scheduling, and action logging.
@@ -102,8 +101,7 @@ class NotiActionsRepository(
     /**
      * Debounces the per-notiKey extraction pipeline after new records arrive: a burst of records
      * coalesces into one pipeline run (scan → extract), and a large burst fires immediately.
-     * A thread that received a successful automatic Stage B pass waits out its B cooldown before
-     * its next scan; that later scan remains the sole gate for another Stage B call.
+     * Stage A scheduling is independent from the more expensive Stage B cooldown.
      */
     private fun registerNewRecordForNotiUnit(notiKey: String) {
         val newCount = (detectionCounters[notiKey] ?: 0) + 1
@@ -111,23 +109,13 @@ class NotiActionsRepository(
         detectionJobs[notiKey]?.cancel()
 
         val job = scope.launch {
-            val waitSeconds = SharedPreferencesManager.waitSecondsBeforeNotiUnitSync
-            val maxRecords = SharedPreferencesManager.maxRecordsBeforeNotiSync
-            if (newCount < maxRecords) {
-                delay(waitSeconds * 1000L)
-            }
-            delayUntilItemExtractionCooldownExpires(notiKey)
+            val delayMs = captureDelayMs(newCount)
+            if (delayMs > 0L) delay(delayMs)
             enqueueExtractionPipeline(appContext, notiKey)
             detectionCounters.remove(notiKey)
             detectionJobs.remove(notiKey)
         }
         detectionJobs[notiKey] = job
-    }
-
-    private suspend fun delayUntilItemExtractionCooldownExpires(notiKey: String) {
-        val lastItemExtractionAt = notiLlmStateDao.getByKey(notiKey)?.lastItemExtractionAt ?: 0L
-        val remainingMs = ITEM_EXTRACTION_COOLDOWN_MS - (System.currentTimeMillis() - lastItemExtractionAt)
-        if (remainingMs > 0) delay(remainingMs)
     }
 
     suspend fun actOnNotiLegacy(notiKey: String, action: String) {
@@ -176,7 +164,11 @@ class NotiActionsRepository(
         else notiDrawerDao.setPinned(notiKey, pinned)
     }
 
-    private companion object {
-        const val ITEM_EXTRACTION_COOLDOWN_MS = 5 * 60 * 1000L
+    companion object {
+        internal const val CAPTURE_DELAY_MS = 2 * 60 * 1000L
+        internal const val CAPTURE_IMMEDIATE_RECORD_COUNT = 10
+
+        internal fun captureDelayMs(accumulatedRecords: Int): Long =
+            if (accumulatedRecords >= CAPTURE_IMMEDIATE_RECORD_COUNT) 0L else CAPTURE_DELAY_MS
     }
 }

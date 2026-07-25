@@ -17,10 +17,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
@@ -91,7 +93,7 @@ fun ReviewScreen(
     // Longer-lived than a default snackbar so the "Tell it why" affordance is catchable.
     androidx.compose.runtime.LaunchedEffect(reviewSnackbar) {
         if (reviewSnackbar != null) {
-            kotlinx.coroutines.delay(6000)
+            kotlinx.coroutines.delay(10_000)
             reviewSnackbar = null
         }
     }
@@ -102,7 +104,7 @@ fun ReviewScreen(
 
     // Edit-in-review: hosts the full editor as a full-screen overlay; signal AppScaffold to hide its
     // bars (the editor has its own header) just like the list editor does.
-    var editingItem by remember { mutableStateOf<ReviewViewModel.ReviewEntry?>(null) }
+    var editingItem by remember { mutableStateOf<Pair<ReviewViewModel.ReviewEntry, Int?>?>(null) }
     androidx.compose.runtime.LaunchedEffect(editingItem) { onDetailOpenChange(editingItem != null) }
     val stepsBySavedItem by savedItemsViewModel.allTodoStepsBySavedItem.collectAsState()
     var languageEntry by remember { mutableStateOf<ReviewViewModel.ReviewEntry?>(null) }
@@ -153,7 +155,7 @@ fun ReviewScreen(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
-                            if (top.preview.isTodo) {
+                            if (top.preview.isTodo && top.operationKind != ReviewViewModel.ReviewOperationKind.Split) {
                                 TextButton(
                                     onClick = {
                                         reviewViewModel.saveApprove(
@@ -177,8 +179,27 @@ fun ReviewScreen(
                             TextButton(onClick = { languageEntry = top }) {
                                 Text(stringResource(R.string.review_change_language))
                             }
-                            TextButton(onClick = { reviewViewModel.reviewLater(top) }) {
-                                Text(stringResource(R.string.review_later))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                            ) {
+                                Surface(shape = CircleShape, color = MaterialTheme.colorScheme.errorContainer) {
+                                    IconButton(onClick = { reviewViewModel.reject(top) }) {
+                                        Icon(Icons.Default.Close, stringResource(R.string.review_reject), tint = MaterialTheme.colorScheme.onErrorContainer)
+                                    }
+                                }
+                                TextButton(onClick = { reviewViewModel.reviewLater(top) }) {
+                                    Text(stringResource(R.string.review_later))
+                                }
+                                Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer) {
+                                    IconButton(
+                                        enabled = top.sourceVersionIsCurrent,
+                                        onClick = { reviewViewModel.approve(top) },
+                                    ) {
+                                        Icon(Icons.Default.Check, stringResource(R.string.review_approve), tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                                    }
+                                }
                             }
                         }
                     },
@@ -198,7 +219,7 @@ fun ReviewScreen(
                         if (data.canTeach && data.item != null) {
                             TextButton(onClick = {
                                 preferenceViewModel.startFlowSheet(
-                                    org.muilab.notigpt.ui.preference.model.PreferenceEntryPoint.DELETE,
+                                    data.preferenceEntryPoint,
                                     data.item,
                                 )
                                 reviewSnackbar = null
@@ -222,14 +243,17 @@ fun ReviewScreen(
             ReviewDetailSheet(
                 entry = entry,
                 reviewViewModel = reviewViewModel,
-                onFurtherReview = { editingItem = entry; expanded = null },
+                onFurtherReview = { editingItem = entry to null; expanded = null },
+                onEditSplitChild = { index -> editingItem = entry to index; expanded = null },
+                onAddSplitChild = { reviewViewModel.addSplitChild(entry) },
             )
         }
     }
 
     // Full-screen editor overlay (review mode: Save & Approve / Delete footer).
-    editingItem?.let { entry ->
-        val item = entry.preview
+    editingItem?.let { (entry, splitChildIndex) ->
+        val splitDraft = splitChildIndex?.let { entry.splitChildren.getOrNull(it) }
+        val item = splitDraft?.item ?: entry.preview
         androidx.compose.foundation.layout.Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -243,14 +267,37 @@ fun ReviewScreen(
             org.muilab.notigpt.ui.saveditem.screen.SavedItemDetailScreen(
                 initial = item,
                 drawerViewModel = drawerViewModel,
-                onBack = { editingItem = null },
-                onDelete = { reviewViewModel.reject(entry); editingItem = null },
+                onBack = { updated ->
+                    if (splitChildIndex != null && updated != null && splitDraft != null) {
+                        reviewViewModel.saveSplitChild(
+                            entry,
+                            splitChildIndex,
+                            ReviewItemDraft(updated, splitDraft.steps),
+                        )
+                    }
+                    editingItem = null
+                },
+                onDelete = {
+                    if (splitChildIndex != null) reviewViewModel.removeSplitChild(entry, splitChildIndex)
+                    else reviewViewModel.reject(entry)
+                    editingItem = null
+                },
                 onSave = {},
                 reviewMode = true,
-                onSaveApprove = { updated -> reviewViewModel.saveApprove(entry, updated); editingItem = null },
-                onRejectDelete = { reviewViewModel.reject(entry); editingItem = null },
+                onSaveApprove = { updated ->
+                    if (splitChildIndex != null) reviewViewModel.saveSplitChild(entry, splitChildIndex, updated)
+                    else reviewViewModel.saveApprove(entry, updated)
+                    editingItem = null
+                },
+                onRejectDelete = {
+                    if (splitChildIndex != null) reviewViewModel.removeSplitChild(entry, splitChildIndex)
+                    else reviewViewModel.reject(entry)
+                    editingItem = null
+                },
+                reviewPrimaryLabelRes = if (splitChildIndex != null) R.string.review_save_return else R.string.review_save_approve,
+                reviewSecondaryLabelRes = if (splitChildIndex != null) R.string.review_remove_from_split else R.string.review_reject_change,
                 changeLog = reviewViewModel.changeLogFlow(item.savedItemId),
-                steps = entry.previewSteps.ifEmpty { stepsBySavedItem[item.savedItemId] ?: emptyList() },
+                steps = splitDraft?.steps ?: entry.previewSteps.ifEmpty { stepsBySavedItem[item.savedItemId] ?: emptyList() },
                 stepsEditable = true,
             )
         }
@@ -306,6 +353,7 @@ private fun ReviewFilterChips(
     val updatedTodos = items.count { it.preview.isTodo && !it.isNewLike }
     val newKeeps = items.count { !it.preview.isTodo && it.isNewLike }
     val updatedKeeps = items.count { !it.preview.isTodo && !it.isNewLike }
+    val splits = items.count { it.operationKind == ReviewViewModel.ReviewOperationKind.Split }
 
     Row(
         modifier = Modifier
@@ -338,6 +386,11 @@ private fun ReviewFilterChips(
             selected = selected == ReviewViewModel.ReviewFilter.UpdatedKeeps,
             onClick = { onSelect(ReviewViewModel.ReviewFilter.UpdatedKeeps) },
             label = { Text(stringResource(R.string.review_chip_updated_keeps, updatedKeeps)) },
+        )
+        if (splits > 0) FilterChip(
+            selected = selected == ReviewViewModel.ReviewFilter.Splits,
+            onClick = { onSelect(ReviewViewModel.ReviewFilter.Splits) },
+            label = { Text(stringResource(R.string.review_chip_splits, splits)) },
         )
     }
 }
@@ -376,13 +429,19 @@ private fun MinimalReviewCard(
                 }
                 Spacer(Modifier.size(12.dp))
                 Text(
-                    text = item.title.ifBlank { stringResource(R.string.ui_saved_items_untitled_task) },
+                    text = if (entry.operationKind == ReviewViewModel.ReviewOperationKind.Split) {
+                        entry.survivor?.item?.title.orEmpty()
+                    } else item.title.ifBlank { stringResource(R.string.ui_saved_items_untitled_task) },
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
                 )
-                val body = changeSummary ?: item.content.trim()
+                val body = if (entry.operationKind == ReviewViewModel.ReviewOperationKind.Split) {
+                    val titles = entry.splitChildren.take(2).joinToString(" · ") { it.item.title }
+                    val more = entry.splitChildren.size - 2
+                    stringResource(R.string.review_split_summary, entry.splitChildren.size, titles, if (more > 0) "+$more" else "")
+                } else changeSummary ?: item.content.trim()
                 if (body.isNotBlank()) {
                     Spacer(Modifier.size(12.dp))
                     Text(
@@ -465,6 +524,8 @@ private fun ReviewBadge(kind: ReviewViewModel.ReviewOperationKind) {
                     ReviewViewModel.ReviewOperationKind.Create -> R.string.review_badge_created
                     ReviewViewModel.ReviewOperationKind.Update -> R.string.review_badge_updated
                     ReviewViewModel.ReviewOperationKind.Merge -> R.string.review_badge_merged
+                    ReviewViewModel.ReviewOperationKind.Split -> R.string.review_badge_split
+                    ReviewViewModel.ReviewOperationKind.Regenerate -> R.string.review_badge_regenerated
                 }
             ),
             style = MaterialTheme.typography.labelMedium,

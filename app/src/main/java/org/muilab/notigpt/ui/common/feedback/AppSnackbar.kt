@@ -14,6 +14,7 @@ data class AppSnackbarMessage(
     val text: String,
     val actionLabel: String? = null,
     val onAction: (() -> Unit)? = null,
+    val durationMillis: Long? = null,
 )
 
 /**

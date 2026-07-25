@@ -21,6 +21,8 @@ import org.muilab.notigpt.model.features.SavedItemChangeType
 import org.muilab.notigpt.model.features.SavedItemType
 import org.muilab.notigpt.domain.saveditem.SavedItemNormalization
 import org.muilab.notigpt.model.features.SavedItemState
+import org.muilab.notigpt.model.features.PendingProposedOpType
+import org.muilab.notigpt.model.features.TodoStep
 import org.muilab.notigpt.util.SharedPreferencesManager
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -44,7 +46,7 @@ internal object SavedItemRegenerationHandler {
      *
      * The item ID stays stable; n8n is asked to revise content, not create a separate item.
      */
-    suspend fun handleOne(ctx: N8nWorkerContext, inputData: Data): ListenableWorker.Result {
+    suspend fun handleOne(ctx: N8nWorkerContext, inputData: Data, runAttemptCount: Int = 0): ListenableWorker.Result {
         val webhookPath = inputData.getString("webhook_path") ?: run {
             Log.e(TAG, "No webhook_path for regenerate_one")
             return ctx.failure()
@@ -60,11 +62,16 @@ internal object SavedItemRegenerationHandler {
             Log.w(TAG, "SavedItem $savedItemId not found")
             return ctx.success()
         }
+        val processing = ctx.pendingProposedOpRepository().getPendingForTarget(savedItemId)
+            .singleOrNull { it.opType == PendingProposedOpType.Regenerate }
+        val requestedVersion = processing?.let {
+            runCatching { JSONObject(it.payload).optLong("sourceVersion", item.lastUpdateTimestamp) }.getOrNull()
+        } ?: item.lastUpdateTimestamp
 
         val personalization = ctx.personalizationPayloadBuilder()
         val notiContext = buildNotiContextForSavedItem(ctx, item)
         val payload = buildPayload(
-            savedItems = listOf(item),
+            savedItems = listOf(item.copy(lastUpdateTimestamp = requestedVersion)),
             stepsByItem = mapOf(savedItemId to ctx.database.todoStepDao().getBySavedItemId(savedItemId)),
             notiContextMap = mapOf(savedItemId to notiContext),
             linkedByItem = ctx.savedItemRepository.getLinkedRecordIdsFor(listOf(savedItemId)),
@@ -72,7 +79,13 @@ internal object SavedItemRegenerationHandler {
             personalizationEnvelope = personalization.regenerateEnvelope(),
         )
 
-        return postAndApply(ctx, webhookPath, payload, trigger = "REGENERATE_ONE")
+        return postAndApply(
+            ctx = ctx,
+            webhookPath = webhookPath,
+            payload = payload,
+            trigger = "REGENERATE_ONE",
+            runAttemptCount = runAttemptCount,
+        )
     }
 
     /**
@@ -81,7 +94,7 @@ internal object SavedItemRegenerationHandler {
      * This is shared preparation for regeneration payloads. If item context loading is needed by
      * UI or sync too, move it behind a SavedItemContextRepository instead of copying this DB traversal.
      */
-    private suspend fun buildNotiContextForSavedItem(
+    internal suspend fun buildNotiContextForSavedItem(
         ctx: N8nWorkerContext,
         item: SavedItem,
     ): List<Map<String, Any>> {
@@ -108,7 +121,7 @@ internal object SavedItemRegenerationHandler {
         }
     }
 
-    private fun buildPayload(
+    internal fun buildPayload(
         savedItems: List<SavedItem>,
         stepsByItem: Map<String, List<org.muilab.notigpt.model.features.TodoStep>>,
         notiContextMap: Map<String, List<Map<String, Any>>>,
@@ -122,6 +135,7 @@ internal object SavedItemRegenerationHandler {
             val deadlineIso = if (r.deadlineAtMs > 0L) sdf.format(Date(r.deadlineAtMs)) else -1L
             mapOf(
                 "savedItemId" to r.savedItemId,
+                "sourceVersion" to r.lastUpdateTimestamp,
                 "title" to r.title,
                 "content" to r.content,
                 "itemType" to r.itemType,
@@ -153,10 +167,19 @@ internal object SavedItemRegenerationHandler {
         webhookPath: String,
         payload: Map<String, Any>,
         trigger: String,
+        runAttemptCount: Int,
     ): ListenableWorker.Result {
         val gson = Gson()
         val jsonPayload = gson.toJson(payload)
         val requestBody = jsonPayload.toRequestBody("application/json; charset=utf-8".toMediaType())
+        val sourceIds = (payload["savedItems"] as? List<*>).orEmpty().mapNotNull { raw ->
+            (raw as? Map<*, *>)?.get("savedItemId") as? String
+        }
+        suspend fun clearProcessing() {
+            sourceIds.forEach { id ->
+                ctx.pendingProposedOpRepository().clearProcessingTransform(id, PendingProposedOpType.Regenerate)
+            }
+        }
 
         Log.d(TAG, "Payload ($trigger) bytes=${jsonPayload.length}")
 
@@ -164,16 +187,17 @@ internal object SavedItemRegenerationHandler {
             ctx.n8nApiService.postToWebhook(webhookPath, requestBody)
         } catch (t: Throwable) {
             Log.e(TAG, "Network exception ($trigger)", t)
-            return ctx.retry()
+            if (runAttemptCount < 1) return ctx.retry()
+            clearProcessing()
+            return ctx.failure()
         }
 
         if (!response.isSuccessful) return when {
-            response.code() == 429 -> ctx.retry()
-            response.code() in 500..599 -> ctx.retry()
-            else -> ctx.failure()
+            (response.code() == 429 || response.code() in 500..599) && runAttemptCount < 1 -> ctx.retry()
+            else -> { clearProcessing(); ctx.failure() }
         }
 
-        val bodyStr = response.body()?.string() ?: return ctx.success()
+        val bodyStr = response.body()?.string() ?: run { clearProcessing(); return ctx.failure() }
         Log.d(TAG, "Response ($trigger) bytes=${bodyStr.length}")
 
         try {
@@ -183,116 +207,70 @@ internal object SavedItemRegenerationHandler {
             // call already succeeded.
             withContext(NonCancellable) {
             val arr = JSONArray(bodyStr)
+            val expectedVersions = (payload["savedItems"] as? List<*>).orEmpty()
+                .mapNotNull { raw ->
+                    val row = raw as? Map<*, *> ?: return@mapNotNull null
+                    val id = row["savedItemId"] as? String ?: return@mapNotNull null
+                    val version = row["sourceVersion"] as? Long ?: return@mapNotNull null
+                    id to version
+                }.toMap()
             for (i in 0 until arr.length()) {
                 val obj = arr.getJSONObject(i)
                 val savedItemId = N8nOpParsing.savedItemIdFrom(obj)
                 if (savedItemId.isBlank()) continue
 
                 val existing = ctx.savedItemRepository.getById(savedItemId)
-                val now = System.currentTimeMillis()
-
-                val title = N8nOpParsing.titleFrom(obj, existing?.title ?: "")
-                val content = N8nOpParsing.contentFrom(obj, existing?.content ?: "")
-                val itemType = obj.optString("itemType", existing?.itemType ?: SavedItemType.Todo)
-                if (itemType != SavedItemType.Todo && itemType != SavedItemType.Keep) continue
-                val deadlineMs = N8nOpParsing.isoToUnixMillis(obj.optString("deadlineTimeString", "-1"))
-                val isCompleted = obj.optBoolean("isCompleted", existing?.isCompleted ?: false)
-
-                // Parse buttons
-                val buttonsArr = obj.optJSONArray("buttons")
+                if (existing == null) continue
+                val expectedVersion = expectedVersions[savedItemId] ?: existing.syncModifiedAt
+                val title = N8nOpParsing.titleFrom(obj, existing.title)
+                val content = N8nOpParsing.contentFrom(obj, existing.content)
+                val deadline = N8nOpParsing.isoToUnixMillis(obj.optString("deadlineTimeString", "-1"))
                 val buttons = SavedItemNormalization.mergeButtons(
-                    buttonsArr?.toString() ?: existing?.buttons ?: "[]",
+                    obj.optJSONArray("buttons")?.toString() ?: "[]",
                     N8nOpParsing.childButtons(obj.optJSONArray("steps")),
                 )
-
-                // Regeneration is user-initiated, so it must NOT drop the item into the review queue
-                // (an unrevertible wholesale rewrite has no place in the swipe-to-reject flow). A brand
-                // new row is still reviewable; an existing pending item is auto-acknowledged to `saved`;
-                // otherwise the prior list state (saved/completed/archived) is preserved.
-                val newState = when {
-                    existing == null -> SavedItemState.New
-                    SavedItemState.isNewLike(existing.state) -> SavedItemState.Saved
-                    else -> existing.state
-                }
-
-                // Preserve linked record ids from existing links when the response omits them.
-                val unit = SavedItem(
-                    savedItemId = savedItemId,
-                    title = title,
-                    content = content,
-                    itemType = itemType,
-                    state = newState,
-                    lastUpdateTimestamp = now,
-                    syncModifiedAt = now,
-                    deadlineAtMs = deadlineMs,
-                    origin = existing?.origin ?: "llm_auto_extraction",
-                    humanEditCount = existing?.humanEditCount ?: 0,
-                    // Preserve manual-edit provenance; this flag no longer blocks model updates
-                    // or Firestore reconciliation.
-                    userEdited = existing?.userEdited ?: false,
-                    buttons = buttons,
-                    isViewed = false,
-                    // User-owned fields: regeneration must never reset them.
-                    isStarred = existing?.isStarred ?: false,
-                    // Advance the review cursor past this regeneration's change-log row so it never
-                    // surfaces as "what's new" and revert never treats the rewrite as pending.
-                    lastViewedChangeAt = now,
-                )
-
                 val returnedSteps = N8nOpParsing.parseSteps(
                     obj.optJSONArray("steps"),
                     savedItemId,
-                    now,
+                    existing.syncModifiedAt,
                     baseSortOrder = 0,
                 )
-                val normalized = SavedItemNormalization.normalize(unit, returnedSteps)
-                ctx.savedItemRepository.upsert(normalized.item)
-                ctx.todoStepRepository.replaceForParent(savedItemId, normalized.steps)
-                // Regeneration rewrites content from the item's existing noti context; it neither
-                // adds nor removes provenance, so links stay untouched.
-
-                // Record the rewrite in the change history (regeneration is the one flow allowed
-                // to replace text wholesale — the user explicitly asked for it) and the journal.
-                if (existing != null) {
-                    val changeSummary = obj.optString("changeSummary", "")
-                    val changedFields = JSONObject().apply {
-                        if (existing.title != title) {
-                            put("title", JSONObject().put("old", existing.title).put("new", title))
-                        }
-                        if (existing.content != content) {
-                            put("content", JSONObject().put("old", existing.content).put("new", content))
-                        }
-                        if (existing.deadlineAtMs != deadlineMs) {
-                            put("deadlineAtMs", JSONObject().put("old", existing.deadlineAtMs).put("new", deadlineMs))
-                        }
-                    }
-                    ctx.changeLogRepository.record(
-                        SavedItemChangeLog(
-                            savedItemId = savedItemId,
-                            createdAt = now,
-                            changeType = SavedItemChangeType.Regenerated,
-                            changeSummary = changeSummary,
-                            changedFieldsJson = changedFields.toString(),
-                            origin = "llm",
-                        )
-                    )
-                    ctx.savedItemRepository.getLinkedKeys(savedItemId).forEach { key ->
-                        ctx.journalRepository.append(
-                            ExtractionJournalEntry(
-                                notiKey = key,
-                                createdAt = now,
-                                eventType = ExtractionJournalEventType.ItemUpdated,
-                                savedItemId = savedItemId,
-                                itemTitle = title,
-                                detail = changeSummary.ifBlank { "Regenerated ($trigger)" },
-                            )
-                        )
-                    }
+                val existingSteps = ctx.database.todoStepDao().getBySavedItemId(savedItemId)
+                fun stepShape(items: List<org.muilab.notigpt.model.features.TodoStep>) = items.map {
+                    TodoStep.normalizeText(it.text) to it.isCompleted
                 }
+                val materiallySame = title.trim() == existing.title.trim() &&
+                    content.trim() == existing.content.trim() &&
+                    deadline == existing.deadlineAtMs &&
+                    buttons == existing.buttons &&
+                    obj.optString("itemType", existing.itemType) == existing.itemType &&
+                    stepShape(returnedSteps) == stepShape(existingSteps)
+                if (materiallySame) {
+                    ctx.pendingProposedOpRepository().clearProcessingTransform(
+                        savedItemId,
+                        PendingProposedOpType.Regenerate,
+                    )
+                    continue
+                }
+
+                ctx.pendingProposedOpRepository().stageTransform(
+                    sourceItemId = savedItemId,
+                    type = PendingProposedOpType.Regenerate,
+                    result = JSONObject().apply {
+                        put("sourceVersion", expectedVersion)
+                        put("reason", obj.optString("changeSummary", "Regenerated"))
+                        put("result", obj)
+                    },
+                ) ?: ctx.pendingProposedOpRepository().clearProcessingTransform(
+                    savedItemId,
+                    PendingProposedOpType.Regenerate,
+                )
             }
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error parsing response ($trigger)", e)
+            clearProcessing()
+            return ctx.failure()
         }
 
         return ctx.success()

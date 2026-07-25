@@ -1,4 +1,60 @@
 <resources>
+    <string name="ui_settings_approve_simple_on_use">開啟或使用時核准新增與更新</string>
+    <string name="ui_settings_approve_simple_on_use_desc">開啟或使用 AI 新增或更新的待辦或保存項目時，系統會自動核准。合併、拆分與重新生成仍需檢視。</string>
+    <string name="pending_review_result_title">檢視 AI 結果</string>
+    <string name="pending_review_split_message">1 → %1$d。前幾個結果：%2$s。只有核准整批拆分後，原項目才會被取代。</string>
+    <string name="pending_review_regenerate_message">建議的替代版本：%1$s。在核准前，原項目不會變更。</string>
+    <string name="pending_review_approve_continue">核准並繼續</string>
+    <string name="pending_review_details">檢視詳細內容</string>
+    <string name="pending_review_trust_checkbox">日後開啟或使用新增或更新的項目時自動核准</string>
+    <string name="pending_review_trust_helper">你可以稍後在設定中變更。</string>
+    <string name="split_action">拆分</string>
+    <string name="regenerate_action">重新生成</string>
+    <string name="split_confirm_title">要拆分這個項目嗎？</string>
+    <string name="split_confirm_message">AI 會重新整理可獨立處理的待辦與保存內容。措辭或脈絡可能改變，但在你核准完整結果前，原項目不會變更。</string>
+    <string name="split_confirm_message_reminder">AI 會重新整理可獨立處理的待辦與保存內容。措辭或脈絡可能改變，但在你核准完整結果前，原項目不會變更。只有核准拆分後，這個項目的提醒才會被解除。</string>
+    <string name="regenerate_confirm_title">要重新生成這個項目嗎？</string>
+    <string name="regenerate_confirm_message">AI 會根據這個項目與相關脈絡產生替代版本。在你檢視並核准前，原項目不會變更。</string>
+    <string name="split_processing">正在拆分…</string>
+    <string name="regenerate_processing">正在重新生成…</string>
+    <string name="review_chip_splits">拆分（%1$d）</string>
+    <string name="review_badge_split">拆分</string>
+    <string name="review_badge_regenerated">重新生成</string>
+    <string name="review_split_summary">1 → %1$d · %2$s %3$s</string>
+    <string name="review_split_detail_title">拆分為 %1$d 個結果</string>
+    <string name="review_original_item">原始項目</string>
+    <string name="review_source_changed">產生結果後，來源已變更。請重新執行，才能安全核准。</string>
+    <string name="review_edit_result">編輯這個結果</string>
+    <string name="review_save_return">儲存並返回</string>
+    <string name="review_remove_from_split">從拆分中移除</string>
+    <string name="saved_item_more_actions">另有 %1$d 個動作</string>
+    <string name="quick_sync_ready">個人化建議已準備好</string>
+    <string name="quick_sync_view">查看</string>
+    <string name="quick_sync_summary_title">建議的個人化變更</string>
+    <string name="quick_sync_summary_message">套用前請先檢視建議。</string>
+    <string name="quick_sync_apply">套用建議</string>
+    <string name="quick_sync_discuss">在對話中討論</string>
+    <string name="personalization_split_belong_together">這些結果應該放在一起</string>
+    <string name="personalization_split_context_lost">遺失了重要脈絡</string>
+    <string name="personalization_split_types_wrong">待辦／保存類型不正確</string>
+    <string name="personalization_split_state_wrong">截止時間或完成狀態不正確</string>
+    <string name="personalization_split_too_fragmented">拆分得太零碎</string>
+    <string name="personalization_regenerate_context_lost">遺失了重要脈絡</string>
+    <string name="personalization_regenerate_incorrect">結果包含錯誤資訊</string>
+    <string name="personalization_regenerate_original_better">原本的措辭比較好</string>
+    <string name="personalization_regenerate_state_wrong">類型、截止時間或完成狀態不正確</string>
+    <string name="personalization_regenerate_scope_wrong">結果太廣泛或太零碎</string>
+    <string name="personalization_merge_separate_actions">這些是不同的行動或參考內容</string>
+    <string name="personalization_merge_different_time">我會在不同時間處理它們</string>
+    <string name="personalization_merge_lifecycle_wrong">截止時間或生命週期不同</string>
+    <string name="personalization_merge_context_lost">合併後遺失了重要脈絡</string>
+    <string name="personalization_merge_result_wrong">選錯了合併結果項目</string>
+    <string name="ai_change_ready">AI 變更已可供檢視</string>
+    <string name="split_no_result">這個項目已經很聚焦，或無法安全拆分。</string>
+    <string name="regenerate_no_result">沒有建議的變更。</string>
+    <string name="review_add_split_result">新增結果</string>
+    <string name="ai_change_pending_other_device">另一部裝置上有待處理的 AI 變更。</string>
+    <string name="ai_awaiting_review">等待檢視</string>
     <!-- UI strings (Traditional Chinese - Taiwan). -->
 
     <!-- Common / actions -->
@@ -33,7 +89,7 @@
     <string name="ui_saved_items_filter_keep">保留</string>
     <string name="ui_saved_items_filter_archived">已封存</string>
     <string name="ui_saved_items_filter_starred">已加星號</string>
-    <string name="ui_saved_items_search_placeholder">搜尋儲存項目（用 + 代表「且」）</string>
+    <string name="ui_saved_items_search_placeholder">搜尋待辦與保存內容（用 + 代表「且」）</string>
     <string name="ui_saved_items_add_dialog_title">新增</string>
     <string name="ui_saved_items_add_dialog_body">建立待辦或備忘</string>
     <string name="ui_saved_items_add_dialog_task">待辦</string>
@@ -162,7 +218,7 @@
 
     <!-- Noti record context menu -->
     <string name="ui_noti_menu_title">選項</string>
-    <string name="ui_action_extract_saved_item">擷取儲存項目</string>
+    <string name="ui_action_extract_saved_item">建立待辦／保存內容</string>
     <string name="ui_noti_linked_items">此通知產生的項目</string>
     <string name="ui_noti_show_more_context">顯示更多內容</string>
     <string name="ui_noti_hide_more_context">隱藏更多內容</string>
@@ -174,7 +230,7 @@
     <string name="tab_preferences">偏好</string>
     <string name="menu_settings">設定</string>
     <string name="saved_item_related_notifications">相關通知（%1$d）</string>
-    <string name="saved_item_related_notifications_loading">正在載入儲存項目與相關通知…</string>
+    <string name="saved_item_related_notifications_loading">正在載入項目與相關通知…</string>
     <string name="saved_item_no_related_notifications">沒有相關通知。</string>
     <string name="a11y_expand">展開</string>
     <string name="a11y_collapse">收合</string>
@@ -299,7 +355,7 @@
     <string name="pref_chat_empty_prompt_about_me">告訴我關於您自己的資訊，讓我更了解您的通知。</string>
     <string name="pref_chat_empty_example_about_me">例如：「我是 Google 的軟體工程師」或「我的伴侶叫 Alice」</string>
     <string name="pref_chat_discover_button">了解我</string>
-    <string name="pref_chat_discover_analyzing">正在分析您的通知與儲存項目以了解您…</string>
+    <string name="pref_chat_discover_analyzing">正在分析您的通知、待辦與保存內容以了解您…</string>
     <string name="pref_chat_active_rules_count">您有 %1$d 條有效規則。</string>
     <string name="pref_chat_input_placeholder">描述一項偏好…</string>
     <string name="pref_chat_send_desc">傳送</string>
@@ -333,8 +389,8 @@
     <string name="pref_conflict_resolve">解決</string>
 
     <!-- Chat context card -->
-    <string name="pref_chat_context_edit">針對已編輯的儲存項目調整擷取偏好：</string>
-    <string name="pref_chat_context_delete">針對已刪除的儲存項目調整擷取偏好：</string>
+    <string name="pref_chat_context_edit">針對已編輯的待辦／保存內容調整擷取偏好：</string>
+    <string name="pref_chat_context_delete">針對已刪除的待辦／保存內容調整擷取偏好：</string>
     <string name="pref_chat_context_extract">針對手動擷取的通知調整擷取偏好：</string>
     <string name="pref_chat_context_before">修改前：</string>
     <string name="pref_chat_context_after">修改後：</string>
@@ -365,7 +421,7 @@
     <!-- Reminder sorting sections -->
     <string name="saved_item_section_unseen">新項目</string>
     <string name="saved_item_section_pinned">已釘選</string>
-    <string name="saved_item_section_scored">所有儲存項目</string>
+    <string name="saved_item_section_scored">所有待辦與保存內容</string>
 
     <!-- Sub-task list / row -->
     <string name="step_section_title">步驟</string>
@@ -381,28 +437,28 @@
     <string name="a11y_step_more">更多選項</string>
 
     <!-- Reminder actions -->
-    <string name="saved_item_refresh_all">重新整理所有儲存項目</string>
+    <string name="saved_item_refresh_all">重新整理所有待辦與保存內容</string>
     <string name="reminder_regenerate">重新生成</string>
     <string name="saved_item_share">分享</string>
     <string name="reminder_pin">釘選</string>
     <string name="reminder_unpin">取消釘選</string>
 
     <!-- Reminder feedback dialog -->
-    <string name="saved_item_feedback_title">這個儲存項目的排序應如何調整？</string>
+    <string name="saved_item_feedback_title">這個待辦／保存內容的排序應如何調整？</string>
     <string name="reminder_feedback_important">重要</string>
     <string name="reminder_feedback_handle_later">稍後處理</string>
 
     <!-- Reminder button chips -->
     <string name="a11y_open_link">開啟連結</string>
     <string name="a11y_copy_text">複製文字</string>
-    <string name="a11y_share_saved_item">分享儲存項目</string>
-    <string name="a11y_refresh_saved_items">重新整理所有儲存項目</string>
-    <string name="dialog_regenerate_all_saved_items_title">重新生成所有儲存項目？</string>
-    <string name="dialog_regenerate_all_saved_items_message">這會將所有現有儲存項目及其通知脈絡重新送交處理流程；項目可能被改寫或合併。</string>
+    <string name="a11y_share_saved_item">分享</string>
+    <string name="a11y_refresh_saved_items">重新整理所有待辦與保存內容</string>
+    <string name="dialog_regenerate_all_saved_items_title">重新生成所有待辦與保存內容？</string>
+    <string name="dialog_regenerate_all_saved_items_message">這會將所有現有待辦與保存內容及其通知脈絡重新送交處理流程；結果可能被改寫或合併。</string>
     <string name="dialog_regenerate_all_saved_items_confirm">重新生成</string>
-    <string name="a11y_regenerate_saved_item">重新生成儲存項目</string>
-    <string name="a11y_pin_saved_item">釘選儲存項目</string>
-    <string name="a11y_unpin_saved_item">取消釘選儲存項目</string>
+    <string name="a11y_regenerate_saved_item">重新生成</string>
+    <string name="a11y_pin_saved_item">釘選</string>
+    <string name="a11y_unpin_saved_item">取消釘選</string>
     <string name="a11y_archive">封存</string>
     <string name="a11y_drag_handle">拖曳以重新排序</string>
 
@@ -579,8 +635,8 @@
     <string name="review_why_updated">更新此項目的原因</string>
     <string name="review_why_merged">合併這些項目的原因</string>
     <string name="review_merge_into">將內容合併至「%1$s」</string>
-    <string name="review_merge_survivor">保留項目</string>
-    <string name="review_merge_source">來源項目</string>
+    <string name="review_merge_survivor">結果</string>
+    <string name="review_merge_source">合併自</string>
     <string name="review_merge_description">將加入的描述</string>
     <string name="review_merge_steps">將加入的步驟</string>
     <string name="review_merge_fields">將變更的欄位</string>

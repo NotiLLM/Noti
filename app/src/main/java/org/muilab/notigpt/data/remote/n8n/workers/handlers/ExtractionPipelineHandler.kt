@@ -34,6 +34,7 @@ internal object ExtractionPipelineHandler {
 
     private const val ITEM_EXTRACTION_COOLDOWN_MS = 5 * 60 * 1000L
     private const val MANUAL_EXTRACTION_VISIBLE_RECORD_LIMIT = 50
+    private const val A_REJECTION_COMPACTION_RECORD_COUNT = 50
 
     suspend fun handle(ctx: N8nWorkerContext, input: N8nWorkerInput.ExtractionPipeline): ListenableWorker.Result {
         val notiKey = input.notiKey
@@ -103,7 +104,7 @@ internal object ExtractionPipelineHandler {
         // true verdict from A before it can make another costly item-extraction request.
         if (!input.forced) {
             val lastItemExtractionAt = ctx.database.notiLlmStateDao().getByKey(notiKey)?.lastItemExtractionAt ?: 0L
-            if (System.currentTimeMillis() - lastItemExtractionAt < ITEM_EXTRACTION_COOLDOWN_MS) {
+            if (!canRunAutomaticStageB(System.currentTimeMillis(), lastItemExtractionAt)) {
                 Log.d(ExtractionStageSupport.TAG, "Skipping Stage B for $notiKey: cooldown active")
                 return ctx.success()
             }
@@ -213,6 +214,9 @@ internal object ExtractionPipelineHandler {
         }
     }
 
+    internal fun canRunAutomaticStageB(now: Long, lastItemExtractionAt: Long): Boolean =
+        now - lastItemExtractionAt >= ITEM_EXTRACTION_COOLDOWN_MS
+
     /**
      * Compaction guard: fold the unprocessed records into the summary (advancing the watermark) when
      * the thread has gone quiet or accumulated too many unprocessed records. A negative setting
@@ -227,17 +231,25 @@ internal object ExtractionPipelineHandler {
     ) {
         if (records.isEmpty()) return
         val quietMin = SharedPreferencesManager.extractionQuietWindowMinutes
-        val maxUnprocessed = SharedPreferencesManager.extractionMaxUnprocessedRecords
         val now = System.currentTimeMillis()
         val newestPost = records.maxOf { it.postTime }
-        val quietTrip = quietMin >= 0 && (now - newestPost) >= quietMin * 60_000L
-        val countTrip = maxUnprocessed >= 0 && records.size >= maxUnprocessed
-        if (!quietTrip && !countTrip) return
+        if (!shouldCompact(records.size, newestPost, now, quietMin)) return
         val unit = ctx.getNotiUnit(notiKey) ?: return
         val priorSummary = ctx.database.extractionJournalDao().getSummary(notiKey)?.summaryText ?: ""
         runSummaryFold(ctx, notiKey, unit.isPeople, priorSummary, records, personalization)
         // Folded away with no items — nothing left pending for this thread.
         ctx.database.notiLlmStateDao().setShouldExtractByKeys(listOf(notiKey), false, System.currentTimeMillis())
+    }
+
+    internal fun shouldCompact(
+        recordCount: Int,
+        newestPostTime: Long,
+        now: Long,
+        quietWindowMinutes: Int,
+    ): Boolean {
+        val quietTrip = quietWindowMinutes >= 0 &&
+            now - newestPostTime >= quietWindowMinutes * 60_000L
+        return recordCount >= A_REJECTION_COMPACTION_RECORD_COUNT || quietTrip
     }
 
     /** Stage C — fold the given records into the rolling summary and advance the watermark. */

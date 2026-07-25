@@ -9,7 +9,15 @@ data class SavedItemActionButton(
     val buttonText: String,
     val intent: String,
     val type: String,
-)
+) {
+    val displayText: String
+        get() {
+            val value = if (type == SavedItemActionButtons.TYPE_LINK) {
+                SavedItemActionButtons.fallbackLinkLabel(intent)
+            } else intent
+            return if (buttonText.equals(value, ignoreCase = true)) value else "$buttonText · $value"
+        }
+}
 
 /** Normalizes the small copy/link action contract shared by extraction, previews, and UI. */
 object SavedItemActionButtons {

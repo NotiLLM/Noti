@@ -68,6 +68,16 @@ class PreferenceViewModel(
     private val _navigateToPersonalization = MutableStateFlow(false)
     val navigateToPersonalization: StateFlow<Boolean> = _navigateToPersonalization.asStateFlow()
 
+    data class QuickSyncResultSummary(
+        val action: String,
+        val userReason: String,
+        val suggestionIds: List<String>,
+        val descriptions: List<String>,
+    )
+
+    private val _quickSyncResult = MutableStateFlow<QuickSyncResultSummary?>(null)
+    val quickSyncResult: StateFlow<QuickSyncResultSummary?> = _quickSyncResult.asStateFlow()
+
     init {
         val database = AppDatabase.getInstance(application)
         repository = RoomPersonalizationRepository(
@@ -261,6 +271,39 @@ class PreferenceViewModel(
         _navigateToPersonalization.value = false
     }
 
+    fun dismissQuickSyncResult() { _quickSyncResult.value = null }
+
+    fun applyQuickSyncResult() {
+        val ids = _quickSyncResult.value?.suggestionIds.orEmpty()
+        _quickSyncResult.value = null
+        if (ids.isEmpty()) return
+        viewModelScope.launch(Dispatchers.IO) {
+            for (id in ids) {
+                val changeSet = withContext(Dispatchers.Main) {
+                    val transition = PersonalizationUiStateReducer.beginConfirmation(_uiState.value, id)
+                    _uiState.value = transition.state
+                    transition.changeSet
+                } ?: continue
+                val result = repository.apply(changeSet)
+                withContext(Dispatchers.Main) {
+                    _uiState.value = PersonalizationUiStateReducer.completeConfirmation(_uiState.value, result)
+                }
+            }
+        }
+    }
+
+    fun discussQuickSyncResult() {
+        val summary = _quickSyncResult.value ?: return
+        _quickSyncResult.value = null
+        clearConversation()
+        _navigateToPersonalization.value = true
+        sendMessage(
+            "I gave this feedback after ${summary.action}: ${summary.userReason}. " +
+                "The quick suggestion was: ${summary.descriptions.joinToString("; ")}. " +
+                "Help me refine the preference before applying anything."
+        )
+    }
+
     fun updateQuickSyncDraft(text: String) {
         if (isMutationBlocked()) return
         updateState { state ->
@@ -279,6 +322,7 @@ class PreferenceViewModel(
         val feedback = _uiState.value.quickSyncFeedback ?: return
         val trimmed = reason.trim()
         if (trimmed.isBlank() || isMutationBlocked() || _uiState.value.isAssistantLoading) return
+        val previousSuggestionIds = _uiState.value.pendingSuggestions.map { it.changeSet.proposalId }.toSet()
         updateState {
             it.copy(
                 quickSyncFeedback = null,
@@ -310,7 +354,15 @@ class PreferenceViewModel(
             withContext(Dispatchers.Main) {
                 acceptClientResult(result)
                 if (result is PersonalizationClientResult.Success) {
-                    _navigateToPersonalization.value = true
+                    val suggestions = _uiState.value.pendingSuggestions.filter {
+                        it.changeSet.proposalId !in previousSuggestionIds
+                    }
+                    _quickSyncResult.value = QuickSyncResultSummary(
+                        action = feedback.action,
+                        userReason = trimmed,
+                        suggestionIds = suggestions.map { it.changeSet.proposalId },
+                        descriptions = suggestions.map { it.changeSet.resultingBehavior },
+                    )
                 }
             }
         }
@@ -335,6 +387,27 @@ class PreferenceViewModel(
                 R.string.personalization_reason_sender,
                 R.string.personalization_reason_topic,
                 R.string.personalization_reason_action,
+            )
+            PreferenceEntryPoint.SPLIT -> listOf(
+                R.string.personalization_split_belong_together,
+                R.string.personalization_split_context_lost,
+                R.string.personalization_split_types_wrong,
+                R.string.personalization_split_state_wrong,
+                R.string.personalization_split_too_fragmented,
+            )
+            PreferenceEntryPoint.REGENERATE -> listOf(
+                R.string.personalization_regenerate_context_lost,
+                R.string.personalization_regenerate_incorrect,
+                R.string.personalization_regenerate_original_better,
+                R.string.personalization_regenerate_state_wrong,
+                R.string.personalization_regenerate_scope_wrong,
+            )
+            PreferenceEntryPoint.MERGE -> listOf(
+                R.string.personalization_merge_separate_actions,
+                R.string.personalization_merge_different_time,
+                R.string.personalization_merge_lifecycle_wrong,
+                R.string.personalization_merge_context_lost,
+                R.string.personalization_merge_result_wrong,
             )
         }.map { getApplication<Application>().getString(it) }
         updateState { state ->

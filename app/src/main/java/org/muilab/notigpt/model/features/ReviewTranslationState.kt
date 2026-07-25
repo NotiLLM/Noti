@@ -13,10 +13,15 @@ data class ReviewTranslationState(
     val sourceOpIds: List<Long> = emptyList(),
     val translatedItem: SavedItem? = null,
     val translatedSteps: List<TodoStep> = emptyList(),
+    val sourceBatch: List<ReviewItemDraft>? = null,
+    val translatedBatch: List<ReviewItemDraft>? = null,
 ) {
     val isPending: Boolean get() = status == STATUS_PENDING
     val translatedDraft: ReviewItemDraft?
         get() = translatedItem?.let { ReviewItemDraft(it, translatedSteps) }
+
+    val translatedBatchDrafts: List<ReviewItemDraft>
+        get() = translatedBatch.orEmpty()
 
     companion object {
         const val STATUS_PENDING = "pending"
@@ -29,6 +34,7 @@ data class ReviewTranslationState(
             source: ReviewItemDraft,
             evidenceRecordIds: List<String>,
             sourceOpIds: List<Long> = emptyList(),
+            sourceBatch: List<ReviewItemDraft> = emptyList(),
         ) = ReviewTranslationState(
             status = STATUS_PENDING,
             targetLanguage = targetLanguage,
@@ -36,6 +42,7 @@ data class ReviewTranslationState(
             sourceSteps = source.steps,
             evidenceRecordIds = evidenceRecordIds.filter(String::isNotBlank).distinct(),
             sourceOpIds = sourceOpIds.distinct(),
+            sourceBatch = sourceBatch,
         )
 
         fun fromJson(value: String?): ReviewTranslationState? = value

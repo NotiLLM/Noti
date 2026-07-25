@@ -189,6 +189,8 @@ class FirestoreSyncRepository(
             "syncModifiedAt" to TimeFormatters.toLocalIso(item.syncModifiedAt, zoneId),
             "syncModifiedAtEpoch" to item.syncModifiedAt,
             "lastViewedChangeAtEpoch" to item.lastViewedChangeAt,
+            "pendingTransformType" to item.pendingTransformType,
+            "pendingTransformStatus" to item.pendingTransformStatus,
             "itemType" to item.itemType,
             "steps" to stepsPayload(item.savedItemId),
             // A normal sync is also the resurrection path for a locally edited item that was

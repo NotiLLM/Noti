@@ -17,6 +17,9 @@ object SavedItemChangeType {
 
     /** One or more source items were folded into the surviving item. */
     const val Merged = "merged"
+
+    /** A source item was deliberately separated into independently handled items. */
+    const val Split = "split"
 }
 
 /**

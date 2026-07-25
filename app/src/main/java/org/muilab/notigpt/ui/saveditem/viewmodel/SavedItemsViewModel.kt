@@ -5,6 +5,7 @@ import android.content.Intent
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.work.WorkManager
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -17,12 +18,15 @@ import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.muilab.notigpt.data.local.room.AppDatabase
 import org.muilab.notigpt.data.remote.n8n.enqueueRegenerateOne
+import org.muilab.notigpt.data.remote.n8n.enqueueSplitOne
 import org.muilab.notigpt.data.remote.n8n.enqueueSuggestionRefresh
 import org.muilab.notigpt.data.export.ExportableItem
 import org.muilab.notigpt.model.features.SavedItem
 import org.muilab.notigpt.model.features.SavedItemState
 import org.muilab.notigpt.model.features.SavedItemType
 import org.muilab.notigpt.model.features.TodoStep
+import org.muilab.notigpt.model.features.ReviewItemDraft
+import org.muilab.notigpt.model.features.PendingProposedOpType
 import org.muilab.notigpt.ui.common.navigation.SavedListFilter
 import org.muilab.notigpt.util.time.SmartFilterWindows
 import org.muilab.notigpt.data.remote.googletasks.GoogleTasksRepository
@@ -55,6 +59,9 @@ class SavedItemsViewModel(application: Application) : AndroidViewModel(applicati
         val steps: List<TodoStep>,
         val mergeSourceItemIds: Set<String> = emptySet(),
         val reason: String = "",
+        val operationType: String = PendingProposedOpType.Update,
+        val splitChildren: List<ReviewItemDraft> = emptyList(),
+        val isProcessing: Boolean = false,
     )
 
     /**
@@ -159,9 +166,16 @@ class SavedItemsViewModel(application: Application) : AndroidViewModel(applicati
     ) { ops, _ -> ops }
         .mapLatest { ops ->
             pendingProposedOpRepo.groupOps(ops)
-                .filter { !it.isCreate }
                 .mapNotNull { group ->
                     val preview = pendingProposedOpRepo.buildPreview(group) ?: return@mapNotNull null
+                    if (group.isCreate) {
+                        return@mapNotNull PendingListPreview(
+                            item = preview.item,
+                            steps = preview.steps,
+                            reason = group.reason,
+                            operationType = PendingProposedOpType.Create,
+                        )
+                    }
                     val current = repo.getById(group.targetItemId!!) ?: return@mapNotNull null
                     val sourceIds = group.ops.flatMap { pending ->
                         try {
@@ -175,16 +189,30 @@ class SavedItemsViewModel(application: Application) : AndroidViewModel(applicati
                             emptyList()
                         }
                     }.toSet()
+                    val operationType = group.ops.singleOrNull()?.opType ?: PendingProposedOpType.Update
+                    val displayItem = if (operationType == PendingProposedOpType.Split) {
+                        current.copy(
+                            content = preview.splitChildren.joinToString(" · ") { it.item.title },
+                            state = current.state,
+                        )
+                    } else preview.item.copy(state = current.state)
                     PendingListPreview(
                         // Keep completed/archived list membership stable while replacing only the
                         // content fields with the staged preview.
-                        item = preview.item.copy(state = current.state),
-                        steps = preview.steps,
+                        item = displayItem,
+                        steps = if (operationType == PendingProposedOpType.Split) emptyList() else preview.steps,
                         mergeSourceItemIds = sourceIds,
                         reason = group.reason,
+                        operationType = operationType,
+                        splitChildren = preview.splitChildren,
+                        isProcessing = preview.isProcessing,
                     )
                 }
-                .associateBy { it.item.savedItemId }
+                .associateBy { preview ->
+                    if (preview.operationType == PendingProposedOpType.Split) {
+                        preview.item.savedItemId
+                    } else preview.item.savedItemId
+                }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
 
@@ -292,14 +320,42 @@ class SavedItemsViewModel(application: Application) : AndroidViewModel(applicati
             .filter { it.savedItemId !in mergeSourceIds || it.savedItemId in pendingPreviews }
             .map { pendingPreviews[it.savedItemId]?.item ?: it }
 
+        val pendingCreates = pendingPreviews.values
+            .filter { it.operationType == PendingProposedOpType.Create }
+            .map { it.item }
+            .filter { item ->
+                val typeMatches = when (mode) {
+                    ListMode.Todos -> item.isTodo
+                    ListMode.Keep -> !item.isTodo
+                    ListMode.All -> true
+                }
+                val filterMatches = when (f) {
+                    FilterTab.Todos, FilterTab.Pending -> item.isTodo
+                    FilterTab.Keeps, FilterTab.Keep -> !item.isTodo
+                    FilterTab.Completed, FilterTab.Archived -> false
+                    FilterTab.Starred -> item.isStarred
+                    else -> true
+                }
+                val smartMatches = when (smart) {
+                    null, SavedListFilter.AllItems, SavedListFilter.Todos, SavedListFilter.Keep -> true
+                    SavedListFilter.Starred -> item.isStarred
+                    SavedListFilter.DueSoon -> item.isTodo && item.deadlineAtMs > 0L &&
+                        item.deadlineAtMs < SmartFilterWindows.dueSoonEndExclusiveMs(System.currentTimeMillis())
+                    SavedListFilter.RecentlyUpdated -> true
+                    SavedListFilter.Suggested -> false
+                }
+                typeMatches && filterMatches && smartMatches
+            }
+        val completeDisplayList = (displayList + pendingCreates).distinctBy { it.savedItemId }
+
         if (query.isBlank()) {
-            displayList
+            completeDisplayList
         } else {
             val terms = query.split("+").map { it.trim().lowercase() }.filter { it.isNotBlank() }
             if (terms.isEmpty()) {
                 displayList
             } else {
-                displayList.filter { item ->
+            completeDisplayList.filter { item ->
                     val searchable = "${item.title} ${item.content}".lowercase()
                     terms.all { term -> searchable.contains(term) }
                 }
@@ -392,17 +448,38 @@ class SavedItemsViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
+    fun autosaveDraft(item: SavedItem) {
+        viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            repo.upsert(item.copy(lastUpdateTimestamp = now, syncModifiedAt = now))
+        }
+    }
+
     /** Accepts a staged update/merge, then opens the now-current item for manual editing. */
     fun approvePendingForEdit(savedItemId: String, onApproved: (SavedItem) -> Unit) {
         viewModelScope.launch {
             val group = pendingProposedOpRepo.groupOps(pendingProposedOpRepo.getPending())
-                .firstOrNull { it.targetItemId == savedItemId }
+                .firstOrNull { candidate ->
+                    candidate.targetItemId == savedItemId ||
+                        (candidate.isCreate && savedItemId == "pending_${candidate.ops.first().opId}")
+                }
             if (group == null) {
                 repo.getById(savedItemId)?.let(onApproved)
                 return@launch
             }
             val outcome = pendingProposedOpRepo.applyGroup(group) ?: return@launch
             repo.getById(outcome.appliedItemId)?.let(onApproved)
+        }
+    }
+
+    fun rejectPending(savedItemId: String) {
+        viewModelScope.launch {
+            val group = pendingProposedOpRepo.groupOps(pendingProposedOpRepo.getPending())
+                .firstOrNull { candidate ->
+                    candidate.targetItemId == savedItemId ||
+                        (candidate.isCreate && savedItemId == "pending_${candidate.ops.first().opId}")
+                } ?: return@launch
+            pendingProposedOpRepo.discardGroup(group)
         }
     }
 
@@ -494,6 +571,47 @@ class SavedItemsViewModel(application: Application) : AndroidViewModel(applicati
 
     fun regenerateOne(savedItemId: String) {
         enqueueRegenerateOne(getApplication(), savedItemId)
+    }
+
+    /** Persists the visible draft before starting a user-requested structural transformation. */
+    fun requestRegenerate(item: SavedItem) {
+        viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            repo.upsert(item.copy(lastUpdateTimestamp = now, syncModifiedAt = now))
+            if (pendingProposedOpRepo.beginTransform(item.savedItemId, PendingProposedOpType.Regenerate, now) != null) {
+                enqueueRegenerateOne(getApplication(), item.savedItemId)
+            }
+        }
+    }
+
+    fun requestSplit(item: SavedItem) {
+        viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            repo.upsert(item.copy(lastUpdateTimestamp = now, syncModifiedAt = now))
+            if (pendingProposedOpRepo.beginTransform(item.savedItemId, PendingProposedOpType.Split, now) != null) {
+                enqueueSplitOne(getApplication(), item.savedItemId)
+            }
+        }
+    }
+
+    fun cancelTransform(savedItemId: String, type: String) {
+        viewModelScope.launch {
+            val workName = if (type == PendingProposedOpType.Split) {
+                "n8n_split_one_$savedItemId"
+            } else "n8n_regenerate_one_$savedItemId"
+            WorkManager.getInstance(getApplication<Application>()).cancelUniqueWork(workName)
+            pendingProposedOpRepo.clearProcessingTransform(savedItemId, type)
+        }
+    }
+
+    fun checkActiveReminder(savedItemId: String, onResult: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            val active = AppDatabase.getInstance(getApplication<Application>()).reminderDao()
+                .getBySavedItemId(savedItemId)
+                .any { it.status == org.muilab.notigpt.model.features.ReminderStatus.Scheduled ||
+                    it.status == org.muilab.notigpt.model.features.ReminderStatus.DueUnseen }
+            onResult(active)
+        }
     }
 
     // ========== Google Tasks Integration ==========

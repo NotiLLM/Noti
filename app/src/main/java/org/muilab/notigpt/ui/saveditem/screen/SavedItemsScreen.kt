@@ -32,6 +32,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -106,9 +107,11 @@ import org.muilab.notigpt.model.features.SavedItemType
 import org.muilab.notigpt.model.features.SavedItemState
 import org.muilab.notigpt.model.features.TodoStep
 import org.muilab.notigpt.model.features.ReviewItemDraft
+import org.muilab.notigpt.model.features.PendingProposedOpType
 import org.muilab.notigpt.data.export.asExportable
 import org.muilab.notigpt.data.repository.suggestion.SuggestedItem
 import org.muilab.notigpt.ui.common.feedback.AppSnackbar
+import org.muilab.notigpt.ui.common.feedback.AppSnackbarMessage
 import org.muilab.notigpt.ui.theme.NotiTheme
 import org.muilab.notigpt.ui.theme.NotiType
 import org.muilab.notigpt.ui.theme.Dimens
@@ -125,6 +128,7 @@ import org.muilab.notigpt.ui.reminder.viewmodel.ScheduledReminderViewModel
 import org.muilab.notigpt.ui.reminder.screen.ReminderDateTimeDialog
 import org.muilab.notigpt.util.time.getAbsoluteTimeStr
 import org.muilab.notigpt.util.time.getRelativeTimeStr
+import org.muilab.notigpt.util.SharedPreferencesManager
 import java.util.Calendar
 import org.muilab.notigpt.ui.common.clipboard.AndroidClipboardController
 import androidx.compose.foundation.text.BasicTextField
@@ -157,6 +161,7 @@ fun SavedItemsScreen(
     /** When set, opens this item's detail screen as soon as it's loaded (e.g. jumping in from a notification's linked-items sheet). Consumed once. */
     initialDetailItemId: String? = null,
     onDetailOpenChange: (Boolean) -> Unit = {},
+    onOpenReview: () -> Unit = {},
 ) {
     val vm: SavedItemsViewModel = savedItemsViewModel ?: viewModel()
     val scheduledVm: ScheduledReminderViewModel = scheduledReminderViewModel ?: viewModel()
@@ -180,9 +185,42 @@ fun SavedItemsScreen(
     val strGoogleTasksSuccess = stringResource(R.string.google_tasks_success)
     val strGoogleTasksErrorFmt = stringResource(R.string.google_tasks_error, "%s")
     val strGoogleCalendarNoApp = stringResource(R.string.google_calendar_no_app)
+    val strAiChangeReady = stringResource(R.string.ai_change_ready)
+    val strReviewChanges = stringResource(R.string.quick_sync_view)
+    val strSplitNoResult = stringResource(R.string.split_no_result)
+    val strRegenerateNoResult = stringResource(R.string.regenerate_no_result)
+    val strSplitProcessing = stringResource(R.string.split_processing)
+    val strRegenerateProcessing = stringResource(R.string.regenerate_processing)
+    val strCancel = stringResource(R.string.ui_action_cancel)
+    val strPendingOtherDevice = stringResource(R.string.ai_change_pending_other_device)
 
     val savedItems by vm.savedItems.collectAsState()
     val pendingPreviews by vm.pendingPreviews.collectAsState()
+    var previousPendingPreviews by remember { mutableStateOf<Map<String, SavedItemsViewModel.PendingListPreview>>(emptyMap()) }
+    LaunchedEffect(pendingPreviews) {
+        previousPendingPreviews.forEach { (id, before) ->
+            if (!before.isProcessing) return@forEach
+            val after = pendingPreviews[id]
+            when {
+                after != null && !after.isProcessing -> AppSnackbar.show(
+                    AppSnackbarMessage(
+                        text = strAiChangeReady,
+                        actionLabel = strReviewChanges,
+                        onAction = onOpenReview,
+                        durationMillis = 10_000,
+                    )
+                )
+                after == null -> AppSnackbar.show(
+                    AppSnackbarMessage(
+                        text = if (before.operationType == PendingProposedOpType.Split) strSplitNoResult
+                        else strRegenerateNoResult,
+                        durationMillis = 10_000,
+                    )
+                )
+            }
+        }
+        previousPendingPreviews = pendingPreviews
+    }
     val filter by vm.filter.collectAsState()
     val suggestionState by vm.suggestionState.collectAsState()
 
@@ -280,8 +318,32 @@ fun SavedItemsScreen(
     }
 
     fun requestEdit(item: SavedItem) {
-        if (pendingPreviews[item.savedItemId] != null) {
-            pendingEditRequest = item
+        val pending = pendingPreviews[item.savedItemId]
+        if (pending != null) {
+            if (pending.isProcessing) {
+                AppSnackbar.show(
+                    AppSnackbarMessage(
+                        text = if (pending.operationType == PendingProposedOpType.Split) strSplitProcessing
+                        else strRegenerateProcessing,
+                        actionLabel = strCancel,
+                        onAction = { vm.cancelTransform(item.savedItemId, pending.operationType) },
+                        durationMillis = 10_000,
+                    )
+                )
+                return
+            }
+            val simple = pending.operationType == PendingProposedOpType.Update ||
+                pending.operationType == PendingProposedOpType.Create
+            if (simple && SharedPreferencesManager.approveCreationsAndUpdatesOnUse) {
+                vm.approvePendingForEdit(item.savedItemId, ::openEditor)
+            } else pendingEditRequest = item
+        } else if (item.pendingTransformStatus.isNotBlank()) {
+            AppSnackbar.show(
+                AppSnackbarMessage(
+                    text = strPendingOtherDevice,
+                    durationMillis = 10_000,
+                )
+            )
         } else {
             openEditor(item)
         }
@@ -527,6 +589,8 @@ fun SavedItemsScreen(
                         steps = pendingPreview?.steps
                             ?: allTodoStepsBySavedItem[item.savedItemId].orEmpty(),
                         pendingReview = pendingPreview != null,
+                        pendingProcessing = pendingPreview?.isProcessing == true,
+                        pendingOperationType = pendingPreview?.operationType,
                         pendingMergeSourceCount = pendingPreview?.mergeSourceItemIds?.size ?: 0,
                         onToggleCompleted = { completed: Boolean ->
                             vm.toggleCompleted(item, completed)
@@ -602,33 +666,65 @@ fun SavedItemsScreen(
         pendingEditRequest?.let { target ->
             val pending = pendingPreviews[target.savedItemId]
             val mergeCount = pending?.mergeSourceItemIds?.size ?: 0
+            val operation = pending?.operationType ?: PendingProposedOpType.Update
+            val isSplit = operation == PendingProposedOpType.Split
+            val isRegenerate = operation == PendingProposedOpType.Regenerate
+            val isStructural = isSplit || isRegenerate || operation == PendingProposedOpType.Merge
+            var trustSimpleChanges by remember(target.savedItemId) { mutableStateOf(false) }
             AlertDialog(
                 onDismissRequest = { pendingEditRequest = null },
-                title = { Text(stringResource(R.string.pending_review_edit_title)) },
+                title = { Text(stringResource(if (isStructural) R.string.pending_review_result_title else R.string.pending_review_edit_title)) },
                 text = {
-                    Text(
-                        if (mergeCount > 0) {
-                            stringResource(R.string.pending_review_merge_message, mergeCount)
-                        } else {
-                            stringResource(R.string.pending_review_edit_message)
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text(
+                            when {
+                                isSplit -> stringResource(
+                                    R.string.pending_review_split_message,
+                                    pending?.splitChildren?.size ?: 0,
+                                    pending?.splitChildren?.take(2)?.joinToString(" · ") { it.item.title }.orEmpty(),
+                                )
+                                isRegenerate -> stringResource(R.string.pending_review_regenerate_message, pending?.item?.title.orEmpty())
+                                mergeCount > 0 -> stringResource(R.string.pending_review_merge_message, mergeCount)
+                                else -> stringResource(R.string.pending_review_edit_message)
+                            }
+                        )
+                        if (!isStructural) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Checkbox(checked = trustSimpleChanges, onCheckedChange = { trustSimpleChanges = it })
+                                Text(stringResource(R.string.pending_review_trust_checkbox), style = MaterialTheme.typography.bodySmall)
+                            }
+                            Text(stringResource(R.string.pending_review_trust_helper), style = MaterialTheme.typography.labelSmall)
                         }
-                    )
+                    }
                 },
                 confirmButton = {
                     TextButton(
                         onClick = {
+                            if (!isStructural && trustSimpleChanges) {
+                                SharedPreferencesManager.approveCreationsAndUpdatesOnUse = true
+                            }
                             pendingEditRequest = null
                             vm.approvePendingForEdit(target.savedItemId) { approved ->
                                 openEditor(approved)
                             }
                         },
                     ) {
-                        Text(stringResource(R.string.pending_review_edit_accept))
+                        Text(stringResource(R.string.pending_review_approve_continue))
                     }
                 },
                 dismissButton = {
-                    TextButton(onClick = { pendingEditRequest = null }) {
-                        Text(stringResource(R.string.pending_review_edit_cancel))
+                    Row {
+                        TextButton(onClick = {
+                            vm.rejectPending(target.savedItemId)
+                            pendingEditRequest = null
+                        }) { Text(stringResource(R.string.review_reject)) }
+                        if (isStructural) {
+                            TextButton(onClick = { pendingEditRequest = null; onOpenReview() }) {
+                                Text(stringResource(R.string.pending_review_details))
+                            }
+                        } else TextButton(onClick = { pendingEditRequest = null }) {
+                            Text(stringResource(R.string.pending_review_edit_cancel))
+                        }
                     }
                 },
             )
@@ -704,6 +800,7 @@ fun SavedItemsScreen(
                                 base.isTodo != updatedOrNull.isTodo ||
                                 base.isCompleted != updatedOrNull.isCompleted ||
                                 base.deadlineAtMs != updatedOrNull.deadlineAtMs
+                                || base.isStarred != updatedOrNull.isStarred
                         )
 
                         if (updatedOrNull != null) {
@@ -772,6 +869,7 @@ fun SavedItemsScreen(
                                 base.isTodo != updated.isTodo ||
                                 base.isCompleted != updated.isCompleted ||
                                 base.deadlineAtMs != updated.deadlineAtMs
+                                || base.isStarred != updated.isStarred
                         )
 
                         val emptyNow = updated.title.isBlank() && updated.content.isBlank()
@@ -817,7 +915,11 @@ fun SavedItemsScreen(
                     },
                     isGoogleTasksExporting = googleTasksExportResult is SavedItemsViewModel.GoogleTasksExportResult.Loading,
                     onOpenExportDialog = openExportDialog,
-                    onRegenerate = { vm.regenerateOne(current.savedItemId) },
+                    onRegenerate = { draft -> vm.requestRegenerate(draft) },
+                    onSplit = { draft -> vm.requestSplit(draft) },
+                    onCancelTransform = { type -> vm.cancelTransform(current.savedItemId, type) },
+                    onAutosaveDraft = vm::autosaveDraft,
+                    onCheckActiveReminder = { result -> vm.checkActiveReminder(current.savedItemId, result) },
                     relatedNotificationsState = relatedNotificationsState,
                     onLoadRelatedNotifications = { item -> vm.loadRelatedNotifications(item) },
                     changeLog = remember(current.savedItemId) { vm.changeLogFlow(current.savedItemId) },
@@ -923,6 +1025,8 @@ fun SavedItemCard(
     item: SavedItem,
     steps: List<TodoStep> = emptyList(),
     pendingReview: Boolean = false,
+    pendingProcessing: Boolean = false,
+    pendingOperationType: String? = null,
     pendingMergeSourceCount: Int = 0,
     onToggleCompleted: (Boolean) -> Unit,
     onEdit: () -> Unit,
@@ -1034,6 +1138,10 @@ fun SavedItemCard(
                 // Review badge: staged previews remain gated until the user explicitly accepts them.
                 if ((item.isNewLike || pendingReview) && !selectionMode) {
                     val badgeText = when {
+                        pendingProcessing -> stringResource(
+                            if (pendingOperationType == PendingProposedOpType.Split) R.string.split_processing
+                            else R.string.regenerate_processing
+                        )
                         pendingReview && pendingMergeSourceCount > 0 ->
                             stringResource(R.string.pending_review_merge_badge, pendingMergeSourceCount)
                         pendingReview -> stringResource(R.string.pending_review_badge)
@@ -1102,8 +1210,15 @@ fun SavedItemCard(
                 if (buttons.isNotEmpty()) {
                     val savedItemActionScrollState = rememberScrollState()
                     Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp).horizontalScroll(savedItemActionScrollState), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        buttons.forEach { button ->
+                        val visibleButtons = if (expanded) buttons else buttons.take(2)
+                        visibleButtons.forEach { button ->
                             SavedItemActionChip(button = button, context = context, clipboard = clipboard)
+                        }
+                        if (!expanded && buttons.size > 2) {
+                            AssistChip(
+                                onClick = { expanded = true },
+                                label = { Text(stringResource(R.string.saved_item_more_actions, buttons.size - 2)) },
+                            )
                         }
                     }
                 }
@@ -1198,6 +1313,7 @@ private fun SavedItemActionChip(
     button: SavedItemActionButton,
     context: android.content.Context,
     clipboard: AndroidClipboardController,
+    compact: Boolean = true,
 ) {
     val iconRes = when (button.type) {
         "copy" -> R.drawable.copy
@@ -1219,7 +1335,15 @@ private fun SavedItemActionChip(
                 }
             }
         },
-        label = { Text(button.buttonText, style = MaterialTheme.typography.labelSmall) },
+        label = {
+            Text(
+                button.displayText,
+                style = MaterialTheme.typography.labelSmall,
+                maxLines = if (compact) 1 else Int.MAX_VALUE,
+                overflow = TextOverflow.Ellipsis,
+                modifier = if (compact) Modifier.widthIn(max = 280.dp) else Modifier,
+            )
+        },
         leadingIcon = {
             Icon(
                 painter = painterResource(iconRes),
@@ -1241,7 +1365,11 @@ fun SavedItemDetailScreen(
     onExportToGoogleTasks: (SavedItem) -> Unit = {},
     isGoogleTasksExporting: Boolean = false,
     onOpenExportDialog: (SavedItem, ExportType) -> Unit = { _, _ -> },
-    onRegenerate: () -> Unit = {},
+    onRegenerate: (SavedItem) -> Unit = {},
+    onSplit: (SavedItem) -> Unit = {},
+    onCancelTransform: (String) -> Unit = {},
+    onAutosaveDraft: (SavedItem) -> Unit = {},
+    onCheckActiveReminder: ((Boolean) -> Unit) -> Unit = { callback -> callback(false) },
     onCreateReminder: (() -> Unit)? = null,
     relatedNotificationsState: SavedItemsViewModel.RelatedNotificationsState = SavedItemsViewModel.RelatedNotificationsState(),
     onLoadRelatedNotifications: (SavedItem) -> Unit = {},
@@ -1253,6 +1381,8 @@ fun SavedItemDetailScreen(
     reviewMode: Boolean = false,
     onSaveApprove: ((ReviewItemDraft) -> Unit)? = null,
     onRejectDelete: (() -> Unit)? = null,
+    reviewPrimaryLabelRes: Int = R.string.review_save_approve,
+    reviewSecondaryLabelRes: Int = R.string.review_reject_change,
     // Sub-task parameters
     steps: List<TodoStep> = emptyList(),
     stepsEditable: Boolean = true,
@@ -1274,6 +1404,7 @@ fun SavedItemDetailScreen(
     var isTodo by remember(initial.savedItemId) { mutableStateOf(initial.isTodo) }
     var isCompleted by remember(initial.savedItemId) { mutableStateOf(initial.isCompleted) }
     var deadlineAtMs by remember(initial.savedItemId) { mutableStateOf(initial.deadlineAtMs) }
+    var isStarred by remember(initial.savedItemId) { mutableStateOf(initial.isStarred) }
     var reviewSteps by remember(initial.savedItemId) { mutableStateOf(steps) }
     val visibleSteps = if (reviewMode) reviewSteps else steps
 
@@ -1291,6 +1422,7 @@ fun SavedItemDetailScreen(
             // Keep this value until persistence so Todo -> Keep conversion can merge it into content.
             // SavedItemNormalization clears it before the Keep row is stored.
             deadlineAtMs = deadlineAtMs,
+            isStarred = isStarred,
         )
     }
 
@@ -1303,6 +1435,36 @@ fun SavedItemDetailScreen(
     var showTimePicker by remember { mutableStateOf(false) }
     var showTaskToKeepDialog by remember { mutableStateOf(false) }
     var headerMenuOpen by remember { mutableStateOf(false) }
+    var requestedTransform by remember { mutableStateOf<String?>(null) }
+    var confirmTransform by remember { mutableStateOf<String?>(null) }
+    var splitHasReminder by remember { mutableStateOf(false) }
+    val editingLocked = requestedTransform != null || initial.pendingTransformStatus.isNotBlank()
+
+    confirmTransform?.let { operation ->
+        val isSplit = operation == "split"
+        AlertDialog(
+            onDismissRequest = { confirmTransform = null },
+            title = { Text(stringResource(if (isSplit) R.string.split_confirm_title else R.string.regenerate_confirm_title)) },
+            text = { Text(stringResource(
+                when {
+                    isSplit && splitHasReminder -> R.string.split_confirm_message_reminder
+                    isSplit -> R.string.split_confirm_message
+                    else -> R.string.regenerate_confirm_message
+                }
+            )) },
+            confirmButton = {
+                TextButton(onClick = {
+                    val draft = buildUpdated()
+                    confirmTransform = null
+                    requestedTransform = operation
+                    if (isSplit) onSplit(draft) else onRegenerate(draft)
+                }) { Text(stringResource(if (isSplit) R.string.split_action else R.string.regenerate_action)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmTransform = null }) { Text(stringResource(R.string.ui_action_cancel)) }
+            },
+        )
+    }
 
     Column(Modifier.fillMaxSize()) {
         Surface(color = MaterialTheme.colorScheme.surface) {
@@ -1318,6 +1480,7 @@ fun SavedItemDetailScreen(
                 BasicTextField(
                     value = title,
                     onValueChange = { title = it },
+                    enabled = !editingLocked,
                     singleLine = false,
                     textStyle = MaterialTheme.typography.titleLarge.copy(color = MaterialTheme.colorScheme.onSurface),
                     cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
@@ -1333,16 +1496,44 @@ fun SavedItemDetailScreen(
                         innerTextField()
                     }
                 )
+                IconButton(
+                    enabled = !editingLocked,
+                    onClick = { isStarred = !isStarred },
+                ) {
+                    Icon(
+                        painterResource(if (isStarred) R.drawable.star_yes else R.drawable.star_no),
+                        contentDescription = stringResource(R.string.a11y_star),
+                    )
+                }
                 if (!reviewMode) Box {
                     IconButton(onClick = { headerMenuOpen = true }) {
                         Icon(painterResource(R.drawable.more_vert), contentDescription = stringResource(R.string.a11y_step_more))
                     }
                     DropdownMenu(expanded = headerMenuOpen, onDismissRequest = { headerMenuOpen = false }) {
                         DropdownMenuItem(
-                            text = { Text(stringResource(R.string.a11y_regenerate_saved_item)) },
+                            text = { Text(stringResource(R.string.regenerate_action)) },
                             leadingIcon = { Icon(painterResource(R.drawable.refresh), contentDescription = null, modifier = Modifier.size(20.dp)) },
-                            onClick = { headerMenuOpen = false; onRegenerate() },
+                            enabled = !editingLocked && !initial.isCompleted && !initial.isArchived,
+                            onClick = {
+                                headerMenuOpen = false
+                                onAutosaveDraft(buildUpdated())
+                                confirmTransform = "regenerate"
+                            },
                         )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.split_action)) },
+                            leadingIcon = { Icon(painterResource(R.drawable.split), contentDescription = null, modifier = Modifier.size(20.dp)) },
+                            enabled = !editingLocked && !initial.isCompleted && !initial.isArchived,
+                            onClick = {
+                                headerMenuOpen = false
+                                onAutosaveDraft(buildUpdated())
+                                onCheckActiveReminder { hasReminder ->
+                                    splitHasReminder = hasReminder
+                                    confirmTransform = "split"
+                                }
+                            },
+                        )
+                        HorizontalDivider()
                         DropdownMenuItem(
                             text = { Text(stringResource(R.string.a11y_delete), color = MaterialTheme.colorScheme.error) },
                             leadingIcon = { Icon(painterResource(R.drawable.delete), contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(20.dp)) },
@@ -1350,6 +1541,35 @@ fun SavedItemDetailScreen(
                         )
                     }
                 }
+            }
+            requestedTransform?.let { operation ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = stringResource(if (operation == "split") R.string.split_processing else R.string.regenerate_processing),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    Spacer(Modifier.weight(1f))
+                    TextButton(onClick = {
+                        onCancelTransform(
+                            if (operation == "split") PendingProposedOpType.Split
+                            else PendingProposedOpType.Regenerate
+                        )
+                        requestedTransform = null
+                    }) { Text(stringResource(R.string.ui_action_cancel)) }
+                }
+            }
+            if (requestedTransform == null && initial.pendingTransformStatus.isNotBlank()) {
+                Text(
+                    text = stringResource(
+                        if (initial.pendingTransformStatus == "processing") {
+                            if (initial.pendingTransformType == PendingProposedOpType.Split) R.string.split_processing
+                            else R.string.regenerate_processing
+                        } else R.string.ai_awaiting_review
+                    ),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                )
             }
         }
 
@@ -1503,6 +1723,7 @@ fun SavedItemDetailScreen(
                 BasicTextField(
                     value = content,
                     onValueChange = { content = it },
+                    enabled = !editingLocked,
                     textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
                     cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                     modifier = Modifier
@@ -1530,7 +1751,7 @@ fun SavedItemDetailScreen(
                 val detailClipboard = remember(context) { AndroidClipboardController(context) }
                 FlowRow(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     detailButtons.forEach { button ->
-                        SavedItemActionChip(button = button, context = context, clipboard = detailClipboard)
+                        SavedItemActionChip(button = button, context = context, clipboard = detailClipboard, compact = false)
                     }
                 }
             }
@@ -1763,13 +1984,13 @@ fun SavedItemDetailScreen(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     OutlinedButton(onClick = { onRejectDelete?.invoke() }) {
-                        Text(stringResource(R.string.review_reject_change), color = MaterialTheme.colorScheme.error)
+                        Text(stringResource(reviewSecondaryLabelRes), color = MaterialTheme.colorScheme.error)
                     }
                     Button(
                         onClick = { onSaveApprove?.invoke(ReviewItemDraft(buildUpdated(), reviewSteps)) },
                         modifier = Modifier.weight(1f),
                     ) {
-                        Text(stringResource(R.string.review_save_approve))
+                        Text(stringResource(reviewPrimaryLabelRes))
                     }
                 }
             }

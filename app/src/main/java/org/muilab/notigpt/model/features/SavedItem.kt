@@ -62,6 +62,11 @@ data class SavedItem(
     /** Newest generated change explicitly acknowledged by the user. */
     @ColumnInfo(defaultValue = "0")
     val lastViewedChangeAt: Long = 0L,
+    /** Lightweight cross-device lock/result marker; proposal content remains initiating-device local. */
+    @ColumnInfo(defaultValue = "''")
+    val pendingTransformType: String = "",
+    @ColumnInfo(defaultValue = "''")
+    val pendingTransformStatus: String = "",
 ) {
     val isTodo: Boolean
         @Ignore get() = itemType == SavedItemType.Todo

@@ -7,6 +7,7 @@ import org.muilab.notigpt.data.remote.n8n.workers.handlers.ExtractionPipelineHan
 import org.muilab.notigpt.data.remote.n8n.workers.handlers.PreferenceQuickSyncHandler
 import org.muilab.notigpt.data.remote.n8n.workers.handlers.ReflectionPipelineHandler
 import org.muilab.notigpt.data.remote.n8n.workers.handlers.SavedItemRegenerationHandler
+import org.muilab.notigpt.data.remote.n8n.workers.handlers.SavedItemSplitHandler
 import org.muilab.notigpt.data.remote.n8n.workers.handlers.ReviewTranslationHandler
 import org.muilab.notigpt.data.remote.n8n.workers.handlers.SuggestionRefreshHandler
 
@@ -33,7 +34,8 @@ internal object N8nWorkerHandlers {
             is N8nWorkerInput.ExtractionPipeline -> ExtractionPipelineHandler.handle(ctx, input)
             is N8nWorkerInput.ReflectionPipeline -> ReflectionPipelineHandler.handle(ctx)
             is N8nWorkerInput.PreferenceQuickSync -> PreferenceQuickSyncHandler.handle(ctx, input)
-            is N8nWorkerInput.RegenerateOne -> SavedItemRegenerationHandler.handleOne(ctx, raw)
+            is N8nWorkerInput.RegenerateOne -> SavedItemRegenerationHandler.handleOne(ctx, raw, runAttemptCount)
+            is N8nWorkerInput.SplitOne -> SavedItemSplitHandler.handle(ctx, input)
             is N8nWorkerInput.ReviewTranslation -> ReviewTranslationHandler.handle(ctx, input, runAttemptCount)
             is N8nWorkerInput.SuggestionRefresh -> SuggestionRefreshHandler.handle(ctx)
         }

@@ -255,6 +255,8 @@ class FirestoreRestoreRepository(
             isViewed = doc.getBoolean("isViewed") ?: true,
             isStarred = doc.getBoolean("isStarred") ?: false,
             lastViewedChangeAt = doc.getLong("lastViewedChangeAtEpoch") ?: 0L,
+            pendingTransformType = doc.getString("pendingTransformType").orEmpty(),
+            pendingTransformStatus = doc.getString("pendingTransformStatus").orEmpty(),
         )
     }
 

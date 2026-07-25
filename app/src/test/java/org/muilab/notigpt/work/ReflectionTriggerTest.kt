@@ -1,6 +1,7 @@
 package org.muilab.notigpt.work
 
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -18,25 +19,35 @@ class ReflectionTriggerTest {
     }
 
     @Test
-    fun `five dirty items trigger after minimum interval`() {
+    fun `item changes restart one three minute trailing request`() {
+        val first = ReflectionTrigger.changeDrivenRequest()
+        val repeated = ReflectionTrigger.changeDrivenRequest()
+
+        assertEquals(3 * 60_000L, first.delayMs)
+        assertTrue(first.replaceExisting)
+        assertEquals(first, repeated)
+    }
+
+    @Test
+    fun `recent attempt cannot mask daily safety net`() {
         assertTrue(
             ReflectionTrigger.shouldEnqueue(
-                now = ReflectionTrigger.REFLECTION_MIN_INTERVAL_MS,
+                now = ReflectionTrigger.REFLECTION_MAX_INTERVAL_MS,
                 lastSuccess = 0L,
-                lastAttempt = 0L,
-                dirtyCount = ReflectionTrigger.REFLECTION_DIRTY_ITEM_THRESHOLD,
+                lastAttempt = ReflectionTrigger.REFLECTION_MAX_INTERVAL_MS,
+                dirtyCount = 0,
             ),
         )
     }
 
     @Test
-    fun `minimum interval debounces both trigger paths`() {
+    fun `daily safety net stays idle before twenty four hours`() {
         assertFalse(
             ReflectionTrigger.shouldEnqueue(
-                now = ReflectionTrigger.REFLECTION_MAX_INTERVAL_MS,
+                now = ReflectionTrigger.REFLECTION_MAX_INTERVAL_MS - 1L,
                 lastSuccess = 0L,
-                lastAttempt = ReflectionTrigger.REFLECTION_MAX_INTERVAL_MS - 1L,
-                dirtyCount = ReflectionTrigger.REFLECTION_DIRTY_ITEM_THRESHOLD,
+                lastAttempt = 0L,
+                dirtyCount = 100,
             ),
         )
     }

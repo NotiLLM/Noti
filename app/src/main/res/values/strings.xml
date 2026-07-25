@@ -25,6 +25,53 @@
     <string name="ui_action_save">Save</string>
     <string name="a11y_set_deadline">Set deadline</string>
     <string name="review_mark_complete">Mark as complete</string>
+    <string name="split_action">Split</string>
+    <string name="regenerate_action">Regenerate</string>
+    <string name="split_confirm_title">Split this item?</string>
+    <string name="split_confirm_message">AI will reorganize independent To-Dos &amp; Keeps. Wording or context may change, but the original stays unchanged until you approve the full result.</string>
+    <string name="split_confirm_message_reminder">AI will reorganize independent To-Dos &amp; Keeps. Wording or context may change, but the original stays unchanged until you approve the full result. This item’s reminder will be dismissed only if you approve the split.</string>
+    <string name="regenerate_confirm_title">Regenerate this item?</string>
+    <string name="regenerate_confirm_message">AI will create a replacement from this item and its related context. The original stays unchanged until you review and approve the result.</string>
+    <string name="split_processing">Splitting…</string>
+    <string name="regenerate_processing">Regenerating…</string>
+    <string name="review_chip_splits">Splits (%1$d)</string>
+    <string name="review_badge_split">Split</string>
+    <string name="review_badge_regenerated">Regenerated</string>
+    <string name="review_split_summary">1 → %1$d · %2$s %3$s</string>
+    <string name="review_split_detail_title">Split into %1$d results</string>
+    <string name="review_original_item">Original item</string>
+    <string name="review_source_changed">The source changed after this result was generated. Run it again to approve safely.</string>
+    <string name="review_edit_result">Edit this result</string>
+    <string name="review_save_return">Save &amp; return</string>
+    <string name="review_remove_from_split">Remove from split</string>
+    <string name="saved_item_more_actions">+%1$d actions</string>
+    <string name="quick_sync_ready">Personalization suggestion ready</string>
+    <string name="quick_sync_view">View</string>
+    <string name="quick_sync_summary_title">Suggested personalization change</string>
+    <string name="quick_sync_summary_message">Review the suggestion before applying it.</string>
+    <string name="quick_sync_apply">Apply suggestion</string>
+    <string name="quick_sync_discuss">Discuss in chat</string>
+    <string name="personalization_split_belong_together">These results belong together</string>
+    <string name="personalization_split_context_lost">Important context was lost</string>
+    <string name="personalization_split_types_wrong">The To-Do/Keep types are wrong</string>
+    <string name="personalization_split_state_wrong">Deadlines or completion states are wrong</string>
+    <string name="personalization_split_too_fragmented">The split is too fragmented</string>
+    <string name="personalization_regenerate_context_lost">Important context was lost</string>
+    <string name="personalization_regenerate_incorrect">The result contains incorrect information</string>
+    <string name="personalization_regenerate_original_better">The original wording was better</string>
+    <string name="personalization_regenerate_state_wrong">The type, deadline, or completion state is wrong</string>
+    <string name="personalization_regenerate_scope_wrong">The result is too broad or fragmented</string>
+    <string name="personalization_merge_separate_actions">These are separate actions or references</string>
+    <string name="personalization_merge_different_time">I handle these at different times</string>
+    <string name="personalization_merge_lifecycle_wrong">Their deadlines or lifecycles differ</string>
+    <string name="personalization_merge_context_lost">The merge lost important context</string>
+    <string name="personalization_merge_result_wrong">The wrong result item was chosen</string>
+    <string name="ai_change_ready">AI change ready for review</string>
+    <string name="split_no_result">This item is already focused, or it couldn’t be split safely.</string>
+    <string name="regenerate_no_result">No changes suggested.</string>
+    <string name="review_add_split_result">Add result</string>
+    <string name="ai_change_pending_other_device">An AI change is pending on another device.</string>
+    <string name="ai_awaiting_review">Awaiting review</string>
 
     <!-- Settings -->
     <string name="ui_settings_delete_on_swipe">Delete on swipe:</string>
@@ -37,6 +84,8 @@
     <string name="ui_settings_extraction_language_en">English</string>
     <string name="ui_settings_extraction_language_zhtw">繁體中文 (zh-TW)</string>
     <string name="ui_settings_extraction_language_search">Search languages</string>
+    <string name="ui_settings_approve_simple_on_use">Approve creations and updates on open or use</string>
+    <string name="ui_settings_approve_simple_on_use_desc">Automatically approve AI-created or ordinarily updated To-Dos &amp; Keeps when you interact with them. Merge, Split, and Regenerate still require review.</string>
 
     <string name="scheduled_reminder_time">Reminder time: %1$s</string>
     <string name="scheduled_pick_time">Pick time</string>
@@ -92,7 +141,7 @@
     <string name="ui_saved_items_filter_keep">Keep</string>
     <string name="ui_saved_items_filter_archived">Archived</string>
     <string name="ui_saved_items_filter_starred">Starred</string>
-    <string name="ui_saved_items_search_placeholder">Search saved items (use + for AND)</string>
+    <string name="ui_saved_items_search_placeholder">Search To-Dos &amp; Keeps (use + for AND)</string>
     <string name="ui_saved_items_add_dialog_title">Add</string>
     <string name="ui_saved_items_add_dialog_body">Create a Todo or a Memo</string>
     <string name="ui_saved_items_add_dialog_task">Todo</string>
@@ -115,6 +164,13 @@
     <string name="pending_review_merge_message">This item has an unreviewed update that will merge %1$d other item(s). Accept the changes before editing?</string>
     <string name="pending_review_edit_accept">Accept &amp; edit</string>
     <string name="pending_review_edit_cancel">Not now</string>
+    <string name="pending_review_result_title">Review the AI result</string>
+    <string name="pending_review_split_message">1 → %1$d. First results: %2$s. The original will be replaced only if you approve the whole split.</string>
+    <string name="pending_review_regenerate_message">Suggested replacement: %1$s. The original stays unchanged until approval.</string>
+    <string name="pending_review_approve_continue">Approve &amp; continue</string>
+    <string name="pending_review_details">Review details</string>
+    <string name="pending_review_trust_checkbox">Automatically approve future creations and updates when I open or use them</string>
+    <string name="pending_review_trust_helper">You can change this later in Settings.</string>
     <string name="saved_item_whats_new">What\'s new</string>
     <string name="saved_item_whats_new_generic">This item is waiting for your review.</string>
     <string name="saved_item_acknowledge">Got it</string>
@@ -206,7 +262,7 @@
         <item quantity="one">%1$d keep</item>
         <item quantity="other">%1$d keeps</item>
     </plurals>
-    <string name="generating_saved_items">Generating saved items…</string>
+    <string name="generating_saved_items">Creating To-Dos &amp; Keeps…</string>
 
     <!-- Notifications screen (UI chrome only; not notification content) -->
     <string name="ui_notifications_new">New Notifications (%1$d)</string>
@@ -222,7 +278,7 @@
 
     <!-- Noti record context menu -->
     <string name="ui_noti_menu_title">Options</string>
-    <string name="ui_action_extract_saved_item">Extract saved item</string>
+    <string name="ui_action_extract_saved_item">Create To-Do/Keep</string>
     <string name="ui_noti_linked_items">Items from this notification</string>
     <string name="ui_noti_show_more_context">Show more context</string>
     <string name="ui_noti_hide_more_context">Hide more context</string>
@@ -235,7 +291,7 @@
     <string name="menu_settings">Settings</string>
 
     <string name="saved_item_related_notifications">Related notifications (%1$d)</string>
-    <string name="saved_item_related_notifications_loading">Loading saved item &amp; notifications…</string>
+    <string name="saved_item_related_notifications_loading">Loading item &amp; notifications…</string>
     <string name="saved_item_no_related_notifications">No related notifications.</string>
     <string name="a11y_expand">Expand</string>
     <string name="a11y_collapse">Collapse</string>
@@ -360,7 +416,7 @@
     <string name="pref_chat_empty_prompt_about_me">Tell me about yourself so I can better understand your notifications.</string>
     <string name="pref_chat_empty_example_about_me">For example: \"I am a software engineer at Google\" or \"My partner\'s name is Alice\"</string>
     <string name="pref_chat_discover_button">Learn about me</string>
-    <string name="pref_chat_discover_analyzing">Analyzing your notifications and saved items to learn about you…</string>
+    <string name="pref_chat_discover_analyzing">Analyzing your notifications, To-Dos &amp; Keeps to learn about you…</string>
     <string name="pref_chat_active_rules_count">You have %1$d active rule(s).</string>
     <string name="pref_chat_input_placeholder">Describe a preference…</string>
     <string name="pref_chat_send_desc">Send</string>
@@ -394,8 +450,8 @@
     <string name="pref_conflict_resolve">Resolve</string>
 
     <!-- Chat context card (shown when chat is entered from a flow redirect) -->
-    <string name="pref_chat_context_edit">Refining extraction for an edited saved item:</string>
-    <string name="pref_chat_context_delete">Refining extraction for a deleted saved item:</string>
+    <string name="pref_chat_context_edit">Refining extraction for an edited To-Do/Keep:</string>
+    <string name="pref_chat_context_delete">Refining extraction for a deleted To-Do/Keep:</string>
     <string name="pref_chat_context_extract">Refining extraction for a manually extracted notification:</string>
     <string name="pref_chat_context_before">Before:</string>
     <string name="pref_chat_context_after">After:</string>
@@ -426,7 +482,7 @@
     <!-- Reminder sorting sections -->
     <string name="saved_item_section_unseen">New</string>
     <string name="saved_item_section_pinned">Pinned</string>
-    <string name="saved_item_section_scored">All Saved Items</string>
+    <string name="saved_item_section_scored">All To-Dos &amp; Keeps</string>
 
     <!-- Todo steps -->
     <string name="step_section_title">Steps</string>
@@ -442,28 +498,28 @@
     <string name="a11y_step_more">More options</string>
 
     <!-- Reminder actions -->
-    <string name="saved_item_refresh_all">Refresh all saved items</string>
+    <string name="saved_item_refresh_all">Refresh all To-Dos &amp; Keeps</string>
     <string name="reminder_regenerate">Regenerate</string>
     <string name="saved_item_share">Share</string>
     <string name="reminder_pin">Pin</string>
     <string name="reminder_unpin">Unpin</string>
 
     <!-- Reminder feedback dialog -->
-    <string name="saved_item_feedback_title">How should this saved item be ranked?</string>
+    <string name="saved_item_feedback_title">How should this To-Do/Keep be ranked?</string>
     <string name="reminder_feedback_important">Important</string>
     <string name="reminder_feedback_handle_later">Handle Later</string>
 
     <!-- Reminder button chips -->
     <string name="a11y_open_link">Open link</string>
     <string name="a11y_copy_text">Copy text</string>
-    <string name="a11y_share_saved_item">Share saved item</string>
-    <string name="a11y_refresh_saved_items">Refresh all saved items</string>
-    <string name="dialog_regenerate_all_saved_items_title">Regenerate All Saved Items?</string>
-    <string name="dialog_regenerate_all_saved_items_message">This will resend all existing saved items and their notification context to the pipeline for regeneration. Saved items may be rewritten or merged.</string>
+    <string name="a11y_share_saved_item">Share</string>
+    <string name="a11y_refresh_saved_items">Refresh all To-Dos &amp; Keeps</string>
+    <string name="dialog_regenerate_all_saved_items_title">Regenerate All To-Dos &amp; Keeps?</string>
+    <string name="dialog_regenerate_all_saved_items_message">This will resend all existing To-Dos &amp; Keeps and their notification context for regeneration. Results may be rewritten or merged.</string>
     <string name="dialog_regenerate_all_saved_items_confirm">Regenerate</string>
-    <string name="a11y_regenerate_saved_item">Regenerate saved item</string>
-    <string name="a11y_pin_saved_item">Pin saved item</string>
-    <string name="a11y_unpin_saved_item">Unpin saved item</string>
+    <string name="a11y_regenerate_saved_item">Regenerate</string>
+    <string name="a11y_pin_saved_item">Pin</string>
+    <string name="a11y_unpin_saved_item">Unpin</string>
     <string name="a11y_archive">Archive</string>
     <string name="a11y_star">Star</string>
     <string name="a11y_unstar">Unstar</string>
@@ -599,8 +655,8 @@
     <string name="review_why_updated">Why this item was updated</string>
     <string name="review_why_merged">Why these items were merged</string>
     <string name="review_merge_into">Combining into %1$s</string>
-    <string name="review_merge_survivor">Survivor</string>
-    <string name="review_merge_source">Source item</string>
+    <string name="review_merge_survivor">Result</string>
+    <string name="review_merge_source">Combined from</string>
     <string name="review_merge_description">Description to add</string>
     <string name="review_merge_steps">Steps to add</string>
     <string name="review_merge_fields">Fields to change</string>

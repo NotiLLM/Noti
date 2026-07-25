@@ -3,6 +3,7 @@ package org.muilab.notigpt.data.local.room.dao
 import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.Query
+import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 import org.muilab.notigpt.model.features.PendingProposedOp
 
@@ -17,6 +18,9 @@ interface PendingProposedOpDao {
 
     @Insert
     suspend fun insertAll(ops: List<PendingProposedOp>): List<Long>
+
+    @Update
+    suspend fun update(op: PendingProposedOp)
 
     @Query("SELECT * FROM pending_proposed_op ORDER BY createdAt ASC, opId ASC")
     fun observeAll(): Flow<List<PendingProposedOp>>

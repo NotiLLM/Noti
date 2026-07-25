@@ -5,6 +5,7 @@ import org.muilab.notigpt.util.Constants.Companion.N8N_EXTRACTION_PIPELINE
 import org.muilab.notigpt.util.Constants.Companion.N8N_REFLECTION_PIPELINE
 import org.muilab.notigpt.util.Constants.Companion.N8N_PREFERENCE_QUICK_SYNC
 import org.muilab.notigpt.util.Constants.Companion.N8N_REGENERATE_ONE
+import org.muilab.notigpt.util.Constants.Companion.N8N_SPLIT_ONE
 import org.muilab.notigpt.util.Constants.Companion.N8N_REVIEW_TRANSLATION
 import org.muilab.notigpt.util.Constants.Companion.N8N_SUGGESTION_REFRESH
 
@@ -37,6 +38,12 @@ sealed interface N8nWorkerInput {
 
     /** Regenerate a single SavedItem. */
     data class RegenerateOne(
+        override val webhookPath: String,
+        val savedItemId: String,
+    ) : N8nWorkerInput
+
+    /** Separates a single SavedItem into an atomic review batch. */
+    data class SplitOne(
         override val webhookPath: String,
         val savedItemId: String,
     ) : N8nWorkerInput
@@ -79,6 +86,11 @@ sealed interface N8nWorkerInput {
                     savedItemId = input.getString("saved_item_id")
                         ?: input.getString("reminder_id")
                         ?: return null,
+                )
+
+                N8N_SPLIT_ONE -> SplitOne(
+                    webhookPath = webhookPath,
+                    savedItemId = input.getString("saved_item_id") ?: return null,
                 )
 
                 N8N_REVIEW_TRANSLATION -> ReviewTranslation(

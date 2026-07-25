@@ -32,6 +32,8 @@ import org.muilab.notigpt.model.features.PendingProposedOpType
 import org.muilab.notigpt.model.features.ReviewTranslationState
 import org.muilab.notigpt.data.remote.n8n.enqueueReviewTranslation
 import org.muilab.notigpt.util.SharedPreferencesManager
+import org.muilab.notigpt.ui.preference.model.PreferenceEntryPoint
+import java.util.UUID
 
 /**
  * Drives the swipe-to-review screen over the fully-staged model: pipeline proposals live in
@@ -47,8 +49,8 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
     private val relatedRepo = SavedItemRelatedNotificationsRepository(application.applicationContext)
     private val pendingProposedOpRepo = PendingProposedOpRepository(application.applicationContext)
 
-    enum class ReviewFilter { All, NewTodos, UpdatedTodos, NewKeeps, UpdatedKeeps }
-    enum class ReviewOperationKind { Create, Update, Merge }
+    enum class ReviewFilter { All, NewTodos, UpdatedTodos, NewKeeps, UpdatedKeeps, Splits }
+    enum class ReviewOperationKind { Create, Update, Merge, Split, Regenerate }
 
     private val _filter = MutableStateFlow(ReviewFilter.All)
     val filter: StateFlow<ReviewFilter> = _filter
@@ -58,6 +60,47 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
     val deferredKeys: StateFlow<Set<String>> = _deferredKeys
     fun reviewLater(entry: ReviewEntry) { _deferredKeys.value += entry.key }
     fun restoreDeferred() { _deferredKeys.value = emptySet() }
+
+    /** Saves one child edit back into the still-atomic Split batch. */
+    fun saveSplitChild(entry: ReviewEntry, index: Int, draft: ReviewItemDraft) {
+        if (entry.operationKind != ReviewOperationKind.Split) return
+        val children = entry.splitChildren.toMutableList()
+        if (index !in children.indices) return
+        children[index] = draft
+        viewModelScope.launch { pendingProposedOpRepo.setSplitBatchDraft(entry.key, children) }
+    }
+
+    fun removeSplitChild(entry: ReviewEntry, index: Int) {
+        if (entry.operationKind != ReviewOperationKind.Split || entry.splitChildren.size <= 2) return
+        val children = entry.splitChildren.toMutableList()
+        if (index !in children.indices) return
+        children.removeAt(index)
+        viewModelScope.launch { pendingProposedOpRepo.setSplitBatchDraft(entry.key, children) }
+    }
+
+    fun addSplitChild(entry: ReviewEntry) {
+        if (entry.operationKind != ReviewOperationKind.Split) return
+        val now = System.currentTimeMillis()
+        val id = "pending_added_${UUID.randomUUID().toString().take(8)}"
+        val item = SavedItem(
+            savedItemId = id,
+            itemType = SavedItemType.Todo,
+            state = SavedItemState.New,
+            lastUpdateTimestamp = now,
+            syncModifiedAt = now,
+            deadlineAtMs = 0L,
+            origin = "manual",
+            userEdited = true,
+            humanEditCount = 1,
+            isStarred = entry.survivor?.item?.isStarred ?: false,
+        )
+        viewModelScope.launch {
+            pendingProposedOpRepo.setSplitBatchDraft(
+                entry.key,
+                entry.splitChildren + ReviewItemDraft(item, emptyList()),
+            )
+        }
+    }
 
     /**
      * One review card: [preview] is what accepting would produce (a would-be item for creates, the
@@ -73,6 +116,8 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
         val group: PendingProposedOpRepository.OpGroup?,
         val reason: String,
         val operationKind: ReviewOperationKind,
+        val splitChildren: List<ReviewItemDraft> = emptyList(),
+        val sourceVersionIsCurrent: Boolean = true,
         val translatedDraft: ReviewItemDraft? = null,
     ) {
         val isNewLike: Boolean get() = group?.isCreate == true || operationKind == ReviewOperationKind.Create
@@ -94,6 +139,7 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
                 val translationMatches = translation?.sourceOpIds == group.ops.map { it.opId }
                 if (translation?.isPending == true && translationMatches) return@mapNotNull null
                 val preview = pendingProposedOpRepo.buildPreview(group) ?: return@mapNotNull null
+                if (preview.isProcessing) return@mapNotNull null
                 val kind = when {
                     group.isCreate && group.ops.any { pending ->
                         runCatching { org.json.JSONObject(pending.payload).optString("reviewOperationKind") == "merge" }
@@ -101,20 +147,28 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
                     } -> ReviewOperationKind.Merge
                     group.isCreate -> ReviewOperationKind.Create
                     group.ops.any { it.opType == PendingProposedOpType.Merge } -> ReviewOperationKind.Merge
+                    group.ops.any { it.opType == PendingProposedOpType.Split } -> ReviewOperationKind.Split
+                    group.ops.any { it.opType == PendingProposedOpType.Regenerate } -> ReviewOperationKind.Regenerate
                     else -> ReviewOperationKind.Update
                 }
                 val translatedDraft = translation?.takeIf { translationMatches }?.translatedDraft?.let { translated ->
                     overlayTranslatedText(ReviewItemDraft(preview.item, preview.steps), translated)
                 }
+                val translatedBatch = translation?.takeIf { translationMatches }
+                    ?.translatedBatchDrafts
+                    .orEmpty()
+                val visibleSplitChildren = translatedBatch.ifEmpty { preview.splitChildren }
                 ReviewEntry(
                     key = group.key,
-                    preview = translatedDraft?.item ?: preview.item,
-                    previewSteps = translatedDraft?.steps ?: preview.steps,
+                    preview = translatedBatch.firstOrNull()?.item ?: translatedDraft?.item ?: preview.item,
+                    previewSteps = translatedBatch.firstOrNull()?.steps ?: translatedDraft?.steps ?: preview.steps,
                     survivor = preview.survivor,
                     mergeSources = preview.mergeSources,
                     group = group,
                     reason = group.reason,
                     operationKind = kind,
+                    splitChildren = visibleSplitChildren,
+                    sourceVersionIsCurrent = preview.sourceVersionIsCurrent,
                     translatedDraft = translatedDraft,
                 )
             }
@@ -157,6 +211,7 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
             ReviewFilter.UpdatedTodos -> isTodo && !isNew
             ReviewFilter.NewKeeps -> !isTodo && isNew
             ReviewFilter.UpdatedKeeps -> !isTodo && !isNew
+            ReviewFilter.Splits -> entry.operationKind == ReviewOperationKind.Split
         }
     }
 
@@ -198,6 +253,7 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
                 source = ReviewItemDraft(entry.preview, entry.previewSteps),
                 evidenceRecordIds = evidence,
                 sourceOpIds = entry.group?.ops?.map { it.opId }.orEmpty(),
+                sourceBatch = entry.splitChildren,
             )
             pendingProposedOpRepo.setReviewTranslation(entry.key, ReviewTranslationState.toJson(state))
             enqueueReviewTranslation(getApplication<Application>(), entry.key)
@@ -279,7 +335,12 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
      * One review action's snackbar. [item] is what was acted on (for "Tell it why"); [canTeach] is
      * true for rejects — the moments where teaching a preference makes sense.
      */
-    data class ReviewSnackbar(val messageRes: Int, val item: SavedItem?, val canTeach: Boolean)
+    data class ReviewSnackbar(
+        val messageRes: Int,
+        val item: SavedItem?,
+        val canTeach: Boolean,
+        val preferenceEntryPoint: PreferenceEntryPoint = PreferenceEntryPoint.DELETE,
+    )
 
     private val _snackbar = Channel<ReviewSnackbar>(Channel.CONFLATED)
     /** Emits when an action lands, so the screen can show a snackbar (Undo + optional Tell-it-why). */
@@ -291,8 +352,12 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
 
     fun approve(entry: ReviewEntry) {
         viewModelScope.launch {
+            if (!entry.sourceVersionIsCurrent) return@launch
             val group = entry.group
             if (group != null) {
+                if (entry.operationKind == ReviewOperationKind.Split && entry.splitChildren.size >= 2) {
+                    pendingProposedOpRepo.setSplitBatchDraft(entry.key, entry.splitChildren)
+                }
                 val outcome = pendingProposedOpRepo.applyGroup(
                     group = group,
                     editedDraft = entry.translatedDraft,
@@ -352,7 +417,18 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
             if (group != null) {
                 val reviewDraft = pendingProposedOpRepo.discardGroup(group, ts)
                 pendingUndo = UndoableAction.DiscardGroup(group, reviewDraft)
-                _snackbar.trySend(ReviewSnackbar(R.string.review_rejected_toast, entry.preview, canTeach = true))
+                val feedbackEntry = when (entry.operationKind) {
+                    ReviewOperationKind.Split -> PreferenceEntryPoint.SPLIT
+                    ReviewOperationKind.Regenerate -> PreferenceEntryPoint.REGENERATE
+                    ReviewOperationKind.Merge -> PreferenceEntryPoint.MERGE
+                    else -> PreferenceEntryPoint.DELETE
+                }
+                _snackbar.trySend(ReviewSnackbar(
+                    R.string.review_rejected_toast,
+                    if (entry.operationKind == ReviewOperationKind.Split) entry.survivor?.item else entry.preview,
+                    canTeach = true,
+                    preferenceEntryPoint = feedbackEntry,
+                ))
                 return@launch
             }
             val item = db.savedItemDao().getById(entry.preview.savedItemId) ?: return@launch

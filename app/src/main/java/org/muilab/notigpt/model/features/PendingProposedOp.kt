@@ -14,6 +14,12 @@ object PendingProposedOpType {
 
     /** Proposes folding one or more items into a surviving item. */
     const val Merge = "merge"
+
+    /** Proposes replacing one item with two or more independently useful items. */
+    const val Split = "split"
+
+    /** Proposes a user-requested wholesale rewrite while retaining the same item id. */
+    const val Regenerate = "regenerate"
 }
 
 /**

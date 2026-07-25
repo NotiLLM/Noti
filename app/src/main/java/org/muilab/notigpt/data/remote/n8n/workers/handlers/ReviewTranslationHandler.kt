@@ -14,6 +14,7 @@ import org.muilab.notigpt.data.remote.n8n.formatter.N8nRecordFormatter
 import org.muilab.notigpt.data.remote.n8n.workers.N8nWorkerInput
 import org.muilab.notigpt.model.features.ReviewTranslationState
 import org.muilab.notigpt.model.features.TodoStep
+import org.muilab.notigpt.model.features.ReviewItemDraft
 import org.muilab.notigpt.util.SharedPreferencesManager
 import java.util.TimeZone
 
@@ -61,6 +62,9 @@ internal object ReviewTranslationHandler {
             "reviewKey" to input.reviewKey,
             "currentItem" to state.sourceItem,
             "steps" to state.sourceSteps,
+            "batchItems" to state.sourceBatch.orEmpty().map { draft ->
+                mapOf("currentItem" to draft.item, "steps" to draft.steps)
+            },
             "notiRecords" to records.sortedBy { it.time }.map { record ->
                 N8nRecordFormatter.format(record, units[record.notiKey]?.isPeople ?: false)
             },
@@ -150,10 +154,33 @@ internal object ReviewTranslationHandler {
         val response = JsonParser.parseString(responseJson).asJsonObject
         require(requiredString(response, "reviewKey") == expectedReviewKey) { "reviewKey mismatch" }
         require(requiredString(response, "targetLanguage") == source.targetLanguage) { "targetLanguage mismatch" }
+        val sourceBatch = source.sourceBatch.orEmpty()
+        if (sourceBatch.isNotEmpty()) {
+            val translatedBatch = response.getAsJsonArray("batchItems") ?: error("batchItems is required")
+            require(translatedBatch.size() == sourceBatch.size) { "Batch size changed" }
+            val merged = sourceBatch.mapIndexed { index, draft ->
+                val item = translatedBatch[index].asJsonObject
+                require(item.get("index")?.asInt == index) { "Batch order changed" }
+                mergeOneDraft(draft, item)
+            }
+            return source.copy(
+                status = ReviewTranslationState.STATUS_READY,
+                translatedBatch = merged,
+            )
+        }
+        val merged = mergeOneDraft(ReviewItemDraft(source.sourceItem, source.sourceSteps), response)
+        return source.copy(
+            status = ReviewTranslationState.STATUS_READY,
+            translatedItem = merged.item,
+            translatedSteps = merged.steps,
+        )
+    }
+
+    private fun mergeOneDraft(source: ReviewItemDraft, response: JsonObject): ReviewItemDraft {
         val title = requiredString(response, "title")
         val content = requiredString(response, "content")
 
-        val sourceSubs = source.sourceSteps.associateBy { it.todoStepId }
+        val sourceSubs = source.steps.associateBy { it.todoStepId }
         val translatedSubs = response.getAsJsonArray("steps") ?: error("steps is required")
         val subText = mutableMapOf<String, String>()
         for (element in translatedSubs) {
@@ -164,7 +191,7 @@ internal object ReviewTranslationHandler {
         }
         require(subText.keys == sourceSubs.keys) { "Step set changed" }
 
-        val sourceButtons = JsonParser.parseString(source.sourceItem.buttons).asJsonArray
+        val sourceButtons = JsonParser.parseString(source.item.buttons).asJsonArray
         val translatedButtons = response.getAsJsonArray("buttons") ?: error("buttons is required")
         val labels = mutableMapOf<Int, String>()
         for (element in translatedButtons) {
@@ -181,14 +208,13 @@ internal object ReviewTranslationHandler {
             mergedButtons[index].asJsonObject.addProperty("buttonText", labels.getValue(index))
         }
 
-        return source.copy(
-            status = ReviewTranslationState.STATUS_READY,
-            translatedItem = source.sourceItem.copy(
+        return ReviewItemDraft(
+            item = source.item.copy(
                 title = title,
                 content = content,
                 buttons = mergedButtons.toString(),
             ),
-            translatedSteps = source.sourceSteps.map { sub ->
+            steps = source.steps.map { sub ->
                 sub.copy(text = subText.getValue(sub.todoStepId))
             },
         )

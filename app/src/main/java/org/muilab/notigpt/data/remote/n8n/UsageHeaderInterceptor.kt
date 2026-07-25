@@ -21,6 +21,12 @@ class UsageHeaderInterceptor(
         response.header(USAGE_HEADER)?.takeIf(String::isNotBlank)?.let { headerValue ->
             onUsage(stageFromPath(request.url.encodedPath), headerValue)
         }
+        response.header(SPLIT_GENERATE_USAGE_HEADER)?.takeIf(String::isNotBlank)?.let { value ->
+            onUsage("split_generate", value)
+        }
+        response.header(SPLIT_VERIFY_USAGE_HEADER)?.takeIf(String::isNotBlank)?.let { value ->
+            onUsage("split_verify", value)
+        }
         return response
     }
 
@@ -29,5 +35,7 @@ class UsageHeaderInterceptor(
 
     private companion object {
         const val USAGE_HEADER = "X-Noti-Usage"
+        const val SPLIT_GENERATE_USAGE_HEADER = "X-Noti-Usage-Split-Generate"
+        const val SPLIT_VERIFY_USAGE_HEADER = "X-Noti-Usage-Split-Verify"
     }
 }

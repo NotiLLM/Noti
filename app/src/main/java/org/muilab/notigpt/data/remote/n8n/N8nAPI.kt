@@ -14,6 +14,7 @@ import org.muilab.notigpt.util.Constants.Companion.N8N_EXTRACTION_PIPELINE
 import org.muilab.notigpt.util.Constants.Companion.N8N_REFLECTION_PIPELINE
 import org.muilab.notigpt.util.Constants.Companion.N8N_REVIEW_TRANSLATION
 import org.muilab.notigpt.util.Constants.Companion.N8N_REGENERATE_ONE
+import org.muilab.notigpt.util.Constants.Companion.N8N_SPLIT_ONE
 import org.muilab.notigpt.util.Constants.Companion.N8N_SUGGESTION_REFRESH
 import org.muilab.notigpt.data.repository.suggestion.SuggestionSnapshotStore
 import org.muilab.notigpt.util.SharedPreferencesManager
@@ -75,15 +76,20 @@ const val EXTRACTION_WORK_TAG = "n8n_extraction"
 
 /**
  * Queues the periodic reflection pass (cross-thread merge): grouping (D2) then merge resolution
- * (E2), staged for review. A single KEEP slot bounds scheduler growth.
+ * (E2), staged for review. Change-driven calls replace and restart a delayed request; the daily
+ * safety net keeps any already-bounded request in the same unique slot.
  */
-fun enqueueReflectionPipeline(context: Context) {
+fun enqueueReflectionPipeline(
+    context: Context,
+    initialDelayMs: Long = 0L,
+    replaceExisting: Boolean = false,
+    now: Long = System.currentTimeMillis(),
+) {
     if (!isSignedIn()) {
         Log.d("N8nAPI", "Skipping reflection pipeline: not signed in")
         return
     }
-    SharedPreferencesManager.lastReflectionAttemptTime = System.currentTimeMillis()
-    Log.d("N8nAPI", "enqueueReflectionPipeline")
+    Log.d("N8nAPI", "enqueueReflectionPipeline: delayMs=$initialDelayMs replace=$replaceExisting")
     val inputData = Data.Builder()
         .putString("api_type", N8N_REFLECTION_PIPELINE)
         .putString("webhook_path", BuildConfig.N8N_EXTRACT_D2_GROUPING_PATH)
@@ -97,10 +103,16 @@ fun enqueueReflectionPipeline(context: Context) {
         .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
         .setConstraints(constraints)
         .setInputData(inputData)
+        .setInitialDelay(initialDelayMs.coerceAtLeast(0L), TimeUnit.MILLISECONDS)
         .build()
 
     WorkManager.getInstance(context)
-        .enqueueUniqueWork("n8n_reflection_pipeline", ExistingWorkPolicy.KEEP, workerRequest)
+        .enqueueUniqueWork(
+            "n8n_reflection_pipeline",
+            if (replaceExisting) ExistingWorkPolicy.REPLACE else ExistingWorkPolicy.KEEP,
+            workerRequest,
+        )
+    SharedPreferencesManager.lastReflectionAttemptTime = now
 }
 
 /**
@@ -178,3 +190,26 @@ fun enqueueRegenerateOne(context: Context, savedItemId: String) {
     val uniqueName = "n8n_regenerate_one_$savedItemId"
     WorkManager.getInstance(context).enqueueUniqueWork(uniqueName, ExistingWorkPolicy.REPLACE, workerRequest)
  }
+
+/** Queues one user-requested Split. KEEP enforces one in-flight transform per source. */
+fun enqueueSplitOne(context: Context, savedItemId: String) {
+    if (!isSignedIn() || savedItemId.isBlank()) return
+    Log.d("N8nAPI", "enqueueSplitOne: savedItemId=$savedItemId")
+    val inputData = Data.Builder()
+        .putString("api_type", N8N_SPLIT_ONE)
+        .putString("webhook_path", BuildConfig.N8N_SPLIT_ONE_PATH)
+        .putString("saved_item_id", savedItemId)
+        .build()
+    val request = OneTimeWorkRequestBuilder<N8nAPIWorker>()
+        // The workflow owns its single per-pass repair attempt. Do not restart the full two-pass
+        // pipeline after a terminal response or malformed result.
+        .setBackoffCriteria(BackoffPolicy.LINEAR, 1, TimeUnit.MINUTES)
+        .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+        .setInputData(inputData)
+        .build()
+    WorkManager.getInstance(context).enqueueUniqueWork(
+        "n8n_split_one_$savedItemId",
+        ExistingWorkPolicy.KEEP,
+        request,
+    )
+}

@@ -48,6 +48,12 @@ interface ReminderDao {
     @Query("SELECT * FROM reminder WHERE reminderId = :reminderId")
     suspend fun getById(reminderId: String): Reminder?
 
+    @Query("SELECT reminder.* FROM reminder INNER JOIN reminder_saved_item_ref ref ON reminder.reminderId = ref.reminderId WHERE ref.savedItemId = :savedItemId")
+    suspend fun getBySavedItemId(savedItemId: String): List<Reminder>
+
+    @Query("SELECT * FROM reminder_saved_item_ref WHERE savedItemId = :savedItemId")
+    suspend fun getRefsBySavedItemId(savedItemId: String): List<ReminderSavedItemRef>
+
     @Query("UPDATE reminder SET status = :status, updatedAtMs = :updatedAtMs, seenAtMs = :seenAtMs WHERE reminderId = :reminderId")
     suspend fun setSeen(reminderId: String, status: String = ReminderStatus.Seen, seenAtMs: Long, updatedAtMs: Long = seenAtMs)
 

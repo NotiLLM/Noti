@@ -2,6 +2,7 @@ package org.muilab.notigpt.data.remote.n8n.workers.handlers
 
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import org.muilab.notigpt.data.repository.saveditem.PendingProposedOpRepository
 
 class ReflectionPipelineHandlerTest {
 
@@ -33,5 +34,23 @@ class ReflectionPipelineHandlerTest {
         )
 
         assertEquals(listOf(listOf("a", "b", "c")), result)
+    }
+
+    @Test
+    fun approvalReflectionIds_areActualCreatedItemsOrSurvivingTarget() {
+        assertEquals(
+            listOf("split-a", "split-b"),
+            PendingProposedOpRepository.reflectionItemIds(
+                createdItemIds = listOf("split-a", "split-b"),
+                appliedItemId = "deleted-source",
+            ),
+        )
+        assertEquals(
+            listOf("merge-survivor"),
+            PendingProposedOpRepository.reflectionItemIds(
+                createdItemIds = emptyList(),
+                appliedItemId = "merge-survivor",
+            ),
+        )
     }
 }

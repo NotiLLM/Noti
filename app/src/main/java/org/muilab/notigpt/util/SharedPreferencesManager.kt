@@ -79,13 +79,13 @@ object SharedPreferencesManager {
 
     const val KEY_WAIT_SECONDS_BEFORE_NOTI_UNIT_SYNC = "waitSecondsBeforeNotiUnitSync"
     var waitSecondsBeforeNotiUnitSync: Int
-        get() = get(KEY_LOCAL_PREFS, KEY_WAIT_SECONDS_BEFORE_NOTI_UNIT_SYNC, 3 * 60)
-        set(value) = put(KEY_LOCAL_PREFS, KEY_WAIT_SECONDS_BEFORE_NOTI_UNIT_SYNC, value)
+        get() = 2 * 60
+        set(@Suppress("UNUSED_PARAMETER") value) = Unit
 
     const val KEY_MAX_RECORDS_BEFORE_NOTI_SYNC = "maxRecordsBeforeNotiSync"
     var maxRecordsBeforeNotiSync: Int
-        get() = get(KEY_LOCAL_PREFS, KEY_MAX_RECORDS_BEFORE_NOTI_SYNC, 10)
-        set(value) = put(KEY_LOCAL_PREFS, KEY_MAX_RECORDS_BEFORE_NOTI_SYNC, value)
+        get() = 10
+        set(@Suppress("UNUSED_PARAMETER") value) = Unit
 
     // --- Swipe Delete Direction ---
     const val KEY_SWIPE_DELETE_LEFT = "swipeDeleteLeft"
@@ -111,6 +111,11 @@ object SharedPreferencesManager {
         get() = get(KEY_LOCAL_PREFS, KEY_TARGET_EXTRACTION_LANGUAGE, "original")
         set(value) = put(KEY_LOCAL_PREFS, KEY_TARGET_EXTRACTION_LANGUAGE, value)
 
+    /** Device-local, account-scoped trust for ordinary AI creations and updates. */
+    var approveCreationsAndUpdatesOnUse: Boolean
+        get() = get(KEY_LOCAL_PREFS, "approveSimpleOnUse:${userId.ifBlank { "signed_out" }}", false)
+        set(value) = put(KEY_LOCAL_PREFS, "approveSimpleOnUse:${userId.ifBlank { "signed_out" }}", value)
+
     const val KEY_LAST_APP_RESUME_TIME = "lastAppResumeTime"
     var lastAppResumeTime: Long
         get() = get(KEY_LOCAL_PREFS, KEY_LAST_APP_RESUME_TIME, 0L)
@@ -130,7 +135,7 @@ object SharedPreferencesManager {
     private const val KEY_REFLECTION_DIRTY_ITEM_IDS = "reflectionDirtyItemIds"
     private const val KEY_REFLECTION_DIRTY_VERSION = "reflectionDirtyVersion"
 
-    /** Last time D2 was enqueued. Used to debounce item-count-triggered runs. */
+    /** Last time D2 was enqueued. */
     var lastReflectionAttemptTime: Long
         get() = get(KEY_LOCAL_PREFS, KEY_LAST_REFLECTION_ATTEMPT_TIME, 0L).takeIf { it > 0L }
             ?: get(KEY_LOCAL_PREFS, LEGACY_KEY_LAST_REFLECTION_RUN_TIME, 0L)
@@ -144,11 +149,14 @@ object SharedPreferencesManager {
 
     @Synchronized
     fun addReflectionDirtyItemIds(itemIds: Collection<String>): Int {
+        val validIds = itemIds.filter(String::isNotBlank)
+        if (validIds.isEmpty()) return reflectionDirtyItemIds().size
         val merged = reflectionDirtyItemIds().toMutableSet()
-        val previousSize = merged.size
-        merged += itemIds.filter(String::isNotBlank)
+        merged += validIds
         put(KEY_LOCAL_PREFS, KEY_REFLECTION_DIRTY_ITEM_IDS, JSONArray(merged.toList()).toString())
-        if (merged.size != previousSize) reflectionDirtyVersion = reflectionDirtyVersion + 1L
+        // Every signal represents a new candidate snapshot, even when the same item ID was already
+        // dirty. Advancing the version prevents an older in-flight D2 success from clearing it.
+        reflectionDirtyVersion = reflectionDirtyVersion + 1L
         return merged.size
     }
 
@@ -197,8 +205,8 @@ object SharedPreferencesManager {
     /** Unfolded-record count that forces compaction regardless of quiet time. */
     const val KEY_EXTRACTION_MAX_UNPROCESSED_RECORDS = "extractionMaxUnprocessedRecords"
     var extractionMaxUnprocessedRecords: Int
-        get() = get(KEY_LOCAL_PREFS, KEY_EXTRACTION_MAX_UNPROCESSED_RECORDS, 500)
-        set(value) = put(KEY_LOCAL_PREFS, KEY_EXTRACTION_MAX_UNPROCESSED_RECORDS, value)
+        get() = 50
+        set(@Suppress("UNUSED_PARAMETER") value) = Unit
 
     /** Home "Past X hours" recency window for notification previews/counts. Positive hours only. */
     const val KEY_HOME_NOTI_WINDOW_HOURS = "homeNotiWindowHours"

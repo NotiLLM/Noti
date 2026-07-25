@@ -9,5 +9,7 @@ data class PendingReviewDraft(
     @PrimaryKey val reviewKey: String,
     /** Nullable JSON state for a translation requested while this proposal is under review. */
     val translationStateJson: String? = null,
+    /** User-owned edits to an atomic Split batch; null for ordinary review entries. */
+    val batchDraftJson: String? = null,
     val updatedAt: Long,
 )

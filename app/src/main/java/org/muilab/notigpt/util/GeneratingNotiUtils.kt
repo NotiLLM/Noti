@@ -12,7 +12,7 @@ import androidx.core.content.ContextCompat
 import org.muilab.notigpt.R
 
 /**
- * Ongoing "Generating saved items…" notification shown while background extraction runs.
+ * Ongoing generation notification shown while background extraction runs.
  *
  * Posted when periodic/auto extraction starts and cancelled in a `finally` when results return (success,
  * empty, or failure). Uses a distinct channel, id, and group so it does not bundle with the status
@@ -51,7 +51,7 @@ object GeneratingNotiUtils {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "Generating saved items",
+                context.getString(R.string.generating_saved_items),
                 NotificationManager.IMPORTANCE_LOW,
             ).apply {
                 setShowBadge(false)

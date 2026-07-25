@@ -72,6 +72,7 @@ fun SettingsScreen(
 
     var isLeftSwipe by remember { mutableStateOf(SharedPreferencesManager.swipeDeleteLeft) }
     var extractionLanguage by remember { mutableStateOf(SharedPreferencesManager.targetExtractionLanguage) }
+    var approveSimpleOnUse by remember { mutableStateOf(SharedPreferencesManager.approveCreationsAndUpdatesOnUse) }
     var showLanguagePicker by remember { mutableStateOf(false) }
     var showExportDialog by remember { mutableStateOf(false) }
     var homeWindowHours by remember { mutableStateOf(SharedPreferencesManager.homeNotiWindowHours) }
@@ -129,6 +130,21 @@ fun SettingsScreen(
                 colors = transparentListItem(),
                 modifier = Modifier.clickable(enabled = !accountActionWorking) {
                     showSignOutConfirmation = true
+                },
+            )
+            ListItem(
+                headlineContent = { Text(stringResource(R.string.ui_settings_approve_simple_on_use)) },
+                supportingContent = { Text(stringResource(R.string.ui_settings_approve_simple_on_use_desc)) },
+                trailingContent = {
+                    Checkbox(
+                        checked = approveSimpleOnUse,
+                        onCheckedChange = null,
+                    )
+                },
+                colors = transparentListItem(),
+                modifier = Modifier.clickable {
+                    approveSimpleOnUse = !approveSimpleOnUse
+                    SharedPreferencesManager.approveCreationsAndUpdatesOnUse = approveSimpleOnUse
                 },
             )
         }

@@ -56,6 +56,8 @@ fun ReviewDetailSheet(
     entry: ReviewViewModel.ReviewEntry,
     reviewViewModel: ReviewViewModel,
     onFurtherReview: () -> Unit,
+    onEditSplitChild: (Int) -> Unit = {},
+    onAddSplitChild: () -> Unit = {},
 ) {
     val item = entry.preview
     val changes by remember(entry.key) { reviewViewModel.changeLogFlow(item.savedItemId) }
@@ -79,7 +81,10 @@ fun ReviewDetailSheet(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text(
-            text = item.title.ifBlank { stringResource(R.string.ui_saved_items_untitled_task) },
+            text = if (entry.splitChildren.isNotEmpty()) stringResource(
+                R.string.review_split_detail_title,
+                entry.splitChildren.size,
+            ) else item.title.ifBlank { stringResource(R.string.ui_saved_items_untitled_task) },
             style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.SemiBold),
         )
 
@@ -149,7 +154,30 @@ fun ReviewDetailSheet(
             }
         }
 
-        CompactResultCard(item, entry.previewSteps.size)
+        if (entry.splitChildren.isNotEmpty()) {
+            entry.splitChildren.forEachIndexed { index, child ->
+                CompactResultCard(child.item, child.steps.size, onEdit = { onEditSplitChild(index) })
+            }
+            TextButton(onClick = onAddSplitChild, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.review_add_split_result))
+            }
+            entry.survivor?.let { original ->
+                TextButton(onClick = { showCompare = !showCompare }, modifier = Modifier.fillMaxWidth()) {
+                    Text(stringResource(R.string.review_original_item))
+                }
+                if (showCompare) ReviewMergeItemSnapshot(stringResource(R.string.review_original_item), original)
+            }
+        } else {
+            CompactResultCard(item, entry.previewSteps.size)
+        }
+
+        if (!entry.sourceVersionIsCurrent) {
+            Text(
+                stringResource(R.string.review_source_changed),
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
 
         TextButton(onClick = { showEvidence = !showEvidence }, modifier = Modifier.fillMaxWidth()) {
             Text(stringResource(if (showEvidence) R.string.review_evidence_hide else R.string.review_evidence_show))
@@ -185,8 +213,10 @@ fun ReviewDetailSheet(
             if (showHistory) SavedItemChangeHistorySection(changes = allHistory)
         }
 
-        Button(onClick = onFurtherReview, modifier = Modifier.fillMaxWidth()) {
-            Text(stringResource(R.string.review_further_review))
+        if (entry.splitChildren.isEmpty()) {
+            Button(onClick = onFurtherReview, enabled = entry.sourceVersionIsCurrent, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.review_further_review))
+            }
         }
         Spacer(Modifier.padding(bottom = 8.dp))
     }
@@ -208,7 +238,7 @@ private fun DigestSection(icon: Int, title: String, values: List<String>, contai
 }
 
 @Composable
-private fun CompactResultCard(item: SavedItem, stepCount: Int) {
+private fun CompactResultCard(item: SavedItem, stepCount: Int, onEdit: (() -> Unit)? = null) {
     Surface(
         shape = MaterialTheme.shapes.large,
         color = MaterialTheme.colorScheme.surfaceContainerLow,
@@ -221,6 +251,7 @@ private fun CompactResultCard(item: SavedItem, stepCount: Int) {
                 Text(item.content, maxLines = 3, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)
             }
             if (stepCount > 0) Text(stringResource(R.string.review_result_steps, stepCount), style = MaterialTheme.typography.labelMedium)
+            if (onEdit != null) TextButton(onClick = onEdit) { Text(stringResource(R.string.review_edit_result)) }
         }
     }
 }

@@ -26,6 +26,10 @@ import org.muilab.notigpt.model.features.NotiSavedItemLink
 import org.muilab.notigpt.model.features.PendingProposedOp
 import org.muilab.notigpt.model.features.PendingProposedOpType
 import org.muilab.notigpt.model.features.RejectedMerge
+import org.muilab.notigpt.model.features.Reminder
+import org.muilab.notigpt.model.features.ReminderSavedItemRef
+import org.muilab.notigpt.model.features.ReminderStatus
+import org.muilab.notigpt.data.repository.reminder.ReminderScheduler
 import org.muilab.notigpt.model.features.SavedItem
 import org.muilab.notigpt.model.features.SavedItemChangeLog
 import org.muilab.notigpt.model.features.SavedItemChangeType
@@ -36,6 +40,7 @@ import org.muilab.notigpt.model.features.ReviewItemDraft
 import org.muilab.notigpt.model.features.PendingReviewDraft
 import java.util.UUID
 import org.muilab.notigpt.work.FirestoreOutboxWork
+import org.muilab.notigpt.work.ReflectionTrigger
 
 /**
  * The staged-review core: pipeline ops land here as [PendingProposedOp] rows, previews are computed
@@ -79,7 +84,79 @@ class PendingProposedOpRepository(private val appContext: Context) {
         )
     }
 
+    suspend fun setSplitBatchDraft(
+        reviewKey: String,
+        children: List<ReviewItemDraft>,
+        now: Long = System.currentTimeMillis(),
+    ) = withContext(Dispatchers.IO) {
+        val current = db.pendingReviewDraftDao().getByKey(reviewKey)
+        db.pendingReviewDraftDao().upsert(
+            current?.copy(batchDraftJson = splitDraftToJson(children), updatedAt = now)
+                ?: PendingReviewDraft(
+                    reviewKey = reviewKey,
+                    batchDraftJson = splitDraftToJson(children),
+                    updatedAt = now,
+                )
+        )
+    }
+
     suspend fun getPending(): List<PendingProposedOp> = withContext(Dispatchers.IO) { pendingProposedOpDao.getAll() }
+
+    suspend fun getPendingForTarget(savedItemId: String): List<PendingProposedOp> = withContext(Dispatchers.IO) {
+        pendingProposedOpDao.getByTargetItemId(savedItemId)
+    }
+
+    /** Claims the source before network work begins, enforcing one transform per item. */
+    suspend fun beginTransform(
+        sourceItemId: String,
+        type: String,
+        now: Long = System.currentTimeMillis(),
+    ): PendingProposedOp? = withContext(Dispatchers.IO) {
+        require(type == PendingProposedOpType.Split || type == PendingProposedOpType.Regenerate)
+        val source = savedItemDao.getById(sourceItemId) ?: return@withContext null
+        if (source.isCompleted || source.isArchived) return@withContext null
+        val row = PendingProposedOp(
+            opType = type,
+            payload = JSONObject().put("status", "processing")
+                .put("sourceVersion", source.lastUpdateTimestamp)
+                .put("sourceSavedItemId", sourceItemId)
+                .toString(),
+            targetItemId = sourceItemId,
+            itemType = source.itemType,
+            batchId = "transform_${UUID.randomUUID()}",
+            createdAt = now,
+        )
+        db.withTransaction {
+            if (pendingProposedOpDao.getByTargetItemId(sourceItemId).isNotEmpty()) return@withTransaction null
+            val id = pendingProposedOpDao.insertAll(listOf(row)).single()
+            savedItemDao.upsert(source.copy(
+                pendingTransformType = type,
+                pendingTransformStatus = "processing",
+                syncModifiedAt = now,
+            ))
+            queueSavedItem(sourceItemId, FirestoreOutboxKind.UpsertSavedItem, now)
+            row.copy(opId = id).also { persistProposedOpRecords(listOf(it)) }
+        }.also { if (it != null) FirestoreOutboxWork.enqueue(appContext) }
+    }
+
+    suspend fun clearProcessingTransform(sourceItemId: String, type: String) = withContext(Dispatchers.IO) {
+        val processing = pendingProposedOpDao.getByTargetItemId(sourceItemId).filter {
+            it.opType == type && runCatching {
+                JSONObject(it.payload).optString("status") == "processing"
+            }.getOrDefault(false)
+        }
+        if (processing.isNotEmpty()) pendingProposedOpDao.deleteByIds(processing.map { it.opId })
+        savedItemDao.getById(sourceItemId)?.takeIf { it.pendingTransformType == type }?.let { item ->
+            val now = System.currentTimeMillis()
+            savedItemDao.upsert(item.copy(
+                pendingTransformType = "",
+                pendingTransformStatus = "",
+                syncModifiedAt = now,
+            ))
+            queueSavedItem(sourceItemId, FirestoreOutboxKind.UpsertSavedItem, now)
+            FirestoreOutboxWork.enqueue(appContext)
+        }
+    }
 
     /** Item ids with unreviewed staged ops against them — excluded from merge-stage inputs. */
     suspend fun getTargetedItemIds(): Set<String> = withContext(Dispatchers.IO) {
@@ -213,6 +290,81 @@ class PendingProposedOpRepository(private val appContext: Context) {
                 .also { persistProposedOpRecords(it) }
         }
         FirestoreOutboxWork.enqueue(appContext)
+        staged
+    }
+
+    /**
+     * Stages a user-requested structural transformation. The source row remains the durable
+     * truth until review approval; the payload is only a proposal. A source can have at most one
+     * pending transformation at a time.
+     */
+    suspend fun stageTransform(
+        sourceItemId: String,
+        type: String,
+        result: JSONObject,
+        batchId: String = "transform_${UUID.randomUUID()}",
+        now: Long = System.currentTimeMillis(),
+    ): PendingProposedOp? = withContext(Dispatchers.IO) {
+        require(type == PendingProposedOpType.Split || type == PendingProposedOpType.Regenerate)
+        val source = savedItemDao.getById(sourceItemId) ?: return@withContext null
+        if (source.isCompleted || source.isArchived) return@withContext null
+        val existing = pendingProposedOpDao.getByTargetItemId(sourceItemId)
+        val processing = existing.singleOrNull()?.takeIf {
+            it.opType == type && runCatching {
+                JSONObject(it.payload).optString("status") == "processing"
+            }.getOrDefault(false)
+        }
+        if (existing.isNotEmpty() && processing == null) return@withContext null
+
+        val payload = JSONObject(result.toString()).apply {
+            put("sourceSavedItemId", sourceItemId)
+            if (!has("sourceVersion")) put("sourceVersion", source.lastUpdateTimestamp)
+        }
+        if (type == PendingProposedOpType.Split) {
+            val children = payload.optJSONArray("children") ?: return@withContext null
+            if (children.length() < 2) return@withContext null
+        }
+        val row = PendingProposedOp(
+            opId = processing?.opId ?: 0L,
+            opType = type,
+            payload = payload.toString(),
+            targetItemId = sourceItemId,
+            evidenceRecordIds = payload.optJSONArray("evidenceRecordIds")?.toString() ?: "[]",
+            reason = reasonFrom(payload),
+            itemType = source.itemType,
+            batchId = processing?.batchId ?: batchId,
+            createdAt = now,
+        )
+        val staged = db.withTransaction {
+            if (processing != null) {
+                val current = pendingProposedOpDao.getByIds(listOf(processing.opId)).singleOrNull()
+                    ?: return@withTransaction null
+                if (runCatching { JSONObject(current.payload).optString("status") }.getOrDefault("") != "processing") {
+                    return@withTransaction null
+                }
+                pendingProposedOpDao.update(row)
+                savedItemDao.upsert(source.copy(
+                    pendingTransformType = type,
+                    pendingTransformStatus = "review",
+                    syncModifiedAt = now,
+                ))
+                queueSavedItem(sourceItemId, FirestoreOutboxKind.UpsertSavedItem, now)
+                persistProposedOpRecords(listOf(row))
+                row
+            } else {
+                // Re-check inside the transaction in case two workers completed together.
+                if (pendingProposedOpDao.getByTargetItemId(sourceItemId).isNotEmpty()) return@withTransaction null
+                val id = pendingProposedOpDao.insertAll(listOf(row)).single()
+                savedItemDao.upsert(source.copy(
+                    pendingTransformType = type,
+                    pendingTransformStatus = "review",
+                    syncModifiedAt = now,
+                ))
+                queueSavedItem(sourceItemId, FirestoreOutboxKind.UpsertSavedItem, now)
+                row.copy(opId = id).also { persistProposedOpRecords(listOf(it)) }
+            }
+        }
+        if (staged != null) FirestoreOutboxWork.enqueue(appContext)
         staged
     }
 
@@ -395,6 +547,10 @@ class PendingProposedOpRepository(private val appContext: Context) {
         val steps: List<TodoStep>,
         val survivor: MergeSourceSnapshot? = null,
         val mergeSources: List<MergeSourceSnapshot> = emptyList(),
+        /** All proposed results for a Split; [item]/[steps] mirror the first child for legacy UI. */
+        val splitChildren: List<ReviewItemDraft> = emptyList(),
+        val sourceVersionIsCurrent: Boolean = true,
+        val isProcessing: Boolean = false,
     )
 
     /**
@@ -416,6 +572,95 @@ class PendingProposedOpRepository(private val appContext: Context) {
             return@withContext Preview(normalized.item, normalized.steps)
         }
         val current = savedItemDao.getById(group.targetItemId!!) ?: return@withContext null
+        val structural = group.ops.singleOrNull()
+        if (structural != null && runCatching {
+                JSONObject(structural.payload).optString("status") == "processing"
+            }.getOrDefault(false)
+        ) {
+            val steps = todoStepDao.getBySavedItemId(current.savedItemId)
+            return@withContext Preview(
+                item = current,
+                steps = steps,
+                survivor = MergeSourceSnapshot(
+                    current,
+                    steps,
+                    changeLogDao.getByItem(current.savedItemId),
+                    db.notiSavedItemLinkDao().getBySavedItemId(current.savedItemId),
+                ),
+                isProcessing = true,
+            )
+        }
+        if (structural?.opType == PendingProposedOpType.Split) {
+            val payload = JSONObject(structural.payload)
+            val children = payload.optJSONArray("children") ?: return@withContext null
+            val generatedPreviews = buildList {
+                for (index in 0 until children.length()) {
+                    val child = children.optJSONObject(index) ?: continue
+                    val childId = "pending_${structural.opId}_$index"
+                    var item = itemFromCreateOp(child, childId, now).copy(
+                        state = SavedItemState.New,
+                        isStarred = current.isStarred,
+                    )
+                    val steps = N8nOpParsing.parseSteps(child.optJSONArray("steps"), childId, now, 0)
+                    item = item.copy(
+                        buttons = SavedItemNormalization.mergeButtons(
+                            item.buttons,
+                            N8nOpParsing.childButtons(child.optJSONArray("steps")),
+                        )
+                    )
+                    val normalized = SavedItemNormalization.normalize(item, steps)
+                    add(ReviewItemDraft(normalized.item, normalized.steps))
+                }
+            }
+            val previews = db.pendingReviewDraftDao().getByKey(group.key)?.batchDraftJson
+                ?.let(::splitDraftFromJson)
+                ?.takeIf { it.size >= 2 }
+                ?: generatedPreviews
+            if (previews.size < 2) return@withContext null
+            return@withContext Preview(
+                item = previews.first().item,
+                steps = previews.first().steps,
+                survivor = MergeSourceSnapshot(
+                    current,
+                    todoStepDao.getBySavedItemId(current.savedItemId),
+                    changeLogDao.getByItem(current.savedItemId),
+                    db.notiSavedItemLinkDao().getBySavedItemId(current.savedItemId),
+                ),
+                splitChildren = previews,
+                sourceVersionIsCurrent = payload.optLong("sourceVersion", current.lastUpdateTimestamp) == current.lastUpdateTimestamp,
+            )
+        }
+        if (structural?.opType == PendingProposedOpType.Regenerate) {
+            val payload = JSONObject(structural.payload)
+            val result = payload.optJSONObject("result") ?: payload
+            val replacementId = current.savedItemId
+            var replacement = itemFromCreateOp(result, replacementId, now).copy(
+                state = SavedItemState.Updated,
+                isStarred = current.isStarred,
+                userEdited = current.userEdited,
+                humanEditCount = current.humanEditCount,
+                origin = current.origin,
+            )
+            val replacementSteps = N8nOpParsing.parseSteps(result.optJSONArray("steps"), replacementId, now, 0)
+            replacement = replacement.copy(
+                buttons = SavedItemNormalization.mergeButtons(
+                    result.optJSONArray("buttons")?.toString() ?: "[]",
+                    N8nOpParsing.childButtons(result.optJSONArray("steps")),
+                )
+            )
+            val normalized = SavedItemNormalization.normalize(replacement, replacementSteps)
+            return@withContext Preview(
+                item = normalized.item,
+                steps = normalized.steps,
+                survivor = MergeSourceSnapshot(
+                    current,
+                    todoStepDao.getBySavedItemId(current.savedItemId),
+                    changeLogDao.getByItem(current.savedItemId),
+                    db.notiSavedItemLinkDao().getBySavedItemId(current.savedItemId),
+                ),
+                sourceVersionIsCurrent = payload.optLong("sourceVersion", current.lastUpdateTimestamp) == current.lastUpdateTimestamp,
+            )
+        }
         val sourceItems = group.ops.flatMap(::mergeSourceIdsOf).distinct()
             .mapNotNull { savedItemDao.getById(it) }
         val preservedUserState = SavedItemMergePolicy.preservedUserState(listOf(current) + sourceItems)
@@ -468,6 +713,7 @@ class PendingProposedOpRepository(private val appContext: Context) {
     data class ApplyOutcome(
         val ops: List<PendingProposedOp>,
         val createdItemId: String?,
+        val createdItemIds: List<String> = listOfNotNull(createdItemId),
         val beforeTarget: SavedItem?,
         val beforeTargetSteps: List<TodoStep>,
         val deletedSourceItems: List<SavedItem>,
@@ -479,6 +725,9 @@ class PendingProposedOpRepository(private val appContext: Context) {
         val changeLogIds: List<Long>,
         val appliedItemId: String,
         val reviewTranslationStateJson: String? = null,
+        val reviewBatchDraftJson: String? = null,
+        val beforeReminders: List<Reminder> = emptyList(),
+        val beforeReminderRefs: List<ReminderSavedItemRef> = emptyList(),
     )
 
     /**
@@ -493,10 +742,14 @@ class PendingProposedOpRepository(private val appContext: Context) {
     ): ApplyOutcome? = withContext(Dispatchers.IO) {
         val outcome = db.withTransaction {
             val pendingDraft = db.pendingReviewDraftDao().getByKey(group.key)
-            val applied = if (group.isCreate) {
-                applyCreate(group, editedDraft, editedDraftIsUserEdit, now)
-            } else {
-                applyOnTarget(group, editedDraft, editedDraftIsUserEdit, now)
+            val structuralType = group.ops.singleOrNull()?.opType
+            val applied = when {
+                group.isCreate -> applyCreate(group, editedDraft, editedDraftIsUserEdit, now)
+                structuralType == PendingProposedOpType.Split -> applySplit(group, now)
+                structuralType == PendingProposedOpType.Regenerate -> applyRegenerate(
+                    group, editedDraft, editedDraftIsUserEdit, now,
+                )
+                else -> applyOnTarget(group, editedDraft, editedDraftIsUserEdit, now)
             }
             if (applied != null) {
                 val opIds = group.ops.map { it.opId }
@@ -504,12 +757,30 @@ class PendingProposedOpRepository(private val appContext: Context) {
                 db.pendingReviewDraftDao().deleteByKey(group.key)
                 setProposalDecision(opIds, ProposedOpRecordDecision.Approved, now)
             }
-            applied?.copy(reviewTranslationStateJson = pendingDraft?.translationStateJson)
+            applied?.copy(
+                reviewTranslationStateJson = pendingDraft?.translationStateJson,
+                reviewBatchDraftJson = pendingDraft?.batchDraftJson,
+            )
         }
         if (outcome != null) {
+            ReflectionTrigger.noteDirtyItems(
+                appContext,
+                reflectionItemIds(outcome.createdItemIds, outcome.appliedItemId),
+                now,
+            )
             FirestoreOutboxWork.enqueue(appContext)
             outcome.deletedSourceItems.forEach { firestoreSync.markSavedItemDeleted(it.savedItemId, now) }
-            savedItemDao.getById(outcome.appliedItemId)?.let { firestoreSync.syncSavedItem(it) }
+            if (outcome.beforeTarget != null && outcome.createdItemIds.isNotEmpty() &&
+                outcome.beforeTarget.savedItemId !in outcome.createdItemIds
+            ) {
+                firestoreSync.markSavedItemDeleted(outcome.beforeTarget.savedItemId, now)
+            }
+            outcome.createdItemIds.ifEmpty { listOf(outcome.appliedItemId) }.forEach { itemId ->
+                savedItemDao.getById(itemId)?.let { firestoreSync.syncSavedItem(it) }
+            }
+            outcome.beforeReminders.filter {
+                it.status == ReminderStatus.Scheduled || it.status == ReminderStatus.DueUnseen
+            }.forEach { ReminderScheduler.cancel(appContext, it.reminderId) }
         }
         outcome
     }
@@ -574,6 +845,204 @@ class PendingProposedOpRepository(private val appContext: Context) {
             transferredHistoryIds = emptyList(),
             changeLogIds = changeLogIds,
             appliedItemId = itemId,
+        )
+    }
+
+    private suspend fun applySplit(
+        group: OpGroup,
+        now: Long,
+    ): ApplyOutcome? {
+        val pending = group.ops.singleOrNull() ?: return null
+        val before = savedItemDao.getById(group.targetItemId!!) ?: return null
+        val payload = JSONObject(pending.payload)
+        if (payload.optLong("sourceVersion", before.lastUpdateTimestamp) != before.lastUpdateTimestamp) return null
+        val generatedChildren = payload.optJSONArray("children") ?: return null
+        if (generatedChildren.length() < 2) return null
+        val draftedChildren = db.pendingReviewDraftDao().getByKey(group.key)?.batchDraftJson
+            ?.let(::splitDraftFromJson)
+            ?.takeIf { it.size >= 2 }
+
+        val beforeSteps = todoStepDao.getBySavedItemId(before.savedItemId)
+        val linkDao = db.notiSavedItemLinkDao()
+        val beforeLinks = linkDao.getBySavedItemId(before.savedItemId)
+        val beforeHistory = changeLogDao.getByItem(before.savedItemId)
+        val reminderDao = db.reminderDao()
+        val beforeReminders = reminderDao.getBySavedItemId(before.savedItemId)
+        val beforeReminderRefs = reminderDao.getRefsBySavedItemId(before.savedItemId)
+        val createdIds = mutableListOf<String>()
+        val insertedLinkIds = mutableListOf<Long>()
+        val changeIds = mutableListOf<Long>()
+
+        val childCount = draftedChildren?.size ?: generatedChildren.length()
+        for (index in 0 until childCount) {
+            val child = generatedChildren.optJSONObject(index) ?: JSONObject()
+            val childId = "s_" + UUID.randomUUID().toString().take(8)
+            val drafted = draftedChildren?.get(index)
+            val generatedItem = itemFromCreateOp(child, childId, now)
+            val draftedChanged = drafted != null && (
+                drafted.item.title != generatedItem.title ||
+                    drafted.item.content != generatedItem.content ||
+                    drafted.item.itemType != generatedItem.itemType ||
+                    drafted.item.deadlineAtMs != generatedItem.deadlineAtMs ||
+                    drafted.item.buttons != generatedItem.buttons
+                )
+            var item = (drafted?.item?.copy(savedItemId = childId) ?: generatedItem).copy(
+                state = SavedItemState.Saved,
+                isViewed = true,
+                isStarred = drafted?.item?.isStarred ?: before.isStarred,
+                lastViewedChangeAt = now,
+                userEdited = draftedChanged,
+                humanEditCount = if (draftedChanged) 1 else 0,
+                origin = if (draftedChanged) "manual" else generatedItem.origin,
+            )
+            val steps = drafted?.steps?.mapIndexed { position, step ->
+                step.copy(parentSavedItemId = childId, position = position)
+            } ?: N8nOpParsing.parseSteps(child.optJSONArray("steps"), childId, now, 0)
+            item = item.copy(
+                buttons = SavedItemNormalization.mergeButtons(
+                    item.buttons,
+                    N8nOpParsing.childButtons(child.optJSONArray("steps")),
+                )
+            )
+            val normalized = SavedItemNormalization.normalize(item, steps)
+            savedItemDao.upsert(normalized.item)
+            if (normalized.steps.isNotEmpty()) todoStepDao.upsertAll(normalized.steps)
+
+            val requestedEvidence = child.optJSONArray("evidenceRecordIds")?.let { arr ->
+                buildSet { for (i in 0 until arr.length()) arr.optString(i).takeIf(String::isNotBlank)?.let(::add) }
+            }.orEmpty()
+            val relevantLinks = if (requestedEvidence.isEmpty()) emptyList() else beforeLinks.filter {
+                it.notiRecordId in requestedEvidence
+            }
+            if (relevantLinks.isNotEmpty()) {
+                insertedLinkIds += linkDao.insertAll(relevantLinks.map { link ->
+                    link.copy(linkId = 0L, savedItemId = childId, type = normalized.item.itemType)
+                }).filter { it > 0L }
+            }
+            changeIds += changeLogDao.insert(
+                SavedItemChangeLog(
+                    savedItemId = childId,
+                    createdAt = now,
+                    changeType = SavedItemChangeType.Split,
+                    changeSummary = "Split from ${before.title}",
+                    evidenceRecordIdsJson = JSONArray(relevantLinks.map { it.notiRecordId }).toString(),
+                    origin = "llm",
+                    sourceSavedItemId = before.savedItemId,
+                    sourceItemTitle = before.title,
+                )
+            )
+            queueSavedItem(childId, FirestoreOutboxKind.UpsertSavedItem, now)
+            createdIds += childId
+        }
+
+        // A deliberate split is evidence that its independently handled results should not be
+        // immediately suggested for merging again.
+        val cooldownPairs = buildList {
+            for (a in createdIds.indices) for (b in a + 1 until createdIds.size) {
+                add(RejectedMerge.of(createdIds[a], createdIds[b], now))
+            }
+        }
+        if (cooldownPairs.isNotEmpty()) rejectedMergeDao.upsertAll(cooldownPairs)
+
+        todoStepDao.hardDeleteByParentId(before.savedItemId)
+        beforeReminders.filter {
+            it.status == ReminderStatus.Scheduled || it.status == ReminderStatus.DueUnseen
+        }.forEach { reminder ->
+            reminderDao.cancel(
+                reminderId = reminder.reminderId,
+                cancelledAtMs = now,
+                updatedAtMs = now,
+            )
+        }
+        savedItemDao.hardDeleteById(before.savedItemId)
+        queueSavedItem(before.savedItemId, FirestoreOutboxKind.DeleteSavedItem, now)
+
+        return ApplyOutcome(
+            ops = group.ops,
+            createdItemId = createdIds.first(),
+            createdItemIds = createdIds,
+            beforeTarget = before,
+            beforeTargetSteps = beforeSteps,
+            deletedSourceItems = emptyList(),
+            deletedSourceSteps = emptyList(),
+            sourceLinks = beforeLinks,
+            insertedTargetLinkIds = insertedLinkIds,
+            sourceHistories = beforeHistory,
+            transferredHistoryIds = emptyList(),
+            changeLogIds = changeIds,
+            appliedItemId = createdIds.first(),
+            beforeReminders = beforeReminders,
+            beforeReminderRefs = beforeReminderRefs,
+        )
+    }
+
+    private suspend fun applyRegenerate(
+        group: OpGroup,
+        editedDraft: ReviewItemDraft?,
+        editedDraftIsUserEdit: Boolean,
+        now: Long,
+    ): ApplyOutcome? {
+        val pending = group.ops.singleOrNull() ?: return null
+        val before = savedItemDao.getById(group.targetItemId!!) ?: return null
+        val payload = JSONObject(pending.payload)
+        if (payload.optLong("sourceVersion", before.lastUpdateTimestamp) != before.lastUpdateTimestamp) return null
+        val result = payload.optJSONObject("result") ?: payload
+        val beforeSteps = todoStepDao.getBySavedItemId(before.savedItemId)
+        var replacement = itemFromCreateOp(result, before.savedItemId, now).copy(
+            state = before.state,
+            isViewed = true,
+            isStarred = before.isStarred,
+            userEdited = before.userEdited,
+            humanEditCount = before.humanEditCount,
+            origin = before.origin,
+            lastViewedChangeAt = now,
+        )
+        val generatedSteps = N8nOpParsing.parseSteps(result.optJSONArray("steps"), before.savedItemId, now, 0)
+        replacement = replacement.copy(
+            buttons = SavedItemNormalization.mergeButtons(
+                result.optJSONArray("buttons")?.toString() ?: "[]",
+                N8nOpParsing.childButtons(result.optJSONArray("steps")),
+            )
+        )
+        var normalized = SavedItemNormalization.normalize(replacement, generatedSteps)
+        val autoDraft = ReviewItemDraft(normalized.item, normalized.steps)
+        if (editedDraft != null) {
+            normalized = normalizeEditedDraft(
+                autoDraft, editedDraft, before.savedItemId, now, editedDraftIsUserEdit,
+            )
+        }
+        todoStepDao.hardDeleteByParentId(before.savedItemId)
+        savedItemDao.upsert(normalized.item.copy(syncModifiedAt = now, lastUpdateTimestamp = now))
+        if (normalized.steps.isNotEmpty()) todoStepDao.upsertAll(normalized.steps)
+        val changeId = changeLogDao.insert(
+            SavedItemChangeLog(
+                savedItemId = before.savedItemId,
+                createdAt = now,
+                changeType = SavedItemChangeType.Regenerated,
+                changeSummary = result.optString("changeSummary", pending.reason),
+                changedFieldsJson = JSONObject().apply {
+                    if (before.title != normalized.item.title) put("title", JSONObject().put("old", before.title).put("new", normalized.item.title))
+                    if (before.content != normalized.item.content) put("content", JSONObject().put("old", before.content).put("new", normalized.item.content))
+                    if (before.deadlineAtMs != normalized.item.deadlineAtMs) put("deadlineAtMs", JSONObject().put("old", before.deadlineAtMs).put("new", normalized.item.deadlineAtMs))
+                }.toString(),
+                origin = "llm",
+            )
+        )
+        queueSavedItem(before.savedItemId, FirestoreOutboxKind.UpsertSavedItem, now)
+        return ApplyOutcome(
+            ops = group.ops,
+            createdItemId = null,
+            createdItemIds = emptyList(),
+            beforeTarget = before,
+            beforeTargetSteps = beforeSteps,
+            deletedSourceItems = emptyList(),
+            deletedSourceSteps = emptyList(),
+            sourceLinks = emptyList(),
+            insertedTargetLinkIds = emptyList(),
+            sourceHistories = emptyList(),
+            transferredHistoryIds = emptyList(),
+            changeLogIds = listOf(changeId),
+            appliedItemId = before.savedItemId,
         )
     }
 
@@ -746,9 +1215,10 @@ class PendingProposedOpRepository(private val appContext: Context) {
     /** Reverses an [applyGroup]: restores the pre-apply state and re-stages the ops. */
     suspend fun undoApply(outcome: ApplyOutcome, now: Long = System.currentTimeMillis()) = withContext(Dispatchers.IO) {
         db.withTransaction {
-            outcome.createdItemId?.let { id ->
+            outcome.createdItemIds.forEach { id ->
                 todoStepDao.hardDeleteByParentId(id)
                 savedItemDao.hardDeleteById(id)
+                rejectedMergeDao.deleteForItem(id)
                 queueSavedItem(id, FirestoreOutboxKind.DeleteSavedItem, now)
             }
             outcome.beforeTarget?.let { before ->
@@ -769,12 +1239,15 @@ class PendingProposedOpRepository(private val appContext: Context) {
             outcome.changeLogIds.forEach { changeLogDao.deleteById(it) }
             if (outcome.transferredHistoryIds.isNotEmpty()) changeLogDao.deleteByIds(outcome.transferredHistoryIds)
             if (outcome.sourceHistories.isNotEmpty()) changeLogDao.upsertAll(outcome.sourceHistories)
+            outcome.beforeReminders.forEach { db.reminderDao().upsert(it) }
+            if (outcome.beforeReminderRefs.isNotEmpty()) db.reminderDao().insertSavedItemRefs(outcome.beforeReminderRefs)
             pendingProposedOpDao.insertAll(outcome.ops)
-            if (outcome.reviewTranslationStateJson != null) {
+            if (outcome.reviewTranslationStateJson != null || outcome.reviewBatchDraftJson != null) {
                 db.pendingReviewDraftDao().upsert(
                     org.muilab.notigpt.model.features.PendingReviewDraft(
                         reviewKey = if (outcome.createdItemId != null) "create_${outcome.ops.first().opId}" else "item_${outcome.appliedItemId}",
                         translationStateJson = outcome.reviewTranslationStateJson,
+                        batchDraftJson = outcome.reviewBatchDraftJson,
                         updatedAt = now,
                     )
                 )
@@ -786,9 +1259,12 @@ class PendingProposedOpRepository(private val appContext: Context) {
             )
         }
         FirestoreOutboxWork.enqueue(appContext)
-        outcome.createdItemId?.let { firestoreSync.markSavedItemDeleted(it, now) }
+        outcome.createdItemIds.forEach { firestoreSync.markSavedItemDeleted(it, now) }
         outcome.beforeTarget?.let { firestoreSync.syncSavedItem(it) }
         outcome.deletedSourceItems.forEach { firestoreSync.syncSavedItem(it) }
+        outcome.beforeReminders.filter { it.status == ReminderStatus.Scheduled }.forEach {
+            ReminderScheduler.schedule(appContext, it.reminderId, it.remindAtMs)
+        }
     }
 
     // ========== Discard (reject) ==========
@@ -829,6 +1305,19 @@ class PendingProposedOpRepository(private val appContext: Context) {
                 if (pairs.isNotEmpty()) rejectedMergeDao.upsertAll(pairs)
             }
           }
+          group.ops.firstOrNull { it.opType == PendingProposedOpType.Split || it.opType == PendingProposedOpType.Regenerate }
+              ?.targetItemId
+              ?.takeIf(String::isNotBlank)
+              ?.let { targetId ->
+                  savedItemDao.getById(targetId)?.let { item ->
+                      savedItemDao.upsert(item.copy(
+                          pendingTransformType = "",
+                          pendingTransformStatus = "",
+                          syncModifiedAt = now,
+                      ))
+                      queueSavedItem(targetId, FirestoreOutboxKind.UpsertSavedItem, now)
+                  }
+              }
           val opIds = group.ops.map { it.opId }
           pendingProposedOpDao.deleteByIds(opIds)
           db.pendingReviewDraftDao().deleteByKey(group.key)
@@ -883,6 +1372,19 @@ class PendingProposedOpRepository(private val appContext: Context) {
     /** Undo of a reject: the ops come back exactly as they were (fresh row ids). */
     suspend fun restoreDiscarded(group: OpGroup, reviewDraft: PendingReviewDraft? = null) = withContext(Dispatchers.IO) {
         val insertedIds = pendingProposedOpDao.insertAll(group.ops.map { it.copy(opId = 0L) })
+        group.ops.firstOrNull { it.opType == PendingProposedOpType.Split || it.opType == PendingProposedOpType.Regenerate }
+            ?.let { transform ->
+                savedItemDao.getById(transform.targetItemId)?.let { item ->
+                    val now = System.currentTimeMillis()
+                    savedItemDao.upsert(item.copy(
+                        pendingTransformType = transform.opType,
+                        pendingTransformStatus = "review",
+                        syncModifiedAt = now,
+                    ))
+                    queueSavedItem(item.savedItemId, FirestoreOutboxKind.UpsertSavedItem, now)
+                    FirestoreOutboxWork.enqueue(appContext)
+                }
+            }
         reviewDraft?.let { draft ->
             val restoredKey = if (group.isCreate) "create_${insertedIds.first()}" else group.key
             db.pendingReviewDraftDao().upsert(draft.copy(reviewKey = restoredKey))
@@ -977,6 +1479,59 @@ class PendingProposedOpRepository(private val appContext: Context) {
             })
         }
     }.toString()
+
+    private fun splitDraftToJson(children: List<ReviewItemDraft>): String = JSONArray().apply {
+        children.forEach { draft ->
+            put(JSONObject().apply {
+                put("savedItemId", draft.item.savedItemId)
+                put("title", draft.item.title)
+                put("content", draft.item.content)
+                put("itemType", draft.item.itemType)
+                put("deadlineAtMs", draft.item.deadlineAtMs)
+                put("state", draft.item.state)
+                put("isStarred", draft.item.isStarred)
+                put("buttons", draft.item.buttons)
+                put("steps", JSONArray(stepsToJson(draft.steps)))
+            })
+        }
+    }.toString()
+
+    private fun splitDraftFromJson(raw: String): List<ReviewItemDraft> = try {
+        val array = JSONArray(raw)
+        buildList {
+            for (index in 0 until array.length()) {
+                val obj = array.optJSONObject(index) ?: continue
+                val id = obj.optString("savedItemId", "pending_draft_$index")
+                val item = SavedItem(
+                    savedItemId = id,
+                    title = obj.optString("title"),
+                    content = obj.optString("content"),
+                    itemType = if (obj.optString("itemType") == SavedItemType.Keep) SavedItemType.Keep else SavedItemType.Todo,
+                    state = obj.optString("state", SavedItemState.New),
+                    lastUpdateTimestamp = 0L,
+                    deadlineAtMs = obj.optLong("deadlineAtMs", 0L),
+                    buttons = obj.optString("buttons", "[]"),
+                    isStarred = obj.optBoolean("isStarred", false),
+                )
+                val stepArray = obj.optJSONArray("steps") ?: JSONArray()
+                val steps = buildList {
+                    for (stepIndex in 0 until stepArray.length()) {
+                        val step = stepArray.optJSONObject(stepIndex) ?: continue
+                        add(TodoStep(
+                            todoStepId = step.optString("todoStepId").ifBlank { "st_${UUID.randomUUID().toString().take(8)}" },
+                            parentSavedItemId = id,
+                            text = step.optString("text"),
+                            isCompleted = step.optBoolean("isCompleted", false),
+                            position = stepIndex,
+                        ))
+                    }
+                }
+                add(ReviewItemDraft(item, steps))
+            }
+        }
+    } catch (_: Exception) {
+        emptyList()
+    }
 
     private fun appendUniqueSubItem(target: MutableList<TodoStep>, candidate: TodoStep) {
         ReviewMergeSemantics.appendUnique(target, candidate)
@@ -1073,4 +1628,9 @@ class PendingProposedOpRepository(private val appContext: Context) {
 
     private fun reasonFrom(op: JSONObject): String =
         op.optString("reason", op.optString("changeSummary", op.optJSONObject("changes")?.optString("changeSummary") ?: ""))
+
+    companion object {
+        internal fun reflectionItemIds(createdItemIds: List<String>, appliedItemId: String): List<String> =
+            createdItemIds.ifEmpty { listOf(appliedItemId) }
+    }
 }

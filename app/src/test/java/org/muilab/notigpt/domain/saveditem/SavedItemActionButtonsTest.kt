@@ -43,4 +43,20 @@ class SavedItemActionButtonsTest {
             ),
         )
     }
+
+    @Test
+    fun `copy display includes semantic label and exact value`() {
+        val button = SavedItemActionButton("Booking code", "ABCD-1234", "copy")
+        assertEquals("Booking code · ABCD-1234", button.displayText)
+    }
+
+    @Test
+    fun `link display never exposes query or fragment`() {
+        val button = SavedItemActionButton(
+            "Manage booking",
+            "https://example.com/trips/current?token=secret#private",
+            "link",
+        )
+        assertEquals("Manage booking · example.com/trips/current", button.displayText)
+    }
 }
